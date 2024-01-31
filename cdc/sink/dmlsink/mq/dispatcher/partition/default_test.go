@@ -23,11 +23,15 @@ import (
 func TestDefaultDispatcher(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
-		Table: &model.TableName{
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
 			Schema: "test",
 			Table:  "t1",
 		},
+		IndexColumnsOffset: [][]int{{0}},
+	}
+	row := &model.RowChangedEvent{
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{
 				Name:  "id",
@@ -35,7 +39,6 @@ func TestDefaultDispatcher(t *testing.T) {
 				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 			},
 		},
-		IndexColumns: [][]int{{0}},
 	}
 
 	targetPartition, _, err := NewDefaultDispatcher().DispatchRowChangedEvent(row, 3)

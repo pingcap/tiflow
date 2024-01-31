@@ -46,11 +46,10 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 
 	// the size of `testEvent` after being encoded by canal-json is 200
 	testEvent := &model.SingleTableTxn{
-		Table: &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
 		Rows: []*model.RowChangedEvent{
 			{
 				CommitTs:  1,
-				Table:     &model.TableName{Schema: "test", Table: "t"},
 				TableInfo: tableInfo,
 				Columns: []*model.Column{{
 					Name:  "col1",
@@ -93,11 +92,10 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 	count := 0
 
 	txn := &model.SingleTableTxn{
-		Table: &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
 		Rows: []*model.RowChangedEvent{
 			{
 				CommitTs:  1,
-				Table:     &model.TableName{Schema: "test", Table: "t"},
 				TableInfo: tableInfo,
 				Columns: []*model.Column{{
 					Name:  "a",
@@ -108,7 +106,6 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 			},
 			{
 				CommitTs:  2,
-				Table:     &model.TableName{Schema: "test", Table: "t"},
 				TableInfo: tableInfo,
 				Columns: []*model.Column{{
 					Name:  "a",

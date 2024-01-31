@@ -285,7 +285,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	advancer.tryMoveToNextTxn(2, pos)
 
 	require.Equal(suite.T(), uint64(768), advancer.pendingTxnSize)
-	err := advancer.advance(ctx, 256)
+	err := advancer.advance(ctx)
 	require.NoError(suite.T(), err)
 
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
@@ -293,7 +293,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -327,14 +327,12 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	require.Equal(suite.T(), uint64(1024), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
 	// 3. Try advance with txn is finished.
-	advanced, err := advancer.tryAdvanceAndAcquireMem(
+	err := advancer.tryAdvanceAndAcquireMem(
 		ctx,
-		256,
 		false,
 		true,
 	)
 	require.NoError(suite.T(), err)
-	require.True(suite.T(), advanced)
 	require.Equal(suite.T(), uint64(1024), memoryQuota.GetUsedBytes(),
 		"Memory quota should be force acquired when exceed available memory.",
 	)
@@ -343,7 +341,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -375,19 +373,17 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 	advancer.tryMoveToNextTxn(3, pos)
 
 	// 3. Try advance with txn is not finished.
-	advanced, err := advancer.tryAdvanceAndAcquireMem(
+	err := advancer.tryAdvanceAndAcquireMem(
 		ctx,
-		256,
 		false,
 		false,
 	)
 	require.NoError(suite.T(), err)
-	require.True(suite.T(), advanced)
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
 	require.Equal(suite.T(), uint64(2), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(512), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -423,7 +419,6 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	// 3. Try finish.
 	err := advancer.finish(
 		ctx,
-		256,
 		pos,
 	)
 	require.NoError(suite.T(), err)
@@ -437,7 +432,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -477,13 +472,11 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	down := make(chan struct{})
 	go func() {
 		// 4. Try advance and block acquire.
-		advanced, err := advancer.tryAdvanceAndAcquireMem(
+		err := advancer.tryAdvanceAndAcquireMem(
 			ctx,
-			256,
 			false,
 			false,
 		)
-		require.False(suite.T(), advanced)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 		down <- struct{}{}
 	}()

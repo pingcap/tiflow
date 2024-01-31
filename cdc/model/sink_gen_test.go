@@ -687,8 +687,8 @@ func BenchmarkDecodeRedoRowChangedEvent(b *testing.B) {
 	}
 }
 
-func TestMarshalUnmarshalRowChangedEvent(t *testing.T) {
-	v := RowChangedEvent{}
+func TestMarshalUnmarshalRowChangedEventInRedoLog(t *testing.T) {
+	v := RowChangedEventInRedoLog{}
 	bts, err := v.MarshalMsg(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -710,8 +710,8 @@ func TestMarshalUnmarshalRowChangedEvent(t *testing.T) {
 	}
 }
 
-func BenchmarkMarshalMsgRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkMarshalMsgRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -719,8 +719,8 @@ func BenchmarkMarshalMsgRowChangedEvent(b *testing.B) {
 	}
 }
 
-func BenchmarkAppendMsgRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkAppendMsgRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	bts := make([]byte, 0, v.Msgsize())
 	bts, _ = v.MarshalMsg(bts[0:0])
 	b.SetBytes(int64(len(bts)))
@@ -731,8 +731,8 @@ func BenchmarkAppendMsgRowChangedEvent(b *testing.B) {
 	}
 }
 
-func BenchmarkUnmarshalRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkUnmarshalRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	bts, _ := v.MarshalMsg(nil)
 	b.ReportAllocs()
 	b.SetBytes(int64(len(bts)))
@@ -745,17 +745,17 @@ func BenchmarkUnmarshalRowChangedEvent(b *testing.B) {
 	}
 }
 
-func TestEncodeDecodeRowChangedEvent(t *testing.T) {
-	v := RowChangedEvent{}
+func TestEncodeDecodeRowChangedEventInRedoLog(t *testing.T) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 
 	m := v.Msgsize()
 	if buf.Len() > m {
-		t.Log("WARNING: TestEncodeDecodeRowChangedEvent Msgsize() is inaccurate")
+		t.Log("WARNING: TestEncodeDecodeRowChangedEventInRedoLog Msgsize() is inaccurate")
 	}
 
-	vn := RowChangedEvent{}
+	vn := RowChangedEventInRedoLog{}
 	err := msgp.Decode(&buf, &vn)
 	if err != nil {
 		t.Error(err)
@@ -769,8 +769,8 @@ func TestEncodeDecodeRowChangedEvent(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkEncodeRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 	b.SetBytes(int64(buf.Len()))
@@ -783,8 +783,8 @@ func BenchmarkEncodeRowChangedEvent(b *testing.B) {
 	en.Flush()
 }
 
-func BenchmarkDecodeRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkDecodeRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 	b.SetBytes(int64(buf.Len()))

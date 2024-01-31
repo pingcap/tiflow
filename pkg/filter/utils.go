@@ -35,9 +35,7 @@ func isSysSchema(db string) bool {
 func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 	var f tfilter.Filter
 	var err error
-	if len(cfg.Rules) == 0 && cfg.MySQLReplicationRules != nil {
-		f, err = tfilter.ParseMySQLReplicationRules(cfg.MySQLReplicationRules)
-	} else {
+	if len(cfg.Rules) != 0 {
 		rules := cfg.Rules
 		if len(rules) == 0 {
 			rules = []string{"*.*"}

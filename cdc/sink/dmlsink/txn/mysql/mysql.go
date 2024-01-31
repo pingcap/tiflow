@@ -314,7 +314,7 @@ func convert2RowChanges(
 	switch changeType {
 	case sqlmodel.RowChangeInsert:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			nil,
 			postValues,
@@ -322,7 +322,7 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeUpdate:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			preValues,
 			postValues,
@@ -330,7 +330,7 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			preValues,
 			nil,
@@ -570,8 +570,11 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 			// only use batch dml when the table has a handle key
 			if hasHandleKey(tableColumns) {
-				// TODO(dongmen): find a better way to get table info.
-				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				// TODO: will use firstRow.TableInfo.TableInfo directly after we build a more complete TableInfo in later pr
+				tableInfo := model.BuildTiDBTableInfo(
+					firstRow.TableInfo.GetTableName(),
+					tableColumns,
+					firstRow.TableInfo.IndexColumnsOffset)
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
@@ -586,7 +589,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 		}
 
-		quoteTable := firstRow.Table.QuoteString()
+		quoteTable := firstRow.TableInfo.TableName.QuoteString()
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}

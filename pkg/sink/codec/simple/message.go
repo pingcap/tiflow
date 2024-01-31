@@ -41,24 +41,66 @@ const (
 	defaultVersion = 1
 )
 
-// EventType describes the type of the event.
-type EventType string
+// MessageType is the type of the message.
+type MessageType string
 
-// The list of event types.
 const (
-	// WatermarkType is the type of the watermark event.
-	WatermarkType EventType = "WATERMARK"
-	// DDLType is the type of the DDL event.
-	DDLType EventType = "DDL"
-	// BootstrapType is the type of the bootstrap event.
-	BootstrapType EventType = "BOOTSTRAP"
-	// InsertType is the type of the insert event.
-	InsertType EventType = "INSERT"
-	// UpdateType is the type of the update event.
-	UpdateType EventType = "UPDATE"
-	// DeleteType is the type of the delete event.
-	DeleteType EventType = "DELETE"
+	// MessageTypeWatermark is the type of the watermark event.
+	MessageTypeWatermark MessageType = "WATERMARK"
+	// MessageTypeBootstrap is the type of the bootstrap event.
+	MessageTypeBootstrap MessageType = "BOOTSTRAP"
+	// MessageTypeDDL is the type of the ddl event.
+	MessageTypeDDL MessageType = "DDL"
+	// MessageTypeDML is the type of the row event.
+	MessageTypeDML MessageType = "DML"
 )
+
+// DML Message types
+const (
+	// DMLTypeInsert is the type of the insert event.
+	DMLTypeInsert MessageType = "INSERT"
+	// DMLTypeUpdate is the type of the update event.
+	DMLTypeUpdate MessageType = "UPDATE"
+	// DMLTypeDelete is the type of the delete event.
+	DMLTypeDelete MessageType = "DELETE"
+)
+
+// DDL message types
+const (
+	DDLTypeCreate   MessageType = "CREATE"
+	DDLTypeRename   MessageType = "RENAME"
+	DDLTypeCIndex   MessageType = "CINDEX"
+	DDLTypeDIndex   MessageType = "DINDEX"
+	DDLTypeErase    MessageType = "ERASE"
+	DDLTypeTruncate MessageType = "TRUNCATE"
+	DDLTypeAlter    MessageType = "ALTER"
+	DDLTypeQuery    MessageType = "QUERY"
+)
+
+func getDDLType(t timodel.ActionType) MessageType {
+	switch t {
+	case timodel.ActionCreateTable:
+		return DDLTypeCreate
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return DDLTypeRename
+	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
+		return DDLTypeCIndex
+	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
+		return DDLTypeDIndex
+	case timodel.ActionDropTable:
+		return DDLTypeErase
+	case timodel.ActionTruncateTable:
+		return DDLTypeTruncate
+	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
+		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
+		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
+		return DDLTypeAlter
+	default:
+		return DDLTypeQuery
+	}
+}
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
@@ -235,19 +277,6 @@ type TableSchema struct {
 }
 
 func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
-	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
-		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
-	})
-
-	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
-	for _, col := range tableInfo.Columns {
-		colSchema, err := newColumnSchema(col)
-		if err != nil {
-			return nil, err
-		}
-		columns = append(columns, colSchema)
-	}
-
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
@@ -271,6 +300,19 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 			}
 			indexes = append(indexes, index)
 		}
+	}
+
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
+	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
+	for _, col := range tableInfo.Columns {
+		colSchema, err := newColumnSchema(col)
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, colSchema)
 	}
 
 	return &TableSchema{
@@ -361,13 +403,9 @@ func buildRowChangedEvent(
 	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
-		CommitTs: msg.CommitTs,
-		Table: &model.TableName{
-			Schema:  msg.Schema,
-			Table:   msg.Table,
-			TableID: msg.TableID,
-		},
-		TableInfo: tableInfo,
+		CommitTs:        msg.CommitTs,
+		PhysicalTableID: msg.TableID,
+		TableInfo:       tableInfo,
 	}
 
 	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
@@ -465,10 +503,10 @@ type checksum struct {
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
-	Schema  string    `json:"database,omitempty"`
-	Table   string    `json:"table,omitempty"`
-	TableID int64     `json:"tableID,omitempty"`
-	Type    EventType `json:"type"`
+	Schema  string      `json:"database,omitempty"`
+	Table   string      `json:"table,omitempty"`
+	TableID int64       `json:"tableID,omitempty"`
+	Type    MessageType `json:"type"`
 	// SQL is only for the DDL event.
 	SQL      string `json:"sql,omitempty"`
 	CommitTs uint64 `json:"commitTs"`
@@ -497,20 +535,20 @@ type message struct {
 func newResolvedMessage(ts uint64) *message {
 	return &message{
 		Version:  defaultVersion,
-		Type:     WatermarkType,
+		Type:     MessageTypeWatermark,
 		CommitTs: ts,
 		BuildTs:  time.Now().UnixMilli(),
 	}
 }
 
-func newBootstrapMessage(event *model.DDLEvent) (*message, error) {
-	schema, err := newTableSchema(event.TableInfo)
+func newBootstrapMessage(tableInfo *model.TableInfo) (*message, error) {
+	schema, err := newTableSchema(tableInfo)
 	if err != nil {
 		return nil, err
 	}
 	msg := &message{
 		Version:     defaultVersion,
-		Type:        BootstrapType,
+		Type:        MessageTypeBootstrap,
 		BuildTs:     time.Now().UnixMilli(),
 		TableSchema: schema,
 	}
@@ -539,7 +577,7 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:        defaultVersion,
-		Type:           DDLType,
+		Type:           getDDLType(ddl.Type),
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
 		SQL:            ddl.Query,
@@ -555,8 +593,8 @@ func newDMLMessage(
 ) (*message, error) {
 	m := &message{
 		Version:            defaultVersion,
-		Schema:             event.Table.Schema,
-		Table:              event.Table.Table,
+		Schema:             event.TableInfo.GetSchemaName(),
+		Table:              event.TableInfo.GetTableName(),
 		TableID:            event.TableInfo.ID,
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),
@@ -566,19 +604,19 @@ func newDMLMessage(
 	}
 	var err error
 	if event.IsInsert() {
-		m.Type = InsertType
+		m.Type = DMLTypeInsert
 		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
-		m.Type = DeleteType
+		m.Type = DMLTypeDelete
 		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
-		m.Type = UpdateType
+		m.Type = DMLTypeUpdate
 		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err

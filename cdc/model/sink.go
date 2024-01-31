@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -204,10 +205,10 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" json:"db-name" msg:"db-name"`
-	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
-	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
+	Schema      string `toml:"db-name" msg:"db-name"`
+	Table       string `toml:"tbl-name" msg:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" msg:"tbl-id"`
+	IsPartition bool   `toml:"is-partition" msg:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -277,9 +278,9 @@ func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
-	Row        *RowChangedEvent `msg:"row"`
-	Columns    []RedoColumn     `msg:"columns"`
-	PreColumns []RedoColumn     `msg:"pre-columns"`
+	Row        *RowChangedEventInRedoLog `msg:"row"`
+	Columns    []RedoColumn              `msg:"columns"`
+	PreColumns []RedoColumn              `msg:"pre-columns"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -291,8 +292,21 @@ type RedoDDLEvent struct {
 
 // ToRedoLog converts row changed event to redo log
 func (r *RowChangedEvent) ToRedoLog() *RedoLog {
+	rowInRedoLog := &RowChangedEventInRedoLog{
+		StartTs:  r.StartTs,
+		CommitTs: r.CommitTs,
+		Table: &TableName{
+			Schema:      r.TableInfo.GetSchemaName(),
+			Table:       r.TableInfo.GetTableName(),
+			TableID:     r.PhysicalTableID,
+			IsPartition: r.TableInfo.IsPartitionTable(),
+		},
+		Columns:      r.Columns,
+		PreColumns:   r.PreColumns,
+		IndexColumns: r.TableInfo.IndexColumnsOffset,
+	}
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: r},
+		RedoRow: RedoRowChangedEvent{Row: rowInRedoLog},
 		Type:    RedoLogTypeRow,
 	}
 }
@@ -306,16 +320,18 @@ func (d *DDLEvent) ToRedoLog() *RedoLog {
 }
 
 // RowChangedEvent represents a row changed event
+//
+//msgp:ignore RowChangedEvent
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
-	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+	StartTs  uint64
+	CommitTs uint64
 
-	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
+	RowID int64 // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	// Table contains the table name and table ID.
-	// NOTICE: We store the physical table ID here, not the logical table ID.
-	Table    *TableName         `json:"table" msg:"table"`
-	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	PhysicalTableID int64
+
+	ColInfos []rowcodec.ColInfo
+
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
 	// For normal table, there is only one ID, which is the physical ID.
@@ -326,24 +342,46 @@ type RowChangedEvent struct {
 	// In general, we always use the physical ID to represent a table, but we
 	// record the logical ID from the DDL event(job.BinlogInfo.TableInfo).
 	// So be careful when using the TableInfo.
-	TableInfo *TableInfo `json:"-" msg:"-"`
+	TableInfo *TableInfo
 
-	Columns      []*Column `json:"columns" msg:"columns"`
-	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
-	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+	Columns    []*Column
+	PreColumns []*Column
 
 	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
 	// and TiCDC set the integrity check level to the correctness.
-	Checksum *integrity.Checksum `json:"-" msg:"-"`
+	Checksum *integrity.Checksum
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
-	ApproximateDataSize int64 `json:"-" msg:"-"`
+	ApproximateDataSize int64
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
-	SplitTxn bool `json:"-" msg:"-"`
+	SplitTxn bool
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
-	ReplicatingTs Ts `json:"-" msg:"-"`
+	ReplicatingTs Ts
+	// HandleKey is the key of the row changed event.
+	// It can be used to identify the row changed event.
+	// It can be one of three : common_handle, int_handle or _tidb_rowid based on the table definitions
+	// 1. primary key is the clustered index, and key is not int type, then we use `CommonHandle`
+	// 2. primary key is int type(including different types of int, such as bigint, TINYINT), then we use IntHandle
+	// 3. when the table doesn't have the primary key and clustered index,
+	//    tidb will make a hidden column called "_tidb_rowid" as the handle.
+	//    due to the type of "_tidb_rowid" is int, so we also use IntHandle to represent.
+	HandleKey kv.Handle
+}
+
+// RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format
+type RowChangedEventInRedoLog struct {
+	StartTs  uint64 `msg:"start-ts"`
+	CommitTs uint64 `msg:"commit-ts"`
+
+	// Table contains the table name and table ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
+	Table *TableName `msg:"table"`
+
+	Columns      []*Column `msg:"columns"`
+	PreColumns   []*Column `msg:"pre-columns"`
+	IndexColumns [][]int   `msg:"index-columns"`
 }
 
 // txnRows represents a set of events that belong to the same transaction.
@@ -480,12 +518,8 @@ func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
 func (r *RowChangedEvent) ApproximateBytes() int {
 	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
-	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
-	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
-	const sizeOfInt = int(unsafe.Sizeof(int(0)))
 
-	// Size of table name
-	size := len(r.Table.Schema) + len(r.Table.Table) + sizeOfTable
+	size := 0
 	// Size of cols
 	for i := range r.Columns {
 		size += r.Columns[i].ApproximateBytes
@@ -496,11 +530,6 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 			size += r.PreColumns[i].ApproximateBytes
 		}
 	}
-	// Size of index columns
-	for i := range r.IndexColumns {
-		size += len(r.IndexColumns[i]) * sizeOfInt
-		size += sizeOfIndexes
-	}
 	// Size of an empty row event
 	size += sizeOfRowEvent
 	return size
@@ -508,16 +537,16 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Name      string         `json:"name" msg:"name"`
-	Type      byte           `json:"type" msg:"type"`
-	Charset   string         `json:"charset" msg:"charset"`
-	Collation string         `json:"collation" msg:"collation"`
-	Flag      ColumnFlagType `json:"flag" msg:"-"`
-	Value     interface{}    `json:"value" msg:"-"`
-	Default   interface{}    `json:"default" msg:"-"`
+	Name      string         `msg:"name"`
+	Type      byte           `msg:"type"`
+	Charset   string         `msg:"charset"`
+	Collation string         `msg:"collation"`
+	Flag      ColumnFlagType `msg:"-"`
+	Value     interface{}    `msg:"-"`
+	Default   interface{}    `msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `json:"-" msg:"-"`
+	ApproximateBytes int `msg:"-"`
 }
 
 // RedoColumn stores Column change
@@ -530,16 +559,28 @@ type RedoColumn struct {
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
-func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
+// Note the result TableInfo may not be same as the original TableInfo in tidb.
+// The only guarantee is that you can restore the `Name`, `Type`, `Charset`, `Collation`
+// and `Flag` field of `Column` using the result TableInfo.
+// The precondition required for calling this function:
+//  1. There must be at least one handle key in `columns`;
+//  2. The handle key must either be a primary key or a non null unique key;
+//  3. The index that is selected as the handle must be provided in `indexColumns`;
+func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]int) *model.TableInfo {
 	ret := &model.TableInfo{}
-	// nowhere will use this field, so we set a debug message
-	ret.Name = model.NewCIStr("BuildTiDBTableInfo")
+	ret.Name = model.NewCIStr(tableName)
 
+	hasPrimaryKeyColumn := false
+	hasHandleKeyColumn := false
+	// add a mock id to identify columns inside cdc
+	nextMockColID := int64(100) // 100 is an arbitrary number
 	for i, col := range columns {
 		columnInfo := &model.ColumnInfo{
+			ID:     nextMockColID,
 			Offset: i,
 			State:  model.StatePublic,
 		}
+		nextMockColID += 1
 		if col == nil {
 			// by referring to datum2Column, nil is happened when
 			// - !IsColCDCVisible, which means the column is a virtual generated
@@ -555,9 +596,18 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 		columnInfo.Name = model.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
-		// TiKV always use utf8mb4 to store, and collation is not recorded by CDC
-		columnInfo.SetCharset(mysql.UTF8MB4Charset)
-		columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+		if col.Charset != "" {
+			columnInfo.SetCharset(col.Charset)
+		} else {
+			// charset is not stored, give it a default value
+			columnInfo.SetCharset(mysql.UTF8MB4Charset)
+		}
+		if col.Collation != "" {
+			columnInfo.SetCollate(col.Collation)
+		} else {
+			// collation is not stored, give it a default value
+			columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+		}
 
 		// inverse initColumnsFlag
 		flag := col.Flag
@@ -569,14 +619,30 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			columnInfo.GeneratedExprString = "pass_generated_check"
 			columnInfo.GeneratedStored = true
 		}
-		if flag.IsHandleKey() {
+		if flag.IsPrimaryKey() {
 			columnInfo.AddFlag(mysql.PriKeyFlag)
+			hasPrimaryKeyColumn = true
+			if !flag.IsHandleKey() {
+				log.Panic("Primary key must be handle key",
+					zap.String("table", tableName),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
+			}
+			// just set it for test compatibility,
+			// actually we cannot deduce the value of IsCommonHandle from the provided args.
 			ret.IsCommonHandle = true
-		} else if flag.IsPrimaryKey() {
-			columnInfo.AddFlag(mysql.PriKeyFlag)
 		}
 		if flag.IsUniqueKey() {
 			columnInfo.AddFlag(mysql.UniqueKeyFlag)
+		}
+		if flag.IsHandleKey() {
+			hasHandleKeyColumn = true
+			if !flag.IsPrimaryKey() && !flag.IsUniqueKey() {
+				log.Panic("Handle key must either be primary key or unique key",
+					zap.String("table", tableName),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
+			}
 		}
 		if !flag.IsNullable() {
 			columnInfo.AddFlag(mysql.NotNullFlag)
@@ -589,7 +655,21 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 		ret.Columns = append(ret.Columns, columnInfo)
 	}
+	if !hasHandleKeyColumn {
+		log.Panic("Handle key not found",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns))
+	}
 
+	hasPrimaryKeyIndex := false
+	hasHandleIndex := false
+	// TiCDC handles columns according to the following rules:
+	// 1. If a primary key (PK) exists, it is chosen.
+	// 2. If there is no PK, TiCDC looks for a not null unique key (UK) with the least number of columns and the smallest index ID.
+	// So we assign the smallest index id to the index which is selected as handle to mock this behavior.
+	minIndexID := int64(1)
+	nextMockIndexID := minIndexID + 1
 	for i, colOffsets := range indexColumns {
 		indexInfo := &model.IndexInfo{
 			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
@@ -610,11 +690,15 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 
 		isPrimary := true
+		isAllColumnsHandle := true
 		for _, offset := range colOffsets {
 			col := columns[offset]
 			// When only all columns in the index are primary key, then the index is primary key.
 			if col == nil || !col.Flag.IsPrimaryKey() {
 				isPrimary = false
+			}
+			if col == nil || !col.Flag.IsHandleKey() {
+				isAllColumnsHandle = false
 			}
 
 			tiCol := ret.Columns[offset]
@@ -624,11 +708,48 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
 			indexInfo.Primary = isPrimary
 		}
+		hasPrimaryKeyIndex = hasPrimaryKeyIndex || isPrimary
+		if isAllColumnsHandle {
+			// If there is no primary index, only one index will contain columns which are all handles.
+			// If there is a primary index, the primary index must be the handle.
+			// And there may be another index which is a subset of the primary index. So we skip this check.
+			if hasHandleIndex && !hasPrimaryKeyColumn {
+				log.Panic("Multiple handle index found",
+					zap.String("table", tableName),
+					zap.Any("colOffsets", colOffsets),
+					zap.String("indexName", indexInfo.Name.O),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
+			}
+			hasHandleIndex = true
+		}
+		// If there is no primary column, we need allocate the min index id to the one selected as handle.
+		// In other cases, we don't care the concrete value of index id.
+		if isAllColumnsHandle && !hasPrimaryKeyColumn {
+			indexInfo.ID = minIndexID
+		} else {
+			indexInfo.ID = nextMockIndexID
+			nextMockIndexID += 1
+		}
 
 		// TODO: revert the "all column set index related flag" to "only the
 		// first column set index related flag" if needed
 
 		ret.Indices = append(ret.Indices, indexInfo)
+	}
+	if hasPrimaryKeyColumn != hasPrimaryKeyIndex {
+		log.Panic("Primary key column and primary key index is not consistent",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns),
+			zap.Bool("hasPrimaryKeyColumn", hasPrimaryKeyColumn),
+			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex))
+	}
+	if !hasHandleIndex {
+		log.Panic("Handle index not found",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns))
 	}
 	return ret
 }
@@ -766,8 +887,8 @@ func NewBootstrapDDLEvent(tableInfo *TableInfo) *DDLEvent {
 //
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
-	Table     *TableName
-	TableInfo *TableInfo
+	PhysicalTableID int64
+	TableInfo       *TableInfo
 	// TableInfoVersion is the version of the table info, it is used to generate data path
 	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
 	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
@@ -782,6 +903,11 @@ type SingleTableTxn struct {
 // GetCommitTs returns the commit timestamp of the transaction.
 func (t *SingleTableTxn) GetCommitTs() uint64 {
 	return t.CommitTs
+}
+
+// GetPhysicalTableID returns the physical table id of the table in the transaction
+func (t *SingleTableTxn) GetPhysicalTableID() int64 {
+	return t.PhysicalTableID
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
@@ -908,11 +1034,11 @@ func splitUpdateEvent(
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.PhysicalTableID != t.GetPhysicalTableID() {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),
-			zap.Any("table", t.Table),
+			zap.Any("table", t.GetPhysicalTableID()),
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
@@ -920,7 +1046,8 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 
 // TopicPartitionKey contains the topic and partition key of the message.
 type TopicPartitionKey struct {
-	Topic        string
-	Partition    int32
-	PartitionKey string
+	Topic          string
+	Partition      int32
+	PartitionKey   string
+	TotalPartition int32
 }

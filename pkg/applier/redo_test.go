@@ -129,12 +129,15 @@ func TestApply(t *testing.T) {
 		{
 			StartTs:  1100,
 			CommitTs: 1200,
-			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "test", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 1,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "2",
@@ -145,12 +148,15 @@ func TestApply(t *testing.T) {
 		{
 			StartTs:  1200,
 			CommitTs: resolvedTs,
-			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "test", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 1,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "2",
@@ -161,7 +167,7 @@ func TestApply(t *testing.T) {
 				{
 					Name:  "a",
 					Value: 2,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "3",
@@ -191,7 +197,7 @@ func TestApply(t *testing.T) {
 					Schema: "test", Table: "resolved",
 				},
 			},
-			Query: "create table resolved(id int)",
+			Query: "create table resolved(id int not null unique key)",
 			Type:  timodel.ActionCreateTable,
 		},
 	}
@@ -263,8 +269,8 @@ func getMockDB(t *testing.T) *sql.DB {
 
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
-		WithArgs(1, "2").
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
+		WithArgs(1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 		WithArgs(2, "3").
@@ -274,7 +280,7 @@ func getMockDB(t *testing.T) *sql.DB {
 	// Then, apply ddl which commitTs equal to resolvedTs
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("create table resolved(id int)").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("create table resolved(id int not null unique key)").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	mock.ExpectClose()

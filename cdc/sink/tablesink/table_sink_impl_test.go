@@ -84,77 +84,79 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*dmlsink.TxnCallbackableE
 }
 
 func getTestRows() []*model.RowChangedEvent {
-	tableInfo := &model.TableName{
-		Schema:      "test",
-		Table:       "t1",
-		TableID:     1,
-		IsPartition: false,
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:      "test",
+			Table:       "t1",
+			TableID:     1,
+			IsPartition: false,
+		},
 	}
 
 	return []*model.RowChangedEvent{
 		{
-			Table:    tableInfo,
-			CommitTs: 101,
-			StartTs:  98,
+			TableInfo: tableInfo,
+			CommitTs:  101,
+			StartTs:   98,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 102,
-			StartTs:  99,
+			TableInfo: tableInfo,
+			CommitTs:  102,
+			StartTs:   99,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 102,
-			StartTs:  100,
+			TableInfo: tableInfo,
+			CommitTs:  102,
+			StartTs:   100,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 102,
-			StartTs:  100,
+			TableInfo: tableInfo,
+			CommitTs:  102,
+			StartTs:   100,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 103,
-			StartTs:  101,
+			TableInfo: tableInfo,
+			CommitTs:  103,
+			StartTs:   101,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 103,
-			StartTs:  101,
+			TableInfo: tableInfo,
+			CommitTs:  103,
+			StartTs:   101,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 104,
-			StartTs:  102,
+			TableInfo: tableInfo,
+			CommitTs:  104,
+			StartTs:   102,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 105,
-			StartTs:  103,
+			TableInfo: tableInfo,
+			CommitTs:  105,
+			StartTs:   103,
 			// Batch1
 			SplitTxn: true,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 105,
-			StartTs:  103,
+			TableInfo: tableInfo,
+			CommitTs:  105,
+			StartTs:   103,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 105,
-			StartTs:  103,
+			TableInfo: tableInfo,
+			CommitTs:  105,
+			StartTs:   103,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 105,
-			StartTs:  103,
+			TableInfo: tableInfo,
+			CommitTs:  105,
+			StartTs:   103,
 			// Batch2
 			SplitTxn: true,
 		},
 		{
-			Table:    tableInfo,
-			CommitTs: 105,
-			StartTs:  103,
+			TableInfo: tableInfo,
+			CommitTs:  105,
+			StartTs:   103,
 		},
 	}
 }

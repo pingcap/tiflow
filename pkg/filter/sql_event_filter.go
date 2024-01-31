@@ -17,7 +17,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+<<<<<<< HEAD
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+>>>>>>> upstream/master
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -147,8 +152,8 @@ func (f *sqlEventFilter) shouldSkipDDL(
 	evenType := ddlToEventType(ddlType)
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
-			zap.String("type", ddlType.String()),
-			zap.String("query", query))
+			zap.String("type", ddl.Type.String()),
+			zap.String("query", ddl.Query))
 		return false, nil
 	}
 
@@ -157,7 +162,7 @@ func (f *sqlEventFilter) shouldSkipDDL(
 		action, err := rule.bf.Filter(
 			binlogFilterSchemaPlaceholder,
 			binlogFilterTablePlaceholder,
-			evenType, query)
+			evenType, ddl.Query)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -202,7 +207,7 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 		log.Warn("unknown row changed event type")
 		return false, nil
 	}
-	rules := f.getRules(event.Table.Schema, event.Table.Table)
+	rules := f.getRules(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName())
 	for _, rule := range rules {
 		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, et, dmlQuery)
 		if err != nil {
