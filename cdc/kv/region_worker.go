@@ -92,6 +92,7 @@ for event processing to increase throughput.
 type regionWorker struct {
 	parentCtx context.Context
 	session   *eventFeedSession
+	stream    *eventFeedStream
 
 	inputCh  chan []*regionStatefulEvent
 	outputCh chan<- model.RegionFeedEvent
@@ -108,11 +109,8 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	storeAddr string
-
 	// how many pending input events
-	inputPending int32
-
+	inputPending   int32
 	pendingRegions *syncRegionFeedStateMap
 }
 
@@ -143,10 +141,13 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetric
 }
 
 func newRegionWorker(
-	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	ctx context.Context,
+	stream *eventFeedStream,
+	s *eventFeedSession,
 	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
+<<<<<<< HEAD
 		parentCtx:     ctx,
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
@@ -160,6 +161,20 @@ func newRegionWorker(
 		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
 
+=======
+		parentCtx:      ctx,
+		session:        s,
+		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:       s.eventCh,
+		stream:         stream,
+		errorCh:        make(chan error, 1),
+		statesManager:  newRegionStateManager(-1),
+		rtsManager:     newRegionTsManager(),
+		rtsUpdateCh:    make(chan *rtsUpdateEvent, 1024),
+		concurrency:    int(s.client.config.KVClient.WorkerConcurrent),
+		metrics:        newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		inputPending:   0,
+>>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 		pendingRegions: pendingRegions,
 	}
 }
@@ -197,6 +212,15 @@ func (w *regionWorker) checkShouldExit() error {
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
 	if empty && w.pendingRegions.len() == 0 {
+		log.Info("A single region error happens before, "+
+			"and there is no region maintained by this region worker, "+
+			"exit it and cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.stream.addr),
+			zap.Uint64("streamID", w.stream.id),
+			zap.Int64("tableID", w.session.tableID),
+			zap.String("tableName", w.session.tableName))
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
@@ -238,6 +262,18 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	// `ErrPrewriteNotMatch` would cause duplicated request to the same region,
 	// so cancel the original gRPC stream before restarts a new stream.
 	if cerror.ErrPrewriteNotMatch.Equal(err) {
+		log.Info("meet ErrPrewriteNotMatch error, cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.stream.addr),
+			zap.Uint64("streamID", w.stream.id),
+			zap.Int64("tableID", w.session.tableID),
+			zap.String("tableName", w.session.tableName),
+			zap.Uint64("regionID", regionID),
+			zap.Uint64("requestID", state.requestID),
+			zap.Stringer("span", &state.sri.span),
+			zap.Uint64("resolvedTs", state.sri.resolvedTs()),
+			zap.Error(err))
 		w.cancelStream(time.Second)
 	}
 
@@ -340,7 +376,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
-							zap.String("addr", w.storeAddr),
+							zap.String("storeAddr", w.stream.addr),
+							zap.Uint64("streamID", w.stream.id),
+							zap.Int64("tableID", w.session.tableID),
+							zap.String("tableName", w.session.tableName),
 							zap.Uint64("regionID", rts.regionID),
 							zap.Stringer("span", &state.sri.span),
 							zap.Duration("duration", sinceLastResolvedTs),
@@ -563,6 +602,13 @@ func (w *regionWorker) collectWorkpoolError(ctx context.Context) error {
 
 func (w *regionWorker) checkErrorReconnect(err error) error {
 	if errors.Cause(err) == errReconnect {
+		log.Info("kv client reconnect triggered, cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.stream.addr),
+			zap.Uint64("streamID", w.stream.id),
+			zap.Int64("tableID", w.session.tableID),
+			zap.String("tableName", w.session.tableName))
 		w.cancelStream(time.Second)
 		// if stream is already deleted, just ignore errReconnect
 		return nil
@@ -570,22 +616,18 @@ func (w *regionWorker) checkErrorReconnect(err error) error {
 	return err
 }
 
+// Note(dongmen): Please log the reason of calling this function in the caller.
+// This will be helpful for troubleshooting.
 func (w *regionWorker) cancelStream(delay time.Duration) {
-	cancel, ok := w.session.getStreamCancel(w.storeAddr)
-	if ok {
-		// cancel the stream to trigger strem.Recv with context cancel error
-		// Note use context cancel is the only way to terminate a gRPC stream
-		cancel()
-		// Failover in stream.Recv has 0-100ms delay, the onRegionFail
-		// should be called after stream has been deleted. Add a delay here
-		// to avoid too frequent region rebuilt.
-		time.Sleep(delay)
-	} else {
-		log.Warn("gRPC stream cancel func not found",
-			zap.String("addr", w.storeAddr),
-			zap.String("namespace", w.session.client.changefeed.Namespace),
-			zap.String("changefeed", w.session.client.changefeed.ID))
-	}
+	// cancel the stream to make strem.Recv returns a context cancel error
+	// This will make the receiveFromStream goroutine exit and the stream can
+	// be re-established by the caller.
+	// Note: use context cancel is the only way to terminate a gRPC stream.
+	w.stream.cancel()
+	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+	// should be called after stream has been deleted. Add a delay here
+	// to avoid too frequent region rebuilt.
+	time.Sleep(delay)
 }
 
 func (w *regionWorker) run() error {
