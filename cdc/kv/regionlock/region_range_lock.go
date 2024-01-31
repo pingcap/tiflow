@@ -256,12 +256,12 @@ type RegionRangeLock struct {
 	totalSpan         tablepb.Span
 	changefeedLogInfo string
 
-	mu                sync.RWMutex
-	rangeCheckpointTs *rangeTsMap
-	rangeLock         *btree.BTreeG[*rangeLockEntry]
-	regionIDLock      map[uint64]*rangeLockEntry
-	stopped           bool
-	refCount          uint64
+	mu              sync.RWMutex
+	rangeResolvedTs *rangeTsMap
+	rangeLock       *btree.BTreeG[*rangeLockEntry]
+	regionIDLock    map[uint64]*rangeLockEntry
+	stopped         bool
+	refCount        uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
@@ -273,7 +273,7 @@ func NewRegionRangeLock(
 		id:                id,
 		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
-		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
+		rangeResolvedTs:   newRangeTsMap(startKey, endKey, startTs),
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 	}
@@ -324,19 +324,19 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
 	if len(overlappingEntries) == 0 {
-		checkpointTs := l.rangeCheckpointTs.getMinTsInRange(startKey, endKey)
+		checkpointTs := l.rangeResolvedTs.getMinTsInRange(startKey, endKey)
 		newEntry := &rangeLockEntry{
 			startKey: startKey,
 			endKey:   endKey,
 			regionID: regionID,
 			version:  version,
 		}
-		newEntry.state.CheckpointTs.Store(checkpointTs)
+		newEntry.state.ResolvedTs.Store(checkpointTs)
 		newEntry.state.Created = time.Now()
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
-		l.rangeCheckpointTs.unset(startKey, endKey)
+		l.rangeResolvedTs.unset(startKey, endKey)
 		log.Debug("range locked",
 			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("lockID", l.id),
@@ -348,9 +348,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 		l.refCount += 1
 		return LockRangeResult{
-			Status:       LockRangeStatusSuccess,
-			CheckpointTs: checkpointTs,
-			LockedRange:  &newEntry.state,
+			Status:      LockRangeStatusSuccess,
+			ResolvedTs:  checkpointTs,
+			LockedRange: &newEntry.state,
 		}, nil
 	}
 
@@ -511,18 +511,18 @@ func (l *RegionRangeLock) UnlockRange(
 		panic("unreachable")
 	}
 
-	var newCheckpointTs uint64
+	var newResolvedTs uint64
 	if len(checkpointTs) > 0 {
-		newCheckpointTs = checkpointTs[0]
+		newResolvedTs = checkpointTs[0]
 	} else {
-		newCheckpointTs = entry.state.CheckpointTs.Load()
+		newResolvedTs = entry.state.ResolvedTs.Load()
 	}
 
-	l.rangeCheckpointTs.set(startKey, endKey, newCheckpointTs)
+	l.rangeResolvedTs.set(startKey, endKey, newResolvedTs)
 	log.Debug("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
-		zap.Uint64("checkpointTs", newCheckpointTs),
+		zap.Uint64("checkpointTs", newResolvedTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)))
 	return
@@ -563,7 +563,7 @@ const (
 
 // LockRangeResult represents the result of LockRange method of RegionRangeLock.
 // If Status is LockRangeStatusSuccess:
-//   - CheckpointTs will be the minimal checkpoint ts among the locked range;
+//   - ResolvedTs will be the minimal checkpoint ts among the locked range;
 //   - LockedRange is for recording real-time state changes;
 //
 // If Status is LockRangeStatusWait, it means the lock cannot be acquired immediately. WaitFn must be invoked to
@@ -572,20 +572,20 @@ const (
 // If Status is LockRangeStatusStale, it means the LockRange request is stale because there's already a overlapping
 // locked range, whose version is greater or equals to the requested one.
 type LockRangeResult struct {
-	Status       int
-	CheckpointTs uint64
-	LockedRange  *LockedRange
-	WaitFn       func() LockRangeResult
-	RetryRanges  []tablepb.Span
+	Status      int
+	ResolvedTs  uint64
+	LockedRange *LockedRange
+	WaitFn      func() LockRangeResult
+	RetryRanges []tablepb.Span
 }
 
 // LockedRange is returned by `RegionRangeLock.LockRange`, which can be used to
 // collect informations for the range. And collected informations can be accessed
 // by iterating `RegionRangeLock`.
 type LockedRange struct {
-	CheckpointTs atomic.Uint64
-	Initialzied  atomic.Bool
-	Created      time.Time
+	ResolvedTs  atomic.Uint64
+	Initialzied atomic.Bool
+	Created     time.Time
 }
 
 // CollectLockedRangeAttrs collects locked range attributes.
@@ -595,8 +595,8 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	r.LockedRegionCount = l.rangeLock.Len()
-	r.FastestRegion.CheckpointTs = 0
-	r.SlowestRegion.CheckpointTs = math.MaxUint64
+	r.FastestRegion.ResolvedTs = 0
+	r.SlowestRegion.ResolvedTs = math.MaxUint64
 
 	lastEnd := l.totalSpan.StartKey
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
@@ -606,19 +606,19 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 		}
 		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
 			span := tablepb.Span{StartKey: lastEnd, EndKey: item.startKey}
-			ts := l.rangeCheckpointTs.getMinTsInRange(lastEnd, item.startKey)
-			r.Holes = append(r.Holes, HoleAttrs{Span: span, CheckpointTs: ts})
+			ts := l.rangeResolvedTs.getMinTsInRange(lastEnd, item.startKey)
+			r.Holes = append(r.Holes, HoleAttrs{Span: span, ResolvedTs: ts})
 		}
-		ckpt := item.state.CheckpointTs.Load()
-		if ckpt > r.FastestRegion.CheckpointTs {
+		ckpt := item.state.ResolvedTs.Load()
+		if ckpt > r.FastestRegion.ResolvedTs {
 			r.FastestRegion.RegionID = item.regionID
-			r.FastestRegion.CheckpointTs = ckpt
+			r.FastestRegion.ResolvedTs = ckpt
 			r.FastestRegion.Initialized = item.state.Initialzied.Load()
 			r.FastestRegion.Created = item.state.Created
 		}
-		if ckpt < r.SlowestRegion.CheckpointTs {
+		if ckpt < r.SlowestRegion.ResolvedTs {
 			r.SlowestRegion.RegionID = item.regionID
-			r.SlowestRegion.CheckpointTs = ckpt
+			r.SlowestRegion.ResolvedTs = ckpt
 			r.SlowestRegion.Initialized = item.state.Initialzied.Load()
 			r.SlowestRegion.Created = item.state.Created
 		}
@@ -627,8 +627,8 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 	})
 	if spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0 {
 		span := tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey}
-		ts := l.rangeCheckpointTs.getMinTsInRange(lastEnd, l.totalSpan.EndKey)
-		r.Holes = append(r.Holes, HoleAttrs{Span: span, CheckpointTs: ts})
+		ts := l.rangeResolvedTs.getMinTsInRange(lastEnd, l.totalSpan.EndKey)
+		r.Holes = append(r.Holes, HoleAttrs{Span: span, ResolvedTs: ts})
 	}
 	return
 }
@@ -643,33 +643,33 @@ type CollectedLockedRangeAttrs struct {
 
 // LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
 type LockedRangeAttrs struct {
-	RegionID     uint64
-	CheckpointTs uint64
-	Initialized  bool
-	Created      time.Time
+	RegionID    uint64
+	ResolvedTs  uint64
+	Initialized bool
+	Created     time.Time
 }
 
 // HoleAttrs is used for `CollectedLockedRangeAttrs`.
 type HoleAttrs struct {
-	Span         tablepb.Span
-	CheckpointTs uint64
+	Span       tablepb.Span
+	ResolvedTs uint64
 }
 
-// CalculateMinCheckpointTs gets the minimum checkpoint timestamp from range lock.
-func (l *RegionRangeLock) CalculateMinCheckpointTs() uint64 {
+// CalculateMinResolvedTs gets the minimum checkpoint timestamp from range lock.
+func (l *RegionRangeLock) CalculateMinResolvedTs() uint64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	var minTs uint64 = math.MaxUint64
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
-		ts := item.state.CheckpointTs.Load()
+		ts := item.state.ResolvedTs.Load()
 		if ts < minTs {
 			minTs = ts
 		}
 		return true
 	})
 
-	unlockedMinTs := l.rangeCheckpointTs.getMinTs()
+	unlockedMinTs := l.rangeResolvedTs.getMinTs()
 	if unlockedMinTs < minTs {
 		minTs = unlockedMinTs
 	}

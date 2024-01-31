@@ -671,7 +671,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -725,7 +725,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -776,7 +776,7 @@ func (s *SharedClient) newRequestedTable(
 
 	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}

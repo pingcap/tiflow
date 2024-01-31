@@ -26,9 +26,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mustSuccess(t *testing.T, res LockRangeResult, expectedCheckpointTs uint64) {
+func mustSuccess(t *testing.T, res LockRangeResult, expectedResolvedTs uint64) {
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
-	require.Equal(t, expectedCheckpointTs, res.CheckpointTs)
+	require.Equal(t, expectedResolvedTs, res.ResolvedTs)
 }
 
 func mustStale(t *testing.T, res LockRangeResult, expectedRetryRanges ...tablepb.Span) {
@@ -46,10 +46,10 @@ func mustLockRangeSuccess(
 	t *testing.T,
 	l *RegionRangeLock,
 	startKey, endKey string,
-	regionID, version, expectedCheckpointTs uint64,
+	regionID, version, expectedResolvedTs uint64,
 ) {
 	res := l.LockRange(ctx, []byte(startKey), []byte(endKey), regionID, version)
-	mustSuccess(t, res, expectedCheckpointTs)
+	mustSuccess(t, res, expectedResolvedTs)
 }
 
 // nolint:unparam
@@ -266,44 +266,44 @@ func TestRegionRangeLockCollect(t *testing.T) {
 	attrs := l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 1, len(attrs.Holes))
 
-	l.LockRange(ctx, []byte("a"), []byte("m"), 1, 1).LockedRange.CheckpointTs.Add(1)
+	l.LockRange(ctx, []byte("a"), []byte("m"), 1, 1).LockedRange.ResolvedTs.Add(1)
 	attrs = l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 1, len(attrs.Holes))
-	require.Equal(t, uint64(101), attrs.SlowestRegion.CheckpointTs)
-	require.Equal(t, uint64(101), attrs.FastestRegion.CheckpointTs)
+	require.Equal(t, uint64(101), attrs.SlowestRegion.ResolvedTs)
+	require.Equal(t, uint64(101), attrs.FastestRegion.ResolvedTs)
 
-	l.LockRange(ctx, []byte("m"), []byte("z"), 2, 1).LockedRange.CheckpointTs.Add(2)
+	l.LockRange(ctx, []byte("m"), []byte("z"), 2, 1).LockedRange.ResolvedTs.Add(2)
 	attrs = l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 0, len(attrs.Holes))
-	require.Equal(t, uint64(101), attrs.SlowestRegion.CheckpointTs)
-	require.Equal(t, uint64(102), attrs.FastestRegion.CheckpointTs)
+	require.Equal(t, uint64(101), attrs.SlowestRegion.ResolvedTs)
+	require.Equal(t, uint64(102), attrs.FastestRegion.ResolvedTs)
 
 	l.UnlockRange([]byte("a"), []byte("m"), 1, 1)
 	attrs = l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 1, len(attrs.Holes))
-	require.Equal(t, uint64(102), attrs.SlowestRegion.CheckpointTs)
-	require.Equal(t, uint64(102), attrs.FastestRegion.CheckpointTs)
+	require.Equal(t, uint64(102), attrs.SlowestRegion.ResolvedTs)
+	require.Equal(t, uint64(102), attrs.FastestRegion.ResolvedTs)
 
 	l.UnlockRange([]byte("m"), []byte("z"), 2, 1)
 	attrs = l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 1, len(attrs.Holes))
 }
 
-func TestCalculateMinCheckpointTs(t *testing.T) {
+func TestCalculateMinResolvedTs(t *testing.T) {
 	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), 100, "")
 
 	res := l.LockRange(context.Background(), []byte("m"), []byte("x"), 1, 1)
-	res.LockedRange.CheckpointTs.Store(101)
+	res.LockedRange.ResolvedTs.Store(101)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
-	require.Equal(t, uint64(100), l.CalculateMinCheckpointTs())
+	require.Equal(t, uint64(100), l.CalculateMinResolvedTs())
 
 	res = l.LockRange(context.Background(), []byte("a"), []byte("m"), 2, 1)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
-	res.LockedRange.CheckpointTs.Store(102)
+	res.LockedRange.ResolvedTs.Store(102)
 	res = l.LockRange(context.Background(), []byte("x"), []byte("z"), 3, 1)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
-	res.LockedRange.CheckpointTs.Store(103)
-	require.Equal(t, uint64(101), l.CalculateMinCheckpointTs())
+	res.LockedRange.ResolvedTs.Store(103)
+	require.Equal(t, uint64(101), l.CalculateMinResolvedTs())
 }
 
 func BenchmarkOneMillionRegions(b *testing.B) {
@@ -330,11 +330,11 @@ func BenchmarkOneMillionRegions(b *testing.B) {
 		if lockRes.Status != LockRangeStatusSuccess {
 			panic(fmt.Sprintf("bad lock range, i: %d\n", i))
 		}
-		lockRes.LockedRange.CheckpointTs.Store(uint64(100 + i))
+		lockRes.LockedRange.ResolvedTs.Store(uint64(100 + i))
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		l.CalculateMinCheckpointTs()
+		l.CalculateMinResolvedTs()
 	}
 }
