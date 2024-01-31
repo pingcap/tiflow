@@ -724,7 +724,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 
-				if atomic.LoadInt32(&c.debugFinishmark) == 1 {
+				if atomic.LoadInt32(&c.debugFinishmark) == 1 && partition == 0 {
 					log.Info("update partition watermark", zap.Uint64("watermark", watermark),
 						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
 				}
@@ -845,7 +845,10 @@ func (c *Consumer) getGlobalWatermark() uint64 {
 // Run the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		log.Info("consumer run exited")
+	}()
 
 	var globalCommitTs uint64
 	for {
@@ -858,10 +861,20 @@ func (c *Consumer) Run(ctx context.Context) error {
 		globalWatermark := c.getGlobalWatermark()
 
 		ddl := c.getFrontDDL()
-		if ddl != nil && strings.Contains(ddl.Query, "finishmark") {
-			log.Info("try to execute the finishmark ddl",
-				zap.Bool("shouldExecute", ddl.CommitTs <= globalCommitTs),
-				zap.Uint64("commitTs", ddl.CommitTs), zap.Uint64("globalWatermark", globalWatermark), zap.Uint64("globalCommitTs", globalCommitTs))
+		if atomic.LoadInt32(&c.debugFinishmark) == 1 {
+			if ddl == nil {
+				log.Info("Finishmark received, but the ddl is nil")
+			} else {
+				if strings.Contains(ddl.Query, "finishmark") {
+					log.Info("try to execute the finishmark ddl",
+						zap.Bool("shouldExecute", ddl.CommitTs <= globalCommitTs),
+						zap.Uint64("commitTs", ddl.CommitTs), zap.Uint64("globalWatermark", globalWatermark), zap.Uint64("globalCommitTs", globalCommitTs))
+				} else {
+					log.Info("Finishmark received, but the ddl is not finishmark",
+						zap.Uint64("commitTs", ddl.CommitTs), zap.String("ddl", ddl.Query))
+				}
+			}
+
 		}
 
 		// handle DDL
@@ -893,6 +906,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
+	now := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -921,6 +935,11 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		if flushedResolvedTs {
 			return nil
 		}
+		if time.Since(now) > 10*time.Second {
+			log.Warn("flush row changed event takes too long",
+				zap.Uint64("resolvedTs", resolvedTs), zap.Duration("duration", time.Since(now)))
+		}
+
 	}
 }
 
