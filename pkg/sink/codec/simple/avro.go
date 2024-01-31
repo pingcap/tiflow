@@ -30,6 +30,46 @@ import (
 )
 
 func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
+	pkInIndexes := false
+	indexesSchema := make([]interface{}, 0, len(tableInfo.Indices))
+	for _, idx := range tableInfo.Indices {
+		index := map[string]interface{}{
+			"name":     idx.Name.O,
+			"unique":   idx.Unique,
+			"primary":  idx.Primary,
+			"nullable": false,
+		}
+		columns := make([]string, 0, len(idx.Columns))
+		for _, col := range idx.Columns {
+			columns = append(columns, col.Name.O)
+			colInfo := tableInfo.Columns[col.Offset]
+			// An index is not null when all columns of aer not null
+			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
+				index["nullable"] = true
+			}
+		}
+		index["columns"] = columns
+		if idx.Primary {
+			pkInIndexes = true
+		}
+		indexesSchema = append(indexesSchema, index)
+	}
+
+	// sometimes the primary key is not in the index, we need to find it manually.
+	if !pkInIndexes {
+		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
+		if len(pkColumns) != 0 {
+			index := map[string]interface{}{
+				"name":     "primary",
+				"nullable": false,
+				"primary":  true,
+				"unique":   true,
+				"columns":  pkColumns,
+			}
+			indexesSchema = append(indexesSchema, index)
+		}
+	}
+
 	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
 		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
 	})
@@ -80,46 +120,6 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 		columnsSchema = append(columnsSchema, column)
 	}
 
-	pkInIndexes := false
-	indexesSchema := make([]interface{}, 0, len(tableInfo.Indices))
-	for _, idx := range tableInfo.Indices {
-		index := map[string]interface{}{
-			"name":     idx.Name.O,
-			"unique":   idx.Unique,
-			"primary":  idx.Primary,
-			"nullable": false,
-		}
-		columns := make([]string, 0, len(idx.Columns))
-		for _, col := range idx.Columns {
-			columns = append(columns, col.Name.O)
-			colInfo := tableInfo.Columns[col.Offset]
-			// An index is not null when all columns of aer not null
-			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
-				index["nullable"] = true
-			}
-		}
-		index["columns"] = columns
-		if idx.Primary {
-			pkInIndexes = true
-		}
-		indexesSchema = append(indexesSchema, index)
-	}
-
-	// sometimes the primary key is not in the index, we need to find it manually.
-	if !pkInIndexes {
-		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
-		if len(pkColumns) != 0 {
-			index := map[string]interface{}{
-				"name":     "primary",
-				"nullable": false,
-				"primary":  true,
-				"unique":   true,
-				"columns":  pkColumns,
-			}
-			indexesSchema = append(indexesSchema, index)
-		}
-	}
-
 	result := map[string]interface{}{
 		"database": tableInfo.TableName.Schema,
 		"table":    tableInfo.TableName.Table,
@@ -135,7 +135,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	watermark := map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(WatermarkType),
+		"type":     string(MessageTypeWatermark),
 		"commitTs": int64(ts),
 		"buildTs":  time.Now().UnixMilli(),
 	}
@@ -144,6 +144,7 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	}
 
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeWatermark),
 		"payload": watermark,
 	}
 
@@ -155,7 +156,7 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	m := map[string]interface{}{
 		"version":     defaultVersion,
-		"type":        string(BootstrapType),
+		"type":        string(MessageTypeBootstrap),
 		"tableSchema": newTableSchemaMap(tableInfo),
 		"buildTs":     time.Now().UnixMilli(),
 	}
@@ -165,6 +166,7 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	}
 
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeBootstrap),
 		"payload": m,
 	}
 
@@ -199,6 +201,7 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 		"com.pingcap.simple.avro.DDL": result,
 	}
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeDDL),
 		"payload": result,
 	}
 	return map[string]interface{}{
@@ -214,8 +217,8 @@ var (
 		},
 	}
 
-	// payloadHolderPool return holder for the payload
-	payloadHolderPool = sync.Pool{
+	// dmlPayloadHolderPool return holder for the payload
+	dmlPayloadHolderPool = sync.Pool{
 		New: func() any {
 			return make(map[string]interface{})
 		},
@@ -235,8 +238,8 @@ func newDMLMessageMap(
 ) (map[string]interface{}, error) {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
-		"database":      event.Table.Schema,
-		"table":         event.Table.Table,
+		"database":      event.TableInfo.GetSchemaName(),
+		"table":         event.TableInfo.GetTableName(),
 		"tableID":       event.TableInfo.ID,
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
@@ -274,14 +277,14 @@ func newDMLMessageMap(
 			return nil, err
 		}
 		m["data"] = data
-		m["type"] = string(InsertType)
+		m["type"] = string(DMLTypeInsert)
 	} else if event.IsDelete() {
 		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["old"] = old
-		m["type"] = string(DeleteType)
+		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
 		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
@@ -293,7 +296,7 @@ func newDMLMessageMap(
 			return nil, err
 		}
 		m["old"] = old
-		m["type"] = string(UpdateType)
+		m["type"] = string(DMLTypeUpdate)
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
@@ -302,7 +305,8 @@ func newDMLMessageMap(
 		"com.pingcap.simple.avro.DML": m,
 	}
 
-	holder := payloadHolderPool.Get().(map[string]interface{})
+	holder := dmlPayloadHolderPool.Get().(map[string]interface{})
+	holder["type"] = string(MessageTypeDML)
 	holder["payload"] = m
 
 	messageHolder := messageHolderPool.Get().(map[string]interface{})
@@ -343,7 +347,7 @@ func recycleMap(m map[string]interface{}) {
 		}
 	}
 	holder["payload"] = nil
-	payloadHolderPool.Put(holder)
+	dmlPayloadHolderPool.Put(holder)
 	m["com.pingcap.simple.avro.Message"] = nil
 	messageHolderPool.Put(m)
 }
@@ -475,7 +479,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = WatermarkType
+		m.Type = MessageTypeWatermark
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
 		return nil
@@ -485,7 +489,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = BootstrapType
+		m.Type = MessageTypeBootstrap
 		m.BuildTs = rawValues["buildTs"].(int64)
 		m.TableSchema = newTableSchemaFromAvroNative(rawValues["tableSchema"].(map[string]interface{}))
 		return nil
@@ -495,7 +499,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = EventType(rawValues["type"].(string))
+		m.Type = MessageType(rawValues["type"].(string))
 		m.SQL = rawValues["sql"].(string)
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
@@ -517,7 +521,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	}
 
 	rawValues = rawPayload["com.pingcap.simple.avro.DML"].(map[string]interface{})
-	m.Type = EventType(rawValues["type"].(string))
+	m.Type = MessageType(rawValues["type"].(string))
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)

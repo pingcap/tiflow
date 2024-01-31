@@ -110,7 +110,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeRow, true, nil
 	}
 
-	if m.Type == WatermarkType {
+	if m.Type == MessageTypeWatermark {
 		return model.MessageTypeResolved, true, nil
 	}
 
@@ -119,7 +119,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 
 // NextResolvedEvent returns the next resolved event if exists
 func (d *decoder) NextResolvedEvent() (uint64, error) {
-	if d.msg.Type != WatermarkType {
+	if d.msg.Type != MessageTypeWatermark {
 		return 0, cerror.ErrCodecDecode.GenWithStack(
 			"not found resolved event message")
 	}
@@ -210,7 +210,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 	ctx := context.Background()
 	switch m.Type {
-	case InsertType:
+	case DMLTypeInsert:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
@@ -220,7 +220,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 			return nil, err
 		}
 		result.Data = data
-	case UpdateType:
+	case DMLTypeUpdate:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
@@ -240,7 +240,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 			return nil, err
 		}
 		result.Old = old
-	case DeleteType:
+	case DMLTypeDelete:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err

@@ -79,6 +79,13 @@ func TestEncodeEvents(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeString),
 		},
 	}
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 100,
+		},
+	}
 	err := encodingWorker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
@@ -90,20 +97,11 @@ func TestEncodeEvents(t *testing.T) {
 		seqNumber: 1,
 		event: &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				TableInfo: &model.TableInfo{
-					TableName: model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
-				},
+				TableInfo: tableInfo,
 				Rows: []*model.RowChangedEvent{
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
-						},
+						PhysicalTableID: 100,
+						TableInfo:       tableInfo,
 						Columns: []*model.Column{
 							{Name: "c1", Value: 100},
 							{Name: "c2", Value: "hello world"},
@@ -111,11 +109,8 @@ func TestEncodeEvents(t *testing.T) {
 						ColInfos: colInfos,
 					},
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
-						},
+						PhysicalTableID: 100,
+						TableInfo:       tableInfo,
 						Columns: []*model.Column{
 							{Name: "c1", Value: 200},
 							{Name: "c2", Value: "你好，世界"},
@@ -158,10 +153,13 @@ func TestEncodingWorkerRun(t *testing.T) {
 		},
 		Rows: []*model.RowChangedEvent{
 			{
-				Table: &model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
+				PhysicalTableID: 100,
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 				},
 				Columns: []*model.Column{
 					{Name: "c1", Value: 100},

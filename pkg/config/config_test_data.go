@@ -69,6 +69,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -82,8 +83,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -238,7 +238,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true,
       "binary-encoding-method":"base64",
-      "output-old-value": false
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "date-separator": "month",
     "enable-partition-separator": true,
@@ -328,6 +329,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -341,8 +343,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -404,7 +405,9 @@ const (
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true,
-      "binary-encoding-method":"base64"
+      "binary-encoding-method":"base64",
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -494,6 +497,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -507,8 +511,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {

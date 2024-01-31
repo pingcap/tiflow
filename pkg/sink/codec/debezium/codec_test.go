@@ -38,7 +38,9 @@ func TestEncodeInsert(t *testing.T) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		Columns: []*model.Column{{
 			Name:  "tiny",
 			Value: int64(1), Type: mysql.TypeTiny,
@@ -202,7 +204,9 @@ func TestEncodeUpdate(t *testing.T) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		Columns: []*model.Column{{
 			Name:  "tiny",
 			Value: int64(1), Type: mysql.TypeTiny,
@@ -372,7 +376,9 @@ func TestEncodeDelete(t *testing.T) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		PreColumns: []*model.Column{{
 			Name:  "tiny",
 			Value: int64(2), Type: mysql.TypeTiny,
@@ -536,7 +542,9 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		Columns: []*model.Column{{
 			Name:  "tiny",
 			Value: int64(10), Type: mysql.TypeTiny,
@@ -568,7 +576,9 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		Columns: []*model.Column{{
 			Name:  "str",
 			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar,
@@ -600,7 +610,9 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 
 	e := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "table1"},
+		},
 		Columns: []*model.Column{{
 			Name:  "bin",
 			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar, Flag: model.BinaryFlag,

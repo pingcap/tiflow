@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -85,6 +86,7 @@ type csvMessage struct {
 	preColumns []any
 	// newRecord indicates whether we encounter a new record.
 	newRecord bool
+	HandleKey kv.Handle
 }
 
 func newCSVMessage(config *common.Config) *csvMessage {
@@ -124,6 +126,18 @@ func (c *csvMessage) encodeMeta(opType string, b *strings.Builder) {
 	c.formatValue(c.schemaName, b)
 	if c.config.IncludeCommitTs {
 		c.formatValue(c.commitTs, b)
+	}
+	if c.config.OutputOldValue {
+		// When c.config.OutputOldValue, we need an extra column "is-updated"
+		// to indicate whether the row is updated or just original insert/delete
+		if c.opType == operationUpdate {
+			c.formatValue(true, b)
+		} else {
+			c.formatValue(false, b)
+		}
+	}
+	if c.config.OutputHandleKey {
+		c.formatValue(c.HandleKey.String(), b)
 	}
 }
 
@@ -355,11 +369,16 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 
 	csvMsg := &csvMessage{
 		config:     csvConfig,
-		tableName:  e.Table.Table,
-		schemaName: e.Table.Schema,
+		tableName:  e.TableInfo.GetTableName(),
+		schemaName: e.TableInfo.GetSchemaName(),
 		commitTs:   e.CommitTs,
 		newRecord:  true,
 	}
+
+	if csvConfig.OutputHandleKey {
+		csvMsg.HandleKey = e.HandleKey
+	}
+
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
 		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.ColInfos)
@@ -407,9 +426,11 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, ticols
 
 	e := new(model.RowChangedEvent)
 	e.CommitTs = csvMsg.commitTs
-	e.Table = &model.TableName{
-		Schema: csvMsg.schemaName,
-		Table:  csvMsg.tableName,
+	e.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: csvMsg.schemaName,
+			Table:  csvMsg.tableName,
+		},
 	}
 	if csvMsg.opType == operationDelete {
 		e.PreColumns, err = csvColumns2RowChangeColumns(csvConfig, csvMsg.columns, ticols)

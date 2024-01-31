@@ -59,9 +59,13 @@ func TestGenKeys(t *testing.T) {
 		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -77,11 +81,15 @@ func TestGenKeys(t *testing.T) {
 							Value: 1,
 						},
 					},
-					IndexColumns: [][]int{{1, 2}},
 				}, {
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -97,7 +105,6 @@ func TestGenKeys(t *testing.T) {
 							Value: 21,
 						},
 					},
-					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 		},
@@ -106,9 +113,14 @@ func TestGenKeys(t *testing.T) {
 		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1}, {2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -124,11 +136,14 @@ func TestGenKeys(t *testing.T) {
 							Value: 1,
 						},
 					},
-					IndexColumns: [][]int{{1}, {2}},
 				}, {
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1}, {2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -144,7 +159,6 @@ func TestGenKeys(t *testing.T) {
 							Value: 21,
 						},
 					},
-					IndexColumns: [][]int{{1}, {2}},
 				},
 			},
 		},
@@ -153,9 +167,13 @@ func TestGenKeys(t *testing.T) {
 		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1}, {2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -171,11 +189,14 @@ func TestGenKeys(t *testing.T) {
 							Value: nil,
 						},
 					},
-					IndexColumns: [][]int{{1}, {2}},
 				}, {
-					StartTs:  418658114257813514,
-					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					StartTs:         418658114257813514,
+					CommitTs:        418658114257813515,
+					PhysicalTableID: 47,
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1}, {2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -191,7 +212,6 @@ func TestGenKeys(t *testing.T) {
 							Value: 21,
 						},
 					},
-					IndexColumns: [][]int{{1}, {2}},
 				},
 			},
 		},

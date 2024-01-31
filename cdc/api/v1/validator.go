@@ -63,13 +63,17 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changefeedConfig.ID)
 	}
 
+	ts, logical, err := up.PDClient.GetTS(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := up.PDClient.GetTS(ctx)
-		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
-		}
-		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
+		changefeedConfig.StartTS = currentTSO
+	} else if changefeedConfig.StartTS > currentTSO {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid start-ts %v, larger than current tso %v", changefeedConfig.StartTS, currentTSO)
 	}
 
 	// Ensure the start ts is valid in the next 1 hour.

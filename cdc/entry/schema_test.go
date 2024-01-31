@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package entry
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -32,16 +31,14 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
-
 func TestAllPhysicalTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableIDs, err := schema.AllPhysicalTables(context.Background(), ver.Ver)
@@ -93,13 +90,13 @@ func TestAllPhysicalTables(t *testing.T) {
 }
 
 func TestAllTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
@@ -132,13 +129,13 @@ func TestAllTables(t *testing.T) {
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add normal table
@@ -190,13 +187,13 @@ func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
 }
 
 func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add normal table
@@ -265,14 +262,14 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	ctx := context.Background()
@@ -393,14 +390,14 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add test.t1
@@ -496,14 +493,14 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	ctx := context.Background()
@@ -614,67 +611,4 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 		},
 	})
-}
-
-func TestBuildIgnoredDDLJob(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	cfg := config.GetDefaultReplicaConfig()
-	// only replicate ddl event of test.tb1 and test.tb2
-	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
-	f, err := filter.NewFilter(cfg, "")
-	require.Nil(t, err)
-	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
-		false, dummyChangeFeedID, util.RoleTester, f)
-	require.Nil(t, err)
-	ctx := context.Background()
-	// test case 1: Will not filter out create test.tb1 ddl.
-	job := helper.DDL2Job("create table test.tb1(id int primary key)")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err := schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDLJob(job))
-
-	// test case 2: Will not filter out create test.tb2 ddl.
-	job = helper.DDL2Job("create table test.tb2(id int primary key)")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err = schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDLJob(job))
-
-	// test case 3: Will not filter out alter test.tb1 ddl.
-	job = helper.DDL2Job("alter table test.tb1 add age int")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err = schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDLJob(job))
-
-	// test case 4: Will not filter out alter test.tb2 ddl.
-	job = helper.DDL2Job("alter table test.tb2 add name char(10)")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err = schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDLJob(job))
-
-	// test case 5: Will filter create test.tb3 ddl.
-	job = helper.DDL2Job("create table test.tb3(id int primary key)")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err = schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 0)
-	require.Nil(t, schema.HandleDDLJob(job))
-
-	// test case 5: Will filter out drop test.tb3 ddl.
-	job = helper.DDL2Job("alter table test.tb3 add location char(100)")
-	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
-	events, err = schema.BuildDDLEvents(ctx, job)
-	require.Nil(t, err)
-	require.Len(t, events, 0)
 }
