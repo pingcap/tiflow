@@ -109,9 +109,44 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
+<<<<<<< HEAD
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+=======
+	metricsChangefeedBarrierTsGauge prometheus.Gauge
+	metricsChangefeedTickDuration   prometheus.Observer
+
+	metricsChangefeedCreateTimeGuage  prometheus.Gauge
+	metricsChangefeedRestartTimeGauge prometheus.Gauge
+
+	downstreamObserver observer.Observer
+	observerLastTick   *atomic.Time
+
+	newDDLPuller func(ctx context.Context,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
+	) puller.DDLPuller
+
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink
+
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
+	) (scheduler.Scheduler, error)
+
+	newDownstreamObserver func(
+		ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error)
+>>>>>>> d3d06e5388 (owner, metrics(ticdc): fix metrics (#10459))
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -470,9 +505,49 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
+<<<<<<< HEAD
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+=======
+	c.ddlManager = newDDLManager(
+		c.id,
+		ddlStartTs,
+		c.latestStatus.CheckpointTs,
+		c.ddlSink,
+		c.ddlPuller,
+		c.schema,
+		c.redoDDLMgr,
+		c.redoMetaMgr,
+		util.GetOrZero(c.latestInfo.Config.BDRMode))
+
+	// create scheduler
+	cfg := *c.cfg
+	cfg.ChangefeedSettings = c.latestInfo.Config.Scheduler
+	epoch := c.latestInfo.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg, c.redoMetaMgr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.initMetrics()
+
+	c.initialized = true
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+		zap.Uint64("changefeedEpoch", epoch),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", c.resolvedTs),
+		zap.String("info", c.latestInfo.String()))
+
+	return nil
+}
+
+func (c *changefeed) initMetrics() {
+>>>>>>> d3d06e5388 (owner, metrics(ticdc): fix metrics (#10459))
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
@@ -484,6 +559,7 @@ LOOP:
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
+<<<<<<< HEAD
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
 	if err != nil {
@@ -499,10 +575,17 @@ LOOP:
 
 	c.initialized = true
 	return nil
+=======
+	c.metricsChangefeedCreateTimeGuage = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "create")
+	c.metricsChangefeedRestartTimeGauge = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "restart")
+>>>>>>> d3d06e5388 (owner, metrics(ticdc): fix metrics (#10459))
 }
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	c.cleanupMetrics()
 	if c.isReleased {
 		return
 	}
@@ -555,6 +638,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	if c.isRemoved {
 		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+		changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "create")
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "restart")
 	}
 	c.isReleased = true
 	c.initialized = false
