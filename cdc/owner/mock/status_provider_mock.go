@@ -125,6 +125,21 @@ func (mr *MockStatusProviderMockRecorder) GetChangeFeedStatus(ctx, changefeedID 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeedStatus", reflect.TypeOf((*MockStatusProvider)(nil).GetChangeFeedStatus), ctx, changefeedID)
 }
 
+// GetChangeFeedSyncedStatus mocks base method.
+func (m *MockStatusProvider) GetChangeFeedSyncedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedSyncedStatusForAPI, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChangeFeedSyncedStatus", ctx, changefeedID)
+	ret0, _ := ret[0].(*model.ChangeFeedSyncedStatusForAPI)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChangeFeedSyncedStatus indicates an expected call of GetChangeFeedSyncedStatus.
+func (mr *MockStatusProviderMockRecorder) GetChangeFeedSyncedStatus(ctx, changefeedID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeedSyncedStatus", reflect.TypeOf((*MockStatusProvider)(nil).GetChangeFeedSyncedStatus), ctx, changefeedID)
+}
+
 // GetProcessors mocks base method.
 func (m *MockStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
 	m.ctrl.T.Helper()

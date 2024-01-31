@@ -93,6 +93,13 @@ func addTableAndAddEventsToSortEngine(
 				CRTs:   4,
 			},
 		},
+		{
+			CRTs: 6,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   6,
+			},
+		},
 	}
 	for _, event := range events {
 		engine.Add(span, event)
@@ -195,10 +202,16 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(span)
-		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS.ResolvedMark() == 4
+		s := manager.GetTableStats(span)
+		return s.CheckpointTs == 4 && s.LastSyncedTs == 4
+	}, 5*time.Second, 10*time.Millisecond)
+
+	manager.UpdateBarrierTs(6, nil)
+	manager.UpdateReceivedSorterResolvedTs(span, 6)
+	manager.schemaStorage.AdvanceResolvedTs(6)
+	require.Eventually(t, func() bool {
+		s := manager.GetTableStats(span)
+		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -226,10 +239,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(span)
-		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS.ResolvedMark() == 3
+		s := manager.GetTableStats(span)
+		return s.CheckpointTs == 3 && s.LastSyncedTs == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -257,7 +268,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
-		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4
+		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
