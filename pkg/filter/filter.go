@@ -130,7 +130,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlEventFilter, err := newSQLEventFilter(cfg.Filter, cfg.SQLMode)
+	sqlEventFilter, err := newSQLEventFilter(cfg.Filter)
 	if err != nil {
 		return nil, err
 	}

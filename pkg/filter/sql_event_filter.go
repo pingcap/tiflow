@@ -96,7 +96,7 @@ type sqlEventFilter struct {
 	rules []*sqlEventRule
 }
 
-func newSQLEventFilter(cfg *config.FilterConfig, sqlMode string) (*sqlEventFilter, error) {
+func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
 	res := &sqlEventFilter{}
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {

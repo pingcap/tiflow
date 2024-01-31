@@ -185,7 +185,7 @@ func TestShouldSkipDDL(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		f, err := newSQLEventFilter(tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newSQLEventFilter(tc.cfg)
 		require.True(t, errors.ErrorEqual(err, tc.err), "case: %+s", err)
 		for _, c := range tc.cases {
 			ddl := &model.DDLEvent{
@@ -312,7 +312,7 @@ func TestShouldSkipDML(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f, err := newSQLEventFilter(tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+			f, err := newSQLEventFilter(tc.cfg)
 			require.NoError(t, err)
 			for _, c := range tc.cases {
 				event := &model.RowChangedEvent{
