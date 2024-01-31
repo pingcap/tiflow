@@ -173,9 +173,17 @@ func TestVerifyAndComplete(t *testing.T) {
 		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
+<<<<<<< HEAD
 			CaseSensitive:    true,
 			EnableOldValue:   true,
 			CheckGCSafePoint: true,
+=======
+			MemoryQuota:        1073741824,
+			CaseSensitive:      false,
+			CheckGCSafePoint:   true,
+			SyncPointInterval:  util.AddressOf(time.Minute * 10),
+			SyncPointRetention: util.AddressOf(time.Hour * 24),
+>>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
 		},
 	}
 
