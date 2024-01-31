@@ -793,10 +793,10 @@ func BuildTiDBTableInfoImpl(
 
 		// inverse initColumnsFlag
 		flag := col.Flag
-		if flag.IsBinary() {
-			columnInfo.SetCharset("binary")
-		} else if col.Charset != "" {
+		if col.Charset != "" {
 			columnInfo.SetCharset(col.Charset)
+		} else if flag.IsBinary() {
+			columnInfo.SetCharset("binary")
 		} else {
 			// charset is not stored, give it a default value
 			columnInfo.SetCharset(mysql.UTF8MB4Charset)

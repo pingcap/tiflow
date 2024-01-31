@@ -201,7 +201,6 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
-	log.Info("BatchDecoder NextRowChangedEvent", zap.Bool("OnlyHandleKey", b.nextKey.OnlyHandleKey), zap.String("ClaimCheckLocation", b.nextKey.ClaimCheckLocation))
 
 	ctx := context.Background()
 	// claim-check message found
@@ -264,7 +263,6 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	)
 
 	tableInfo := handleKeyOnlyEvent.TableInfo
-	log.Info("assembleHandleKeyOnlyEvent", zap.Any("handleKeyOnlyEvent", handleKeyOnlyEvent))
 	if handleKeyOnlyEvent.IsInsert() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {

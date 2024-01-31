@@ -437,7 +437,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
-	log.Info("batchSingleTxnDmls", zap.Any("insertRows", insertRows), zap.Any("updateRows", updateRows), zap.Any("deleteRows", deleteRows))
 
 	// handle delete
 	if len(deleteRows) > 0 {
@@ -553,7 +552,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			zap.String("changefeed", s.changefeed),
 			zap.Bool("translateToInsert", translateToInsert),
 			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
-			zap.String("tableName", firstRow.TableInfo.GetSchemaName()),
 			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
 			zap.Bool("safeMode", s.cfg.SafeMode))
 
@@ -585,7 +583,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 		quoteTable := firstRow.TableInfo.TableName.QuoteString()
 		for _, row := range event.Event.Rows {
-			log.Info("non batch mode", zap.Any("row", row))
 			var query string
 			var args []interface{}
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.

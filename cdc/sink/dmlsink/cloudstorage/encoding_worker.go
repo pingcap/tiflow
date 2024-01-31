@@ -82,11 +82,6 @@ func (w *encodingWorker) encodeEvents(frag eventFragment) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for _, row := range frag.event.Event.Rows {
-		log.Info("encodeEvents",
-			zap.String("table", frag.event.Event.TableInfo.GetTableName()),
-			zap.Bool("isDelete", row.IsDelete()))
-	}
 	msgs := w.encoder.Build()
 	frag.encodedMsgs = msgs
 	w.outputCh <- frag

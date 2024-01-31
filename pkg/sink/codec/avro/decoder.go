@@ -108,7 +108,6 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	// for the delete event, only have key part, it holds primary key or the unique key columns.
 	// for the insert / update, extract the value part, it holds all columns.
 	isDelete := len(d.value) == 0
-	log.Info("avro NextRowChangedEvent", zap.Bool("isDelete", isDelete), zap.Any("keyMap", keyMap), zap.Any("keySchema", keySchema))
 	if isDelete {
 		// delete event only have key part, treat it as the value part also.
 		valueMap = keyMap
@@ -169,7 +168,6 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
 	}
-	log.Info("assembleEvent")
 
 	columns := make([]*model.Column, 0, len(valueMap))
 	// fields is ordered by the column id, so iterate over it to build columns

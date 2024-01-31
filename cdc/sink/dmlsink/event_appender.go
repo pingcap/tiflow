@@ -118,7 +118,6 @@ func (t *TxnEventAppender) createSingleTableTxn(
 		PhysicalTableID: row.PhysicalTableID,
 		TableInfo:       row.TableInfo,
 	}
-	log.Info("createSingleTableTxn", zap.Any("txn", txn))
 
 	if row.TableInfo != nil {
 		txn.TableInfoVersion = row.TableInfo.Version

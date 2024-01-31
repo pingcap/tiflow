@@ -157,10 +157,6 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
-	log.Info("canalJSONMessage2RowChange meet event",
-		zap.String("table", *msg.getTable()),
-		zap.Any("type", msg.eventType()),
-		zap.Any("pkNames", msg.pkNameSet()))
 	mysqlType := msg.getMySQLType()
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
@@ -168,12 +164,6 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
 		result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
 		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
-		log.Info("canalJSONMessage2RowChange meet delete event",
-			zap.String("table", *msg.getTable()),
-			zap.Int("length", len(preCols)),
-			zap.Any("preCols", preCols),
-			zap.Any("result.PreColumns", result.PreColumns),
-			zap.Any("pks", msg.pkNameSet()))
 		return result, err
 	}
 
@@ -207,8 +197,6 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 			return nil, err
 		}
 	}
-	log.Info("canalJSONMessage2RowChange return event",
-		zap.Any("result", result))
 
 	return result, nil
 }

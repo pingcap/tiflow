@@ -610,7 +610,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			log.Error("add key value to the decoder failed", zap.Error(err))
 			return cerror.Trace(err)
 		}
-		log.Info("AddKeyValue", zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 
 		counter := 0
 		for {
@@ -651,7 +650,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
-				log.Info("RowChangedEvent received", zap.ByteString("value", message.Value), zap.Any("row", row), zap.Any("err", err))
 				if err != nil {
 					log.Panic("decode message value failed",
 						zap.ByteString("value", message.Value),
@@ -745,9 +743,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							events[0].CommitTs,
 							prometheus.NewCounter(prometheus.CounterOpts{}),
 						))
-					}
-					for _, e := range events {
-						log.Info("row changed event ready to be flushed", zap.Any("event", e))
 					}
 					s, _ := sink.tableSinksMap.Load(tableID)
 					s.(tablesink.TableSink).AppendRowChangedEvents(events...)

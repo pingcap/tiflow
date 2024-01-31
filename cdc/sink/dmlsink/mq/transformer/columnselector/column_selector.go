@@ -14,14 +14,12 @@
 package columnselector
 
 import (
-	"github.com/ngaut/log"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/zap"
 )
 
 type selector struct {
@@ -69,7 +67,6 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 	if len(event.Columns) != 0 {
 		for idx, column := range event.Columns {
 			colName := event.TableInfo.ForceGetColumnName(column.ColumnID)
-			log.Info("column selector", zap.String("colName", colName))
 			if s.columnM.MatchColumn(colName) {
 				retainedColumns[colName] = struct{}{}
 				continue
@@ -88,7 +85,6 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		clear(retainedColumns)
 		for idx, column := range event.PreColumns {
 			colName := event.TableInfo.ForceGetColumnName(column.ColumnID)
-			log.Info("column selector", zap.String("colName", colName))
 			if s.columnM.MatchColumn(colName) {
 				retainedColumns[colName] = struct{}{}
 				continue
