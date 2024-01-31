@@ -97,6 +97,7 @@ func (s *testGTIDSuite) TestSortingGTIDSet(c *C) {
 	c.Assert(gSet.String(), Equals, sortedGTIDSet)
 }
 
+<<<<<<< HEAD
 func TestIsNilGTIDSet(t *testing.T) {
 	require.False(t, IsNilMySQLGTIDSet(""))
 	require.False(t, IsNilMySQLGTIDSet("xxxxx"))
@@ -111,6 +112,33 @@ func (s *testGTIDSuite) TestMinGTIDSet(c *C) {
 	gset := MinGTIDSet(mysql.MySQLFlavor)
 	_, ok := gset.(*MySQLGTIDSet)
 	c.Assert(ok, IsTrue)
+=======
+func TestIsNilMySQLGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, IsZeroMySQLGTIDSet(""))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:0,yyyy:0"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:1-2"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:0-0"))
+	require.True(t, IsZeroMySQLGTIDSet("xxxxx:0"))
+	require.True(t, IsZeroMySQLGTIDSet(" xxxxx:0 "))
+}
+
+func TestIsNilMariaDBGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, IsZeroMariaDBGTIDSet(""))
+	require.False(t, IsZeroMariaDBGTIDSet("xxxxx"))
+	require.False(t, IsZeroMariaDBGTIDSet("a-b-0,c-d:0"))
+	require.False(t, IsZeroMariaDBGTIDSet("xxxxx:1"))
+	require.True(t, IsZeroMariaDBGTIDSet("x-y-0"))
+	require.True(t, IsZeroMariaDBGTIDSet(" x-y-0 "))
+}
+
+func TestParseZeroAsEmptyGTIDSet(t *testing.T) {
+	t.Parallel()
+>>>>>>> 955296da89 (dm: reduce gSet.String() usage by using zeroGSet for checking empty (#9944))
 
 	gset = MinGTIDSet(mysql.MariaDBFlavor)
 	_, ok = gset.(*MariadbGTIDSet)
@@ -414,5 +442,52 @@ func (s *testGTIDSuite) TestMariaDBGTIDTruncate(c *C) {
 		} else {
 			c.Assert(bg, DeepEquals, ag)
 		}
+	}
+}
+
+func TestCheckGTIDSetEmpty(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		gsetStr string
+		isEmpty bool
+		flavor  string
+	}{
+		{
+			"",
+			true,
+			mysql.MySQLFlavor,
+		},
+		{
+			"",
+			true,
+			mysql.MariaDBFlavor,
+		},
+		{
+			"3ccc475b-2343-11e7-be21-6c0b84d59f30:0",
+			true,
+			mysql.MySQLFlavor,
+		},
+		{
+			"0-0-0",
+			true,
+			mysql.MariaDBFlavor,
+		},
+		{
+			"3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14",
+			false,
+			mysql.MySQLFlavor,
+		},
+		{
+			"1-2-3",
+			false,
+			mysql.MariaDBFlavor,
+		},
+	}
+	for i, testCase := range testCases {
+		t.Logf("test case %d", i)
+		gset, err := ParserGTID(testCase.flavor, testCase.gsetStr)
+		require.NoError(t, err)
+		require.Equal(t, testCase.isEmpty, CheckGTIDSetEmpty(gset))
 	}
 }
