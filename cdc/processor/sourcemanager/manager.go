@@ -211,10 +211,7 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
 			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
-		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, client, m.engine,
-			int(serverConfig.KVClient.FrontierConcurrent),
-		)
+		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(m.changefeedID, client, m.engine)
 
 		close(m.ready)
 		return m.multiplexingPuller.puller.Run(ctx)

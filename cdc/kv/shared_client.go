@@ -57,6 +57,9 @@ type MultiplexingEvent struct {
 	Start          time.Time
 }
 
+// EventHandler is used to handle MultiplexingEvent.
+type EventHandler func(context.Context, MultiplexingEvent) error
+
 // SharedClient is shared in many tables. Methods are thread-safe.
 type SharedClient struct {
 	changefeed model.ChangeFeedID
@@ -117,10 +120,10 @@ type requestedStore struct {
 type requestedTable struct {
 	subscriptionID SubscriptionID
 
-	span      tablepb.Span
-	startTs   model.Ts
-	rangeLock *regionlock.RegionRangeLock
-	eventCh   chan<- MultiplexingEvent
+	span         tablepb.Span
+	startTs      model.Ts
+	rangeLock    *regionlock.RegionRangeLock
+	eventHandler EventHandler
 
 	lastAdvanceTime atomic.Int64
 
@@ -181,14 +184,14 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
-func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
+func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventHandler EventHandler) {
 	if span.TableID == 0 {
 		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	rt := s.newRequestedTable(subID, span, startTs, eventCh)
+	rt := s.newRequestedTable(subID, span, startTs, eventHandler)
 	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
@@ -761,7 +764,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 func (s *SharedClient) newRequestedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
-	eventCh chan<- MultiplexingEvent,
+	eventHandler EventHandler,
 ) *requestedTable {
 	cfName := s.changefeed.String()
 	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
@@ -771,7 +774,7 @@ func (s *SharedClient) newRequestedTable(
 		span:           span,
 		startTs:        startTs,
 		rangeLock:      rangeLock,
-		eventCh:        eventCh,
+		eventHandler:   eventHandler,
 	}
 
 	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {

@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -155,16 +156,22 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 // NOTE: context.Canceled won't be treated as an error.
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
 	startTs := state.sri.requestedTable.startTs
+	tableID := state.sri.requestedTable.span.TableID
 	emit := func(assembled model.RegionFeedEvent) bool {
 		x := state.sri.requestedTable.associateSubscriptionID(assembled)
-		select {
-		case state.sri.requestedTable.eventCh <- x:
-			return true
-		case <-ctx.Done():
+		if err := state.sri.requestedTable.eventHandler(ctx, x); err != nil {
+			if errors.Cause(err) != context.Canceled {
+				log.Info("region worker meets an error when handles events",
+					zap.String("namespace", w.changefeed.Namespace),
+					zap.String("changefeed", w.changefeed.ID),
+					zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
+					zap.Int64("tableID", tableID),
+					zap.Error(err))
+			}
 			return false
 		}
+		return true
 	}
-	tableID := state.sri.requestedTable.span.TableID
 	log.Debug("region worker get an Event",
 		zap.String("namespace", w.changefeed.Namespace),
 		zap.String("changefeed", w.changefeed.ID),
@@ -232,10 +239,8 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 				Spans: spansAndChan.spans, ResolvedTs: batch.ts,
 			}}
 			x := spansAndChan.requestedTable.associateSubscriptionID(revent)
-			select {
-			case spansAndChan.requestedTable.eventCh <- x:
+			if err := spansAndChan.requestedTable.eventHandler(ctx, x); err == nil {
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
-			case <-ctx.Done():
 			}
 		}
 	}
@@ -274,10 +279,8 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 				},
 			}
 			x := rt.associateSubscriptionID(revent)
-			select {
-			case rt.eventCh <- x:
+			if err := rt.eventHandler(ctx, x); err == nil {
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
-			case <-ctx.Done():
 			}
 		}
 	}
