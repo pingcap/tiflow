@@ -42,7 +42,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecWriteBytesGauge records the total number of bytes written by sink.
+	// TotalWriteBytesCounter records the total number of bytes written by sink.
 	TotalWriteBytesCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",

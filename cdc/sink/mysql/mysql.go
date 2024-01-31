@@ -736,7 +736,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "COMMIT", dmls.rowCount)
 			}
-			return dmls.rowCount, 0, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -974,10 +974,11 @@ func hasHandleKey(cols []*model.Column) bool {
 }
 
 type preparedDMLs struct {
-	sqls     []string
-	values   [][]interface{}
-	markSQL  string
-	rowCount int
+	sqls            []string
+	values          [][]interface{}
+	markSQL         string
+	rowCount        int
+	approximateSize int64
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
@@ -992,7 +993,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 	replaces := make(map[string][][]interface{})
 
 	rowCount := 0
-
+	approximateSize := int64(0)
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
 		if s.params.batchReplaceEnabled && len(replaces) > 0 {
@@ -1040,6 +1041,12 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
 
+				for _, stmt := range sql {
+					approximateSize += int64(len(stmt))
+				}
+				for _, row := range txn.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -1058,6 +1065,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 					values = append(values, args)
 					rowCount++
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
@@ -1104,6 +1112,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 					}
 				}
 			}
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 	flushCacheDMLs()
@@ -1122,6 +1131,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
+	dmls.approximateSize = approximateSize
 	return dmls
 }
 
