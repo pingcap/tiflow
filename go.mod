@@ -294,7 +294,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/ncw/directio v1.0.5 // indirect
-	github.com/ngaut/log v0.0.0-20210830112240-0124ec040aeb // indirect
+	github.com/ngaut/log v0.0.0-20210830112240-0124ec040aeb
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7 // indirect
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef // indirect
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect

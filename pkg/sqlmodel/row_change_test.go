@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
-	"github.com/pingcap/tiflow/cdc/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -353,7 +352,7 @@ func TestGenInsert(t *testing.T) {
 	for _, c := range cases {
 		sourceTI := mockTableInfo(t, c.sourceCreateSQL)
 		targetTI := mockTableInfo(t, c.targetCreateSQL)
-		sourceTI = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
+		sourceTI = cdcmodel.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
 		change := NewRowChange(source, target, nil, c.postValues, sourceTI, targetTI, nil)
 		sql, args := change.GenSQL(DMLInsert)
 		require.Equal(t, c.expectedInsertSQL, sql)

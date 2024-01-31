@@ -369,7 +369,7 @@ func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []ro
 	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
 }
 
-// GetExtraColInfosWithoutVirtualCols return column infos for non-virtual columns
+// GetColInfosForRowChangedEvent return column infos for non-virtual columns
 // The column order in the result is the same as the order in its corresponding RowChangedEvent
 func (ti *TableInfo) GetColInfosForRowChangedEvent() []rowcodec.ColInfo {
 	return *ti.rowColInfosWithoutVirtualCols
@@ -389,7 +389,7 @@ func (ti *TableInfo) HasUniqueColumn() bool {
 	return ti.hasUniqueColumn
 }
 
-// HasVirtualColumn returns whether the table has virtual columns
+// HasVirtualColumns returns whether the table has virtual columns
 func (ti *TableInfo) HasVirtualColumns() bool {
 	return ti.virtualColumnCount > 0
 }

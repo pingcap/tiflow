@@ -698,18 +698,22 @@ func AddExtraColumnInfo(tableInfo *model.TableInfo, extraColInfos []rowcodec.Col
 	}
 }
 
-// GetHandleIndexOffsets4Test is used to get the offset of handle column in test
-func GetHandleIndexOffsets4Test(cols []*Column) [][]int {
+// GetHandleAndUniqueIndexOffsets4Test is used to get the offsets of handle columns and other unique index columns in test
+func GetHandleAndUniqueIndexOffsets4Test(cols []*Column) [][]int {
+	result := make([][]int, 0)
 	handleColumns := make([]int, 0)
 	for i, col := range cols {
 		if col.Flag.IsHandleKey() {
 			handleColumns = append(handleColumns, i)
+		} else if col.Flag.IsUniqueKey() {
+			// TODO: add more comment why this is needed
+			result = append(result, []int{i})
 		}
 	}
-	if len(handleColumns) == 0 {
-		return nil
+	if len(handleColumns) != 0 {
+		result = append(result, handleColumns)
 	}
-	return [][]int{handleColumns}
+	return result
 }
 
 // BuildTiDBTableInfoWithoutVirtualColumns build a TableInfo without virual columns from the source table info
@@ -779,12 +783,7 @@ func BuildTiDBTableInfoImpl(
 		columnInfo.ID = columnIDAllocator.GetColumnID(col.Name)
 		columnInfo.Name = model.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
-		if col.Charset != "" {
-			columnInfo.SetCharset(col.Charset)
-		} else {
-			// charset is not stored, give it a default value
-			columnInfo.SetCharset(mysql.UTF8MB4Charset)
-		}
+
 		if col.Collation != "" {
 			columnInfo.SetCollate(col.Collation)
 		} else {
@@ -796,6 +795,11 @@ func BuildTiDBTableInfoImpl(
 		flag := col.Flag
 		if flag.IsBinary() {
 			columnInfo.SetCharset("binary")
+		} else if col.Charset != "" {
+			columnInfo.SetCharset(col.Charset)
+		} else {
+			// charset is not stored, give it a default value
+			columnInfo.SetCharset(mysql.UTF8MB4Charset)
 		}
 		if flag.IsGeneratedColumn() {
 			// we do not use this field, so we set it to any non-empty string

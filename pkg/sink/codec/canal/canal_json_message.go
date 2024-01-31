@@ -159,7 +159,8 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	result.CommitTs = msg.getCommitTs()
 	log.Info("canalJSONMessage2RowChange meet event",
 		zap.String("table", *msg.getTable()),
-		zap.Any("type", msg.eventType()))
+		zap.Any("type", msg.eventType()),
+		zap.Any("pkNames", msg.pkNameSet()))
 	mysqlType := msg.getMySQLType()
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
@@ -187,11 +188,27 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
 		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		// TODO: add a unit test
+		if len(preCols) < len(cols) {
+			newPreCols := make([]*model.Column, 0, len(preCols))
+			j := 0
+			for _, col := range cols {
+				if j < len(preCols) && col.Name == preCols[j].Name {
+					newPreCols = append(newPreCols, preCols[j])
+					j += 1
+				} else {
+					newPreCols = append(newPreCols, col)
+				}
+			}
+			preCols = newPreCols
+		}
 		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
 		if err != nil {
 			return nil, err
 		}
 	}
+	log.Info("canalJSONMessage2RowChange return event",
+		zap.Any("result", result))
 
 	return result, nil
 }

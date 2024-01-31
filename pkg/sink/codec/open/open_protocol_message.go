@@ -19,12 +19,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"go.uber.org/zap"
 )
 
 type messageRow struct {
@@ -150,7 +152,8 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	if len(value.Delete) != 0 {
 		preCols := codecColumns2RowChangeColumns(value.Delete)
 		internal.SortColumnArrays(preCols)
-		indexColumns := model.GetHandleIndexOffsets4Test(preCols)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
+		log.Info("msgToRowChange", zap.Any("indexColumns", indexColumns), zap.Any("preCols", preCols))
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, preCols, indexColumns)
 		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
 	} else {
@@ -158,7 +161,8 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 		preCols := codecColumns2RowChangeColumns(value.PreColumns)
 		internal.SortColumnArrays(cols)
 		internal.SortColumnArrays(preCols)
-		indexColumns := model.GetHandleIndexOffsets4Test(cols)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
+		log.Info("msgToRowChange", zap.Any("indexColumns", indexColumns), zap.Any("cols", cols))
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, cols, indexColumns)
 		e.Columns = model.Columns2ColumnDatas(cols, e.TableInfo)
 		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
@@ -169,6 +173,7 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 		e.PhysicalTableID = *key.Partition
 		e.TableInfo.TableName.IsPartition = true
 	}
+	log.Info("msgToRowChange", zap.Any("event", e))
 
 	return e
 }

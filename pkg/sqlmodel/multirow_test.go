@@ -16,7 +16,6 @@ package sqlmodel
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -128,7 +127,7 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T, genUpdate ge
 	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c1 int as (c+100) virtual not null, c2 INT, c3 INT, PRIMARY KEY (c))")
 	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c1 int as (c+100) virtual not null, c2 INT, c3 INT, PRIMARY KEY (c))")
 
-	sourceTI = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
+	sourceTI = cdcmodel.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
 
 	change1 := NewRowChange(source, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI, targetTI, nil)
@@ -161,7 +160,7 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumns(t *testing.T, genUpdate g
 	targetTI := mockTableInfo(t, `CREATE TABLE tb (c0 int as (c4*c4) virtual not null,
 	c1 int as (c+100) virtual not null, c2 INT, c3 INT, c4 INT, PRIMARY KEY (c4))`)
 
-	sourceTI = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
+	sourceTI = cdcmodel.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
 
 	change1 := NewRowChange(source, target, []interface{}{2, 3, 1}, []interface{}{20, 30, 10}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{5, 6, 4}, []interface{}{50, 60, 40}, sourceTI, targetTI, nil)
@@ -223,8 +222,8 @@ func TestGenInsertMultiRows(t *testing.T) {
 	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (gen INT AS (c+1), c INT PRIMARY KEY, c2 INT)")
 	targetTI := mockTableInfo(t, "CREATE TABLE tb (gen INT AS (c+1), c INT PRIMARY KEY, c2 INT)")
 
-	sourceTI1 = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI1)
-	sourceTI2 = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI2)
+	sourceTI1 = cdcmodel.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI1)
+	sourceTI2 = cdcmodel.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI2)
 
 	change1 := NewRowChange(source1, target, nil, []interface{}{1, 2}, sourceTI1, targetTI, nil)
 	change2 := NewRowChange(source2, target, nil, []interface{}{3, 4}, sourceTI2, targetTI, nil)

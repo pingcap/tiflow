@@ -610,12 +610,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			log.Error("add key value to the decoder failed", zap.Error(err))
 			return cerror.Trace(err)
 		}
-
 		log.Info("AddKeyValue", zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+
 		counter := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			log.Info("decoder hasNext", zap.Bool("hasNext", hasNext), zap.Any("tp", tp))
 			if err != nil {
 				log.Panic("decode message key failed", zap.Error(err))
 			}
@@ -652,6 +651,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
+				log.Info("RowChangedEvent received", zap.ByteString("value", message.Value), zap.Any("row", row), zap.Any("err", err))
 				if err != nil {
 					log.Panic("decode message value failed",
 						zap.ByteString("value", message.Value),
@@ -746,6 +746,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							prometheus.NewCounter(prometheus.CounterOpts{}),
 						))
 					}
+					for _, e := range events {
+						log.Info("row changed event ready to be flushed", zap.Any("event", e))
+					}
 					s, _ := sink.tableSinksMap.Load(tableID)
 					s.(tablesink.TableSink).AppendRowChangedEvents(events...)
 					commitTs := events[len(events)-1].CommitTs
@@ -754,8 +757,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")

@@ -553,6 +553,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			zap.String("changefeed", s.changefeed),
 			zap.Bool("translateToInsert", translateToInsert),
 			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
+			zap.String("tableName", firstRow.TableInfo.GetSchemaName()),
 			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
 			zap.Bool("safeMode", s.cfg.SafeMode))
 

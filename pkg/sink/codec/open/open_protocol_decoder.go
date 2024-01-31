@@ -126,6 +126,7 @@ func (b *BatchDecoder) decodeNextKey() error {
 
 // HasNext implements the RowEventDecoder interface
 func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
+	log.Info("BatchDecoder HasNext begin", zap.Bool("hasNext", b.hasNext()))
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -134,6 +135,8 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	}
 
 	if b.nextKey.Type == model.MessageTypeRow {
+		log.Info("BatchDecoder HasNext row")
+
 		valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 		value := b.valueBytes[8 : valueLen+8]
 		b.valueBytes = b.valueBytes[valueLen+8:]
@@ -198,6 +201,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
+	log.Info("BatchDecoder NextRowChangedEvent", zap.Bool("OnlyHandleKey", b.nextKey.OnlyHandleKey), zap.String("ClaimCheckLocation", b.nextKey.ClaimCheckLocation))
 
 	ctx := context.Background()
 	// claim-check message found
@@ -260,6 +264,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	)
 
 	tableInfo := handleKeyOnlyEvent.TableInfo
+	log.Info("assembleHandleKeyOnlyEvent", zap.Any("handleKeyOnlyEvent", handleKeyOnlyEvent))
 	if handleKeyOnlyEvent.IsInsert() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
@@ -271,6 +276,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			return nil, err
 		}
 		columns := b.buildColumns(holder, conditions)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
 		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsDelete() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
@@ -283,6 +290,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			return nil, err
 		}
 		preColumns := b.buildColumns(holder, conditions)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preColumns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, preColumns, indexColumns)
 		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsUpdate() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
@@ -295,6 +304,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			return nil, err
 		}
 		columns := b.buildColumns(holder, conditions)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
 		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 
 		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))

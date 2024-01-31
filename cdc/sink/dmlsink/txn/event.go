@@ -94,6 +94,7 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 				log.Panic("transaction key hash fail")
 			}
 			hashRes[uint64(hasher.Sum32())] = struct{}{}
+			log.Info("genTxnKeys", zap.Any("row", row), zap.Uint32("hash", hasher.Sum32()))
 			hasher.Reset()
 		}
 	}
@@ -127,7 +128,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	if len(keys) == 0 {
 		// use table ID as key if no key generated (no PK/UK),
 		// no concurrence for rows in the same table.
-		log.Debug("Use table id as the key", zap.Int64("tableID", row.PhysicalTableID))
+		log.Info("Use table id as the key", zap.Int64("tableID", row.PhysicalTableID), zap.String("tableName", row.TableInfo.GetTableName()))
 		tableKey := make([]byte, 8)
 		binary.BigEndian.PutUint64(tableKey, uint64(row.PhysicalTableID))
 		keys = [][]byte{tableKey}

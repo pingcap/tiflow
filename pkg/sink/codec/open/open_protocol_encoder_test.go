@@ -69,7 +69,7 @@ var (
 		{
 			Name: "col1",
 			Type: mysql.TypeVarchar,
-			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
+			Flag: model.HandleKeyFlag | model.UniqueKeyFlag,
 		},
 		{
 			Name: "col2",
@@ -125,10 +125,6 @@ var (
 		},
 		{
 			Name: "col15",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col16",
 			Type: mysql.TypeBlob,
 		},
 	}, [][]int{{0}})
@@ -194,10 +190,6 @@ var (
 			},
 			{
 				Name:  "col15",
-				Value: []byte("12345678910"),
-			},
-			{
-				Name:  "col16",
 				Value: []byte("12345678910"),
 			},
 		}, tableInfoWithManyCols),
