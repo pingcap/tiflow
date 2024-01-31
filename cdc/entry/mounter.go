@@ -403,6 +403,36 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
+func (m *mounter) newChecksumCalculator(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+) (*rowcodec.RowData, error) {
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		datum := &rawColumns[idx]
+		if col.GetType() == mysql.TypeTimestamp && m.tz != time.UTC {
+			t := datum.GetMysqlTime()
+			err := t.ConvertTimeZone(m.tz, time.UTC)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			datum.SetMysqlTime(t)
+		}
+		column := rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      datum,
+		}
+		columns = append(columns, column)
+	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
+
+	return &rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}, nil
+}
+
 // return error if cannot get the expected checksum from the decoder
 // return false if the checksum is not matched
 // return true if the checksum is matched and the checksum is the matched one.
@@ -431,21 +461,11 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
-	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
-		columns = append(columns, rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
-		})
+	calculator, err := m.newChecksumCalculator(columnInfos, rawColumns)
+	if err != nil {
+		log.Error("failed to create checksum calculator", zap.Error(err))
+		return 0, version, false, errors.Trace(err)
 	}
-	sort.Slice(columns, func(i, j int) bool {
-		return columns[i].ID < columns[j].ID
-	})
-	calculator := rowcodec.RowData{
-		Cols: columns,
-		Data: make([]byte, 0),
-	}
-
 	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
