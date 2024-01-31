@@ -14,6 +14,8 @@
 package v1
 
 import (
+	"net/url"
+
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 	"github.com/pingcap/tiflow/pkg/security"
 )
@@ -66,12 +68,13 @@ func (c *APIV1Client) Status() StatusInterface {
 }
 
 // NewAPIClient creates a new APIV1Client.
-func NewAPIClient(ownerAddr string, credential *security.Credential) (*APIV1Client, error) {
+func NewAPIClient(ownerAddr string, credential *security.Credential, values url.Values) (*APIV1Client, error) {
 	c := &rest.Config{}
 	c.APIPath = "/api"
 	c.Version = "v1"
 	c.Host = ownerAddr
 	c.Credential = credential
+	c.Values = values
 	client, err := rest.CDCRESTClientFromConfig(c)
 	if err != nil {
 		return nil, err

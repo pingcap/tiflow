@@ -34,6 +34,8 @@ import (
 )
 
 func TestUpstreamShouldClose(t *testing.T) {
+	t.Parallel()
+
 	up := &Upstream{}
 	up.isDefaultUpstream = false
 	mockClock := clock.NewMock()
@@ -46,6 +48,8 @@ func TestUpstreamShouldClose(t *testing.T) {
 }
 
 func TestUpstreamError(t *testing.T) {
+	t.Parallel()
+
 	up := &Upstream{}
 	err := errors.New("test")
 	up.err.Store(err)
@@ -55,6 +59,8 @@ func TestUpstreamError(t *testing.T) {
 }
 
 func TestUpstreamIsNormal(t *testing.T) {
+	t.Parallel()
+
 	up := &Upstream{}
 	up.status = uninit
 	require.False(t, up.IsNormal())
@@ -65,6 +71,8 @@ func TestUpstreamIsNormal(t *testing.T) {
 }
 
 func TestTrySetIdleTime(t *testing.T) {
+	t.Parallel()
+
 	up := newUpstream(nil, nil)
 	require.Equal(t, uninit, up.status)
 	up.clock = clock.New()

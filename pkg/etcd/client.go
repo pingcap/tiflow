@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/errs"
@@ -386,7 +387,14 @@ func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints 
 
 // CreateRawEtcdClient creates etcd v3 client with detecting endpoints.
 // It will check the health of endpoints periodically, and update endpoints if needed.
-func CreateRawEtcdClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints ...string) (*clientv3.Client, error) {
+func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.DialOption, endpoints ...string) (*clientv3.Client, error) {
+	log.Info("create etcdCli", zap.Strings("endpoints", endpoints))
+
+	tlsConfig, err := securityConf.ToTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	client, err := newClient(tlsConfig, grpcDialOption, endpoints...)
 	if err != nil {
 		return nil, err

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -37,10 +38,17 @@ const testUpstreamID uint64 = 0
 // tickInterval is the minimum interval that upstream manager to check upstreams
 var tickInterval = 3 * time.Minute
 
+// CaptureTopologyCfg stores the information of the capture topology.
+type CaptureTopologyCfg struct {
+	*model.CaptureInfo
+
+	// GCServiceID identify the cdc cluster gc service id
+	GCServiceID string
+	SessionTTL  int64
+}
+
 // Manager manages all upstream.
 type Manager struct {
-	// gcServiceID identify the cdc cluster gc service id
-	gcServiceID string
 	// upstreamID map to *Upstream.
 	ups *sync.Map
 	// all upstream should be spawn from this ctx.
@@ -54,19 +62,20 @@ type Manager struct {
 
 	lastTickTime atomic.Time
 
-	initUpstreamFunc func(ctx context.Context, up *Upstream, gcID string) error
+	initUpstreamFunc func(context.Context, *Upstream, CaptureTopologyCfg) error
+	captureCfg       CaptureTopologyCfg
 }
 
 // NewManager creates a new Manager.
 // ctx will be used to initialize upstream spawned by this Manager.
-func NewManager(ctx context.Context, gcServiceID string) *Manager {
+func NewManager(ctx context.Context, cfg CaptureTopologyCfg) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Manager{
 		ups:              new(sync.Map),
 		ctx:              ctx,
 		cancel:           cancel,
-		gcServiceID:      gcServiceID,
 		initUpstreamFunc: initUpstream,
+		captureCfg:       cfg,
 	}
 }
 
@@ -75,9 +84,11 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
 	res := &Manager{
 		ups: new(sync.Map), ctx: context.Background(),
-		gcServiceID:     etcd.GcServiceIDForTest(),
 		defaultUpstream: up,
 		cancel:          func() {},
+		captureCfg: CaptureTopologyCfg{
+			GCServiceID: etcd.GcServiceIDForTest(),
+		},
 	}
 	up.isDefaultUpstream = true
 	res.ups.Store(testUpstreamID, up)
@@ -85,16 +96,25 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 }
 
 // AddDefaultUpstream add the default upstream
-func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
+func (m *Manager) AddDefaultUpstream(
+	pdEndpoints []string,
 	conf *security.Credential,
 	pdClient pd.Client,
+	etcdClient *etcd.Client,
 ) (*Upstream, error) {
-	up := newUpstream(pdEndpoints, conf)
-	// use the pdClient pass from cdc server as the default upstream
+	// use the pdClient and etcdClient pass from cdc server as the default upstream
 	// to reduce the creation times of pdClient to make cdc server more stable
-	up.isDefaultUpstream = true
-	up.PDClient = pdClient
-	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
+	up := &Upstream{
+		PdEndpoints:       pdEndpoints,
+		SecurityConfig:    conf,
+		PDClient:          pdClient,
+		etcdCli:           etcdClient,
+		isDefaultUpstream: true,
+		status:            uninit,
+		wg:                new(sync.WaitGroup),
+		clock:             clock.New(),
+	}
+	if err := m.initUpstreamFunc(m.ctx, up, m.captureCfg); err != nil {
 		return nil, err
 	}
 	m.defaultUpstream = up
@@ -134,7 +154,7 @@ func (m *Manager) add(upstreamID uint64,
 	up := newUpstream(pdEndpoints, securityConf)
 	m.ups.Store(upstreamID, up)
 	go func() {
-		err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID)
+		err := m.initUpstreamFunc(m.ctx, up, m.captureCfg)
 		up.err.Store(err)
 	}()
 	up.resetIdleTime()

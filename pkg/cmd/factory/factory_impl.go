@@ -175,7 +175,7 @@ func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
-	client, err := apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	client, err := apiv1client.NewAPIClient(serverAddr, f.GetCredential(), f.GetAuthParameters())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -189,14 +189,14 @@ func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
-	client, err := apiv2client.NewAPIClient(serverAddr, f.GetCredential(), f.GetAuthParameters())
+	client, err := apiv1client.NewAPIClient(serverAddr, f.GetCredential(), f.GetAuthParameters())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := checkCDCVersion(client); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	return apiv2client.NewAPIClient(serverAddr, f.GetCredential(), f.GetAuthParameters())
 }
 
 // findServerAddr find the cdc server address by the following logic
