@@ -256,7 +256,7 @@ type RegionRangeLock struct {
 	totalSpan         tablepb.Span
 	changefeedLogInfo string
 
-	mu                sync.Mutex
+	mu                sync.RWMutex
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
@@ -530,15 +530,15 @@ func (l *RegionRangeLock) UnlockRange(
 
 // LockedRanges returns count of locked ranges.
 func (l *RegionRangeLock) LockedRanges() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.rangeLock.Len()
 }
 
 // RefCount returns how many ranges are locked.
 func (l *RegionRangeLock) RefCount() uint64 {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.refCount
 }
 
@@ -592,8 +592,8 @@ type LockedRange struct {
 func (l *RegionRangeLock) CollectLockedRangeAttrs(
 	action func(regionID, version uint64, state *LockedRange, span tablepb.Span),
 ) (r CollectedLockedRangeAttrs) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	r.LockedRegionCount = l.rangeLock.Len()
 	r.FastestRegion.CheckpointTs = 0
 	r.SlowestRegion.CheckpointTs = math.MaxUint64
@@ -657,8 +657,8 @@ type HoleAttrs struct {
 
 // CalculateMinCheckpointTs gets the minimum checkpoint timestamp from range lock.
 func (l *RegionRangeLock) CalculateMinCheckpointTs() uint64 {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	var minTs uint64 = math.MaxUint64
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
