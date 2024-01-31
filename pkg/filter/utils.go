@@ -59,27 +59,64 @@ func ddlToEventType(jobType timodel.ActionType) bf.EventType {
 	}
 }
 
+var alterTableSubType = []timodel.ActionType{
+	// table related DDLs
+	timodel.ActionRenameTable,
+	timodel.ActionRenameTables,
+	timodel.ActionModifyTableComment,
+	timodel.ActionModifyTableCharsetAndCollate,
+
+	// partition related DDLs
+	timodel.ActionAddTablePartition,
+	timodel.ActionDropTablePartition,
+	timodel.ActionTruncateTablePartition,
+	timodel.ActionExchangeTablePartition,
+	timodel.ActionReorganizePartition,
+	timodel.ActionAlterTablePartitioning,
+	timodel.ActionRemovePartitioning,
+
+	// column related DDLs
+	timodel.ActionAddColumn,
+	timodel.ActionDropColumn,
+	timodel.ActionModifyColumn,
+	timodel.ActionSetDefaultValue,
+
+	// index related DDLs
+	timodel.ActionRebaseAutoID,
+	timodel.ActionAddPrimaryKey,
+	timodel.ActionDropPrimaryKey,
+	timodel.ActionAddIndex,
+	timodel.ActionDropIndex,
+	timodel.ActionRenameIndex,
+	timodel.ActionAlterIndexVisibility,
+
+	// TTL related DDLs
+	timodel.ActionAlterTTLInfo,
+	timodel.ActionAlterTTLRemove,
+
+	// difficult to classify DDLs
+	timodel.ActionMultiSchemaChange,
+
+	// deprecated DDLs,see https://github.com/pingcap/tidb/pull/35862.
+	// DDL types below are deprecated in TiDB v6.2.0, but we still keep them here
+	// In case that some users will use TiCDC to replicate data from TiDB v6.1.x.
+	timodel.ActionAddColumns,
+	timodel.ActionDropColumns,
+}
+
 // isAlterTable returns true if the given job type is alter table's subtype.
 func isAlterTable(jobType timodel.ActionType) bool {
-	alterTableSubType := []timodel.ActionType{
-		timodel.ActionAddColumn,
-		timodel.ActionDropColumn,
-		timodel.ActionModifyColumn,
-		timodel.ActionSetDefaultValue,
-	}
-
 	for _, t := range alterTableSubType {
 		if t == jobType {
 			return true
 		}
 	}
-
 	return false
 }
 
 // SupportedEventTypes returns the supported event types.
 func SupportedEventTypes() []bf.EventType {
-	var supportedEventTypes = []bf.EventType{
+	supportedEventTypes := []bf.EventType{
 		bf.AllDML,
 		bf.AllDDL,
 
