@@ -696,7 +696,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-			return dmls.rowCount, 0, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -714,10 +714,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 }
 
 type preparedDMLs struct {
-	startTs  []model.Ts
-	sqls     []string
-	values   [][]interface{}
-	rowCount int
+	startTs         []model.Ts
+	sqls            []string
+	values          [][]interface{}
+	rowCount        int
+	approximateSize int64
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
@@ -727,6 +728,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
+	approximateSize := int64(0)
+
 	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 	for _, row := range rows {
@@ -768,6 +771,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 				values = append(values, args)
 				rowCount++
 			}
+			approximateSize += row.ApproximateDataSize
 			continue
 		}
 
@@ -813,15 +817,17 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 					rowCount++
 				}
 			}
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 	flushCacheDMLs()
 
 	dmls := &preparedDMLs{
-		startTs:  startTs,
-		sqls:     sqls,
-		values:   values,
-		rowCount: rowCount,
+		startTs:         startTs,
+		sqls:            sqls,
+		values:          values,
+		rowCount:        rowCount,
+		approximateSize: approximateSize,
 	}
 	return dmls
 }
