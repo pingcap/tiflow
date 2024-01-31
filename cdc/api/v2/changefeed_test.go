@@ -951,6 +951,213 @@ func TestPauseChangefeed(t *testing.T) {
 	require.Equal(t, "{}", w.Body.String())
 }
 
+func TestChangefeedSynced(t *testing.T) {
+	syncedInfo := testCase{url: "/api/v2/changefeeds/%s/synced?namespace=abc", method: "GET"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	owner := mock_owner.NewMockOwner(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	statusProvider := &mockStatusProvider{}
+
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	pdClient := &mockPDClient{}
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
+
+	{
+		// case 1: invalid changefeed id
+		w := httptest.NewRecorder()
+		invalidID := "@^Invalid"
+		req, _ := http.NewRequestWithContext(context.Background(),
+			syncedInfo.method, fmt.Sprintf(syncedInfo.url, invalidID), nil)
+		router.ServeHTTP(w, req)
+		respErr := model.HTTPError{}
+		err := json.NewDecoder(w.Body).Decode(&respErr)
+		require.Nil(t, err)
+		require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+	}
+
+	{
+		// case 2: not existed changefeed id
+		validID := changeFeedID.ID
+		statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(context.Background(), syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID), nil)
+		router.ServeHTTP(w, req)
+		respErr := model.HTTPError{}
+		err := json.NewDecoder(w.Body).Decode(&respErr)
+		require.Nil(t, err)
+		require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	}
+
+	validID := changeFeedID.ID
+	cfInfo := &model.ChangeFeedInfo{
+		ID: validID,
+	}
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = cfInfo
+	{
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
+		// case3: pd is offline，resolvedTs - checkpointTs > 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153217279 << 18,
+			PullerResolvedTs: 1701153247279 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, "+
+			"please recheck. Besides the data is not finish syncing", resp.Info)
+	}
+
+	{
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
+		// case4: pd is offline，resolvedTs - checkpointTs < 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153217279 << 18,
+			PullerResolvedTs: 1701153217479 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
+			"You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
+			"If pd is offline, please check whether we satisfy the condition that "+
+			"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than 300 secs. "+
+			"If it's satisfied, means the data syncing is totally finished", resp.Info)
+	}
+
+	helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(pdClient, nil).AnyTimes()
+	pdClient.logicTime = 1000
+	pdClient.timestamp = 1701153217279
+	{
+		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217209 << 18,
+			LastSyncedTs:     1701152217279 << 18,
+			PullerResolvedTs: 1701153217229 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, true, resp.Synced)
+		require.Equal(t, "Data syncing is finished", resp.Info)
+	}
+
+	{
+		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153201279 << 18,
+			LastSyncedTs:     1701152217279 << 18,
+			PullerResolvedTs: 1701153201379 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "Please check whether PD is online and TiKV Regions are all available. "+
+			"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. "+
+			"To check whether TiKV regions are all available, "+
+			"you can view 'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. "+
+			"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. "+
+			"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait", resp.Info)
+	}
+
+	{
+		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153201279 << 18,
+			LastSyncedTs:     1701152207279 << 18,
+			PullerResolvedTs: 1701153218279 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "The data syncing is not finished, please wait", resp.Info)
+	}
+
+	{
+		// case8: pdTs - lastSyncedTs < 5min
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153213279 << 18,
+			PullerResolvedTs: 1701153217279 << 18,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "The data syncing is not finished, please wait", resp.Info)
+	}
+}
+
 func TestHasRunningImport(t *testing.T) {
 	integration.BeforeTestExternal(t)
 	testEtcdCluster := integration.NewClusterV3(

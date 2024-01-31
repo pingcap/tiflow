@@ -101,6 +101,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
 	SQLMode:                      defaultSQLMode,
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -145,6 +146,7 @@ type replicaConfig struct {
 	Integrity                    *integrity.Config          `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration             `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 	SQLMode                      string                     `toml:"sql-mode" json:"sql-mode"`
+	SyncedStatus                 *SyncedStatusConfig        `toml:"synced-status" json:"synced-status,omitempty"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

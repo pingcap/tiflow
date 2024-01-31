@@ -48,8 +48,8 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
 }
 
 // GetTS of mockPDClient returns a mock tso
-func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
-	return m.logicTime, m.timestamp, nil
+func (c *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return c.timestamp, c.logicTime, nil
 }
 
 // GetClusterID of mockPDClient returns a mock ClusterID
@@ -62,13 +62,14 @@ func (c *mockPDClient) Close() {}
 
 type mockStatusProvider struct {
 	owner.StatusProvider
-	changefeedStatus   *model.ChangeFeedStatusForAPI
-	changefeedInfo     *model.ChangeFeedInfo
-	processors         []*model.ProcInfoSnap
-	taskStatus         map[model.CaptureID]*model.TaskStatus
-	changefeedInfos    map[model.ChangeFeedID]*model.ChangeFeedInfo
-	changefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
-	err                error
+	changefeedStatus       *model.ChangeFeedStatusForAPI
+	changefeedInfo         *model.ChangeFeedInfo
+	processors             []*model.ProcInfoSnap
+	taskStatus             map[model.CaptureID]*model.TaskStatus
+	changefeedInfos        map[model.ChangeFeedID]*model.ChangeFeedInfo
+	changefeedStatuses     map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
+	changeFeedSyncedStatus *model.ChangeFeedSyncedStatusForAPI
+	err                    error
 }
 
 // GetChangeFeedStatus returns a changefeeds' runtime status.
@@ -118,4 +119,12 @@ func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
 	error,
 ) {
 	return m.changefeedStatuses, m.err
+}
+
+// GetChangeFeedSyncedStatus returns a mock changefeed status.
+func (m *mockStatusProvider) GetChangeFeedSyncedStatus(_ context.Context, changefeedID model.ChangeFeedID) (
+	*model.ChangeFeedSyncedStatusForAPI,
+	error,
+) {
+	return m.changeFeedSyncedStatus, m.err
 }
