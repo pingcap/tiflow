@@ -867,12 +867,10 @@ github.com/pingcap/sysutil v1.0.1-0.20230407040306-fb007c5aff21 h1:QV6jqlfOkh8hq
 github.com/pingcap/sysutil v1.0.1-0.20230407040306-fb007c5aff21/go.mod h1:QYnjfA95ZaMefyl1NO8oPtKeb8pYUdnDVhQgf+qdpjM=
 github.com/pingcap/tidb v1.1.0-beta.0.20240105042433-54d8a1416ab0 h1:EAeL37UVvIMvAG5JP0qDSBWZvV4tKn0gUbSP05vjtqU=
 github.com/pingcap/tidb v1.1.0-beta.0.20240105042433-54d8a1416ab0/go.mod h1:1jrwjaNIwD9JmFR3NghQ/xu/PCuPQVLhK8sshyFadN0=
-github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6 h1:NJQd14hU0pLj8vS+vYtgFw4bXrFIXa/HfMdxALHtgVU=
-github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
-github.com/pingcap/tidb-tools v0.0.0-20240119060617-3600af4bea52 h1:+NktQctOlWWp7DxlTsM1Wzk6J7Hw1Gew7N3irQw+vQc=
-github.com/pingcap/tidb-tools v0.0.0-20240119060617-3600af4bea52/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
 github.com/pingcap/tidb-tools v0.0.0-20240129062553-5d0e9234576c h1:Vo62F8FjhSZeDH1F6gyAjKMgGOyik5xoDghJiCkKIEU=
 github.com/pingcap/tidb-tools v0.0.0-20240129062553-5d0e9234576c/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
+github.com/pingcap/tidb-tools v0.0.0-20240131075425-5bb51786a1dc h1:z9gMlNH+AMmp62EniIRtyVVgOsrFcuxiUu6Ty60uEMU=
+github.com/pingcap/tidb-tools v0.0.0-20240131075425-5bb51786a1dc/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
 github.com/pingcap/tidb/pkg/parser v0.0.0-20231229060758-e19e06e1bc19 h1:nmFYQ4q3m0v7AleVVyiijMtEzfxCh8zqMeuD1npsy+w=
 github.com/pingcap/tidb/pkg/parser v0.0.0-20231229060758-e19e06e1bc19/go.mod h1:yRkiqLFwIqibYg2P7h4bclHjHcJiIFRLKhGRyBcKYus=
 github.com/pingcap/tipb v0.0.0-20230919054518-dfd7d194838f h1:NCiI4Wyu4GkViLGTu6cYcxt79LZ1SenBBQX1OwEV6Jg=
