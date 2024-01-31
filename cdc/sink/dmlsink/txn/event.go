@@ -94,7 +94,6 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 				log.Panic("transaction key hash fail")
 			}
 			hashRes[uint64(hasher.Sum32())] = struct{}{}
-			log.Info("genTxnKeys", zap.Any("row", row), zap.Uint32("hash", hasher.Sum32()))
 			hasher.Reset()
 		}
 	}
