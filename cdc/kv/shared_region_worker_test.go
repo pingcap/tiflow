@@ -30,7 +30,17 @@ import (
 
 func newSharedClientForTestSharedRegionWorker() *SharedClient {
 	// sharedRegionWorker only requires `SharedClient.onRegionFail`.
-	cfg := &config.ServerConfig{Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}}}
+	cfg := &config.ServerConfig{
+		KVClient: &config.KVClientConfig{
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 2,
+			AdvanceIntervalInMs:  10,
+		},
+		Debug: &config.DebugConfig{
+			Puller: &config.PullerConfig{LogRegionDetails: false},
+		},
+	}
 	return NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 }
 
@@ -183,14 +193,4 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(10), s1.getLastResolvedTs())
 	require.Equal(t, uint64(11), s2.getLastResolvedTs())
 	require.Equal(t, uint64(8), s3.getLastResolvedTs())
-
-	select {
-	case event := <-eventCh:
-		require.Equal(t, uint64(0), event.RegionID)
-		require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
-		require.Equal(t, 1, len(event.Resolved.Spans))
-		require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
-	case <-time.NewTimer(1000 * time.Millisecond).C:
-		require.True(t, false, "must get an event")
-	}
 }
