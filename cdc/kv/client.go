@@ -77,12 +77,14 @@ const (
 	scanRegionsConcurrency = 1024
 
 	tableMonitorInterval = 2 * time.Second
-
-	streamAlterInterval = 1 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
 var reconnectInterval = 60 * time.Minute
+
+// streamAlterInterval is the interval to limit the frequency of creating/deleting streams.
+// Make it a variable so that we can change it in unit test.
+var streamAlterInterval = 1 * time.Second
 
 type regionStatefulEvent struct {
 	changeEvent     *cdcpb.Event

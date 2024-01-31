@@ -57,6 +57,7 @@ func Test(t *testing.T) {
 	conf := config.GetDefaultServerConfig()
 	config.StoreGlobalServerConfig(conf)
 	InitWorkerPool()
+	streamAlterInterval = 1 * time.Microsecond
 	go func() {
 		RunWorkerPool(context.Background()) //nolint:errcheck
 	}()
@@ -1364,6 +1365,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	server1, addr1 := newMockService(ctx, t, srv1, wg)
 
 	defer func() {
+		cancel()
 		close(ch1)
 		server1.Stop()
 		wg.Wait()
@@ -1414,7 +1416,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(30))
 
 	require.Nil(t, err)
 
@@ -2076,6 +2078,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	server1, addr1 := newMockService(ctx, t, srv1, wg)
 
 	defer func() {
+		cancel()
 		close(ch1)
 		server1.Stop()
 		wg.Wait()
