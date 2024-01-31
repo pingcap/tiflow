@@ -78,7 +78,7 @@ const (
 
 	tableMonitorInterval = 2 * time.Second
 
-	streamAlterInterval = 2 * time.Second
+	streamAlterInterval = 1 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -1447,37 +1447,48 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 	s.storeStreamsCache.Lock()
 	defer s.storeStreamsCache.Unlock()
 
-	if streamInMap, ok := s.storeStreamsCache.m[streamToDelete.addr]; ok {
-		if streamInMap.id != streamToDelete.id {
-			log.Warn("delete stream failed, stream id mismatch, ignore it",
+	streamInMap, ok := s.storeStreamsCache.m[streamToDelete.addr]
+	if !ok {
+		log.Warn("delete stream failed, stream not found, ignore it",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Uint64("streamID", streamToDelete.id),
+			zap.Uint64("streamIDInMap", streamInMap.id))
+		return
+	}
+
+	if streamInMap.id != streamToDelete.id {
+		log.Warn("delete stream failed, stream id mismatch, ignore it",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Uint64("streamID", streamToDelete.id),
+			zap.Uint64("streamIDInMap", streamInMap.id))
+		return
+	}
+
+	if lastTime, ok := s.storeStreamsCache.lastAlterTime[streamToDelete.addr]; ok {
+		if time.Since(lastTime) < streamAlterInterval {
+			log.Warn(
+				"delete a stream of a same store too frequently, wait a while and try again",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
 				zap.Uint64("streamID", streamToDelete.id),
-				zap.Uint64("streamIDInMap", streamInMap.id))
-			return
+				zap.Duration("sinceLastTime", time.Since(lastTime)))
+			time.Sleep(streamAlterInterval - time.Since(lastTime))
 		}
-
-		if lastTime, ok := s.storeStreamsCache.lastAlterTime[streamToDelete.addr]; ok {
-			if time.Since(lastTime) < streamAlterInterval {
-				log.Warn(
-					"delete a stream of a same store too frequently, wait a while and try again",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.Int64("tableID", s.tableID),
-					zap.String("tableName", s.tableName),
-					zap.Uint64("streamID", streamToDelete.id),
-					zap.Duration("sinceLastTime", time.Since(lastTime)))
-				time.Sleep(streamAlterInterval - time.Since(lastTime))
-			}
-		}
-		s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
-		delete(s.storeStreamsCache.m, streamToDelete.addr)
-		s.storeStreamsCache.lastAlterTime[streamToDelete.addr] = time.Now()
 	}
 
+	s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
+	delete(s.storeStreamsCache.m, streamToDelete.addr)
 	streamToDelete.cancel()
+	s.storeStreamsCache.lastAlterTime[streamToDelete.addr] = time.Now()
+
 	log.Info("A stream to store has been removed",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),

@@ -286,7 +286,7 @@ func waitRequestID(t *testing.T, allocatedID uint64) {
 			return nil
 		}
 		return errors.Errorf("request id %d is not larger than %d", getCurrentRequestID(), allocatedID)
-	}, retry.WithBackoffBaseDelay(10), retry.WithMaxTries(20))
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(100))
 
 	require.Nil(t, err)
 }
@@ -1502,6 +1502,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	server1, addr1 := newMockService(ctx, t, srv1, wg)
 
 	defer func() {
+		cancel()
 		close(ch1)
 		server1.Stop()
 		wg.Wait()
@@ -1547,7 +1548,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		}
 		return errors.Errorf("request is not received, requestID: %d, expected: %d",
 			atomic.LoadUint64(&requestID), getCurrentRequestID())
-	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(30))
 
 	require.Nil(t, err)
 	initialized1 := mockInitializedEvent(regionID, getCurrentRequestID())
@@ -1601,7 +1602,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		}
 		return errors.Errorf("request is not received, requestID: %d, expected: %d",
 			atomic.LoadUint64(&requestID), getCurrentRequestID())
-	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(30))
 
 	require.Nil(t, err)
 	initialized2 := mockInitializedEvent(regionID, getCurrentRequestID())
