@@ -42,7 +42,7 @@ filters:                     # filter rules, mysql instance can ref rules in it
   user-filter-1:
     schema-pattern: "*"    # pattern of the upstream schema name, wildcard characters (*?) are supported
     table-pattern: "*"        # pattern of the upstream table name, wildcard characters (*?) are supported
-    events: ["truncate table", "drop table"]  # ignore truncate/drop table ddl
+    events: ["truncate table", "drop table", "truncate"]  # ignore truncate/drop table ddl
     action: Ignore
 
 mydumpers:
