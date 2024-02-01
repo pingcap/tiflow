@@ -15,6 +15,7 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
 	"reflect"
 	"testing"
 
@@ -22,11 +23,24 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSubTask(t *testing.T) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	encryptedPass, err := utils.Encrypt("1234")
+	require.NoError(t, err)
+	require.NotEqual(t, "1234", encryptedPass)
 	cfg := &SubTaskConfig{
 		Name:            "test-task",
 		IsSharding:      true,
@@ -38,7 +52,7 @@ func TestSubTask(t *testing.T) {
 			Host:     "127.0.0.1",
 			Port:     3306,
 			User:     "root",
-			Password: "Up8156jArvIPymkVC+5LxkAT6rek",
+			Password: encryptedPass,
 		},
 		To: dbconfig.DBConfig{
 			Host:     "127.0.0.1",

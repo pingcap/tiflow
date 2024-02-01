@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/pingcap/tiflow/dm/common/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -88,6 +89,7 @@ func NewConfig() *Config {
 	fs.Var(&cfg.CertAllowedCN, "cert-allowed-cn", "the trusted common name that allowed to visit")
 
 	fs.StringVar(&cfg.V1SourcesPath, "v1-sources-path", "", "directory path used to store source config files when upgrading from v1.0.x")
+	fs.StringVar(&cfg.SecretKeyPath, "secret-key-path", "", "path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex AES-256 key of length 64")
 
 	return cfg
 }
@@ -138,6 +140,7 @@ type Config struct {
 
 	// tls config
 	security.Security
+	config.Common `yaml:",inline" toml:",inline" json:",inline"`
 
 	printVersion      bool
 	printSampleConfig bool
@@ -338,7 +341,8 @@ func (c *Config) adjust() error {
 		c.ExperimentalFeatures.OpenAPI = false
 		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration may have no affect in feature release, please set openapi=true in dm-master config file")
 	}
-	return err
+
+	return c.Common.Adjust()
 }
 
 // Reload load config from local file.
