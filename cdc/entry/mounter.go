@@ -403,9 +403,9 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
-func (m *mounter) newChecksumCalculator(
+func (m *mounter) calculateChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
-) (*rowcodec.RowData, error) {
+) (uint32, error) {
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
 		datum := &rawColumns[idx]
@@ -413,7 +413,7 @@ func (m *mounter) newChecksumCalculator(
 			t := datum.GetMysqlTime()
 			err := t.ConvertTimeZone(m.tz, time.UTC)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return 0, errors.Trace(err)
 			}
 			datum.SetMysqlTime(t)
 		}
@@ -427,15 +427,20 @@ func (m *mounter) newChecksumCalculator(
 		return columns[i].ID < columns[j].ID
 	})
 
-	return &rowcodec.RowData{
+	calculator := rowcodec.RowData{
 		Cols: columns,
 		Data: make([]byte, 0),
-	}, nil
+	}
+
+	checksum, err := calculator.Checksum()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checksum, nil
 }
 
-// return error if cannot get the expected checksum from the decoder
+// return error when calculate the checksum.
 // return false if the checksum is not matched
-// return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, int, bool, error) {
@@ -461,14 +466,9 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
-	calculator, err := m.newChecksumCalculator(columnInfos, rawColumns)
+	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
 	if err != nil {
-		log.Error("failed to create checksum calculator", zap.Error(err))
-		return 0, version, false, errors.Trace(err)
-	}
-	checksum, err := calculator.Checksum()
-	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Error(err))
+		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, version, false, errors.Trace(err)
 	}
 
@@ -483,10 +483,8 @@ func (m *mounter) verifyChecksum(
 	if !ok {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
 			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
-		return checksum, version,
-			false, errors.New("cannot found the extra checksum from the event")
+			zap.Uint32("first", first))
+		return checksum, version, false, nil
 	}
 
 	if checksum == extra {
