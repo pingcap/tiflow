@@ -30,10 +30,13 @@ import (
 )
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Consistent.MemoryUsage.MemoryQuotaPercentage = 75
+	replicaConfig.Consistent.MemoryUsage.EventCachePercentage = 50
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
-		Config:  config.GetDefaultReplicaConfig(),
+		Config:  replicaConfig,
 	}
 }
 
