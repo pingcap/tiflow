@@ -205,7 +205,7 @@ func TestGenKeys(t *testing.T) {
 }
 
 func TestSortAndDedupHash(t *testing.T) {
-	// If a transaction contains multiple rows, these rows may generate the same hash
+	// If a transaction contains multiple rows, those rows may generate the same hash
 	// in some rare cases. We should dedup these hashes to avoid unnecessary self cyclic
 	// dependency in the causality dependency graph.
 	t.Parallel()
