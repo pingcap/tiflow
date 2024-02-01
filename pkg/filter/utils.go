@@ -54,9 +54,8 @@ func ddlToEventType(jobType timodel.ActionType) bf.EventType {
 	evenType, ok := ddlWhiteListMap[jobType]
 	if ok {
 		return evenType
-	} else {
-		return bf.NullEvent
 	}
+	return bf.NullEvent
 }
 
 var alterTableSubType = []timodel.ActionType{
