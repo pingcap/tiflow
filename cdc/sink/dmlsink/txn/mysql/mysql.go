@@ -290,7 +290,8 @@ func convert2RowChanges(
 	changeType sqlmodel.RowChangeType,
 ) *sqlmodel.RowChange {
 	tidbTableInfo := tableInfo.TableInfo
-	// TODO: add some comments
+	// RowChangedEvent doesn't contain data for virtual columns,
+	// so we need to create a new table info without virtual columns before pass it to NewRowChange.
 	if tableInfo.HasVirtualColumns() {
 		tidbTableInfo = model.BuildTiDBTableInfoWithoutVirtualColumns(tidbTableInfo)
 	}
@@ -590,8 +591,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(
 					quoteTable,
-					model.ColumnDatas2Columns(row.PreColumns, row.TableInfo),
-					model.ColumnDatas2Columns(row.Columns, row.TableInfo),
+					row.GetPreColumns(),
+					row.GetColumns(),
 					s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
@@ -608,7 +609,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// For delete event:
 			// It will be translated directly into a DELETE SQL.
 			if len(row.PreColumns) != 0 {
-				query, args = prepareDelete(quoteTable, model.ColumnDatas2Columns(row.PreColumns, row.TableInfo), s.cfg.ForceReplicate)
+				query, args = prepareDelete(quoteTable, row.GetPreColumns(), s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -626,7 +627,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if len(row.Columns) != 0 {
 				query, args = prepareReplace(
 					quoteTable,
-					model.ColumnDatas2Columns(row.Columns, row.TableInfo),
+					row.GetColumns(),
 					true, /* appendPlaceHolder */
 					translateToInsert)
 				if query != "" {

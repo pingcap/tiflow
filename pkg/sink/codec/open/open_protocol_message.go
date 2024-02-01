@@ -116,15 +116,13 @@ func rowChangeToMsg(
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
-		value.Delete = rowChangeColumns2CodecColumns(model.ColumnDatas2Columns(e.PreColumns, e.TableInfo), onlyHandleKeyColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.GetPreColumns(), onlyHandleKeyColumns)
 		if onlyHandleKeyColumns && len(value.Delete) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
 		}
 	} else if e.IsUpdate() {
-		value.Update = rowChangeColumns2CodecColumns(model.ColumnDatas2Columns(e.Columns, e.TableInfo), largeMessageOnlyHandleKeyColumns)
-		value.PreColumns = rowChangeColumns2CodecColumns(
-			model.ColumnDatas2Columns(e.PreColumns, e.TableInfo),
-			largeMessageOnlyHandleKeyColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
@@ -132,7 +130,7 @@ func rowChangeToMsg(
 			value.dropNotUpdatedColumns()
 		}
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(model.ColumnDatas2Columns(e.Columns, e.TableInfo), largeMessageOnlyHandleKeyColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the insert event")
 		}

@@ -260,6 +260,7 @@ func (t *TableDefinition) ToTableInfo() (*model.TableInfo, error) {
 			return nil, err
 		}
 		if mysql.HasPriKeyFlag(tiCol.GetFlag()) {
+			// use PKIsHandle to make sure that the primary keys can be detected by `WrapTableInfo`
 			tidbTableInfo.PKIsHandle = true
 		}
 		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)

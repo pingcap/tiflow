@@ -128,6 +128,7 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
+
 	colNames, wargs := whereSlice(cols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil

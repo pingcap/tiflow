@@ -338,12 +338,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, model.ColumnDatas2Columns(row.Columns, tableInfo))
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetColumns())
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, model.ColumnDatas2Columns(row.PreColumns, tableInfo))
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetPreColumns())
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -1642,7 +1642,11 @@ func TestBuildTableInfo(t *testing.T) {
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
-		cols := model.ColumnDatas2Columns(colDatas, cdcTableInfo)
+		e := model.RowChangedEvent{
+			TableInfo: cdcTableInfo,
+			Columns:   colDatas,
+		}
+		cols := e.GetColumns()
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

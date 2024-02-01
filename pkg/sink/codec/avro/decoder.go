@@ -135,7 +135,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
-	columns := model.ColumnDatas2Columns(event.Columns, event.TableInfo)
+	columns := event.GetColumns()
 	if isCorrupted(valueMap) {
 		log.Warn("row data is corrupted",
 			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
@@ -247,7 +247,6 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 	event.CommitTs = uint64(commitTs)
 	pkNameSet := make(map[string]struct{}, len(keyMap))
 	for name := range keyMap {
-		log.Info("avro pk name", zap.String("name", name))
 		pkNameSet[name] = struct{}{}
 	}
 	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)

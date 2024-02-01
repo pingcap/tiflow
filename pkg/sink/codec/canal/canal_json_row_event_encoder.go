@@ -218,7 +218,7 @@ func newJSONMessageForDML(
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			model.ColumnDatas2Columns(e.PreColumns, e.TableInfo),
+			e.GetPreColumns(),
 			false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
@@ -227,7 +227,7 @@ func newJSONMessageForDML(
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			model.ColumnDatas2Columns(e.Columns, e.TableInfo),
+			e.GetColumns(),
 			false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
@@ -236,21 +236,20 @@ func newJSONMessageForDML(
 		var newColsMap map[string]*model.Column
 		if config.OnlyOutputUpdatedColumns {
 			newColsMap = make(map[string]*model.Column, len(e.Columns))
-			for _, col := range e.Columns {
-				colName := e.TableInfo.ForceGetColumnName(col.ColumnID)
-				newColsMap[colName] = model.ColumnData2Column(col, e.TableInfo)
+			for _, col := range e.GetColumns() {
+				newColsMap[col.Name] = col
 			}
 		}
 		out.RawString(",\"old\":")
 		if err := fillColumns(
-			model.ColumnDatas2Columns(e.PreColumns, e.TableInfo),
+			e.GetPreColumns(),
 			config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
 		); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			model.ColumnDatas2Columns(e.Columns, e.TableInfo),
+			e.GetColumns(),
 			false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err

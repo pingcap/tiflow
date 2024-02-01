@@ -43,17 +43,14 @@ type dbzCodec struct {
 func (c *dbzCodec) writeDebeziumFieldValues(
 	writer *util.JSONWriter,
 	fieldName string,
-	cols []*model.ColumnData,
+	cols []*model.Column,
 	tableInfo *model.TableInfo,
 ) error {
 	var err error
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
-			err = c.writeDebeziumFieldValue(
-				writer,
-				model.ColumnData2Column(col, tableInfo),
-				colInfos[i].Ft)
+			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
 			if err != nil {
 				break
 			}
@@ -580,16 +577,16 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				// after: An optional field that specifies the state of the row after the event occurred.
 				// Optional field that specifies the state of the row after the event occurred.
 				// In a delete event value, the after field is null, signifying that the row no longer exists.
-				err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.TableInfo)
+				err = c.writeDebeziumFieldValues(jWriter, "after", e.GetColumns(), e.TableInfo)
 			} else if e.IsDelete() {
 				jWriter.WriteStringField("op", "d")
 				jWriter.WriteNullField("after")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.TableInfo)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 			} else if e.IsUpdate() {
 				jWriter.WriteStringField("op", "u")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.TableInfo)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 				if err == nil {
-					err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.TableInfo)
+					err = c.writeDebeziumFieldValues(jWriter, "after", e.GetColumns(), e.TableInfo)
 				}
 			}
 		})
@@ -610,18 +607,17 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					{
 						fieldsBuf := &bytes.Buffer{}
 						fieldsWriter := util.BorrowJSONWriter(fieldsBuf)
-						var validCols []*model.ColumnData
+						var validCols []*model.Column
 						if e.IsInsert() {
-							validCols = e.Columns
+							validCols = e.GetColumns()
 						} else if e.IsDelete() {
-							validCols = e.PreColumns
+							validCols = e.GetPreColumns()
 						} else if e.IsUpdate() {
-							validCols = e.Columns
+							validCols = e.GetColumns()
 						}
-						for _, colData := range validCols {
-							colInfo := e.TableInfo.ForceGetColumnInfo(colData.ColumnID)
-							col := model.ColumnData2Column(colData, e.TableInfo)
-							c.writeDebeziumFieldSchema(fieldsWriter, col, &colInfo.FieldType)
+						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
+						for i, col := range validCols {
+							c.writeDebeziumFieldSchema(fieldsWriter, col, colInfos[i].Ft)
 						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()

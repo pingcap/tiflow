@@ -144,16 +144,17 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.Col
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for _, column := range e.Columns {
+	colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
+	for idx, column := range e.GetColumns() {
 		if column == nil {
 			continue
 		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(column.ColumnID)
+		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", column.ColumnID)
+				"column info not found for column id: %d", colInfos[idx].ID)
 		}
-		c, err := b.buildColumn(model.ColumnData2Column(column, e.TableInfo), columnInfo, !e.IsDelete())
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -162,19 +163,19 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 
 	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
-	for _, column := range e.PreColumns {
+	for idx, column := range e.GetPreColumns() {
 		if column == nil {
 			continue
 		}
-		if onlyHandleKeyColumns && !e.TableInfo.ForceGetColumnFlagType(column.ColumnID).IsHandleKey() {
+		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(column.ColumnID)
+		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", column.ColumnID)
+				"column info not found for column id: %d", colInfos[idx].ID)
 		}
-		c, err := b.buildColumn(model.ColumnData2Column(column, e.TableInfo), columnInfo, !e.IsDelete())
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

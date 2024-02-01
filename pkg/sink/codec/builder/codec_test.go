@@ -136,8 +136,8 @@ func codecEncodeColumnsPB(columns []*model.Column) []*benchmark.Column {
 
 func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChanged{
-		OldValue: codecEncodeColumnsPB(model.ColumnDatas2Columns(event.PreColumns, event.TableInfo)),
-		NewValue: codecEncodeColumnsPB(model.ColumnDatas2Columns(event.Columns, event.TableInfo)),
+		OldValue: codecEncodeColumnsPB(event.GetPreColumns()),
+		NewValue: codecEncodeColumnsPB(event.GetColumns()),
 	}
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
@@ -202,8 +202,8 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChangedColumnar{}
 	for _, event := range events {
-		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(model.ColumnDatas2Columns(event.PreColumns, event.TableInfo)))
-		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(model.ColumnDatas2Columns(event.Columns, event.TableInfo)))
+		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.GetPreColumns()))
+		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.GetColumns()))
 	}
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)

@@ -178,10 +178,10 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
 		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
-		// TODO: add a unit test
 		if len(preCols) < len(cols) {
 			newPreCols := make([]*model.Column, 0, len(preCols))
 			j := 0
+			// Columns are ordered by name
 			for _, col := range cols {
 				if j < len(preCols) && col.Name == preCols[j].Name {
 					newPreCols = append(newPreCols, preCols[j])
@@ -191,6 +191,9 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 				}
 			}
 			preCols = newPreCols
+		}
+		if len(preCols) != len(cols) {
+			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", cols))
 		}
 		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
 		if err != nil {

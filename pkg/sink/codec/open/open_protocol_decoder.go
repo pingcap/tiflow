@@ -126,7 +126,6 @@ func (b *BatchDecoder) decodeNextKey() error {
 
 // HasNext implements the RowEventDecoder interface
 func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
-	log.Info("BatchDecoder HasNext begin", zap.Bool("hasNext", b.hasNext()))
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -135,8 +134,6 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	}
 
 	if b.nextKey.Type == model.MessageTypeRow {
-		log.Info("BatchDecoder HasNext row")
-
 		valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 		value := b.valueBytes[8 : valueLen+8]
 		b.valueBytes = b.valueBytes[valueLen+8:]

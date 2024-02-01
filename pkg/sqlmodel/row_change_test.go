@@ -337,16 +337,6 @@ func TestGenInsert(t *testing.T) {
 			"INSERT INTO `db`.`tb2` (`c`) VALUES (?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`)",
 			[]interface{}{1},
 		},
-		// {
-		// 	"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT AS (c+1))",
-		// 	"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT)",
-		// 	[]interface{}{1},
-
-		// 	"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
-		// 	"REPLACE INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
-		// 	"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`),`c2`=VALUES(`c2`)",
-		// 	[]interface{}{1, 2},
-		// },
 	}
 
 	for _, c := range cases {

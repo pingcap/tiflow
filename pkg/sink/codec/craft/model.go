@@ -421,7 +421,7 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent, 
 	if size, group := newColumnGroup(
 		allocator,
 		columnGroupTypeNew,
-		model.ColumnDatas2Columns(ev.Columns, ev.TableInfo),
+		ev.GetColumns(),
 		false); group != nil {
 		groups[idx] = group
 		idx++
@@ -431,7 +431,7 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent, 
 	if size, group := newColumnGroup(
 		allocator,
 		columnGroupTypeOld,
-		model.ColumnDatas2Columns(ev.PreColumns, ev.TableInfo),
+		ev.GetPreColumns(),
 		onlyHandleKeyColumns); group != nil {
 		groups[idx] = group
 		estimatedSize += size

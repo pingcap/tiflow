@@ -346,8 +346,7 @@ func datum2Column(
 	cols := make([]*model.ColumnData, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
-	// columnInfos and rowColumnInfos hold different column metadata,
-	// they should have the same length and order.
+	// columnInfos should have the same length and order with cols
 	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
 
 	for _, colInfo := range tableInfo.Columns {

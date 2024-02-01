@@ -380,7 +380,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.TableInfo)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetPreColumns(), e.TableInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -388,7 +388,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 		if e.PreColumns == nil {
 			// This is a insert operation.
 			csvMsg.opType = operationInsert
-			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.TableInfo)
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetColumns(), e.TableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -401,12 +401,12 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 						fmt.Errorf("the column length of preColumns %d doesn't equal to that of columns %d",
 							len(e.PreColumns), len(e.Columns)))
 				}
-				csvMsg.preColumns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.TableInfo)
+				csvMsg.preColumns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetPreColumns(), e.TableInfo)
 				if err != nil {
 					return nil, err
 				}
 			}
-			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.TableInfo)
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetColumns(), e.TableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -439,7 +439,7 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, tableI
 	return e, nil
 }
 
-func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.ColumnData, tableInfo *model.TableInfo) ([]any, error) {
+func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column, tableInfo *model.TableInfo) ([]any, error) {
 	var csvColumns []any
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, column := range cols {
@@ -449,10 +449,7 @@ func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.ColumnD
 			continue
 		}
 
-		converted, err := fromColValToCsvVal(
-			csvConfig,
-			model.ColumnData2Column(column, tableInfo),
-			colInfos[i].Ft)
+		converted, err := fromColValToCsvVal(csvConfig, column, colInfos[i].Ft)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

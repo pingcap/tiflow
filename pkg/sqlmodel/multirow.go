@@ -78,7 +78,6 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 // Input `changes` should have same target table and same columns for WHERE
 // (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
 func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
-	log.Info("GenDeleteSQL")
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
 		return "", nil

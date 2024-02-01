@@ -659,7 +659,7 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := model.ColumnDatas2Columns(event.Columns, event.TableInfo)
+	columns := event.GetColumns()
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
 		columns,
@@ -692,7 +692,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := model.ColumnDatas2Columns(event.Columns, event.TableInfo)
+	columns := event.GetColumns()
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
 		columns,
@@ -722,7 +722,7 @@ func TestRowToAvroData(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := model.ColumnDatas2Columns(event.Columns, event.TableInfo)
+	columns := event.GetColumns()
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
 		columns,
