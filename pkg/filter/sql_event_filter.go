@@ -133,16 +133,11 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 
 // skipDDLEvent skips ddl event by its type and query.
 func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
-	schema := ddl.TableInfo.TableName.Schema
-	table := ddl.TableInfo.TableName.Table
 	if len(f.rules) == 0 {
 		return false, nil
 	}
-
-	log.Info("sql event filter handle ddl event",
-		zap.Any("ddlType", ddl.Type.String()), zap.String("schema", schema),
-		zap.String("table", table), zap.String("query", ddl.Query))
-
+	schema := ddl.TableInfo.TableName.Schema
+	table := ddl.TableInfo.TableName.Table
 	evenType := ddlToEventType(ddl.Type)
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
