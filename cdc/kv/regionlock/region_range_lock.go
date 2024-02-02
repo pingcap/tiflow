@@ -642,7 +642,7 @@ type CollectedLockedRangeAttrs struct {
 	LockedRegionCount int
 
 	// If Holes isn't empty it means some regions are not captured at the time.
-	// Those regions can just split or merge, or be transfered, or temporarily be unavailable.
+	// Those regions can just split or merge, or be transferred, or temporarily be unavailable.
 	Holes []HoleAttrs
 
 	FastestRegion LockedRangeAttrs
