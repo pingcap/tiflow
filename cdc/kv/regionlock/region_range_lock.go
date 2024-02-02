@@ -35,7 +35,11 @@ type rangeTsEntry struct {
 	// since the map always keeps a continuous range.
 	startKey []byte
 	ts       uint64
-	isUnset  bool
+
+	// rangeTsEntry is used in rangeTsMap. rangeTsMap.set will associate a timestamp to a given key range,
+	// and rangeTsMap.unset will revoke the relationship. `isUnset` indicates whether a key range is
+	// generated from a set or unset operation.
+	isUnset bool
 }
 
 func rangeTsEntryWithKey(key []byte) rangeTsEntry {
@@ -65,14 +69,14 @@ func newRangeTsMap(startKey, endKey []byte, startTs uint64) *rangeTsMap {
 	return m
 }
 
-func (m *rangeTsMap) clone() (target *rangeTsMap) {
-	target = &rangeTsMap{
+func (m *rangeTsMap) clone() (res *rangeTsMap) {
+	res = &rangeTsMap{
 		m:     btree.NewG(16, rangeTsEntryLess),
 		start: m.start,
 		end:   m.end,
 	}
 	m.m.Ascend(func(i rangeTsEntry) bool {
-		target.m.ReplaceOrInsert(i)
+		res.m.ReplaceOrInsert(i)
 		return true
 	})
 	return
@@ -636,9 +640,13 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
 	LockedRegionCount int
-	Holes             []HoleAttrs
-	FastestRegion     LockedRangeAttrs
-	SlowestRegion     LockedRangeAttrs
+
+	// If Holes isn't empty it means some regions are not captured at the time.
+	// Those regions can just split or merge, or be transfered, or temporarily be unavailable.
+	Holes []HoleAttrs
+
+	FastestRegion LockedRangeAttrs
+	SlowestRegion LockedRangeAttrs
 }
 
 // LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
