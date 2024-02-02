@@ -73,7 +73,7 @@ func decodeTableID(key []byte) (rest []byte, tableID int64, err error) {
 }
 
 // decodeRow decodes a byte slice into datums with an existing row map.
-func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
+func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
 		return map[int64]types.Datum{}, nil
 	}
@@ -83,20 +83,20 @@ func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *tim
 		err    error
 	)
 	if rowcodec.IsNewFormat(b) {
-		encoder := rowcodec.NewDatumMapDecoder(reqCols, tz)
+		encoder := rowcodec.NewDatumMapDecoder(reqCols, time.UTC)
 		datums, err = decodeRowV2(encoder, b)
 	} else {
-		datums, err = decodeRowV1(b, tableInfo, tz)
+		datums, err = decodeRowV1(b, tableInfo)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, tz, datums)
+	return tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, time.UTC, datums)
 }
 
 // decodeRowV1 decodes value data using old encoding format.
 // Row layout: colID1, value1, colID2, value2, .....
-func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
+func decodeRowV1(b []byte, tableInfo *model.TableInfo) (map[int64]types.Datum, error) {
 	row := make(map[int64]types.Datum)
 	if len(b) == 1 && b[0] == codec.NilFlag {
 		b = b[1:]
@@ -132,7 +132,7 @@ func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[i
 			continue
 		}
 		fieldType := &colInfo.FieldType
-		datum, err := unflatten(v, fieldType, tz)
+		datum, err := unflatten(v, fieldType)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
@@ -156,7 +156,7 @@ func decodeRowV2(
 }
 
 // unflatten converts a raw datum to a column datum.
-func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
+func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 	if datum.IsNull() {
 		return datum, nil
 	}
@@ -176,12 +176,6 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
 			return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
-		}
-		if ft.GetType() == mysql.TypeTimestamp && !t.IsZero() {
-			err = t.ConvertTimeZone(time.UTC, loc)
-			if err != nil {
-				return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
-			}
 		}
 		datum.SetUint64(0)
 		datum.SetMysqlTime(t)

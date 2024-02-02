@@ -579,12 +579,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
 	p.globalVars = prcCtx.GlobalVars()
 
-	var tz *time.Location
-	// todo: get the timezone from the global config or the changefeed config?
-	tz, err = util.GetTimezone(config.GetGlobalServerConfig().TZ)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	p.filter, err = filter.NewFilter(p.latestInfo.Config, util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
@@ -599,7 +593,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.latestInfo.Config.Mounter.WorkerNum,
-		p.filter, tz, p.changefeedID, p.latestInfo.Config.Integrity)
+		p.filter, p.changefeedID, p.latestInfo.Config.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(prcCtx)

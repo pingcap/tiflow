@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
@@ -74,7 +73,6 @@ type Mounter interface {
 
 type mounter struct {
 	schemaStorage                SchemaStorage
-	tz                           *time.Location
 	changefeedID                 model.ChangeFeedID
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
@@ -86,17 +84,11 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
-
-	// encoder is used to calculate the checksum.
-	encoder *rowcodec.Encoder
-	// sctx hold some information can be used by the encoder to calculate the checksum.
-	sctx *stmtctx.StatementContext
 }
 
 // NewMounter creates a mounter
 func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
-	tz *time.Location,
 	filter pfilter.Filter,
 	integrity *integrity.Config,
 ) Mounter {
@@ -108,11 +100,7 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz:        tz,
 		integrity: integrity,
-
-		encoder: &rowcodec.Encoder{},
-		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -269,7 +257,7 @@ func (m *mounter) decodeRow(
 	)
 
 	if rowcodec.IsNewFormat(rawValue) {
-		decoder := rowcodec.NewDatumMapDecoder(reqCols, m.tz)
+		decoder := rowcodec.NewDatumMapDecoder(reqCols, time.UTC)
 		if isPreColumns {
 			m.preDecoder = decoder
 		} else {
@@ -277,7 +265,7 @@ func (m *mounter) decodeRow(
 		}
 		datums, err = decodeRowV2(decoder, rawValue)
 	} else {
-		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
+		datums, err = decodeRowV1(rawValue, tableInfo)
 	}
 
 	if err != nil {
@@ -285,7 +273,7 @@ func (m *mounter) decodeRow(
 	}
 
 	datums, err = tablecodec.DecodeHandleToDatumMap(
-		recordID, handleColIDs, handleColFt, m.tz, datums)
+		recordID, handleColIDs, handleColFt, time.UTC, datums)
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
@@ -310,7 +298,7 @@ func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
+		row, err := decodeRow(rawKV.Value, recordID, tblInfo)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
