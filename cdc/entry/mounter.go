@@ -408,18 +408,9 @@ func (m *mounter) calculateChecksum(
 ) (uint32, error) {
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
-		datum := &rawColumns[idx]
-		if col.GetType() == mysql.TypeTimestamp && m.tz != time.UTC {
-			t := datum.GetMysqlTime()
-			err := t.ConvertTimeZone(m.tz, time.UTC)
-			if err != nil {
-				return 0, errors.Trace(err)
-			}
-			datum.SetMysqlTime(t)
-		}
 		column := rowcodec.ColData{
 			ColumnInfo: col,
-			Datum:      datum,
+			Datum:      &rawColumns[idx],
 		}
 		columns = append(columns, column)
 	}
