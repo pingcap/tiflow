@@ -1025,7 +1025,10 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 		r.Checkpoint.LastSyncedTs = checkpoint.LastSyncedTs
 	}
 
-	r.Stats = stats
+	// we only update stats when stats is not empty, because we only collect stats every 10s.
+	if stats.Size() > 0 {
+		r.Stats = stats
+	}
 }
 
 // SetHeap is a max-heap, it implements heap.Interface.
