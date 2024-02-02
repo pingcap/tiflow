@@ -432,7 +432,7 @@ func (m *mounter) calculateChecksum(
 		Data: make([]byte, 0),
 	}
 
-	checksum, err := calculator.Checksum()
+	checksum, err := calculator.Checksum(m.tz)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
