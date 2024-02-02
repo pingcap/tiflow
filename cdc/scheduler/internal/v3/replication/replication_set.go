@@ -1029,7 +1029,6 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	if stats.Size() > 0 {
 		r.Stats = stats
 	}
-
 }
 
 // SetHeap is a max-heap, it implements heap.Interface.
