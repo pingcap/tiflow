@@ -85,8 +85,8 @@ func mustLockRangeWait(
 	return mustWaitFn(t, res)
 }
 
-func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version uint64, checkpointTs uint64) {
-	l.UnlockRange([]byte(startKey), []byte(endKey), regionID, version, checkpointTs)
+func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version uint64, resolvedTs uint64) {
+	l.UnlockRange([]byte(startKey), []byte(endKey), regionID, version, resolvedTs)
 }
 
 func TestRegionRangeLock(t *testing.T) {
@@ -160,7 +160,7 @@ func TestRegionRangeLockLockingRegionID(t *testing.T) {
 	unlockRange(l, "e", "f", 1, 11, 11)
 	res := <-ch
 	// CheckpointTS calculation should still be based on range and do not consider the regionID. So
-	// the result's checkpointTs should be 20 from of range ["g", "h"), instead of 11 from min(11, 20).
+	// the result's resolvedTs should be 20 from of range ["g", "h"), instead of 11 from min(11, 20).
 	mustSuccess(t, res, 20)
 	unlockRange(l, "g", "h", 1, 12, 30)
 }
