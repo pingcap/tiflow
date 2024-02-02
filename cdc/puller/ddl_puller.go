@@ -297,11 +297,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		if !ok {
 			shouldDiscardOldTable = true
 		} else {
-			shouldDiscardOldTable, err = p.filter.ShouldDiscardDDL(job.StartTS,
-				job.Type, oldSchemaNames[i].O, oldTable.Name.O, job.Query)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
 		}
 
 		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
@@ -309,11 +305,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			// the new table name does not hit the filter rule, so we should discard the table.
 			shouldDiscardNewTable = true
 		} else {
-			shouldDiscardNewTable, err = p.filter.ShouldDiscardDDL(job.StartTS,
-				job.Type, newSchemaName.Name.O, newTableNames[i].O, job.Query)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
 		}
 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
@@ -425,12 +417,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	snap := p.schemaStorage.GetLastSnapshot()
 	if err := snap.FillSchemaName(job); err != nil {
 		log.Info("failed to fill schema name for ddl job", zap.Error(err))
-		discard, fErr := p.filter.
-			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
-		if fErr != nil {
-			return false, errors.Trace(fErr)
-		}
-		if discard {
+		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
 			return true, nil
 		}
 		return true, errors.Trace(err)
@@ -453,11 +440,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			discard, err := p.filter.
-				ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.Query)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
+			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
 			if !discard {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
@@ -468,16 +451,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("oldSchemaName", oldTable.TableName.Schema))
 			// since we can find the old table, we must can find the old schema.
 			// 2. If we can find the preTableInfo, we filter it by the old table name.
-			skipByOldTableName, err := p.filter.ShouldDiscardDDL(job.StartTS,
-				job.Type, oldTable.TableName.Schema, oldTable.TableName.Table, job.Query)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
-			skipByNewTableName, err := p.filter.ShouldDiscardDDL(job.StartTS,
-				job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.Query)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
+			skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table)
+			skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
 			// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
 			if skipByOldTableName && !skipByNewTableName {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
@@ -492,11 +467,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
-		skip, err = p.filter.
-			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
+		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
 	}
 
 	if skip {
@@ -597,7 +568,7 @@ func NewDDLJobPuller(
 
 		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
 		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
-		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig)
+		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 
 		client := kv.NewSharedClient(
 			changefeed, cfg, ddlPullerFilterLoop,

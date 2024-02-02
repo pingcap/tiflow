@@ -58,6 +58,7 @@ const (
 type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
+	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
 
@@ -157,6 +158,7 @@ func New(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
+	totalQuota := changefeedInfo.Config.MemoryQuota
 	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
 		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
@@ -164,18 +166,26 @@ func New(
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
-		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
-		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
+		consistentMemoryUsage := changefeedInfo.Config.Consistent.MemoryUsage
+		if consistentMemoryUsage == nil {
+			consistentMemoryUsage = config.GetDefaultReplicaConfig().Consistent.MemoryUsage
+		}
+
+		redoQuota := totalQuota * consistentMemoryUsage.MemoryQuotaPercentage / 100
+		sinkQuota := totalQuota - redoQuota
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, sinkQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
-		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+
+		eventCache := redoQuota * consistentMemoryUsage.EventCachePercentage / 100
+		if eventCache > 0 {
+			m.eventCache = newRedoEventCache(changefeedID, eventCache)
+		}
 	} else {
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, totalQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.ready = make(chan struct{})
-
 	return m
 }
 
@@ -531,13 +541,50 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
 			upperBound := m.getUpperBound(tableSink.getUpperBoundTs())
-			// The table has no available progress.
-			if lowerBound.Compare(upperBound) >= 0 {
+
+			if !tableSink.initTableSink() {
+				// The table hasn't been attached to a sink.
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
-			// The table hasn't been attached to a sink.
-			if !tableSink.initTableSink() {
+
+			if sinkErr := tableSink.checkTableSinkHealth(); sinkErr != nil {
+				switch errors.Cause(sinkErr).(type) {
+				case tablesink.SinkInternalError:
+					tableSink.closeAndClearTableSink()
+					if restartErr := tableSink.restart(ctx); restartErr == nil {
+						// Restart the table sink based on the checkpoint position.
+						ckpt := tableSink.getCheckpointTs().ResolvedMark()
+						lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+						p := &progress{
+							span:              tableSink.span,
+							nextLowerBoundPos: lastWrittenPos.Next(),
+							version:           slowestTableProgress.version,
+						}
+						m.sinkProgressHeap.push(p)
+						log.Info("table sink has been restarted",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Stringer("span", &tableSink.span),
+							zap.Any("lastWrittenPos", lastWrittenPos),
+							zap.String("sinkError", sinkErr.Error()))
+					} else {
+						m.sinkProgressHeap.push(slowestTableProgress)
+						log.Warn("table sink restart fail",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Stringer("span", &tableSink.span),
+							zap.String("sinkError", sinkErr.Error()),
+							zap.Error(restartErr))
+					}
+				default:
+					return sinkErr
+				}
+				continue
+			}
+
+			// The table has no available progress.
+			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
@@ -961,6 +1008,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
+	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
@@ -1003,6 +1051,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
+		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }
