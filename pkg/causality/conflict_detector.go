@@ -44,8 +44,8 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 }
 
 type txnFinishedEvent struct {
-	node         *internal.Node
-	conflictKeys []uint64
+	node           *internal.Node
+	sortedKeysHash []uint64
 }
 
 // NewConflictDetector creates a new ConflictDetector.
@@ -73,20 +73,29 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 
 // Add pushes a transaction to the ConflictDetector.
 //
-// NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
+// NOTE: if multiple threads access this concurrently,
+// Txn.GenSortedDedupKeysHash must be sorted by the slot index.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
-	conflictKeys := txn.ConflictKeys(d.numSlots)
+	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
 	node := internal.NewNode()
 	node.OnResolved = func(workerID int64) {
-		unlock := func() {
+		// This callback is called after the transaction is executed.
+		postTxnExecuted := func() {
+			// After this transaction is executed, we can remove the node from the graph,
+			// and resolve related dependencies for these transacitons which depend on this
+			// executed transaction.
 			node.Remove()
-			d.garbageNodes.In() <- txnFinishedEvent{node, conflictKeys}
+
+			// Send this node to garbageNodes to GC it from the slots if this node is still
+			// occupied related slots.
+			d.garbageNodes.In() <- txnFinishedEvent{node, sortedKeysHash}
 		}
-		d.sendToWorker(txn, unlock, workerID)
+		// Send this txn to related worker as soon as all dependencies are resolved.
+		d.sendToWorker(txn, postTxnExecuted, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
-	d.slots.Add(node, conflictKeys)
+	d.slots.Add(node, sortedKeysHash)
 }
 
 // Close closes the ConflictDetector.
@@ -110,18 +119,18 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 			}
 		case event := <-d.garbageNodes.Out():
 			if event.node != nil {
-				d.slots.Free(event.node, event.conflictKeys)
+				d.slots.Free(event.node, event.sortedKeysHash)
 			}
 		}
 	}
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, unlock func(), workerID int64) {
+func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, postTxnExecuted func(), workerID int64) {
 	if workerID < 0 {
 		panic("must assign with a valid workerID")
 	}
 	txn.OnConflictResolved()
 	worker := d.workers[workerID]
-	worker.Add(txn, unlock)
+	worker.Add(txn, postTxnExecuted)
 }
