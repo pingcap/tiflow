@@ -1031,8 +1031,10 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		// We expect some unknown error to trigger RegionCache recheck its store state and change leader to peer to
 		// make some detection(peer may tell us where new leader is)
 		// RegionCache.OnSendFail is thread_safe inner.
-		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		s.client.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
+		if !cerror.ErrPendingRegionCancel.Equal(err) {
+			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+			s.client.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
+		}
 	}
 
 	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
