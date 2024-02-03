@@ -347,7 +347,8 @@ func (s *Server) RegisterWorker(ctx context.Context, req *pb.RegisterWorkerReque
 	}
 	log.L().Info("register worker successfully", zap.String("name", req.Name), zap.String("address", req.Address))
 	return &pb.RegisterWorkerResponse{
-		Result: true,
+		Result:    true,
+		SecretKey: s.cfg.SecretKey,
 	}, nil
 }
 

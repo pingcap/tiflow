@@ -197,7 +197,11 @@ function run() {
 		"unknown command \"any\" for \"dmctl\"" 1 \
 		"Run 'dmctl --help' for usage\." 1
 
+	mkdir -p $WORK_DIR/master
+	cp $cur/conf/key.txt $WORK_DIR/master/
+	export DM_MASTER_EXTRA_ARG="--secret-key-path $WORK_DIR/master/key.txt"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $dm_master_conf
+	export DM_MASTER_EXTRA_ARG=""
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# only one master, check it should be leader and etcd metrics works
 	check_metric $MASTER_PORT 'etcd_server_has_leader' 3 0 2
@@ -480,6 +484,28 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"detect inconsistent DDL sequence" 2
+
+	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"encrypt a" \
+		"cipher is not initialized" 1
+
+	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"decrypt a" \
+		"cipher is not initialized" 1
+
+	cp $cur/conf/key.txt $WORK_DIR/key.txt
+	run_dm_ctl_plain $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"encrypt abc --secret-key-path $WORK_DIR/master/key.txt"
+	val=$(cat $WORK_DIR/dmctl-plain.log | head -n 1)
+	echo "encrypt value: $val"
+	run_dm_ctl_plain $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"decrypt $val --secret-key-path $WORK_DIR/master/key.txt"
+	decrypted_val=$(cat $WORK_DIR/dmctl-plain.log | head -n 1)
+	echo "decrypt value: $decrypted_val"
+	if [ "$decrypted_val" != "abc" ]; then
+		echo "encrypt test failed"
+		exit 1
+	fi
 }
 
 cleanup_data dmctl
