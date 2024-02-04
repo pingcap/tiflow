@@ -22,13 +22,16 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,8 +57,6 @@ const (
 	closed
 
 	maxIdleDuration = time.Minute * 30
-	// topologyKey is /topology/ticdc/{clusterID}/{ip:port}
-	topologyTiCDC = "/topology/ticdc/%s/%s"
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
@@ -376,4 +377,52 @@ func (up *Upstream) shouldClose() bool {
 	}
 
 	return false
+}
+
+func (up *Upstream) Verify(ctx context.Context, username, password string) error {
+	tidbs, err := fetchTiDBTopology(ctx, up.etcdCli.Unwrap())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(tidbs) == 0 {
+		return errors.New("tidb instance not found in topology, please check if the tidb is running")
+	}
+
+	for _, tidb := range tidbs {
+		// connect tidb
+		host := fmt.Sprintf("%s:%d", tidb.IP, tidb.Port)
+		dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/", username, password, host)
+		err = up.doVerify(ctx, dsnStr)
+		if err == nil {
+			return nil
+		}
+		if err == nil || errorutil.IsAccessDeniedError(err) {
+			return errors.Trace(err)
+		}
+	}
+	return errors.Trace(err)
+}
+
+func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// TODO: use client tls config for tidb connection if mutual tls is enabled.
+	if up.SecurityConfig != nil {
+		dsn.TLS, err = up.SecurityConfig.ToTLSConfig()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer db.Close()
+	// TODO: check authtication here if needed
+	return db.Ping()
 }

@@ -33,6 +33,8 @@ type Config struct {
 	Credential *security.Credential
 	// API verion
 	Version string
+	// Extra query parameters
+	Values url.Values
 }
 
 // defaultServerURLFromConfig is used to build base URL and api path.
@@ -79,7 +81,7 @@ func CDCRESTClientFromConfig(config *Config) (*CDCRESTClient, error) {
 		return nil, errors.Trace(err)
 	}
 
-	restClient, err := NewCDCRESTClient(baseURL, versionedAPIPath, httpClient)
+	restClient, err := NewCDCRESTClient(baseURL, versionedAPIPath, httpClient, config.Values)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

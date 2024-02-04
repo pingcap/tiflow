@@ -982,4 +982,14 @@ var (
 		"cdc met unexpected error: %s",
 		errors.RFCCodeText("CDC:ErrUnexpected"),
 	)
+
+	// credential related errors
+	ErrCredentialNotFound = errors.Normalize(
+		"credential not found: %s",
+		errors.RFCCodeText("CDC:ErrCredentialNotFound"),
+	)
+	ErrUnauthorized = errors.Normalize(
+		"user %s unauthorized, error: %s",
+		errors.RFCCodeText("CDC:ErrUnauthorized"),
+	)
 )

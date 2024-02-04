@@ -211,6 +211,11 @@ error = '''
 craft codec invalid data
 '''
 
+["CDC:ErrCredentialNotFound"]
+error = '''
+credential not found: %s
+'''
+
 ["CDC:ErrDDLSchemaNotFound"]
 error = '''
 cannot find mysql.tidb_ddl_job schema
@@ -1004,6 +1009,11 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnauthorized"]
+error = '''
+user %s unauthorized, error: %s
 '''
 
 ["CDC:ErrUnexpected"]

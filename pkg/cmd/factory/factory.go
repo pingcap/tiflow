@@ -15,14 +15,26 @@ package factory
 
 import (
 	"crypto/tls"
+	"fmt"
+	"net/url"
+	"os"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/api"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
+	"golang.org/x/term"
 	"google.golang.org/grpc"
+)
+
+const (
+	envVarTiCDCUser              = "TICDC_USER"
+	envVarTiCDCPassword          = "TICDC_PASSWORD"
+	defaultCrendentialConfigFile = "ticdc_credential.toml"
 )
 
 // Factory defines the client-side construction factory.
@@ -41,10 +53,17 @@ type ClientGetter interface {
 	GetServerAddr() string
 	GetLogLevel() string
 	GetCredential() *security.Credential
+	GetAuthParameters() url.Values
+}
+
+type ClientAuth struct {
+	user     string `json:"ticdc_user,omitempty" toml:"ticdc_user,omitempty" yaml:"ticdc_user,omitempty"`
+	password string `json:"ticdc_password,omitempty" toml:"ticdc_password,omitempty" yaml:"ticdc_password,omitempty"`
 }
 
 // ClientFlags specifies the parameters needed to construct the client.
 type ClientFlags struct {
+	ClientAuth
 	pdAddr     string
 	serverAddr string
 	logLevel   string
@@ -112,6 +131,11 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 		"Private key path for TLS connection to CDC server")
 	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn",
 		"log level (etc: debug|info|warn|error)")
+
+	cmd.PersistentFlags().StringVar(&c.user, "user", "", "User name for authentication. "+
+		"You can sqpecify it via environment variable TICDC_USER")
+	cmd.PersistentFlags().StringVar(&c.password, "password", "", "Password for authentication. "+
+		"You can specify it via environment variable TICDC_PASSWORD")
 }
 
 // GetCredential returns credential.
@@ -123,5 +147,56 @@ func (c *ClientFlags) GetCredential() *security.Credential {
 		CertPath:      c.certPath,
 		KeyPath:       c.keyPath,
 		CertAllowedCN: certAllowedCN,
+	}
+}
+
+func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
+	defer func() {
+		if err == nil {
+			if c.user == "" && c.password != "" {
+				err = errors.ErrCredentialNotFound.GenWithStackByArgs("invalid atuhentication: password is specified without user")
+			}
+		}
+	}()
+	// If user is specified via command line, password should be specified as well.
+	if c.user != "" {
+		if c.password == "" {
+			cmd.Print("Enter password: ")
+			password, err := term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				return errors.ErrCredentialNotFound.GenWithStackByArgs(c.user, "Error reading password, ", err)
+			}
+			cmd.Println()
+			c.password = string(password)
+		}
+		return nil
+	}
+
+	// If user is not specified via command line, try to get it from environment variable.
+	c.user = os.Getenv(envVarTiCDCUser)
+	c.password = os.Getenv(envVarTiCDCPassword)
+	if c.user != "" {
+		return nil
+	}
+
+	// If user is not specified via command line or environment variable, try to get it from credential file.
+	filename := defaultCrendentialConfigFile
+
+	err = util.StrictDecodeFile(filename, "cdc cli auth config", &c.ClientAuth)
+	if err != nil {
+		msg := fmt.Sprintf("failed to parse authentication from creandential file <%s>", filename)
+		return errors.ErrCredentialNotFound.GenWithStackByArgs(msg)
+	}
+
+	return nil
+}
+
+func (c *ClientFlags) GetAuthParameters() url.Values {
+	if c.user == "" {
+		return nil
+	}
+	return url.Values{
+		api.ApiOpVarTiCDCUser:     {c.user},
+		api.ApiOpVarTiCDCPassword: {c.password},
 	}
 }

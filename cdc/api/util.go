@@ -42,6 +42,28 @@ var httpBadRequestError = []*errors.Error{
 }
 
 const (
+	// OpVarAdminJob is the key of admin job in HTTP API
+	OpVarAdminJob = "admin-job"
+	// OpVarChangefeedID is the key of changefeed ID in HTTP API
+	OpVarChangefeedID = "cf-id"
+	// OpVarTargetCaptureID is the key of to-capture ID in HTTP API
+	OpVarTargetCaptureID = "target-cp-id"
+	// OpVarTableID is the key of table ID in HTTP API
+	OpVarTableID = "table-id"
+
+	// ApiOpVarChangefeedState is the key of changefeed state in HTTP API.
+	ApiOpVarChangefeedState = "state"
+	// ApiOpVarChangefeedID is the key of changefeed ID in HTTP API.
+	ApiOpVarChangefeedID = "changefeed_id"
+	// ApiOpVarCaptureID is the key of capture ID in HTTP API.
+	ApiOpVarCaptureID = "capture_id"
+	// ApiOpVarNamespace is the key of changefeed namespace in HTTP API.
+	ApiOpVarNamespace = "namespace"
+	// ApiOpVarTiCDCPassword is the key of ticdc user in HTTP API.
+	ApiOpVarTiCDCUser = "user"
+	// ApiOpVarTiCDCPassword is the key of ticdc password in HTTP API.
+	ApiOpVarTiCDCPassword = "password"
+
 	// forwardFromCapture is a header to be set when forwarding requests to owner
 	forwardFromCapture = "TiCDC-ForwardFromCapture"
 	// forwardTimes is a header to identify how many times the request has been forwarded

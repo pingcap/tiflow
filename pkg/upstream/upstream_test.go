@@ -15,6 +15,8 @@ package upstream
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -137,4 +139,57 @@ func TestRegisterTopo(t *testing.T) {
 		require.NoError(t, err)
 		return len(resp.Kvs) == 0
 	}, time.Second*5, time.Millisecond*100)
+}
+
+func TestVerify(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clientURL, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+
+	require.NoError(t, err)
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+
+	rawEtcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{clientURL.String()},
+		Context:     ctx,
+		LogConfig:   &logConfig,
+		DialTimeout: 3 * time.Second,
+	})
+	require.NoError(t, err)
+	defer rawEtcdCli.Close()
+
+	etcdCli := etcd.Wrap(rawEtcdCli, make(map[string]prometheus.Counter))
+	up := &Upstream{
+		cancel:  func() {},
+		etcdCli: etcdCli,
+		wg:      &sync.WaitGroup{},
+	}
+
+	// case 1: no tidb instance
+	err = up.Verify(ctx, "test", "")
+	require.ErrorContains(t, err, "tidb instance not found in topology")
+
+	// case 2: tidb instance not alive
+	tidbInstances := []*tidbInstance{
+		{
+			IP:   "127.0.0.1",
+			Port: 40000,
+		},
+		{
+			IP:   "127.0.0.1",
+			Port: 40001,
+		},
+	}
+	for _, tidb := range tidbInstances {
+		infoKey := fmt.Sprintf("/topology/tidb/%s:%d/info", tidb.IP, tidb.Port)
+		ttlKey := fmt.Sprintf("/topology/tidb/%s:%d/ttl", tidb.IP, tidb.Port)
+		rawEtcdCli.Put(ctx, infoKey, "test")
+		rawEtcdCli.Put(ctx, ttlKey, strconv.FormatInt(time.Now().Unix(), 10))
+	}
+	err = up.Verify(ctx, "test", "")
+	require.ErrorContains(t, err, "connection refused")
 }

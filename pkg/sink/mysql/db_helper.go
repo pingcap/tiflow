@@ -46,7 +46,7 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		if closeErr := db.Close(); closeErr != nil {
 			log.Warn("close db failed", zap.Error(err))
 		}
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to close MySQL connection")
 	}
 
 	return db, nil

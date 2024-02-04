@@ -249,15 +249,22 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		c.CaptureSessionTTL = 10
 	}
 
-	if c.Security != nil && c.Security.IsTLSEnabled() {
-		var err error
-		_, err = c.Security.ToTLSConfig()
-		if err != nil {
-			return errors.Annotate(err, "invalidate TLS config")
+	if c.Security != nil {
+		if c.Security.ClientUserRequired && !c.Security.IsTLSEnabled() {
+			log.Error("client user required but TLS is not enabled")
+			// TODO: we should strengthen the security check here in the future.
+			// return cerror.ErrInvalidServerOption.GenWithStack("client user required but TLS is not enabled, please check the security config")
 		}
-		_, err = c.Security.ToGRPCDialOption()
-		if err != nil {
-			return errors.Annotate(err, "invalidate TLS config")
+		if c.Security.IsTLSEnabled() {
+			var err error
+			_, err = c.Security.ToTLSConfig()
+			if err != nil {
+				return errors.Annotate(err, "invalidate TLS config")
+			}
+			_, err = c.Security.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "invalidate TLS config")
+			}
 		}
 	}
 

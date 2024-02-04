@@ -85,14 +85,15 @@ func NewRequest(c *CDCRESTClient) *Request {
 		timeout:    timeout,
 		pathPrefix: pathPrefix,
 		maxRetries: 1,
+		params:     c.values,
 	}
 	r.WithHeader("Accept", "application/json")
 	r.WithHeader(middleware.ClientVersionHeader, version.ReleaseVersion)
 	return r
 }
 
-// NewRequestWithClient creates a Request with an embedded CDCRESTClient for test.
-func NewRequestWithClient(base *url.URL, versionedAPIPath string, client *httputil.Client) *Request {
+// newRequestWithClient creates a Request with an embedded CDCRESTClient for test.
+func newRequestWithClient(base *url.URL, versionedAPIPath string, client *httputil.Client) *Request {
 	return NewRequest(&CDCRESTClient{
 		base:             base,
 		versionedAPIPath: versionedAPIPath,

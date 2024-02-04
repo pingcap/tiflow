@@ -22,8 +22,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
 
@@ -184,4 +186,57 @@ func CheckServerReadyMiddleware(capture capture.Capture) gin.HandlerFunc {
 			return
 		}
 	}
+}
+
+// AuthenticateMiddleware authenticates the request by query upstream TiDB.
+func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		m, err := capture.GetUpstreamManager()
+		if err != nil {
+			_ = ctx.Error(err)
+			ctx.Abort()
+			return
+		}
+		up, err := m.GetDefaultUpstream()
+		if err != nil {
+			_ = ctx.Error(err)
+			ctx.Abort()
+			return
+		}
+
+		if err := verify(ctx, up); err != nil {
+			ctx.IndentedJSON(http.StatusUnauthorized, model.NewHTTPError(err))
+			ctx.Abort()
+			return
+		}
+		ctx.Next()
+	}
+}
+
+func verify(ctx *gin.Context, up *upstream.Upstream) error {
+	serverCfg := config.GetGlobalServerConfig()
+	if serverCfg.Security.ClientUserRequired {
+		username := ctx.Query(api.ApiOpVarTiCDCUser)
+		password := ctx.Query(api.ApiOpVarTiCDCPassword)
+		if username == "" {
+			errMsg := "plesase specify the user and password via url parameter"
+			return errors.ErrCredentialNotFound.GenWithStackByArgs(errMsg)
+		}
+
+		allowed := false
+		for _, user := range serverCfg.Security.ClientAllowedUser {
+			if user == username {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			errMsg := "ClientAllowedUser check failed"
+			return errors.ErrUnauthorized.GenWithStackByArgs(username, errMsg)
+		}
+		if err := up.Verify(ctx, username, password); err != nil {
+			return errors.ErrUnauthorized.GenWithStackByArgs(username, err.Error())
+		}
+	}
+	return nil
 }
