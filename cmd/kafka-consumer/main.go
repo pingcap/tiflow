@@ -907,6 +907,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
 	now := time.Now()
+	memo := make(map[int64]time.Time)
 	for {
 		select {
 		case <-ctx.Done():
@@ -928,6 +929,14 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			checkpoint := tableSink.(tablesink.TableSink).GetCheckpointTs()
 			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
+				lastLoggingTime, ok := memo[tableID]
+				if !ok || time.Since(lastLoggingTime) > 1*time.Minute {
+					log.Warn("flush row changed event takes too long",
+						zap.Int64("tableID", tableID),
+						zap.Uint64("resolvedTs", resolvedTs.Ts),
+						zap.Uint64("checkpointTs", checkpoint.Ts))
+					memo[tableID] = time.Now()
+				}
 			}
 			sink.flowController.release(checkpoint.Ts)
 			return true
@@ -935,11 +944,6 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		if flushedResolvedTs {
 			return nil
 		}
-		if time.Since(now) > 10*time.Second {
-			log.Warn("flush row changed event takes too long",
-				zap.Uint64("resolvedTs", resolvedTs), zap.Duration("duration", time.Since(now)))
-		}
-
 	}
 }
 
@@ -961,6 +965,10 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	}
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
+
+	log.Info("assign table id", zap.Int64("tableID", g.currentTableID),
+		zap.String("schema", schema), zap.String("table", table))
+
 	return g.currentTableID
 }
 
