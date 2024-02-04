@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
@@ -141,7 +142,17 @@ func (tr *Tracker) Init(
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 	// TODO: need to use upstream timezone to correctly check literal is in [1970, 2038]
-	se := executorContext{Context: mock.NewContext()}
+	sctx := mock.NewContext()
+	store, err := mockstore.NewMockStore()
+	if err != nil {
+		return err
+	}
+	sctx.Store = store
+	err = sctx.NewTxn(ctx)
+	if err != nil {
+		return err
+	}
+	se := executorContext{Context: sctx}
 	tr.Lock()
 	defer tr.Unlock()
 	tr.lowerCaseTableNames = lowerCaseTableNames
