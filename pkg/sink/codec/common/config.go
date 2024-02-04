@@ -72,13 +72,30 @@ type Config struct {
 	Terminator           string
 	BinaryEncodingMethod string
 	OutputOldValue       bool
+	OutputHandleKey      bool
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
+	// for the simple protocol, can be "json" and "avro", default to "json"
+	EncodingFormat EncodingFormatType
+
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema bool
 }
+
+// EncodingFormatType is the type of encoding format
+type EncodingFormatType string
+
+const (
+	// EncodingFormatJSON is the json format
+	EncodingFormatJSON EncodingFormatType = "json"
+	// EncodingFormatAvro is the avro format
+	EncodingFormatAvro EncodingFormatType = "avro"
+)
 
 // NewConfig return a Config for codec
 func NewConfig(protocol config.Protocol) *Config {
@@ -99,6 +116,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		EncodingFormat: EncodingFormatJSON,
 
 		TimeZone: time.Local,
 	}
@@ -138,6 +157,11 @@ type urlConfig struct {
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 	ContentCompatible        *bool  `form:"content-compatible"`
+
+	DebeziumDisableSchema *bool `form:"debezium-disable-schema"`
+	// EncodingFormatType is only works for the simple protocol,
+	// can be `json` and `avro`, default to `json`.
+	EncodingFormatType *string `form:"encoding-format"`
 }
 
 // Apply fill the Config
@@ -199,6 +223,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 			c.OutputOldValue = replicaConfig.Sink.CSVConfig.OutputOldValue
+			c.OutputHandleKey = replicaConfig.Sink.CSVConfig.OutputHandleKey
 		}
 		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
@@ -230,6 +255,23 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		}
 	}
 
+	if c.Protocol == config.ProtocolSimple {
+		s := util.GetOrZero(urlParameter.EncodingFormatType)
+		if s != "" {
+			encodingFormat := EncodingFormatType(s)
+			switch encodingFormat {
+			case EncodingFormatJSON, EncodingFormatAvro:
+				c.EncodingFormat = encodingFormat
+			default:
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					"unsupported encoding format type: %s for the simple protocol", encodingFormat)
+			}
+		}
+	}
+	if urlParameter.DebeziumDisableSchema != nil {
+		c.DebeziumDisableSchema = *urlParameter.DebeziumDisableSchema
+	}
+
 	return nil
 }
 
@@ -254,7 +296,11 @@ func mergeConfig(
 				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
+		}
+		if replicaConfig.Sink.DebeziumDisableSchema != nil {
+			dest.DebeziumDisableSchema = replicaConfig.Sink.DebeziumDisableSchema
 		}
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {

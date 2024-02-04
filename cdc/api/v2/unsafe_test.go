@@ -82,7 +82,7 @@ func TestCDCMetaData(t *testing.T) {
 func TestWithUpstreamConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	upManager := upstream.NewManager(ctx, "abc")
+	upManager := upstream.NewManager(ctx, upstream.CaptureTopologyCfg{GCServiceID: "abc"})
 	upManager.AddUpstream(&model.UpstreamInfo{
 		ID:          uint64(1),
 		PDEndpoints: "http://127.0.0.1:22379",

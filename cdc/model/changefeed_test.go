@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -142,34 +141,6 @@ func TestFillV1(t *testing.T) {
     "config":{
         "case-sensitive":true,
         "filter":{
-            "do-tables":[
-                {
-                    "db-name":"test",
-                    "tbl-name":"tbl1"
-                },
-                {
-                    "db-name":"test",
-                    "tbl-name":"tbl2"
-                }
-            ],
-            "do-dbs":[
-                "test1",
-                "sys1"
-            ],
-            "ignore-tables":[
-                {
-                    "db-name":"test",
-                    "tbl-name":"tbl3"
-                },
-                {
-                    "db-name":"test",
-                    "tbl-name":"tbl4"
-                }
-            ],
-            "ignore-dbs":[
-                "test",
-                "sys"
-            ],
             "ignore-txn-start-ts":[
                 1,
                 2
@@ -206,24 +177,6 @@ func TestFillV1(t *testing.T) {
 		Config: &config.ReplicaConfig{
 			CaseSensitive: true,
 			Filter: &config.FilterConfig{
-				MySQLReplicationRules: &filter.MySQLReplicationRules{
-					DoTables: []*filter.Table{{
-						Schema: "test",
-						Name:   "tbl1",
-					}, {
-						Schema: "test",
-						Name:   "tbl2",
-					}},
-					DoDBs: []string{"test1", "sys1"},
-					IgnoreTables: []*filter.Table{{
-						Schema: "test",
-						Name:   "tbl3",
-					}, {
-						Schema: "test",
-						Name:   "tbl4",
-					}},
-					IgnoreDBs: []string{"test", "sys"},
-				},
 				IgnoreTxnStartTs: []uint64{1, 2},
 			},
 			Mounter: &config.MounterConfig{
@@ -250,6 +203,7 @@ func TestVerifyAndComplete(t *testing.T) {
 			CaseSensitive:         false,
 			CheckGCSafePoint:      true,
 			EnableSyncPoint:       util.AddressOf(false),
+			EnableTableMonitor:    util.AddressOf(false),
 			SyncPointInterval:     util.AddressOf(time.Minute * 10),
 			SyncPointRetention:    util.AddressOf(time.Hour * 24),
 			BDRMode:               util.AddressOf(false),

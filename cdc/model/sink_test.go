@@ -89,9 +89,11 @@ func TestTableNameFuncs(t *testing.T) {
 func TestRowChangedEventFuncs(t *testing.T) {
 	t.Parallel()
 	deleteRow := &RowChangedEvent{
-		Table: &TableName{
-			Schema: "test",
-			Table:  "t1",
+		TableInfo: &TableInfo{
+			TableName: TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 		},
 		PreColumns: []*Column{
 			{
@@ -608,4 +610,34 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
+}
+
+func TestToRedoLog(t *testing.T) {
+	event := &RowChangedEvent{
+		StartTs:         100,
+		CommitTs:        1000,
+		PhysicalTableID: 1,
+		TableInfo: &TableInfo{
+			TableName: TableName{Schema: "test", Table: "t"},
+		},
+		Columns: []*Column{
+			{
+				Name:  "col1",
+				Flag:  BinaryFlag,
+				Value: "col1-value",
+			},
+			{
+				Name:  "col2",
+				Flag:  HandleKeyFlag | UniqueKeyFlag,
+				Value: "col2-value-updated",
+			},
+		},
+	}
+	eventInRedoLog := event.ToRedoLog()
+	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
+	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)
+	require.Equal(t, event.PhysicalTableID, eventInRedoLog.RedoRow.Row.Table.TableID)
+	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
+	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
+	require.Equal(t, event.Columns, eventInRedoLog.RedoRow.Row.Columns)
 }

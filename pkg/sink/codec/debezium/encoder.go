@@ -64,8 +64,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		Key:      nil,
 		Value:    value,
 		Ts:       e.CommitTs,
-		Schema:   &e.Table.Schema,
-		Table:    &e.Table.Table,
+		Schema:   e.TableInfo.GetSchemaNamePtr(),
+		Table:    e.TableInfo.GetTableNamePtr(),
 		Type:     model.MessageTypeRow,
 		Protocol: config.ProtocolDebezium,
 		Callback: callback,
@@ -95,13 +95,13 @@ func (d *BatchEncoder) Build() []*common.Message {
 }
 
 // newBatchEncoder creates a new Debezium BatchEncoder.
-func newBatchEncoder(c *common.Config) codec.RowEventEncoder {
+func newBatchEncoder(c *common.Config, clusterID string) codec.RowEventEncoder {
 	batch := &BatchEncoder{
 		messages: nil,
 		config:   c,
 		codec: &dbzCodec{
 			config:    c,
-			clusterID: config.GetGlobalServerConfig().ClusterID,
+			clusterID: clusterID,
 			nowFunc:   time.Now,
 		},
 	}
@@ -109,19 +109,21 @@ func newBatchEncoder(c *common.Config) codec.RowEventEncoder {
 }
 
 type batchEncoderBuilder struct {
-	config *common.Config
+	config    *common.Config
+	clusterID string
 }
 
 // NewBatchEncoderBuilder creates a Debezium batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config, clusterID string) codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{
-		config: config,
+		config:    config,
+		clusterID: clusterID,
 	}
 }
 
 // Build a `BatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return newBatchEncoder(b.config)
+	return newBatchEncoder(b.config, b.clusterID)
 }
 
 // CleanMetrics do nothing

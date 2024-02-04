@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -225,17 +226,28 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+	deployPath, err := os.Executable()
+	if err != nil {
+		deployPath = ""
+	}
 	c.info = &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: c.config.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
+		ID:             uuid.New().String(),
+		AdvertiseAddr:  c.config.AdvertiseAddr,
+		Version:        version.ReleaseVersion,
+		GitHash:        version.GitHash,
+		DeployPath:     deployPath,
+		StartTimestamp: time.Now().Unix(),
 	}
 
 	if c.upstreamManager != nil {
 		c.upstreamManager.Close()
 	}
-	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient)
+	c.upstreamManager = upstream.NewManager(ctx, upstream.CaptureTopologyCfg{
+		CaptureInfo: c.info,
+		GCServiceID: c.EtcdClient.GetGCServiceID(),
+		SessionTTL:  int64(c.config.CaptureSessionTTL),
+	})
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient, c.EtcdClient.GetEtcdClient())
 	if err != nil {
 		return errors.Trace(err)
 	}

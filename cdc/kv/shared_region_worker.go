@@ -74,7 +74,7 @@ func newSharedRegionWorker(c *SharedClient) *sharedRegionWorker {
 		client:        c,
 		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
 		statesManager: newRegionStateManager(-1),
-		metrics:       newRegionWorkerMetrics(c.changefeed),
+		metrics:       newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
 	}
 }
 
@@ -105,7 +105,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 	stepsToRemoved := state.markRemoved()
 	err := state.takeError()
 	if err != nil {
-		log.Info("region worker get a region error",
+		w.client.logRegionDetails("region worker get a region error",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Uint64("streamID", stream.streamID),
@@ -163,12 +163,14 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			return false
 		}
 	}
+	tableID := state.sri.requestedTable.span.TableID
 	log.Debug("region worker get an Event",
 		zap.String("namespace", w.changefeed.Namespace),
 		zap.String("changefeed", w.changefeed.ID),
 		zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
+		zap.Int64("tableID", tableID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
-	return handleEventEntry(x, startTs, state, w.metrics, emit)
+	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {

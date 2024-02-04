@@ -113,7 +113,7 @@ var (
 
 	// codec related errors
 	ErrEncodeFailed = errors.Normalize(
-		"encode failed: %s",
+		"encode failed",
 		errors.RFCCodeText("CDC:ErrEncodeFailed"),
 	)
 	ErrDecodeFailed = errors.Normalize(
@@ -933,9 +933,13 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInternalCheckFailed = errors.Normalize(
+		"internal check failed, %s",
+		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
-		"handle ddl failed, job: %s, query: %s, startTs: %d. "+
+		"handle ddl failed, query: %s, startTs: %d. "+
 			"If you want to skip this DDL and continue with replication, "+
 			"you can manually execute this DDL downstream. Afterwards, "+
 			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
@@ -962,7 +966,7 @@ var (
 		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
 	)
 	ErrMetaOpFailed = errors.Normalize(
-		"meta operation %s is failed",
+		"unexpected meta operation failure: %s",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
 	)
 	ErrMetaInvalidState = errors.Normalize(
@@ -972,5 +976,10 @@ var (
 	ErrInconsistentMetaCache = errors.Normalize(
 		"meta cache is inconsistent: %s",
 		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
+	)
+
+	ErrUnexpected = errors.Normalize(
+		"cdc met unexpected error: %s",
+		errors.RFCCodeText("CDC:ErrUnexpected"),
 	)
 )

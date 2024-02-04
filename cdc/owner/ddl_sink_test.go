@@ -560,10 +560,9 @@ func TestAddSpecialComment(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, ca.result, re)
 	}
-	require.Panics(t, func() {
-		_, _ = s.addSpecialComment(&model.DDLEvent{
-			Query: "alter table t force, auto_increment = 12;alter table t force, " +
-				"auto_increment = 12;",
-		})
-	}, "invalid ddlQuery statement size")
+	_, err := s.addSpecialComment(&model.DDLEvent{
+		Query: "alter table t force, auto_increment = 12;alter table t force, " +
+			"auto_increment = 12;",
+	})
+	require.NotNil(t, err)
 }

@@ -21,6 +21,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -65,7 +66,11 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -76,7 +81,10 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": false,
@@ -87,7 +95,11 @@ const (
     "corruption-handle-level": "warn"
  },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -122,7 +134,8 @@ const (
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
-    "cert-allowed-cn": null
+    "cert-allowed-cn": null,
+    "mtls": false
   },
   "per-table-memory-quota": 0,
   "kv-client": {
@@ -175,7 +188,8 @@ const (
     },
     "puller": {
       "enable-resolved-ts-stuck-detection": false,
-      "resolved-ts-stuck-interval": 300000000000
+      "resolved-ts-stuck-interval": 300000000000,
+      "log-region-details": false
     }
   },
   "cluster-id": "default",
@@ -190,6 +204,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -223,7 +238,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true,
       "binary-encoding-method":"base64",
-      "output-old-value": false
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "date-separator": "month",
     "enable-partition-separator": true,
@@ -266,7 +282,8 @@ const (
         "max-batch-size": 100000,
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
-        "avro-bigint-unsigned-handling-mode": "string"
+        "avro-bigint-unsigned-handling-mode": "string",
+		"encoding-format": "json"
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
@@ -309,7 +326,11 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -320,7 +341,10 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -334,7 +358,11 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -344,6 +372,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -376,7 +405,9 @@ const (
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true,
-      "binary-encoding-method":"base64"
+      "binary-encoding-method":"base64",
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -419,7 +450,8 @@ const (
         "max-batch-size": 100000,
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
-        "avro-bigint-unsigned-handling-mode": "string"
+        "avro-bigint-unsigned-handling-mode": "string",
+        "encoding-format": "json"
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
@@ -462,7 +494,11 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -473,7 +509,10 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -485,6 +524,10 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 )

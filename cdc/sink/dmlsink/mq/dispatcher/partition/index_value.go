@@ -46,7 +46,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.hasher.Reset()
-	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	r.hasher.Write([]byte(row.TableInfo.GetSchemaName()), []byte(row.TableInfo.GetTableName()))
 
 	dispatchCols := row.Columns
 	if len(row.Columns) == 0 {
@@ -67,10 +67,10 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 		names, offsets, ok := row.TableInfo.IndexByName(r.IndexName)
 		if !ok {
 			log.Error("index not found when dispatch event",
-				zap.Any("tableName", row.Table),
+				zap.Any("tableName", row.TableInfo.GetTableName()),
 				zap.String("indexName", r.IndexName))
 			return 0, "", errors.ErrDispatcherFailed.GenWithStack(
-				"index not found when dispatch event, table: %v, index: %s", row.Table, r.IndexName)
+				"index not found when dispatch event, table: %v, index: %s", row.TableInfo.GetTableName(), r.IndexName)
 		}
 		for idx := 0; idx < len(names); idx++ {
 			col := dispatchCols[offsets[idx]]

@@ -17,13 +17,14 @@ import (
 	"context"
 	"math/rand"
 	"sort"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -94,14 +95,6 @@ var redoBarrierDDLs = map[timodel.ActionType]struct{}{
 	timodel.ActionRemovePartitioning:     {},
 }
 
-type bootstrapState int32
-
-const (
-	bootstrapStateNone bootstrapState = iota
-	bootstrapStateRunning
-	bootstrapStateCompleted
-)
-
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
 // It also provides the ability to calculate the barrier of a changefeed.
@@ -112,12 +105,13 @@ type ddlManager struct {
 	// use to pull DDL jobs from TiDB
 	ddlPuller puller.DDLPuller
 	// schema store multiple version of schema, it is used by scheduler
-	schema *schemaWrap4Owner
+	schema entry.SchemaStorage
 	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
 	redoDDLManager  redo.DDLManager
 	redoMetaManager redo.MetaManager
 	// ddlSink is used to ddlSink DDL events to the downstream
 	ddlSink DDLSink
+	filter  filter.Filter
 
 	// pendingDDLs store the pending DDL events of all tables
 	// the DDL events in the same table are ordered by commitTs.
@@ -136,12 +130,6 @@ type ddlManager struct {
 
 	BDRMode       bool
 	ddlResolvedTs model.Ts
-
-	// needBootstrap is true when the downstream is kafka
-	// and the protocol is simple protocol.
-	needSendBootstrapEvent bool
-	errCh                  chan error
-	bootstrapState         int32
 }
 
 func newDDLManager(
@@ -149,36 +137,33 @@ func newDDLManager(
 	startTs model.Ts,
 	checkpointTs model.Ts,
 	ddlSink DDLSink,
+	filter filter.Filter,
 	ddlPuller puller.DDLPuller,
-	schema *schemaWrap4Owner,
+	schema entry.SchemaStorage,
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
-	sinkType model.DownstreamType,
 	bdrMode bool,
-	needSendBootstrapEvent bool,
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Bool("bdrMode", bdrMode),
-		zap.Stringer("sinkType", sinkType))
+		zap.Bool("bdrMode", bdrMode))
 
 	return &ddlManager{
-		changfeedID:            changefeedID,
-		ddlSink:                ddlSink,
-		ddlPuller:              ddlPuller,
-		schema:                 schema,
-		redoDDLManager:         redoManager,
-		redoMetaManager:        redoMetaManager,
-		startTs:                startTs,
-		checkpointTs:           checkpointTs,
-		ddlResolvedTs:          startTs,
-		BDRMode:                bdrMode,
-		pendingDDLs:            make(map[model.TableName][]*model.DDLEvent),
-		errCh:                  make(chan error, 1),
-		needSendBootstrapEvent: needSendBootstrapEvent,
+		changfeedID:     changefeedID,
+		ddlSink:         ddlSink,
+		filter:          filter,
+		ddlPuller:       ddlPuller,
+		schema:          schema,
+		redoDDLManager:  redoManager,
+		redoMetaManager: redoMetaManager,
+		startTs:         startTs,
+		checkpointTs:    checkpointTs,
+		ddlResolvedTs:   startTs,
+		BDRMode:         bdrMode,
+		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
 	}
 }
 
@@ -195,16 +180,6 @@ func (m *ddlManager) tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
-	if m.needSendBootstrapEvent {
-		finished, err := m.checkAndBootstrap(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !finished {
-			return nil, schedulepb.NewBarrierWithMinTs(checkpointTs), nil
-		}
-	}
-
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
 
@@ -236,7 +211,7 @@ func (m *ddlManager) tick(
 
 		log.Info("handle a ddl job",
 			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("ID", m.changfeedID.ID),
+			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int64("tableID", job.TableID),
 			zap.Int64("jobID", job.ID),
 			zap.String("query", job.Query),
@@ -272,8 +247,14 @@ func (m *ddlManager) tick(
 		// Send DDL events to redo log.
 		if m.redoDDLManager.Enabled() {
 			for _, event := range events {
-				err := m.redoDDLManager.EmitDDLEvent(ctx, event)
+				skip, _, err := m.shouldSkipDDL(event)
 				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					continue
+				}
+				if err := m.redoDDLManager.EmitDDLEvent(ctx, event); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -355,26 +336,34 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
 }
 
+func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
+	ignored, err := m.filter.ShouldIgnoreDDLEvent(ddl)
+	if err != nil {
+		return false, "", errors.Trace(err)
+	}
+	if ignored {
+		return true, "ddl is ignored by event filter rule, skip it", nil
+	}
+
+	// In a BDR mode cluster, TiCDC can receive DDLs from all roles of TiDB.
+	// However, CDC only executes the DDLs from the TiDB that has BDRRolePrimary role.
+	if m.BDRMode && ddl.BDRRole != string(ast.BDRRolePrimary) {
+		return true, "changefeed is in BDRMode and the DDL is not executed by Primary Cluster, skip it", nil
+	}
+	return false, "", nil
+}
+
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
 		return nil
 	}
-
-	// If changefeed is in BDRMode, skip ddl.
-	if m.BDRMode {
-		log.Info("changefeed is in BDRMode, skip a ddl event",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("ID", m.changfeedID.ID),
-			zap.Any("ddlEvent", m.executingDDL))
-		tableName := m.executingDDL.TableInfo.TableName
-		// Set it to nil first to accelerate GC.
-		m.pendingDDLs[tableName][0] = nil
-		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.DoGC(m.executingDDL.CommitTs - 1)
-		m.justSentDDL = m.executingDDL
-		m.executingDDL = nil
-		m.cleanCache()
+	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if skip {
+		m.cleanCache(cleanMsg)
 		return nil
 	}
 
@@ -396,22 +385,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if done {
-		tableName := m.executingDDL.TableInfo.TableName
-		log.Info("execute a ddl event successfully",
-			zap.String("ddl", m.executingDDL.Query),
-			zap.Uint64("commitTs", m.executingDDL.CommitTs),
-			zap.Stringer("table", tableName),
-		)
-		// Set it to nil first to accelerate GC.
-		m.pendingDDLs[tableName][0] = nil
-		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.DoGC(m.executingDDL.CommitTs - 1)
-		m.justSentDDL = m.executingDDL
-		m.executingDDL = nil
-		m.cleanCache()
+		m.cleanCache("execute a ddl event successfully")
 	}
 	return nil
 }
@@ -555,12 +532,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 
 // getSnapshotTs returns the ts that we should use
 // to get the snapshot of the schema, the rules are:
-// 1. If the changefeed is just started, we use the startTs,
+// If the changefeed is just started, we use the startTs,
 // otherwise we use the checkpointTs.
-// 2. If the changefeed is in BDRMode, we use the ddlManager.ddlResolvedTs.
-// Since TiCDC ignore the DDLs in BDRMode, we don't need to care about whether
-// the DDLs are executed or not. We should use the ddlResolvedTs to get the up-to-date
-// schema.
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
@@ -578,67 +551,29 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 		return
 	}
 
-	if m.BDRMode {
-		ts = m.ddlResolvedTs
-	}
-
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
 }
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
-// It should be called after a DDL is applied to schema or a DDL
-// is sent to downstream successfully.
-func (m *ddlManager) cleanCache() {
+// It should be called after a DDL is skipped or sent to downstream successfully.
+func (m *ddlManager) cleanCache(msg string) {
+	tableName := m.executingDDL.TableInfo.TableName
+	log.Info(msg, zap.String("ddl", m.executingDDL.Query),
+		zap.String("namespace", m.changfeedID.Namespace),
+		zap.String("changefeed", m.changfeedID.ID),
+		zap.String("bdrRole", m.executingDDL.BDRRole),
+		zap.Any("ddlEvent", m.executingDDL))
+
+	// Set it to nil first to accelerate GC.
+	m.pendingDDLs[tableName][0] = nil
+	m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
+	m.schema.DoGC(m.executingDDL.CommitTs - 1)
+	m.justSentDDL = m.executingDDL
+	m.executingDDL = nil
+
 	m.tableInfoCache = nil
 	m.physicalTablesCache = nil
-}
-
-func (m *ddlManager) checkAndBootstrap(ctx context.Context) (bool, error) {
-	if atomic.LoadInt32(&m.bootstrapState) == int32(bootstrapStateCompleted) {
-		return true, nil
-	}
-
-	select {
-	case err := <-m.errCh:
-		return false, err
-	default:
-	}
-
-	if atomic.LoadInt32(&m.bootstrapState) == int32(bootstrapStateRunning) {
-		return false, nil
-	}
-	// begin bootstrap
-	atomic.StoreInt32(&m.bootstrapState, int32(bootstrapStateRunning))
-	tables, err := m.allTables(ctx)
-	if err != nil {
-		return false, err
-	}
-	bootstrapEvents := make([]*model.DDLEvent, 0, len(tables))
-	for _, table := range tables {
-		ddlEvent := &model.DDLEvent{
-			StartTs:     m.startTs,
-			CommitTs:    m.startTs,
-			TableInfo:   table,
-			IsBootstrap: true,
-		}
-		bootstrapEvents = append(bootstrapEvents, ddlEvent)
-	}
-	// send bootstrap events
-	go func() {
-		for _, event := range bootstrapEvents {
-			err := m.ddlSink.emitBootstrapEvent(ctx, event)
-			if err != nil {
-				log.Error("emit bootstrap event failed",
-					zap.Any("bootstrapEvent", event), zap.Error(err))
-				atomic.StoreInt32(&m.bootstrapState, int32(bootstrapStateNone))
-				m.errCh <- err
-				return
-			}
-		}
-		atomic.StoreInt32(&m.bootstrapState, int32(bootstrapStateCompleted))
-	}()
-	return false, nil
 }
 
 // getRelatedPhysicalTableIDs get all related physical table ids of a ddl event.

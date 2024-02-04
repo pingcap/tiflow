@@ -16,6 +16,8 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -29,6 +31,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
 )
@@ -37,29 +41,69 @@ const (
 	defaultVersion = 1
 )
 
-// EventType describes the type of the event.
-type EventType string
+// MessageType is the type of the message.
+type MessageType string
 
-// The list of event types.
 const (
-	// WatermarkType is the type of the watermark event.
-	WatermarkType EventType = "WATERMARK"
-	// DDLType is the type of the DDL event.
-	DDLType EventType = "DDL"
-	// BootstrapType is the type of the bootstrap event.
-	BootstrapType EventType = "BOOTSTRAP"
-	// InsertType is the type of the insert event.
-	InsertType EventType = "INSERT"
-	// UpdateType is the type of the update event.
-	UpdateType EventType = "UPDATE"
-	// DeleteType is the type of the delete event.
-	DeleteType EventType = "DELETE"
+	// MessageTypeWatermark is the type of the watermark event.
+	MessageTypeWatermark MessageType = "WATERMARK"
+	// MessageTypeBootstrap is the type of the bootstrap event.
+	MessageTypeBootstrap MessageType = "BOOTSTRAP"
+	// MessageTypeDDL is the type of the ddl event.
+	MessageTypeDDL MessageType = "DDL"
+	// MessageTypeDML is the type of the row event.
+	MessageTypeDML MessageType = "DML"
 )
+
+// DML Message types
+const (
+	// DMLTypeInsert is the type of the insert event.
+	DMLTypeInsert MessageType = "INSERT"
+	// DMLTypeUpdate is the type of the update event.
+	DMLTypeUpdate MessageType = "UPDATE"
+	// DMLTypeDelete is the type of the delete event.
+	DMLTypeDelete MessageType = "DELETE"
+)
+
+// DDL message types
+const (
+	DDLTypeCreate   MessageType = "CREATE"
+	DDLTypeRename   MessageType = "RENAME"
+	DDLTypeCIndex   MessageType = "CINDEX"
+	DDLTypeDIndex   MessageType = "DINDEX"
+	DDLTypeErase    MessageType = "ERASE"
+	DDLTypeTruncate MessageType = "TRUNCATE"
+	DDLTypeAlter    MessageType = "ALTER"
+	DDLTypeQuery    MessageType = "QUERY"
+)
+
+func getDDLType(t timodel.ActionType) MessageType {
+	switch t {
+	case timodel.ActionCreateTable:
+		return DDLTypeCreate
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return DDLTypeRename
+	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
+		return DDLTypeCIndex
+	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
+		return DDLTypeDIndex
+	case timodel.ActionDropTable:
+		return DDLTypeErase
+	case timodel.ActionTruncateTable:
+		return DDLTypeTruncate
+	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
+		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
+		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
+		return DDLTypeAlter
+	default:
+		return DDLTypeQuery
+	}
+}
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
-	// ID is used to sort all column schema, should not be exposed to the outside.
-	ID       int64       `json:"-"`
 	Name     string      `json:"name"`
 	DataType dataType    `json:"dataType"`
 	Nullable bool        `json:"nullable"`
@@ -85,28 +129,44 @@ type dataType struct {
 }
 
 // newColumnSchema converts from TiDB ColumnInfo to columnSchema.
-func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
+func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 	tp := dataType{
 		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
 		Charset:   col.GetCharset(),
 		Collate:   col.GetCollate(),
 		Length:    col.GetFlen(),
-		Decimal:   col.GetDecimal(),
 		Elements:  col.GetElems(),
 		Unsigned:  mysql.HasUnsignedFlag(col.GetFlag()),
 		Zerofill:  mysql.HasZerofillFlag(col.GetFlag()),
 	}
+
+	switch col.GetType() {
+	// Float and Double decimal is always -1, do not encode it into the schema.
+	case mysql.TypeFloat, mysql.TypeDouble:
+	default:
+		tp.Decimal = col.GetDecimal()
+	}
+
+	defaultValue := entry.GetColumnDefaultValue(col)
+	if defaultValue != nil && col.GetType() == mysql.TypeBit {
+		var err error
+		defaultValue, err = common.BinaryLiteralToInt([]byte(defaultValue.(string)))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+	}
 	return &columnSchema{
-		ID:       col.ID,
 		Name:     col.Name.O,
 		DataType: tp,
 		Nullable: !mysql.HasNotNullFlag(col.GetFlag()),
-		Default:  entry.GetColumnDefaultValue(col),
-	}
+		Default:  defaultValue,
+	}, nil
 }
 
 // newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
-func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.ColumnInfo {
+func newTiColumnInfo(
+	column *columnSchema, indexes []*IndexSchema,
+) (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 	col.Name = timodel.NewCIStr(column.Name)
 
@@ -127,6 +187,25 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		col.AddFlag(mysql.BinaryFlag)
 	}
 
+	if column.Nullable {
+		col.AddFlag(mysql.NotNullFlag)
+	}
+
+	defaultValue := column.Default
+	if defaultValue != nil && col.GetType() == mysql.TypeBit {
+		switch v := defaultValue.(type) {
+		case float64:
+			byteSize := (col.GetFlen() + 7) >> 3
+			defaultValue = tiTypes.NewBinaryLiteralFromUint(uint64(v), byteSize)
+			defaultValue = defaultValue.(tiTypes.BinaryLiteral).ToString()
+		default:
+		}
+	}
+	err := col.SetDefaultValue(defaultValue)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+	}
+
 	for _, index := range indexes {
 		if index.Primary {
 			for _, name := range index.Columns {
@@ -139,13 +218,7 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		}
 	}
 
-	if column.Nullable {
-		col.AddFlag(mysql.NotNullFlag)
-	}
-
-	col.DefaultValue = column.Default
-
-	return col
+	return col, nil
 }
 
 // IndexSchema is the schema of the index.
@@ -195,21 +268,15 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
+	Schema  string          `json:"schema"`
+	Table   string          `json:"table"`
+	TableID int64           `json:"tableID"`
+	Version uint64          `json:"version"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
-	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
-	for _, col := range tableInfo.Columns {
-		columns = append(columns, newColumnSchema(col))
-	}
-
-	// sort by column by its id
-	sort.SliceStable(columns, func(i, j int) bool {
-		return int(columns[i].ID) < int(columns[j].ID)
-	})
-
+func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
@@ -220,7 +287,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		indexes = append(indexes, index)
 	}
 
-	// Sometime the primary key is not in the index, we need to find it manually.
+	// sometimes the primary key is not in the index, we need to find it manually.
 	if !pkInIndexes {
 		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
 		if len(pkColumns) != 0 {
@@ -229,100 +296,195 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 				Nullable: false,
 				Primary:  true,
 				Unique:   true,
-			}
-			for col := range pkColumns {
-				index.Columns = append(index.Columns, col)
+				Columns:  pkColumns,
 			}
 			indexes = append(indexes, index)
 		}
 	}
 
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
+	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
+	for _, col := range tableInfo.Columns {
+		colSchema, err := newColumnSchema(col)
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, colSchema)
+	}
+
 	return &TableSchema{
+		Schema:  tableInfo.TableName.Schema,
+		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.ID,
+		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
-	}
+	}, nil
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(msg *message) *model.TableInfo {
+func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
+	var (
+		database      string
+		table         string
+		tableID       int64
+		schemaVersion uint64
+	)
+	if m != nil {
+		database = m.Schema
+		table = m.Table
+		tableID = m.TableID
+		schemaVersion = m.Version
+	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: msg.Database,
-			Table:  msg.Table,
+			Schema:  database,
+			Table:   table,
+			TableID: tableID,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(msg.Table),
-			UpdateTS: msg.SchemaVersion,
+			Name:     timodel.NewCIStr(table),
+			UpdateTS: schemaVersion,
 		},
 	}
 
-	if msg.TableSchema != nil {
-		for _, col := range msg.TableSchema.Columns {
-			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
-			info.Columns = append(info.Columns, tiCol)
-		}
-		for _, idx := range msg.TableSchema.Indexes {
-			index := newTiIndexInfo(idx)
-			info.Indices = append(info.Indices, index)
-		}
+	if m == nil {
+		return info, nil
 	}
 
-	return info
+	for _, col := range m.Columns {
+		tiCol, err := newTiColumnInfo(col, m.Indexes)
+		if err != nil {
+			return nil, err
+		}
+		info.Columns = append(info.Columns, tiCol)
+	}
+	for _, idx := range m.Indexes {
+		index := newTiIndexInfo(idx)
+		info.Indices = append(info.Indices, index)
+	}
+
+	return info, nil
 }
 
 // newDDLEvent converts from message to DDLEvent.
-func newDDLEvent(msg *message) *model.DDLEvent {
-	tableInfo := newTableInfo(msg)
-	return &model.DDLEvent{
-		StartTs:   msg.CommitTs,
-		CommitTs:  msg.CommitTs,
-		TableInfo: tableInfo,
-		Query:     msg.SQL,
+func newDDLEvent(msg *message) (*model.DDLEvent, error) {
+	var (
+		tableInfo    *model.TableInfo
+		preTableInfo *model.TableInfo
+		err          error
+	)
+
+	tableInfo, err = newTableInfo(msg.TableSchema)
+	if err != nil {
+		return nil, err
 	}
+
+	if msg.PreTableSchema != nil {
+		preTableInfo, err = newTableInfo(msg.PreTableSchema)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &model.DDLEvent{
+		StartTs:      msg.CommitTs,
+		CommitTs:     msg.CommitTs,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Query:        msg.SQL,
+	}, nil
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
-func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(
+	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
+) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
-		CommitTs: msg.CommitTs,
-		Table: &model.TableName{
-			Schema: msg.Database,
-			Table:  msg.Table,
-		},
-		TableInfo: tableInfo,
+		CommitTs:        msg.CommitTs,
+		PhysicalTableID: msg.TableID,
+		TableInfo:       tableInfo,
 	}
 
-	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
-	for _, columnInfo := range tableInfo.Columns {
-		fieldTypeMap[columnInfo.Name.O] = &columnInfo.FieldType
-	}
-
-	columns, err := decodeColumns(msg.Data, fieldTypeMap)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, fieldTypeMap)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.PreColumns = columns
 
-	result.WithHandlePrimaryFlag(tableInfo.GetPrimaryKeyColumnNames())
+	primaryKeySet := make(map[string]struct{})
+	for _, name := range tableInfo.GetPrimaryKeyColumnNames() {
+		primaryKeySet[name] = struct{}{}
+	}
+	result.WithHandlePrimaryFlag(primaryKeySet)
+
+	if enableRowChecksum && msg.Checksum != nil {
+		err = common.VerifyChecksum(result.PreColumns, msg.Checksum.Previous)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		err = common.VerifyChecksum(result.Columns, msg.Checksum.Current)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		result.Checksum = &integrity.Checksum{
+			Previous:  msg.Checksum.Previous,
+			Current:   msg.Checksum.Current,
+			Corrupted: msg.Checksum.Corrupted,
+			Version:   msg.Checksum.Version,
+		}
+
+		if msg.Checksum.Corrupted {
+			log.Warn("cdc detect checksum corrupted",
+				zap.String("schema", msg.Schema),
+				zap.String("table", msg.Table))
+			for _, col := range result.PreColumns {
+				log.Info("data corrupted, print each previous column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+			for _, col := range result.Columns {
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+		}
+	}
 
 	return result, nil
 }
 
-func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
+func decodeColumns(
+	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo,
+) ([]*model.Column, error) {
+	if rawData == nil {
+		return nil, nil
+	}
 	var result []*model.Column
-	for name, value := range rawData {
-		fieldType, ok := fieldTypeMap[name]
+	for _, info := range columnInfos {
+		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the fieldType for the column", zap.String("column", name))
-			return nil, cerror.ErrDecodeFailed.GenWithStack("cannot found the fieldType for the column %s", name)
+			log.Error("cannot found the value for the column",
+				zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(name, value, fieldType)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -331,98 +493,135 @@ func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*type
 	return result, nil
 }
 
+type checksum struct {
+	Version   int    `json:"version"`
+	Corrupted bool   `json:"corrupted"`
+	Current   uint32 `json:"current"`
+	Previous  uint32 `json:"previous"`
+}
+
 type message struct {
 	Version int `json:"version"`
-	// Scheme and Table is empty for the resolved ts event.
-	Database string    `json:"database,omitempty"`
-	Table    string    `json:"table,omitempty"`
-	Type     EventType `json:"type"`
-	CommitTs uint64    `json:"commitTs"`
-	BuildTs  int64     `json:"buildTs"`
+	// Schema and Table is empty for the resolved ts event.
+	Schema  string      `json:"database,omitempty"`
+	Table   string      `json:"table,omitempty"`
+	TableID int64       `json:"tableID,omitempty"`
+	Type    MessageType `json:"type"`
+	// SQL is only for the DDL event.
+	SQL      string `json:"sql,omitempty"`
+	CommitTs uint64 `json:"commitTs"`
+	BuildTs  int64  `json:"buildTs"`
+	// SchemaVersion is for the DML event.
+	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+
+	// ClaimCheckLocation is only for the DML event.
+	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
+	// HandleKeyOnly is only for the DML event.
+	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+
+	// E2E checksum related fields, only set when enable checksum functionality.
+	Checksum *checksum `json:"checksum,omitempty"`
+
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
 	Old map[string]interface{} `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
-	// SQL is only for the DDL event.
-	SQL string `json:"sql,omitempty"`
-	// SchemaVersion is for the DDL, Bootstrap and DML event.
-	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+	// PreTableSchema holds schema information before the DDL executed.
+	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
 	return &message{
 		Version:  defaultVersion,
-		Type:     WatermarkType,
+		Type:     MessageTypeWatermark,
 		CommitTs: ts,
 		BuildTs:  time.Now().UnixMilli(),
 	}
 }
 
-func newDDLMessage(ddl *model.DDLEvent) *message {
+func newBootstrapMessage(tableInfo *model.TableInfo) (*message, error) {
+	schema, err := newTableSchema(tableInfo)
+	if err != nil {
+		return nil, err
+	}
+	msg := &message{
+		Version:     defaultVersion,
+		Type:        MessageTypeBootstrap,
+		BuildTs:     time.Now().UnixMilli(),
+		TableSchema: schema,
+	}
+	return msg, nil
+}
+
+func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	var (
-		database      string
-		table         string
-		schema        *TableSchema
-		schemaVersion uint64
+		schema    *TableSchema
+		preSchema *TableSchema
+		err       error
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
-		schema = newTableSchema(ddl.TableInfo)
-		database = ddl.TableInfo.TableName.Schema
-		table = ddl.TableInfo.TableName.Table
-		schemaVersion = ddl.TableInfo.UpdateTS
+		schema, err = newTableSchema(ddl.TableInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
-
+	// `PreTableInfo` may not exist for some DDL, such as `create table`
+	if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+		preSchema, err = newTableSchema(ddl.PreTableInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
 	msg := &message{
-		Version:       defaultVersion,
-		Database:      database,
-		Table:         table,
-		Type:          DDLType,
-		CommitTs:      ddl.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SQL:           ddl.Query,
-		TableSchema:   schema,
-		SchemaVersion: schemaVersion,
+		Version:        defaultVersion,
+		Type:           getDDLType(ddl.Type),
+		CommitTs:       ddl.CommitTs,
+		BuildTs:        time.Now().UnixMilli(),
+		SQL:            ddl.Query,
+		TableSchema:    schema,
+		PreTableSchema: preSchema,
 	}
-	if ddl.IsBootstrap {
-		msg.Type = BootstrapType
-		msg.SQL = ""
-	}
-
-	return msg
+	return msg, nil
 }
 
-func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
+func newDMLMessage(
+	event *model.RowChangedEvent, config *common.Config,
+	onlyHandleKey bool, claimCheckFileName string,
+) (*message, error) {
 	m := &message{
-		Version:       defaultVersion,
-		Database:      event.Table.Schema,
-		Table:         event.Table.Table,
-		CommitTs:      event.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SchemaVersion: event.TableInfo.UpdateTS,
+		Version:            defaultVersion,
+		Schema:             event.TableInfo.GetSchemaName(),
+		Table:              event.TableInfo.GetTableName(),
+		TableID:            event.TableInfo.ID,
+		CommitTs:           event.CommitTs,
+		BuildTs:            time.Now().UnixMilli(),
+		SchemaVersion:      event.TableInfo.UpdateTS,
+		HandleKeyOnly:      onlyHandleKey,
+		ClaimCheckLocation: claimCheckFileName,
 	}
 	var err error
 	if event.IsInsert() {
-		m.Type = InsertType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Type = DMLTypeInsert
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
-		m.Type = DeleteType
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Type = DMLTypeDelete
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
-		m.Type = UpdateType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Type = DMLTypeUpdate
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -430,14 +629,29 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
+	if config.EnableRowChecksum && event.Checksum != nil {
+		m.Checksum = &checksum{
+			Version:   event.Checksum.Version,
+			Corrupted: event.Checksum.Corrupted,
+			Current:   event.Checksum.Current,
+			Previous:  event.Checksum.Previous,
+		}
+	}
+
 	return m, nil
 }
 
 func formatColumns(
-	columns []*model.Column, columnInfos []rowcodec.ColInfo,
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
+		if col == nil {
+			continue
+		}
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
+			continue
+		}
 		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err
@@ -447,6 +661,65 @@ func formatColumns(
 	return result, nil
 }
 
+func encodeValue4Avro(
+	value interface{}, ft *types.FieldType,
+) (interface{}, string, error) {
+	if value == nil {
+		return nil, "null", nil
+	}
+
+	switch ft.GetType() {
+	case mysql.TypeEnum:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the enum value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+
+		enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		value = enumVar.Name
+	case mysql.TypeSet:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the set value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+		setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		value = setValue.Name
+	}
+
+	switch v := value.(type) {
+	case uint64:
+		if v > math.MaxInt64 {
+			return strconv.FormatUint(v, 10), "string", nil
+		}
+		return int64(v), "long", nil
+	case int64:
+		return v, "long", nil
+	case []byte:
+		if mysql.HasBinaryFlag(ft.GetFlag()) {
+			return v, "bytes", nil
+		}
+		return string(v), "string", nil
+	case float32:
+		return v, "float", nil
+	case float64:
+		return v, "double", nil
+	case string:
+		return v, "string", nil
+	default:
+		log.Panic("unexpected type for avro value", zap.Any("value", value))
+	}
+
+	return value, "", nil
+}
+
 func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 	if value == nil {
 		return nil, nil
@@ -454,27 +727,43 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 
 	switch ft.GetType() {
 	case mysql.TypeEnum:
-		if v, ok := value.(string); ok {
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return enumVar.Name, nil
+		case []uint8:
+			return string(v), nil
+		case string:
 			return v, nil
+		default:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
-		element := ft.GetElems()
-		number := value.(uint64)
-		enumVar, err := tiTypes.ParseEnumValue(element, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		return enumVar.Name, nil
 	case mysql.TypeSet:
-		if v, ok := value.(string); ok {
-			return v, nil
+		switch v := value.(type) {
+		case uint64:
+			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return setValue.Name, nil
+		case []uint8:
+			return string(v), nil
+		default:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-		elements := ft.GetElems()
-		number := value.(uint64)
-		setVar, err := tiTypes.ParseSetValue(elements, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+	case mysql.TypeBit:
+		switch v := value.(type) {
+		case []uint8:
+			bitValue, err := common.BinaryLiteralToInt(v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			value = bitValue
+		default:
 		}
-		return setVar.Name, nil
 	default:
 	}
 
@@ -515,63 +804,113 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		return result, nil
 	}
 
-	data, ok := value.(string)
-	if !ok {
-		log.Panic("simple encode message should have type in `string`")
-	}
-
+	var err error
 	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
-		v, err := base64.StdEncoding.DecodeString(data)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			value, err = base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
 		}
-		result.Value = v
+		result.Value = value
 		return result, nil
 	}
 
 	switch fieldType.GetType() {
 	case mysql.TypeBit:
-		val, err := strconv.ParseUint(data, 10, 64)
-		if err != nil {
-			log.Panic("invalid column value for bit or set",
-				zap.String("name", name), zap.Any("data", data),
-				zap.Any("type", fieldType.GetType()), zap.Error(err))
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				log.Error("invalid column value for bit",
+					zap.String("name", name), zap.Any("data", v),
+					zap.Any("type", fieldType.GetType()), zap.Error(err))
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		case []uint8:
+			value, err = common.BinaryLiteralToInt(v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		case uint64:
+			value = v
+		case int64:
+			value = uint64(v)
+		default:
+			log.Panic("unexpected type for bit value", zap.Any("value", value))
 		}
-		result.Value = val
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
-		val, err := strconv.ParseInt(data, 10, 64)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
 		}
-		result.Value = val
+	case mysql.TypeLonglong:
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				value, err = strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				}
+			}
+		default:
+			value = v
+		}
 	case mysql.TypeFloat:
-		val, err := strconv.ParseFloat(data, 32)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseFloat(v, 32)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
 		}
-		result.Value = val
 	case mysql.TypeDouble:
-		val, err := strconv.ParseFloat(data, 64)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
 		}
-		result.Value = val
 	case mysql.TypeEnum:
-		element := fieldType.GetElems()
-		enumVar, err := tiTypes.ParseEnumName(element, data, fieldType.GetCharset())
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			element := fieldType.GetElems()
+			enumVar, err := tiTypes.ParseEnumName(element, v, fieldType.GetCharset())
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+			value = enumVar.Value
+		case uint64:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
-		result.Value = enumVar.Value
 	case mysql.TypeSet:
-		elements := fieldType.GetElems()
-		setVar, err := tiTypes.ParseSetName(elements, data, fieldType.GetCharset())
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			elements := fieldType.GetElems()
+			setVar, err := tiTypes.ParseSetName(elements, v, fieldType.GetCharset())
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+			value = setVar.Value
+		case uint64:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-		result.Value = setVar.Value
 	default:
 	}
 
+	result.Value = value
 	return result, nil
 }

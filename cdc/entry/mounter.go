@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -170,10 +171,18 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
+			// for truncate table and truncate table partition DDL, the table ID is changed, but DML can be inserted to TiKV with old table ID.
+			// normally, cdc will close the old table pipeline and create a new one, and these invalid DMLs keys will not be pulled by CDC,
+			// but if redo is enabled or push based table pipeline is enabled, puller and mounter are not blocked by barrier ts.
+			// So some invalid DML keys will be decoded before processor removing the table pipeline
 			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
+			log.Error("can not found table schema",
+				zap.Uint64("ts", raw.CRTs),
+				zap.String("key", hex.EncodeToString(raw.Key)),
+				zap.Int64("tableID", physicalTableID))
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		if bytes.HasPrefix(key, recordPrefix) {
@@ -314,22 +323,21 @@ func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*
 
 // parseJob unmarshal the job from "v".
 func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
-	job := &timodel.Job{}
-	err := json.Unmarshal(v, job)
+	var job timodel.Job
+	err := json.Unmarshal(v, &job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("get new DDL job", zap.String("detail", job.String()))
 	if !job.IsDone() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
 	job.StartTS = startTs
-	// Since ddl in stateDone is not contain the FinishedTS,
+	// Since ddl in stateDone doesn't contain the FinishedTS,
 	// we need to set it as the txn's commit ts.
 	job.BinlogInfo.FinishedTS = CRTs
-	return job, nil
+	return &job, nil
 }
 
 func datum2Column(
@@ -550,8 +558,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 	}
 
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
 	var intRowID int64
 	if row.RecordID.IsInt() {
 		intRowID = row.RecordID.IntValue()
@@ -572,23 +578,18 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	return &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    intRowID,
-		Table: &model.TableName{
-			Schema:      schemaName,
-			Table:       tableName,
-			TableID:     row.PhysicalTableID,
-			IsPartition: tableInfo.GetPartitionInfo() != nil,
-		},
-		ColInfos:   extendColumnInfos,
-		TableInfo:  tableInfo,
-		Columns:    cols,
-		PreColumns: preCols,
+		StartTs:         row.StartTs,
+		CommitTs:        row.CRTs,
+		RowID:           intRowID,
+		HandleKey:       row.RecordID,
+		PhysicalTableID: row.PhysicalTableID,
+		ColInfos:        extendColumnInfos,
+		TableInfo:       tableInfo,
+		Columns:         cols,
+		PreColumns:      preCols,
 
 		Checksum: checksum,
 
-		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
 	}, rawRow, nil
 }
