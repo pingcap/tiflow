@@ -284,7 +284,6 @@ type RegionRangeLock struct {
 	rangeLock       *btree.BTreeG[*rangeLockEntry]
 	regionIDLock    map[uint64]*rangeLockEntry
 	stopped         bool
-	refCount        uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
@@ -369,7 +368,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)))
 
-		l.refCount += 1
 		return LockRangeResult{
 			Status:      LockRangeStatusSuccess,
 			ResolvedTs:  resolvedTs,
@@ -513,8 +511,7 @@ func (l *RegionRangeLock) UnlockRange(
 			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
 	}
 	delete(l.regionIDLock, regionID)
-	l.refCount -= 1
-	drained = l.stopped && l.refCount == 0
+	drained = l.stopped && len(l.regionIDLock) == 0
 
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
 		log.Panic("unlocking region doesn't match the locked region",
@@ -562,7 +559,7 @@ func (l *RegionRangeLock) LockedRanges() int {
 func (l *RegionRangeLock) RefCount() uint64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.refCount
+	return uint64(len(l.regionIDLock))
 }
 
 // Stop stops the instance.
@@ -570,7 +567,7 @@ func (l *RegionRangeLock) Stop() (drained bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.stopped = true
-	return l.stopped && l.refCount == 0
+	return l.stopped && len(l.regionIDLock) == 0
 }
 
 const (
