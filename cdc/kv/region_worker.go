@@ -216,7 +216,7 @@ func (w *regionWorker) checkShouldExit() error {
 			zap.Uint64("streamID", w.stream.id),
 			zap.Int64("tableID", w.session.tableID),
 			zap.String("tableName", w.session.tableName))
-		w.cancelStream(time.Second)
+		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 	return nil
