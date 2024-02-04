@@ -906,7 +906,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
-	now := time.Now()
 	memo := make(map[int64]time.Time)
 	for {
 		select {
