@@ -69,8 +69,8 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20240109063850-932639606bcf
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20240202063325-2aa13a895289
-	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240131135425-c76fe3ff97d8
+	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240201131654-b289dc9ad916
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/r3labs/diff v1.1.0
@@ -109,7 +109,7 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.26.0
-	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b
+	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
 	golang.org/x/net v0.20.0
 	golang.org/x/oauth2 v0.16.0
 	golang.org/x/sync v0.6.0
