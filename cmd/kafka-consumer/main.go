@@ -929,7 +929,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 				lastLoggingTime, ok := memo[tableID]
-				if !ok || time.Since(lastLoggingTime) > 1*time.Minute {
+				if ok && time.Since(lastLoggingTime) > 1*time.Minute {
 					log.Warn("flush row changed event takes too long",
 						zap.Int64("tableID", tableID),
 						zap.Uint64("resolvedTs", resolvedTs.Ts),
