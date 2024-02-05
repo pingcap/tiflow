@@ -36,7 +36,7 @@ import (
 )
 
 func TestConfigFunctions(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 	require.Equal(t, uint32(101), cfg.ServerID)
@@ -63,27 +63,27 @@ func TestConfigFunctions(t *testing.T) {
 	require.Contains(t, originCfgYamlStr, `server-id: 101`)
 
 	// test update config file and reload
-	require.NoError(t, cfg.Parse(tomlStr))
+	require.NoError(t, cfg.FromToml(tomlStr))
 	require.Equal(t, uint32(100), cfg.ServerID)
-	cfg1, err := ParseYaml(yamlStr)
+	cfg1, err := SourceCfgFromYaml(yamlStr)
 	require.NoError(t, err)
 	require.Equal(t, uint32(100), cfg1.ServerID)
 	cfg.Filters = []*bf.BinlogEventRule{}
 	cfg.Tracer = map[string]interface{}{}
 
 	var cfg2 SourceConfig
-	require.NoError(t, cfg2.Parse(originCfgStr))
+	require.NoError(t, cfg2.FromToml(originCfgStr))
 	require.Equal(t, uint32(101), cfg2.ServerID)
 
-	cfg3, err := ParseYaml(originCfgYamlStr)
+	cfg3, err := SourceCfgFromYaml(originCfgYamlStr)
 	require.NoError(t, err)
 	require.Equal(t, uint32(101), cfg3.ServerID)
 
 	cfg.From.Password = "xxx"
-	cfg.DecryptPassword()
+	cfg.GetDecryptedClone()
 
 	cfg.From.Password = ""
-	clone3 := cfg.DecryptPassword()
+	clone3 := cfg.GetDecryptedClone()
 	require.Equal(t, cfg, clone3)
 
 	// test toml and parse again
@@ -97,14 +97,14 @@ func TestConfigFunctions(t *testing.T) {
 	require.Contains(t, clone4toml, `backoff-max = "5m`)
 
 	var clone5 SourceConfig
-	require.NoError(t, clone5.Parse(clone4toml))
+	require.NoError(t, clone5.FromToml(clone4toml))
 	require.Equal(t, *clone4, clone5)
 	clone4yaml, err := clone4.Yaml()
 	require.NoError(t, err)
 	require.Contains(t, clone4yaml, `backoff-rollback: 5m`)
 	require.Contains(t, clone4yaml, `backoff-max: 5m`)
 
-	clone6, err := ParseYaml(clone4yaml)
+	clone6, err := SourceCfgFromYaml(clone4yaml)
 	require.NoError(t, err)
 	clone6.From.Session = nil
 	require.Equal(t, clone4, clone6)
@@ -135,7 +135,7 @@ func TestConfigVerify(t *testing.T) {
 	require.NoError(t, err)
 
 	newConfig := func() *SourceConfig {
-		cfg, err := ParseYaml(SampleSourceConfig)
+		cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 		require.NoError(t, err)
 		cfg.RelayDir = "./xx"
 		return cfg
@@ -250,7 +250,7 @@ func TestConfigVerify(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-			newCfg := cfg.DecryptPassword()
+			newCfg := cfg.GetDecryptedClone()
 			if encrypt.IsInitialized() {
 				require.Equal(t, tc.expectPassword, newCfg.From.Password)
 			} else {
@@ -267,7 +267,7 @@ func TestConfigVerify(t *testing.T) {
 }
 
 func TestSourceConfigForDowngrade(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 
 	// make sure all new field were added
@@ -304,7 +304,7 @@ func subtestFlavor(t *testing.T, cfg *SourceConfig, sqlInfo, expectedFlavor, exp
 }
 
 func TestAdjustFlavor(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
@@ -327,7 +327,7 @@ func TestAdjustServerID(t *testing.T) {
 	}()
 	getAllServerIDFunc = getMockServerIDs
 
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
@@ -346,7 +346,7 @@ func TestAdjustServerIDFallback(t *testing.T) {
 		WillReturnError(errors.New("mysql error 1227: Access denied; you need (at least one of) the REPLICATION SLAVE privilege(s) for this operation"))
 	mock.ExpectClose()
 
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.ServerID = 0
 
@@ -363,7 +363,7 @@ func getMockServerIDs(ctx *tcontext.Context, db *conn.BaseDB) (map[uint32]struct
 }
 
 func TestAdjustCaseSensitive(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 
 	db, mock, err := sqlmock.New()

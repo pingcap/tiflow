@@ -628,8 +628,8 @@ func (c *TaskConfig) DecodeFile(fpath string) error {
 	return c.adjust()
 }
 
-// Decode loads config from file data.
-func (c *TaskConfig) Decode(data string) error {
+// FromYaml loads config from file data.
+func (c *TaskConfig) FromYaml(data string) error {
 	err := yaml.UnmarshalStrict([]byte(data), c)
 	if err != nil {
 		return terror.ErrConfigYamlTransform.Delegate(err, "decode task config failed")

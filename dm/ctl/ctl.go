@@ -14,6 +14,7 @@
 package ctl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -23,9 +24,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/ctl/master"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
@@ -114,7 +114,6 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 func Init(cfg *common.Config) error {
 	// set the log level temporarily
 	log.SetLevel(zapcore.InfoLevel)
-	encrypt.InitCipher(cfg.SecretKey)
 
 	return errors.Trace(common.InitUtils(cfg))
 }
@@ -225,14 +224,22 @@ func newEncryptCmd() *cobra.Command {
 			if len(args) != 1 {
 				return cmd.Help()
 			}
-			if err := common.CheckSecretInitialized(); err != nil {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			resp := &pb.EncryptRequest{}
+			err := common.SendRequest(
+				ctx,
+				"Encrypt",
+				&pb.EncryptRequest{
+					Plaintext: args[0],
+				},
+				&resp,
+			)
+			if err != nil {
 				return err
 			}
-			ciphertext, err := utils.Encrypt(args[0])
-			if err != nil {
-				return errors.Trace(err)
-			}
-			fmt.Println(ciphertext)
+
+			common.PrettyPrintResponse(resp)
 			return nil
 		},
 	}
@@ -246,14 +253,22 @@ func newDecryptCmd() *cobra.Command {
 			if len(args) != 1 {
 				return cmd.Help()
 			}
-			if err := common.CheckSecretInitialized(); err != nil {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			resp := &pb.DecryptResponse{}
+			err := common.SendRequest(
+				ctx,
+				"Decrypt",
+				&pb.DecryptRequest{
+					Ciphertext: args[0],
+				},
+				&resp,
+			)
+			if err != nil {
 				return err
 			}
-			plaintext, err := utils.Decrypt(args[0])
-			if err != nil {
-				return errors.Trace(err)
-			}
-			fmt.Println(plaintext)
+
+			common.PrettyPrintResponse(resp)
 			return nil
 		},
 	}

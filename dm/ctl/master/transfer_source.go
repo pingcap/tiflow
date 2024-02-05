@@ -24,6 +24,7 @@ import (
 )
 
 // NewTransferSourceCmd creates a TransferSource command.
+// deprecated, replaced by binlog command.
 func NewTransferSourceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "transfer-source <source-id> <worker-id>",

@@ -384,7 +384,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	c.To.AdjustWithTimeZone(c.Timezone)
 
 	if verifyDecryptPassword {
-		_, err1 := c.DecryptPassword()
+		_, err1 := c.DecryptedClone()
 		if err1 != nil {
 			return err1
 		}
@@ -460,8 +460,8 @@ func (c *SubTaskConfig) Parse(arguments []string, verifyDecryptPassword bool) er
 	return c.Adjust(verifyDecryptPassword)
 }
 
-// DecryptPassword tries to decrypt db password in config.
-func (c *SubTaskConfig) DecryptPassword() (*SubTaskConfig, error) {
+// DecryptedClone tries to decrypt db password in config.
+func (c *SubTaskConfig) DecryptedClone() (*SubTaskConfig, error) {
 	clone, err := c.Clone()
 	if err != nil {
 		return nil, err

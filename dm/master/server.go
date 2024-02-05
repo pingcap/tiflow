@@ -1289,8 +1289,6 @@ func (s *Server) getSourceConfigs(sources []string) map[string]*config.SourceCon
 	cfgs := make(map[string]*config.SourceConfig)
 	for _, source := range sources {
 		if cfg := s.scheduler.GetSourceCfgByID(source); cfg != nil {
-			// check the password
-			cfg.DecryptPassword()
 			cfgs[source] = cfg
 		}
 	}
@@ -1346,7 +1344,7 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*config.SourceConfig, error) {
 	cfgs := make([]*config.SourceConfig, len(contents))
 	for i, content := range contents {
-		cfg, err := config.ParseYaml(content)
+		cfg, err := config.SourceCfgFromYaml(content)
 		if err != nil {
 			return cfgs, err
 		}
@@ -1394,7 +1392,7 @@ func checkAndAdjustSourceConfigForDMCtl(ctx context.Context, cfg *config.SourceC
 func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 	cfgs := make([]*config.SourceConfig, len(contents))
 	for i, content := range contents {
-		cfg, err := config.ParseYaml(content)
+		cfg, err := config.SourceCfgFromYaml(content)
 		if err != nil {
 			return cfgs, err
 		}
@@ -1428,7 +1426,7 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConf
 	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gSet}, nil
 }
 
-func AdjustTargetDB(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
+func AdjustTargetDBSessionCfg(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1652,13 +1650,13 @@ func (s *Server) generateSubTask(
 		}
 		err = cfg.Adjust()
 	} else {
-		err = cfg.Decode(task)
+		err = cfg.FromYaml(task)
 	}
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
-	err = AdjustTargetDB(ctx, cfg.TargetDB)
+	err = AdjustTargetDBSessionCfg(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
@@ -2471,7 +2469,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 			return resp2, nil
 		}
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-		if adjustDBErr := AdjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+		if adjustDBErr := AdjustTargetDBSessionCfg(ctx, toDBCfg); adjustDBErr != nil {
 			if adjustDBErr != nil {
 				resp2.Msg = adjustDBErr.Error()
 				// nolint:nilerr
@@ -3306,5 +3304,49 @@ func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationR
 	return &pb.UpdateValidationResponse{
 		Result:  true,
 		Sources: workerResps,
+	}, nil
+}
+
+func (s *Server) Encrypt(ctx context.Context, req *pb.EncryptRequest) (*pb.EncryptResponse, error) {
+	var (
+		resp2 *pb.EncryptResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+	ciphertext, err := utils.Encrypt(req.Plaintext)
+	if err != nil {
+		return &pb.EncryptResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}, nil
+	}
+	return &pb.EncryptResponse{
+		Result:     true,
+		Ciphertext: ciphertext,
+	}, nil
+}
+
+func (s *Server) Decrypt(ctx context.Context, req *pb.DecryptRequest) (*pb.DecryptResponse, error) {
+	var (
+		resp2 *pb.DecryptResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+	plaintext, err := utils.Decrypt(req.Ciphertext)
+	if err != nil {
+		return &pb.DecryptResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}, nil
+	}
+	return &pb.DecryptResponse{
+		Result:    true,
+		Plaintext: plaintext,
 	}, nil
 }

@@ -328,7 +328,7 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 		// but different tasks may have different downstream.
 		var targetDB *conn.BaseDB
 		for _, cfg := range taskCfgs {
-			cfg2, err := cfg.DecryptPassword() // `cfg` should already be `Adjust`.
+			cfg2, err := cfg.DecryptedClone() // `cfg` should already be `Adjust`.
 			if err != nil {
 				return err
 			}
@@ -361,7 +361,7 @@ outerLoop:
 	for taskName, taskCfgs := range cfgs {
 		for sourceID, cfg := range taskCfgs {
 			var cfg2 *config.SubTaskConfig
-			cfg2, err = cfg.DecryptPassword()
+			cfg2, err = cfg.DecryptedClone()
 			if err != nil {
 				break outerLoop
 			}

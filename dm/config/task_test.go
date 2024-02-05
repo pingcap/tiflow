@@ -123,7 +123,7 @@ func TestUnusedTaskConfig(t *testing.T) {
 	t.Parallel()
 
 	taskConfig := NewTaskConfig()
-	err := taskConfig.Decode(correctTaskConfig)
+	err := taskConfig.FromYaml(correctTaskConfig)
 	require.NoError(t, err)
 	errorTaskConfig := `---
 name: test
@@ -213,7 +213,7 @@ mysql-instances:
     syncer-config-name: "global2"
 `
 	taskConfig = NewTaskConfig()
-	err = taskConfig.Decode(errorTaskConfig)
+	err = taskConfig.FromYaml(errorTaskConfig)
 	require.ErrorContains(t, err, "The configurations as following [expr-1 filter-rule-2 route-rule-2] are set in global configuration")
 }
 
@@ -269,11 +269,11 @@ mysql-instances:
     syncer-config-name: "global"
 `
 	taskConfig := NewTaskConfig()
-	err := taskConfig.Decode(errorTaskConfig1)
+	err := taskConfig.FromYaml(errorTaskConfig1)
 	// field server-id is not a member of TaskConfig
 	require.ErrorContains(t, err, "line 18: field server-id not found in type config.MySQLInstance")
 
-	err = taskConfig.Decode(errorTaskConfig2)
+	err = taskConfig.FromYaml(errorTaskConfig2)
 	// field name duplicate
 	require.ErrorContains(t, err, "line 3: field name already set in type config.TaskConfig")
 
@@ -1028,7 +1028,7 @@ func TestTaskConfigForDowngrade(t *testing.T) {
 	t.Parallel()
 
 	cfg := NewTaskConfig()
-	err := cfg.Decode(correctTaskConfig)
+	err := cfg.FromYaml(correctTaskConfig)
 	require.NoError(t, err)
 
 	cfgForDowngrade := NewTaskConfigForDowngrade(cfg)

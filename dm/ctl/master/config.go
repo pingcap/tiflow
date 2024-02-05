@@ -216,9 +216,6 @@ func newImportCfgsCmd() *cobra.Command {
 
 // exportCfgsFunc exports configs.
 func exportCfgsFunc(cmd *cobra.Command, args []string) error {
-	if err := common.CheckSecretInitialized(); err != nil {
-		return err
-	}
 	filePath, err := cmd.Flags().GetString("path")
 	if err != nil {
 		common.PrintLinesf("can not get path")
