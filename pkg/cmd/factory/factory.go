@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 
 	"github.com/pingcap/tiflow/cdc/api"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
@@ -34,7 +35,7 @@ import (
 const (
 	envVarTiCDCUser              = "TICDC_USER"
 	envVarTiCDCPassword          = "TICDC_PASSWORD"
-	defaultCrendentialConfigFile = "ticdc_credential.toml"
+	defaultCrendentialConfigFile = ".ticdc/credentials"
 )
 
 // Factory defines the client-side construction factory.
@@ -180,12 +181,17 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	}
 
 	// If user is not specified via command line or environment variable, try to get it from credential file.
-	filename := defaultCrendentialConfigFile
-
-	err = util.StrictDecodeFile(filename, "cdc cli auth config", &c.ClientAuth)
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		msg := fmt.Sprintf("failed to parse authentication from creandential file <%s>", filename)
-		return errors.ErrCredentialNotFound.GenWithStackByArgs(msg)
+		return errors.WrapError(errors.ErrCredentialNotFound, err, "failed to get user home directory")
+	}
+	filename := filepath.Join(homeDir, defaultCrendentialConfigFile)
+	if _, err := os.Stat(filename); err == nil {
+		err = util.StrictDecodeFile(filename, "cdc cli auth config", &c.ClientAuth)
+		if err != nil {
+			msg := fmt.Sprintf("failed to parse authentication from creandential file <%s>", filename)
+			return errors.ErrCredentialNotFound.GenWithStackByArgs(msg)
+		}
 	}
 
 	return nil
