@@ -210,17 +210,13 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 	return records
 }
 
-var (
-	ignoredRecordPaths = map[string]bool{
-		`{map[string]any}["schema"]`:                             true,
-		`{map[string]any}["payload"].(map[string]any)["source"]`: true,
-		`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
-	}
-)
+var ignoredRecordPaths = map[string]bool{
+	`{map[string]any}["schema"]`:                             true,
+	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
+	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
+}
 
-var (
-	headingColor = color.New(color.FgHiWhite, color.Bold)
-)
+var headingColor = color.New(color.FgHiWhite, color.Bold)
 
 func printObj(obj any) {
 	v, _ := json.MarshalIndent(obj, "", "  ")
