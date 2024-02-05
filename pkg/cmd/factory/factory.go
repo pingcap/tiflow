@@ -190,7 +190,7 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 		err = util.StrictDecodeFile(filename, "cdc cli auth config", &c.ClientAuth)
 		if err != nil {
 			msg := fmt.Sprintf("failed to parse authentication from creandential file <%s>", filename)
-			return errors.ErrCredentialNotFound.GenWithStackByArgs(msg)
+			return errors.WrapError(errors.ErrCredentialNotFound, err, msg)
 		}
 	}
 
