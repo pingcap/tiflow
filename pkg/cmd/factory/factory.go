@@ -58,8 +58,8 @@ type ClientGetter interface {
 }
 
 type ClientAuth struct {
-	user     string `json:"ticdc_user,omitempty" toml:"ticdc_user,omitempty" yaml:"ticdc_user,omitempty"`
-	password string `json:"ticdc_password,omitempty" toml:"ticdc_password,omitempty" yaml:"ticdc_password,omitempty"`
+	User     string `json:"ticdc_user,omitempty" toml:"ticdc_user,omitempty" yaml:"ticdc_user,omitempty"`
+	Password string `json:"ticdc_password,omitempty" toml:"ticdc_password,omitempty" yaml:"ticdc_password,omitempty"`
 }
 
 // ClientFlags specifies the parameters needed to construct the client.
@@ -133,9 +133,9 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn",
 		"log level (etc: debug|info|warn|error)")
 
-	cmd.PersistentFlags().StringVar(&c.user, "user", "", "User name for authentication. "+
+	cmd.PersistentFlags().StringVar(&c.User, "user", "", "User name for authentication. "+
 		"You can sqpecify it via environment variable TICDC_USER")
-	cmd.PersistentFlags().StringVar(&c.password, "password", "", "Password for authentication. "+
+	cmd.PersistentFlags().StringVar(&c.Password, "password", "", "Password for authentication. "+
 		"You can specify it via environment variable TICDC_PASSWORD")
 }
 
@@ -154,29 +154,29 @@ func (c *ClientFlags) GetCredential() *security.Credential {
 func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	defer func() {
 		if err == nil {
-			if c.user == "" && c.password != "" {
+			if c.User == "" && c.Password != "" {
 				err = errors.ErrCredentialNotFound.GenWithStackByArgs("invalid atuhentication: password is specified without user")
 			}
 		}
 	}()
 	// If user is specified via command line, password should be specified as well.
-	if c.user != "" {
-		if c.password == "" {
+	if c.User != "" {
+		if c.Password == "" {
 			cmd.Print("Enter password: ")
 			password, err := term.ReadPassword(int(os.Stdin.Fd()))
 			if err != nil {
-				return errors.ErrCredentialNotFound.GenWithStackByArgs(c.user, "Error reading password, ", err)
+				return errors.ErrCredentialNotFound.GenWithStackByArgs(c.User, "Error reading password, ", err)
 			}
 			cmd.Println()
-			c.password = string(password)
+			c.Password = string(password)
 		}
 		return nil
 	}
 
 	// If user is not specified via command line, try to get it from environment variable.
-	c.user = os.Getenv(envVarTiCDCUser)
-	c.password = os.Getenv(envVarTiCDCPassword)
-	if c.user != "" {
+	c.User = os.Getenv(envVarTiCDCUser)
+	c.Password = os.Getenv(envVarTiCDCPassword)
+	if c.User != "" {
 		return nil
 	}
 
@@ -198,11 +198,11 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 }
 
 func (c *ClientFlags) GetAuthParameters() url.Values {
-	if c.user == "" {
+	if c.User == "" {
 		return nil
 	}
 	return url.Values{
-		api.ApiOpVarTiCDCUser:     {c.user},
-		api.ApiOpVarTiCDCPassword: {c.password},
+		api.ApiOpVarTiCDCUser:     {c.User},
+		api.ApiOpVarTiCDCPassword: {c.Password},
 	}
 }
