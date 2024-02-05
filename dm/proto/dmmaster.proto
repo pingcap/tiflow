@@ -313,6 +313,7 @@ message RegisterWorkerRequest {
 message RegisterWorkerResponse {
   bool result = 1;
   string msg = 2;
+  bytes secretKey = 3;
 }
 
 message OfflineMemberRequest {

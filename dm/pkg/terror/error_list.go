@@ -271,6 +271,7 @@ const (
 	codeConfigColumnMappingDeprecated
 	codeConfigInvalidLoadAnalyze
 	codeConfigStrictOptimisticShardMode
+	codeConfigSecretKeyPath
 )
 
 // Binlog operation error code list.
@@ -983,6 +984,7 @@ var (
 	ErrConfigColumnMappingDeprecated            = New(codeConfigColumnMappingDeprecated, ClassConfig, ScopeInternal, LevelHigh, "column-mapping is not supported since v6.6.0", "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced")
 	ErrConfigInvalidLoadAnalyze                 = New(codeConfigInvalidLoadAnalyze, ClassConfig, ScopeInternal, LevelMedium, "invalid load analyze option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
 	ErrConfigStrictOptimisticShardMode          = New(codeConfigStrictOptimisticShardMode, ClassConfig, ScopeInternal, LevelMedium, "cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`", "Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`.")
+	ErrConfigSecretKeyPath                      = New(codeConfigSecretKeyPath, ClassConfig, ScopeInternal, LevelHigh, "invalid secret key path or content: %v", "Please check whether the path is valid, and has required permission to read the file, and the key is correct.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

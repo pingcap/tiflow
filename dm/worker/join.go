@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/failpoint"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -81,6 +82,11 @@ func (s *Server) JoinMaster(endpoints []string) error {
 			errorStr = resp.Msg
 			continue
 		}
+
+		// worker do calls decrypt, but the password is decrypted already,
+		// but in case we need it later, init it.
+		encrypt.InitCipher(resp.GetSecretKey())
+
 		return nil
 	}
 	return terror.ErrWorkerFailConnectMaster.Generate(endpoints, errorStr)
