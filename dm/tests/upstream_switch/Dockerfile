@@ -1,6 +1,7 @@
 ARG version
 FROM mysql:${version}-debian
 
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
 RUN apt-get update && apt-get -y install keepalived net-tools
 
 ADD init.sh /init.sh
