@@ -85,7 +85,6 @@ func NewRootCmd() *cobra.Command {
 		master.NewSourceTableSchemaCmd(),
 		master.NewConfigCmd(),
 		master.NewValidationCmd(),
-		newDecryptCmd(),
 		newEncryptCmd(),
 	)
 	// copied from (*cobra.Command).InitDefaultHelpCmd
@@ -238,37 +237,10 @@ func newEncryptCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			common.PrettyPrintResponse(resp)
-			return nil
-		},
-	}
-}
-
-func newDecryptCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "decrypt <cipher-text>",
-		Short: "Decrypts cipher text to plain text",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return cmd.Help()
+			if !resp.Result {
+				return errors.New(resp.Msg)
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			resp := &pb.DecryptResponse{}
-			err := common.SendRequest(
-				ctx,
-				"Decrypt",
-				&pb.DecryptRequest{
-					Ciphertext: args[0],
-				},
-				&resp,
-			)
-			if err != nil {
-				return err
-			}
-
-			common.PrettyPrintResponse(resp)
+			fmt.Println(resp.Ciphertext)
 			return nil
 		},
 	}

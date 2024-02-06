@@ -3330,28 +3330,6 @@ func (s *Server) Encrypt(ctx context.Context, req *pb.EncryptRequest) (*pb.Encry
 	}, nil
 }
 
-func (s *Server) Decrypt(ctx context.Context, req *pb.DecryptRequest) (*pb.DecryptResponse, error) {
-	var (
-		resp2 *pb.DecryptResponse
-		err   error
-	)
-	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
-	if shouldRet {
-		return resp2, err
-	}
-	plaintext, err := utils.Decrypt(req.Ciphertext)
-	if err != nil {
-		return &pb.DecryptResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}, nil
-	}
-	return &pb.DecryptResponse{
-		Result:    true,
-		Plaintext: plaintext,
-	}, nil
-}
-
 func (s *Server) ListTaskConfigs(ctx context.Context, req *emptypb.Empty) (*pb.ListTaskConfigsResponse, error) {
 	var (
 		resp2 *pb.ListTaskConfigsResponse

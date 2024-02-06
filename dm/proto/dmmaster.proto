@@ -125,9 +125,6 @@ service Master {
   // Encrypt encrypts the plaintext using the secret key of dm-master
   rpc Encrypt(EncryptRequest) returns(EncryptResponse) {}
 
-  // Decrypt decrypts the ciphertext using the secret key of dm-master
-  rpc Decrypt(DecryptRequest) returns(DecryptResponse) {}
-
   rpc ListTaskConfigs(google.protobuf.Empty) returns(ListTaskConfigsResponse) {}
 
   rpc ListSourceConfigs(google.protobuf.Empty) returns(ListSourceConfigsResponse) {}
@@ -550,16 +547,6 @@ message EncryptResponse {
   bool result = 1;
   string msg = 2;
   string ciphertext = 3;
-}
-
-message DecryptRequest {
-  string ciphertext = 1;
-}
-
-message DecryptResponse {
-  bool result = 1;
-  string msg = 2;
-  string plaintext = 3;
 }
 
 message ListTaskConfigsResponse {
