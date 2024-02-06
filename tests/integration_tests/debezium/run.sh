@@ -32,7 +32,7 @@ curl -i -X POST \
     "connector.class": "io.debezium.connector.mysql.MySqlConnector",
     "tasks.max": "1",
     "database.hostname": "mysql",
-    "database.port": "3306",
+    "database.port": "3310",
     "database.user": "debezium",
     "database.password": "dbz",
     "database.server.id": "184054",
