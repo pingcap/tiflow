@@ -63,9 +63,9 @@ done
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
-stop_tidb_cluster
+stop_upstream_tidb_cluster
 
-cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
+cd $OUT_DIR && echo "start upstream tidb cluster in $OUT_DIR"
 
 # pd server config file
 if [[ "$pd_config" != "" ]]; then
