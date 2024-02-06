@@ -355,7 +355,7 @@ function test_relay_operations() {
 
 	# config export
 	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"config export -p /tmp/configs --secret-key-path $cur/conf/key.txt" \
+		"config export -p /tmp/configs" \
 		"export configs to directory .* succeed" 1
 
 	# check configs

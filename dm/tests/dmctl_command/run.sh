@@ -8,8 +8,8 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
 
-# 44 normal help message + 1 "PASS" line
-help_cnt=46
+# 43 normal help message + 1 "PASS" line
+help_cnt=44
 
 function get_uuid() {
 	uuid=$(echo "show variables like '%server_uuid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'FNR == 2 {print $2}')
