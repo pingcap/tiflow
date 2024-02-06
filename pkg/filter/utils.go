@@ -28,9 +28,9 @@ import (
 // isSysSchema returns true if the given schema is a system schema
 func isSysSchema(db string) bool {
 	switch db {
-	// schema `tidb_cdc` is used in syncpoint function.
-	// Tables in `tidb_cdc` should not be replicated by cdc.
-	case "tidb_cdc":
+	// TiCDCSystemSchema is used by TiCDC only.
+	// Tables in TiCDCSystemSchema should not be replicated by cdc.
+	case TiCDCSystemSchema:
 		return true
 	default:
 		return tifilter.IsSystemSchema(db)
