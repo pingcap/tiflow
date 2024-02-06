@@ -28,11 +28,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func TestConfigFunctions(t *testing.T) {
@@ -386,4 +388,36 @@ func TestEmbedSampleFile(t *testing.T) {
 	data, err := os.ReadFile("./source.yaml")
 	require.NoError(t, err)
 	require.Equal(t, SampleSourceConfig, string(data))
+}
+
+func TestSourceYamlForDowngrade(t *testing.T) {
+	originCfg := SourceConfig{
+		SourceID: "mysql-3306",
+		From: dbconfig.DBConfig{
+			Password: "123456",
+		},
+	}
+	// when secret key is empty, the password should be kept
+	content, err := originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg := &SourceConfig{}
+	require.NoError(t, yaml.UnmarshalStrict([]byte(content), newCfg))
+	require.Equal(t, originCfg.From.Password, newCfg.From.Password)
+
+	// when secret key is not empty, the password should be encrypted
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	content, err = originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg = &SourceConfig{}
+	require.NoError(t, yaml.UnmarshalStrict([]byte(content), newCfg))
+	require.NotEqual(t, originCfg.From.Password, newCfg.From.Password)
+	decryptedPass, err := utils.Decrypt(newCfg.From.Password)
+	require.NoError(t, err)
+	require.Equal(t, originCfg.From.Password, decryptedPass)
 }

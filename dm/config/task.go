@@ -1246,6 +1246,7 @@ type TaskConfigForDowngrade struct {
 
 // NewTaskConfigForDowngrade create new TaskConfigForDowngrade.
 func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
+	targetDB := *taskConfig.TargetDB
 	return &TaskConfigForDowngrade{
 		Name:                      taskConfig.Name,
 		TaskMode:                  taskConfig.TaskMode,
@@ -1259,7 +1260,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 		HeartbeatReportInterval:   taskConfig.HeartbeatReportInterval,
 		Timezone:                  taskConfig.Timezone,
 		CaseSensitive:             taskConfig.CaseSensitive,
-		TargetDB:                  taskConfig.TargetDB,
+		TargetDB:                  &targetDB,
 		OnlineDDLScheme:           taskConfig.OnlineDDLScheme,
 		Routes:                    taskConfig.Routes,
 		Filters:                   taskConfig.Filters,

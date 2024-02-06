@@ -14,6 +14,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"os"
 	"path"
 	"reflect"
@@ -27,7 +28,9 @@ import (
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1144,4 +1147,42 @@ func TestLoadConfigAdjust(t *testing.T) {
 	cfg.OnDuplicatePhysical = "wrong"
 	err := cfg.adjust()
 	require.True(t, terror.ErrConfigInvalidPhysicalDuplicateResolution.Equal(err))
+}
+
+func TestTaskYamlForDowngrade(t *testing.T) {
+	originCfg := TaskConfig{
+		Name:     "test",
+		TaskMode: ModeFull,
+		MySQLInstances: []*MySQLInstance{
+			{
+				SourceID: "mysql-3306",
+			},
+		},
+		TargetDB: &dbconfig.DBConfig{
+			Password: "123456",
+		},
+	}
+	// when secret key is empty, the password should be kept
+	content, err := originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg := &TaskConfig{}
+	require.NoError(t, newCfg.FromYaml(content))
+	require.Equal(t, originCfg.TargetDB.Password, newCfg.TargetDB.Password)
+
+	// when secret key is not empty, the password should be encrypted
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	content, err = originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg = &TaskConfig{}
+	require.NoError(t, newCfg.FromYaml(content))
+	require.NotEqual(t, originCfg.TargetDB.Password, newCfg.TargetDB.Password)
+	decryptedPass, err := utils.Decrypt(newCfg.TargetDB.Password)
+	require.NoError(t, err)
+	require.Equal(t, originCfg.TargetDB.Password, decryptedPass)
 }
