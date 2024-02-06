@@ -423,6 +423,6 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 		return errors.Trace(err)
 	}
 	defer db.Close()
-	// TODO: check authtication here if needed
+	// TODO: check authentication here if needed
 	return db.Ping()
 }
