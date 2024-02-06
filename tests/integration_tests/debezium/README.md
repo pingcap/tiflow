@@ -1,24 +1,13 @@
-#!/bin/bash
+# Debezium Integration Test Locally
 
-set -eu
+This file shows how to run debezium integration test locally
 
-CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source $CUR/../_utils/test_prepare
-WORK_DIR=$OUT_DIR/$TEST_NAME
-CDC_BINARY=cdc.test
-SINK_TYPE=$1
+```
+cd tiflow/tests/integration_tests/debezium
+docker compose up
+```
 
-stop_tidb_cluster
-rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
-cleanup() {
-    stop_tidb_cluster
-} 
-
-trap cleanup EXIT
-
-sleep 60 
-
+```
 curl -i -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
@@ -45,16 +34,18 @@ curl -i -X POST \
   }
 }
 EOF
+```
 
-start_tidb_cluster --workdir $WORK_DIR
-run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-run_cdc_cli changefeed create --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium&kafka-version=2.4.0"
+```
+tiup playground nightly --tiflash 0 --ticdc 1 
+```
 
-cd $CUR
+```
+tiup cdc cli changefeed create \
+  --server=http://127.0.0.1:8300 \
+  --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium&kafka-version=2.4.0"
+```
+
+```
 go run ./src
-
-if [ $? -ne 0  ]; then
-  exit 1
-fi
-
-echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+```
