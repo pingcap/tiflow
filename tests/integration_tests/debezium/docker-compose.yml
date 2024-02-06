@@ -24,7 +24,7 @@ services:
   mysql:
     restart: always
     ports:
-      - 3306:3306
+      - 3310:3310
     image: quay.io/debezium/example-mysql:2.4
     environment:
       - MYSQL_ROOT_PASSWORD=
