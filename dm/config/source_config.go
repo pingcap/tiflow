@@ -167,7 +167,7 @@ func (c *SourceConfig) FromToml(content string) error {
 		return terror.ErrWorkerDecodeConfigFromFile.Delegate(err)
 	}
 	undecoded := metaData.Undecoded()
-	if len(undecoded) > 0 && err == nil {
+	if len(undecoded) > 0 {
 		var undecodedItems []string
 		for _, item := range undecoded {
 			undecodedItems = append(undecodedItems, item.String())
