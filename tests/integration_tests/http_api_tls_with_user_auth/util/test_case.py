@@ -428,7 +428,7 @@ def create_changefeed_v2():
 
 def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/metadata"
-    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    resp = rq.get(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     print("status code", resp.status_code)
     print("pass test: show metadata")
