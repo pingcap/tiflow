@@ -49,11 +49,9 @@ curl -i -X POST \
 }
 EOF
 
-tiup playground nightly --tiflash 0 --ticdc 1 --ticdc.binpath ../bin/$CDC_BINARY &
-
-sleep 60
-
-tiup cdc cli changefeed create --server=http://127.0.0.1:8300 --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium&kafka-version=2.4.0"
+start_upstream_tidb_cluster --workdir $WORK_DIR
+run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+run_cdc_cli changefeed create --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium&kafka-version=2.4.0"
 
 cd $CUR
 go run ./src
