@@ -4,6 +4,7 @@ package pb;
 
 import "dmworker.proto"; // refine if needed
 import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
 
 service Master {
   rpc StartTask (StartTaskRequest) returns (StartTaskResponse) {
@@ -126,6 +127,10 @@ service Master {
 
   // Decrypt decrypts the ciphertext using the secret key of dm-master
   rpc Decrypt(DecryptRequest) returns(DecryptResponse) {}
+
+  rpc ListTaskConfigs(google.protobuf.Empty) returns(ListTaskConfigsResponse) {}
+
+  rpc ListSourceConfigs(google.protobuf.Empty) returns(ListSourceConfigsResponse) {}
 }
 
 message StartTaskRequest {
@@ -555,4 +560,16 @@ message DecryptResponse {
   bool result = 1;
   string msg = 2;
   string plaintext = 3;
+}
+
+message ListTaskConfigsResponse {
+  bool result = 1;
+  string msg = 2;
+  map<string, string> taskConfigs = 3;
+}
+
+message ListSourceConfigsResponse {
+  bool result = 1;
+  string msg = 2;
+  map<string, string> sourceConfigs = 3;
 }

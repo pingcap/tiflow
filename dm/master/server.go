@@ -61,6 +61,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -3348,5 +3349,69 @@ func (s *Server) Decrypt(ctx context.Context, req *pb.DecryptRequest) (*pb.Decry
 	return &pb.DecryptResponse{
 		Result:    true,
 		Plaintext: plaintext,
+	}, nil
+}
+
+func (s *Server) ListTaskConfigs(ctx context.Context, req *emptypb.Empty) (*pb.ListTaskConfigsResponse, error) {
+	var (
+		resp2 *pb.ListTaskConfigsResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+
+	subtaskCfgsOfTasks := s.scheduler.GetSubTaskCfgs()
+	contents := make(map[string]string, len(subtaskCfgsOfTasks))
+	for taskName, subtaskCfgMap := range subtaskCfgsOfTasks {
+		subtaskCfgs := make([]*config.SubTaskConfig, 0, len(subtaskCfgMap))
+		for _, subtaskCfg := range subtaskCfgMap {
+			subtaskCfgs = append(subtaskCfgs, &subtaskCfg)
+		}
+		sort.Slice(subtaskCfgs, func(i, j int) bool {
+			return subtaskCfgs[i].SourceID < subtaskCfgs[j].SourceID
+		})
+		taskCfg := config.SubTaskConfigsToTaskConfig(subtaskCfgs...)
+		content, err := taskCfg.YamlForDowngrade()
+		if err != nil {
+			return &pb.ListTaskConfigsResponse{
+				Result: false,
+				Msg:    fmt.Sprintf("failed to marshal task config of %s: %s", taskName, err.Error()),
+			}, nil
+		}
+		contents[taskName] = content
+	}
+	return &pb.ListTaskConfigsResponse{
+		Result:      true,
+		TaskConfigs: contents,
+	}, nil
+}
+
+func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb.ListSourceConfigsResponse, error) {
+	var (
+		resp2 *pb.ListSourceConfigsResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+
+	sourceCfgs := s.scheduler.GetSourceCfgs()
+	contents := make(map[string]string, len(sourceCfgs))
+	for sourceID, cfg := range sourceCfgs {
+		yamlContent, err := cfg.YamlForDowngrade()
+		if err != nil {
+			return &pb.ListSourceConfigsResponse{
+				Result: false,
+				Msg:    fmt.Sprintf("fail to marshal source config of %s: %s", sourceID, err.Error()),
+			}, nil
+		}
+		contents[sourceID] = yamlContent
+	}
+	return &pb.ListSourceConfigsResponse{
+		Result:        true,
+		SourceConfigs: contents,
 	}, nil
 }

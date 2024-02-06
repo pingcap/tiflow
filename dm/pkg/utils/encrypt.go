@@ -30,6 +30,16 @@ func Encrypt(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// EncryptOrPlaintext tries to encrypt plaintext to base64 encoded ciphertext or return plaintext.
+// dm-master might not set customized key, so we should handle the error and return plaintext directly.
+func EncryptOrPlaintext(plaintext string) string {
+	ciphertext, err := Encrypt(plaintext)
+	if err != nil {
+		return plaintext
+	}
+	return ciphertext
+}
+
 // Decrypt tries to decrypt base64 encoded ciphertext to plaintext.
 func Decrypt(ciphertextB64 string) (string, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextB64)
@@ -45,6 +55,8 @@ func Decrypt(ciphertextB64 string) (string, error) {
 }
 
 // DecryptOrPlaintext tries to decrypt base64 encoded ciphertext to plaintext or return plaintext.
+// when a customized key is provided, we support both plaintext and ciphertext as password,
+// if not provided, only plaintext is supported.
 func DecryptOrPlaintext(ciphertextB64 string) string {
 	plaintext, err := Decrypt(ciphertextB64)
 	if err != nil {

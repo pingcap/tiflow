@@ -393,12 +393,8 @@ func LoadFromFile(path string) (*SourceConfig, error) {
 func (c *SourceConfig) YamlForDowngrade() (string, error) {
 	s := NewSourceConfigForDowngrade(c)
 
-	// encrypt password
-	cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(c.From.Password))
-	if err != nil {
-		return "", err
-	}
-	s.From.Password = cipher
+	// try to encrypt password
+	s.From.Password = utils.EncryptOrPlaintext(utils.DecryptOrPlaintext(c.From.Password))
 	s.omitDefaultVals()
 	return s.Yaml()
 }

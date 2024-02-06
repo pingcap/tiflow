@@ -1076,12 +1076,8 @@ func checkValidExpr(expr string) error {
 func (c *TaskConfig) YamlForDowngrade() (string, error) {
 	t := NewTaskConfigForDowngrade(c)
 
-	// encrypt password
-	cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(t.TargetDB.Password))
-	if err != nil {
-		return "", err
-	}
-	t.TargetDB.Password = cipher
+	// try to encrypt password
+	t.TargetDB.Password = utils.EncryptOrPlaintext(utils.DecryptOrPlaintext(t.TargetDB.Password))
 
 	// omit default values, so we can ignore them for later marshal
 	t.omitDefaultVals()
