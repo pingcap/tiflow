@@ -1642,12 +1642,12 @@ func TestBuildTableInfo(t *testing.T) {
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		require.NoError(t, err)
 		e := model.RowChangedEvent{
 			TableInfo: cdcTableInfo,
 			Columns:   colDatas,
 		}
 		cols := e.GetColumns()
-		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)
