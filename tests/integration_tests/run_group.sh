@@ -14,7 +14,7 @@ mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_sui
 mysql_only_http="http_api http_api_tls api_v2"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
-kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro debezium"
+kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro"
 kafka_only_protocol="kafka_simple_basic kafka_simple_basic_avro kafka_simple_handle_key_only kafka_simple_handle_key_only_avro kafka_simple_claim_check kafka_simple_claim_check_avro canal_json_adapter_compatibility canal_json_basic canal_json_content_compatible multi_topics avro_basic canal_json_handle_key_only open_protocol_handle_key_only canal_json_claim_check open_protocol_claim_check"
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
@@ -54,7 +54,7 @@ groups=(
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
 	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster'
-	["G21"]='bank kill_owner_with_ddl owner_remove_table_error'
+	["G21"]='bank kill_owner_with_ddl owner_remove_table_error debezium'
 )
 
 # Get other cases not in groups, to avoid missing any case

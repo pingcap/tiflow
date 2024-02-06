@@ -8,6 +8,10 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+if [ "$SINK_TYPE" != "kafka" ]; then
+  return
+fi
+
 stop_tidb_cluster
 rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
