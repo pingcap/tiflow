@@ -219,7 +219,7 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 		username := ctx.Query(api.ApiOpVarTiCDCUser)
 		password := ctx.Query(api.ApiOpVarTiCDCPassword)
 		if username == "" {
-			errMsg := "plesase specify the user and password via url parameter"
+			errMsg := "please specify the user and password via url parameter"
 			return errors.ErrCredentialNotFound.GenWithStackByArgs(errMsg)
 		}
 
