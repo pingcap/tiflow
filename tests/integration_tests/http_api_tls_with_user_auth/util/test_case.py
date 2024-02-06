@@ -218,7 +218,7 @@ def move_table():
     # not allow empty capture_id
     data = json.dumps({"capture_id": "", "table_id": 11})
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: move table")
