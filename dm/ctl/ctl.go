@@ -226,7 +226,7 @@ func newEncryptCmd() *cobra.Command {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			resp := &pb.EncryptRequest{}
+			resp := &pb.EncryptResponse{}
 			err := common.SendRequest(
 				ctx,
 				"Encrypt",
