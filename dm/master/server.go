@@ -3319,6 +3319,7 @@ func (s *Server) Encrypt(ctx context.Context, req *pb.EncryptRequest) (*pb.Encry
 	}
 	ciphertext, err := utils.Encrypt(req.Plaintext)
 	if err != nil {
+		// nolint:nilerr
 		return &pb.EncryptResponse{
 			Result: false,
 			Msg:    err.Error(),
@@ -3344,8 +3345,9 @@ func (s *Server) ListTaskConfigs(ctx context.Context, req *emptypb.Empty) (*pb.L
 	contents := make(map[string]string, len(subtaskCfgsOfTasks))
 	for taskName, subtaskCfgMap := range subtaskCfgsOfTasks {
 		subtaskCfgs := make([]*config.SubTaskConfig, 0, len(subtaskCfgMap))
-		for _, subtaskCfg := range subtaskCfgMap {
-			subtaskCfgs = append(subtaskCfgs, &subtaskCfg)
+		for sourceID := range subtaskCfgMap {
+			subTaskConfig := subtaskCfgMap[sourceID]
+			subtaskCfgs = append(subtaskCfgs, &subTaskConfig)
 		}
 		sort.Slice(subtaskCfgs, func(i, j int) bool {
 			return subtaskCfgs[i].SourceID < subtaskCfgs[j].SourceID
@@ -3353,6 +3355,7 @@ func (s *Server) ListTaskConfigs(ctx context.Context, req *emptypb.Empty) (*pb.L
 		taskCfg := config.SubTaskConfigsToTaskConfig(subtaskCfgs...)
 		content, err := taskCfg.YamlForDowngrade()
 		if err != nil {
+			// nolint:nilerr
 			return &pb.ListTaskConfigsResponse{
 				Result: false,
 				Msg:    fmt.Sprintf("failed to marshal task config of %s: %s", taskName, err.Error()),
@@ -3381,6 +3384,7 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 	for sourceID, cfg := range sourceCfgs {
 		yamlContent, err := cfg.YamlForDowngrade()
 		if err != nil {
+			// nolint:nilerr
 			return &pb.ListSourceConfigsResponse{
 				Result: false,
 				Msg:    fmt.Sprintf("fail to marshal source config of %s: %s", sourceID, err.Error()),
