@@ -495,7 +495,7 @@ function run() {
 		exit 1
 	fi
 
-	# start a master without secret-key, encrypt/decrypt should fail
+	# start a master without secret-key, encrypt should fail
 	cleanup_process
 	# previous logic will override $dm_master_conf, so we need to copy it again
 	cp $cur/conf/dm-master.toml $dm_master_conf
