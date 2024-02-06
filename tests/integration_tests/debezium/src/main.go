@@ -72,7 +72,7 @@ func buildDefaultDBConnStr(port int) string {
 }
 
 func main() {
-	dbConnMySQL := flag.String("db.mysql", buildDefaultDBConnStr(3306), "The connection string to connect to a MySQL instance")
+	dbConnMySQL := flag.String("db.mysql", buildDefaultDBConnStr(3310), "The connection string to connect to a MySQL instance")
 	dbConnTiDB := flag.String("db.tidb", buildDefaultDBConnStr(4000), "The connection string to connect to a TiDB instance")
 	kafkaAddr = flag.String("cdc.kafka", "127.0.0.1:9094", "")
 	topicDebezium := flag.String("cdc.topic.debezium", "output_debezium", "")
