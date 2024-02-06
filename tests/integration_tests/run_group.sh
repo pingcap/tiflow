@@ -41,7 +41,7 @@ groups=(
 	["G07"]='kv_client_stream_reconnect cdc split_region'
 	["G08"]='processor_err_chan changefeed_reconstruct multi_capture'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint synced_status'
-	["G10"]='default_value simple cdc_server_tips event_filter'
+	["G10"]='default_value simple cdc_server_tips event_filter debezium'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
 	["G13"]='tiflash region_merge common_1'
@@ -54,7 +54,7 @@ groups=(
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
 	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster'
-	["G21"]='bank kill_owner_with_ddl owner_remove_table_error debezium'
+	["G21"]='bank kill_owner_with_ddl owner_remove_table_error'
 )
 
 # Get other cases not in groups, to avoid missing any case
