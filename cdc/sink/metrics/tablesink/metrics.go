@@ -29,7 +29,7 @@ var TotalRowsCountCounter = prometheus.NewCounterVec(
 var TableSinkFlushLagDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "ticdc",
-		Subsystem: "subj",
+		Subsystem: "sink",
 		Name:      "flush_lag_histogram",
 		Help:      "flush lag histogram of rows that are processed by table sink",
 		Buckets:   lagBucket(),
