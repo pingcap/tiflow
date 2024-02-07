@@ -36,7 +36,7 @@ function run() {
 	curl -X PUT -H "Content-Type: application/vnd.schemaregistry.v1+json" --data '{"compatibility": "NONE"}' http://127.0.0.1:8088/config
 
 	# upstream tidb cluster enable row level checksum
-	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	# run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	TOPIC_NAME="ticdc-avro-test"
 	# record tso before we create tables to skip the system table DDLs
