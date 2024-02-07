@@ -27,6 +27,7 @@ var TotalRowsCountCounter = prometheus.NewCounterVec(
 		Help:      "The total count of rows that are processed by table sink",
 	}, []string{"namespace", "changefeed"})
 
+// TableSinkFlushLagDuration is the  per event flush lag calculated by ts_after_event_flushed_to_downstream - commit_ts_of_event
 var TableSinkFlushLagDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "ticdc",
