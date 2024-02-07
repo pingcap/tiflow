@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 export TEST_DIR=/tmp/dm_test
 export TEST_NAME="upgrade-via-tiup"

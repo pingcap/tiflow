@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 CLUSTER_NAME="dm-v2"
 
@@ -9,6 +9,7 @@ CUR_VER=$2
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PATH=$CUR/../_utils:$PATH # for sync_diff_inspector
+tiup_dm_operation_log=/tmp/tiup-dm-operation.log
 
 source $CUR/lib.sh
 
@@ -16,12 +17,12 @@ function deploy_previous_v2() {
 	# install TiUP-DM
 	curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
 	source /root/.profile
-	tiup install dm
+	tiup install dm >> $tiup_dm_operation_log
 
-	tiup install dmctl:$PRE_VER
+	tiup install dmctl:$PRE_VER >> $tiup_dm_operation_log
 
-	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml
-	tiup dm start --yes $CLUSTER_NAME
+	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >> $tiup_dm_operation_log
+	tiup dm start --yes $CLUSTER_NAME >> $tiup_dm_operation_log
 }
 
 function migrate_in_previous_v2() {
@@ -79,7 +80,7 @@ function upgrade_to_current_v2() {
 	# and fetch the config which previous version doesn't support, so we fix the version to 7.5.0
 	tiup dmctl:v7.5.0 --master-addr=master1:8261 config export -d old_configs
 
-	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER
+	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER >> $tiup_dm_operation_log
 
 	restart_relay
 }
@@ -136,13 +137,13 @@ function downgrade_to_previous_v2() {
 	echo "downgrade to previous version $PRE_VER"
 
 	# destory current cluster
-	tiup dm destroy --yes $CLUSTER_NAME
+	tiup dm destroy --yes $CLUSTER_NAME >> $tiup_dm_operation_log
 
 	exec_incremental_stage3
 
 	# deploy previous cluster
-	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml
-	tiup dm start --yes $CLUSTER_NAME
+	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >> $tiup_dm_operation_log
+	tiup dm start --yes $CLUSTER_NAME >> $tiup_dm_operation_log
 
 	# config import
 	tiup dmctl:$CUR_VER --master-addr=master1:8261 config import -d new_configs
@@ -162,7 +163,7 @@ function downgrade_to_previous_v2() {
 function destroy_v2_by_tiup() {
 	export DM_MASTER_ADDR="master1:8261"
 	tiup dmctl:$CUR_VER stop-task $TASK_NAME
-	tiup dm destroy --yes $CLUSTER_NAME
+	tiup dm destroy --yes $CLUSTER_NAME >> $tiup_dm_operation_log
 }
 
 function test() {
