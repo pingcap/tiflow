@@ -21,8 +21,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
+const (
+	// SyncPointTable is the tale name use to write ts-map when sync-point is enable.
+	SyncPointTable = "syncpoint_v1"
+	// TiCDCSystemSchema is the schema only use by TiCDC.
+	TiCDCSystemSchema = "tidb_cdc"
+)
+
 // ddlWhiteListMap is a map of all DDL types that can be applied to cdc's schema storage.
-// It's a white list.
 var ddlWhiteListMap = map[timodel.ActionType]bf.EventType{
 	// schema related DDLs
 	timodel.ActionCreateSchema:                  bf.CreateDatabase,
