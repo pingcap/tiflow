@@ -75,7 +75,9 @@ function upgrade_to_current_v2() {
 	tiup uninstall dmctl --all
 
 	# config export in PRE_VER
-	tiup dmctl:$CUR_VER --master-addr=master1:8261 config export -d old_configs
+	# on version >= 8.0.0, the `config export` command will connect to the master
+	# and fetch the config which previous version doesn't support, so we fix the version to 7.5.0
+	tiup dmctl:v7.5.0 --master-addr=master1:8261 config export -d old_configs
 
 	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER
 
