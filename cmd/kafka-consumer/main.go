@@ -442,8 +442,6 @@ type Consumer struct {
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
-
-	debugFinishmark int32
 }
 
 const (
@@ -724,11 +722,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 
-				if atomic.LoadInt32(&c.debugFinishmark) == 1 && partition == 0 {
-					log.Info("update partition watermark", zap.Uint64("watermark", watermark),
-						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
-				}
-
 				atomic.StoreUint64(&sink.watermark, ts)
 				session.MarkMessage(message, "")
 				for tableID, group := range eventGroups {
@@ -792,10 +785,6 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlList = append(c.ddlList, ddl)
 	c.ddlWithMaxCommitTs = ddl
 	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
-
-	if strings.Contains(ddl.Query, "finishmark") {
-		atomic.StoreInt32(&c.debugFinishmark, 1)
-	}
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -859,23 +848,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		globalWatermark := c.getGlobalWatermark()
-
-		ddl := c.getFrontDDL()
-		if atomic.LoadInt32(&c.debugFinishmark) == 1 {
-			if ddl == nil {
-				log.Info("Finishmark received, but the ddl is nil")
-			} else {
-				if strings.Contains(ddl.Query, "finishmark") {
-					log.Info("try to execute the finishmark ddl",
-						zap.Bool("shouldExecute", ddl.CommitTs <= globalCommitTs),
-						zap.Uint64("commitTs", ddl.CommitTs), zap.Uint64("globalWatermark", globalWatermark), zap.Uint64("globalCommitTs", globalCommitTs))
-				} else {
-					log.Info("Finishmark received, but the ddl is not finishmark",
-						zap.Uint64("commitTs", ddl.CommitTs), zap.String("ddl", ddl.Query))
-				}
-			}
-
-		}
 
 		// handle DDL
 		for todoDDL := c.getFrontDDL(); todoDDL != nil && todoDDL.CommitTs <= globalWatermark; todoDDL = c.getFrontDDL() {
