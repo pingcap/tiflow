@@ -231,7 +231,7 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 			}
 		}
 		if !allowed {
-			errMsg := "ClientAllowedUser check failed"
+			errMsg := "The user is not allowed."
 			return errors.ErrUnauthorized.GenWithStackByArgs(username, errMsg)
 		}
 		if err := up.Verify(ctx, username, password); err != nil {
