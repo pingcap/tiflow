@@ -244,63 +244,67 @@ func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream,
 		Namespace  string `json:"namespace"`
 		PDConfig
 	}
+	// Case 1, the upstream ID is specified in the request body.
 	err := ctx.ShouldBindJSON(&changefeedCfg)
 	if err != nil && err != io.EOF {
 		return nil, errors.Trace(err)
 	}
 
-	var upInfo *model.UpstreamInfo
-	if changefeedCfg.UpstreamID == 0 {
-		if changefeedCfg.ID != "" {
-			if changefeedCfg.Namespace == "" {
-				changefeedCfg.Namespace = model.DefaultNamespace
-			}
-			changefeedID := model.ChangeFeedID{
-				Namespace: changefeedCfg.Namespace,
-				ID:        changefeedCfg.ID,
-			}
-			cfInfo, err := capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+	// Case 2, the upstream ID is not specified in the request body, try to get it from the changefeed info.
+	isUpstreamIDNotFound := changefeedCfg.UpstreamID == 0
+	if isUpstreamIDNotFound && changefeedCfg.ID != "" {
+		if changefeedCfg.Namespace == "" {
+			changefeedCfg.Namespace = model.DefaultNamespace
+		}
+		changefeedID := model.ChangeFeedID{
+			Namespace: changefeedCfg.Namespace,
+			ID:        changefeedCfg.ID,
+		}
+		cfInfo, _ := capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+		if cfInfo != nil {
 			changefeedCfg.UpstreamID = cfInfo.UpstreamID
-		} else if len(changefeedCfg.PDAddrs) != 0 {
-			pdAddrs := changefeedCfg.PDAddrs
-			credential := changefeedCfg.toCredential()
+		}
+	}
 
-			grpcTLSOption, err := credential.ToGRPCDialOption()
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+	// Case 3, the upstream ID is not specified in the request body and the changefeed info, try to query it from PD.
+	isUpstreamIDNotFound = changefeedCfg.UpstreamID == 0
+	var upInfo *model.UpstreamInfo
+	if isUpstreamIDNotFound && len(changefeedCfg.PDAddrs) != 0 {
+		pdAddrs := changefeedCfg.PDAddrs
+		credential := changefeedCfg.toCredential()
 
-			pdClient, err := pd.NewClientWithContext(
-				ctx, pdAddrs, credential.PDSecurityOption(),
-				pd.WithGRPCDialOptions(
-					grpcTLSOption,
-					grpc.WithBlock(),
-					grpc.WithConnectParams(grpc.ConnectParams{
-						Backoff: backoff.Config{
-							BaseDelay:  time.Second,
-							Multiplier: 1.1,
-							Jitter:     0.1,
-							MaxDelay:   3 * time.Second,
-						},
-						MinConnectTimeout: 3 * time.Second,
-					}),
-				))
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
-			}
-			id := pdClient.GetClusterID(ctx)
+		grpcTLSOption, err := credential.ToGRPCDialOption()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
-			upInfo = &model.UpstreamInfo{
-				ID:            id,
-				PDEndpoints:   strings.Join(changefeedCfg.PDAddrs, ","),
-				KeyPath:       changefeedCfg.KeyPath,
-				CertPath:      changefeedCfg.CertPath,
-				CAPath:        changefeedCfg.CAPath,
-				CertAllowedCN: changefeedCfg.CertAllowedCN,
-			}
+		pdClient, err := pd.NewClientWithContext(
+			ctx, pdAddrs, credential.PDSecurityOption(),
+			pd.WithGRPCDialOptions(
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
+		}
+		id := pdClient.GetClusterID(ctx)
+
+		upInfo = &model.UpstreamInfo{
+			ID:            id,
+			PDEndpoints:   strings.Join(changefeedCfg.PDAddrs, ","),
+			KeyPath:       changefeedCfg.KeyPath,
+			CertPath:      changefeedCfg.CertPath,
+			CAPath:        changefeedCfg.CAPath,
+			CertAllowedCN: changefeedCfg.CertAllowedCN,
 		}
 	}
 
@@ -312,6 +316,7 @@ func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream,
 	if ok {
 		return up, nil
 	} else if upInfo != nil {
+		// upstream not found, and we have the upstream info, add it to the manager.
 		up = m.AddUpstream(upInfo)
 		return up, nil
 	}
