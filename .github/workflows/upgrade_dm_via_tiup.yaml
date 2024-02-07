@@ -162,7 +162,7 @@ jobs:
           docker cp -L master1:/home/tidb/dm/deploy/dm-master-8261/log ./logs/master
           docker cp -L worker1:/home/tidb/dm/deploy/dm-worker-8262/log ./logs/worker1
           docker cp -L worker2:/home/tidb/dm/deploy/dm-worker-8262/log ./logs/worker2
-          cp /tmp/*.log ./logs
+          docker cp -L control:/tmp/tiup-dm-operation.log ./logs
           sudo chown -R runner ./logs
 
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
