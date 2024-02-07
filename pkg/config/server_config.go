@@ -155,10 +155,9 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:              NewDefaultSchedulerConfig(),
-		EnableNewSink:          true,
-		EnablePullBasedSink:    true,
-		EnableKVConnectBackOff: false,
+		Scheduler:           NewDefaultSchedulerConfig(),
+		EnableNewSink:       true,
+		EnablePullBasedSink: true,
 		Puller: &PullerConfig{
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),

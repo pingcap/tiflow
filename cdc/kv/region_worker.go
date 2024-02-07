@@ -113,9 +113,8 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	// how many pending input events
-	inputPending   int32
-	pendingRegions *syncRegionFeedStateMap
+	// how many pending input events from the input channel
+	inputPendingEvents int32
 }
 
 func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string) *regionWorkerMetrics {
@@ -153,38 +152,20 @@ func newRegionWorker(
 	ctx context.Context,
 	stream *eventFeedStream,
 	s *eventFeedSession,
-	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
-<<<<<<< HEAD
-		parentCtx:     ctx,
-		session:       s,
-		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
-		storeAddr:     addr,
-		concurrency:   s.client.config.KVClient.WorkerConcurrent,
-		metrics:       newRegionWorkerMetrics(changefeedID, strconv.FormatInt(s.tableID, 10), addr),
-		inputPending:  0,
-
-=======
-		parentCtx:      ctx,
-		session:        s,
-		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:       s.eventCh,
-		stream:         stream,
-		errorCh:        make(chan error, 1),
-		statesManager:  newRegionStateManager(-1),
-		rtsManager:     newRegionTsManager(),
-		rtsUpdateCh:    make(chan *rtsUpdateEvent, 1024),
-		concurrency:    int(s.client.config.KVClient.WorkerConcurrent),
-		metrics:        newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
-		inputPending:   0,
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
-		pendingRegions: pendingRegions,
+		parentCtx:          ctx,
+		session:            s,
+		inputCh:            make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:           s.eventCh,
+		stream:             stream,
+		errorCh:            make(chan error, 1),
+		statesManager:      newRegionStateManager(-1),
+		rtsManager:         newRegionTsManager(),
+		rtsUpdateCh:        make(chan *rtsUpdateEvent, 1024),
+		concurrency:        int(s.client.config.KVClient.WorkerConcurrent),
+		metrics:            newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		inputPendingEvents: 0,
 	}
 }
 
@@ -220,7 +201,7 @@ func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
-	if empty && w.pendingRegions.len() == 0 {
+	if empty && w.stream.regions.len() == 0 {
 		log.Info("A single region error happens before, "+
 			"and there is no region maintained by this region worker, "+
 			"exit it and cancel the gRPC stream",
@@ -528,13 +509,13 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 			regionEventsBatchSize.Observe(float64(len(events)))
 
 			start := time.Now()
-			inputPending := atomic.LoadInt32(&w.inputPending)
+			inputPending := atomic.LoadInt32(&w.inputPendingEvents)
 			if highWatermarkMet {
 				highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
 			} else {
 				highWatermarkMet = int(inputPending) >= regionWorkerHighWatermark
 			}
-			atomic.AddInt32(&w.inputPending, -int32(len(events)))
+			atomic.AddInt32(&w.inputPendingEvents, -int32(len(events)))
 
 			if highWatermarkMet {
 				// All events in one batch can be hashed into one handle slot.
@@ -638,7 +619,7 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	// This will make the receiveFromStream goroutine exit and the stream can
 	// be re-established by the caller.
 	// Note: use context cancel is the only way to terminate a gRPC stream.
-	w.stream.cancel()
+	w.stream.close()
 	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
 	// should be called after stream has been deleted. Add a delay here
 	// to avoid too frequent region rebuilt.
@@ -902,10 +883,10 @@ func (w *regionWorker) evictAllRegions() {
 // sendEvents puts events into inputCh and updates some internal states.
 // Callers must ensure that all items in events can be hashed into one handle slot.
 func (w *regionWorker) sendEvents(ctx context.Context, events []*regionStatefulEvent) error {
-	atomic.AddInt32(&w.inputPending, int32(len(events)))
+	atomic.AddInt32(&w.inputPendingEvents, int32(len(events)))
 	select {
 	case <-ctx.Done():
-		atomic.AddInt32(&w.inputPending, -int32(len(events)))
+		atomic.AddInt32(&w.inputPendingEvents, -int32(len(events)))
 		return ctx.Err()
 	case w.inputCh <- events:
 		return nil
