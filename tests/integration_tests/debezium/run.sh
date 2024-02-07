@@ -9,22 +9,22 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 if [ "$SINK_TYPE" != "kafka" ]; then
-  return
+	exit 0
 fi
 
 stop_tidb_cluster
 rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 cleanup() {
-    stop_tidb_cluster
-} 
+	stop_tidb_cluster
+}
 
 trap cleanup EXIT
 
 curl -i -X POST \
-  -H "Accept:application/json" \
-  -H "Content-Type:application/json" \
-  localhost:8083/connectors/ --data-binary @- << EOF
+	-H "Accept:application/json" \
+	-H "Content-Type:application/json" \
+	localhost:8083/connectors/ --data-binary @- <<EOF
 {
   "name": "my-connector",
   "config": {
@@ -55,8 +55,8 @@ run_cdc_cli changefeed create --sink-uri="kafka://127.0.0.1:9092/output_ticdc?pr
 cd $CUR
 go run ./src
 
-if [ $? -ne 0  ]; then
-  exit 1
+if [ $? -ne 0 ]; then
+	exit 1
 fi
 
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
