@@ -185,6 +185,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.Equal(t, DDLTypeCreate, dec.msg.Type)
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
@@ -200,6 +201,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 			_, _, err = dec.HasNext()
 			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
