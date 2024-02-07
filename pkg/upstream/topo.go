@@ -37,7 +37,7 @@ const (
 	topologyTiDB    = infosync.TopologyInformationPath
 	topologyTiDBTTL = infosync.TopologySessionTTL
 	// defaultTimeout is the default timeout for etcd and mysql operations.
-	defaultTimeout = time.Second
+	defaultTimeout = time.Second * 2
 )
 
 type tidbInstance struct {

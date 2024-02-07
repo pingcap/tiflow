@@ -15,6 +15,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,8 +26,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 // ClientVersionHeader is the header name of client version
@@ -193,15 +198,9 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		serverCfg := config.GetGlobalServerConfig()
 		if serverCfg.Security.ClientUserRequired {
-			m, err := capture.GetUpstreamManager()
+			up, err := getUpstream(ctx, capture)
 			if err != nil {
-				_ = ctx.Error(err)
-				ctx.Abort()
-				return
-			}
-			up, err := m.GetDefaultUpstream()
-			if err != nil {
-				_ = ctx.Error(err)
+				ctx.Error(err)
 				ctx.Abort()
 				return
 			}
@@ -214,6 +213,108 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 		}
 		ctx.Next()
 	}
+}
+
+// redeclare the function to avoid import cycle
+type PDConfig struct {
+	PDAddrs       []string `json:"pd_addrs,omitempty"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
+}
+
+// toCredential generates a security.Credential from a PDConfig
+func (cfg *PDConfig) toCredential() *security.Credential {
+	credential := &security.Credential{
+		CAPath:   cfg.CAPath,
+		CertPath: cfg.CertPath,
+		KeyPath:  cfg.KeyPath,
+	}
+	credential.CertAllowedCN = make([]string, len(cfg.CertAllowedCN))
+	copy(credential.CertAllowedCN, cfg.CertAllowedCN)
+	return credential
+}
+
+func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream, error) {
+	var changefeedCfg struct {
+		UpstreamID uint64 `json:"upstream_id"`
+		ID         string `json:"changefeed_id"`
+		Namespace  string `json:"namespace"`
+		PDConfig
+	}
+	err := ctx.BindJSON(&changefeedCfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var upInfo *model.UpstreamInfo
+	if changefeedCfg.UpstreamID == 0 {
+		if changefeedCfg.ID != "" {
+			if changefeedCfg.Namespace == "" {
+				changefeedCfg.Namespace = model.DefaultNamespace
+			}
+			changefeedID := model.ChangeFeedID{
+				Namespace: changefeedCfg.Namespace,
+				ID:        changefeedCfg.ID,
+			}
+			cfInfo, err := capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			changefeedCfg.UpstreamID = cfInfo.UpstreamID
+		} else if len(changefeedCfg.PDAddrs) != 0 {
+			pdAddrs := changefeedCfg.PDAddrs
+			credential := changefeedCfg.toCredential()
+
+			grpcTLSOption, err := credential.ToGRPCDialOption()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			pdClient, err := pd.NewClientWithContext(
+				ctx, pdAddrs, credential.PDSecurityOption(),
+				pd.WithGRPCDialOptions(
+					grpcTLSOption,
+					grpc.WithBlock(),
+					grpc.WithConnectParams(grpc.ConnectParams{
+						Backoff: backoff.Config{
+							BaseDelay:  time.Second,
+							Multiplier: 1.1,
+							Jitter:     0.1,
+							MaxDelay:   3 * time.Second,
+						},
+						MinConnectTimeout: 3 * time.Second,
+					}),
+				))
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
+			}
+			id := pdClient.GetClusterID(ctx)
+
+			upInfo = &model.UpstreamInfo{
+				ID:            id,
+				PDEndpoints:   strings.Join(changefeedCfg.PDAddrs, ","),
+				KeyPath:       changefeedCfg.KeyPath,
+				CertPath:      changefeedCfg.CertPath,
+				CAPath:        changefeedCfg.CAPath,
+				CertAllowedCN: changefeedCfg.CertAllowedCN,
+			}
+		}
+	}
+
+	m, err := capture.GetUpstreamManager()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	up, ok := m.Get(changefeedCfg.UpstreamID)
+	if ok {
+		return up, nil
+	} else if upInfo != nil {
+		up = m.AddUpstream(upInfo)
+		return up, nil
+	}
+	return m.GetDefaultUpstream()
 }
 
 func verify(ctx *gin.Context, up *upstream.Upstream) error {
