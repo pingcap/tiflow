@@ -176,7 +176,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-kv-connect-backoff": false,
     "cdc-v2": {
       "enable": false,
       "meta-store": {
