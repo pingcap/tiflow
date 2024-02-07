@@ -1,7 +1,8 @@
 ARG version
 FROM mysql:${version}-debian
 
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
+# https://github.com/docker-library/mysql/issues/1016#issuecomment-1857280082
+RUN rm /etc/apt/sources.list.d/mysql.list
 RUN apt-get update && apt-get -y install keepalived net-tools
 
 ADD init.sh /init.sh
