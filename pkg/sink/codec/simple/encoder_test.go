@@ -707,6 +707,14 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.True(t, hasNext)
 				require.Equal(t, model.MessageTypeRow, messageType)
 
+				if event.IsDelete() {
+					require.Equal(t, dec.msg.Type, DMLTypeDelete)
+				} else if event.IsUpdate() {
+					require.Equal(t, dec.msg.Type, DMLTypeUpdate)
+				} else {
+					require.Equal(t, dec.msg.Type, DMLTypeInsert)
+				}
+
 				decodedRow, err := dec.NextRowChangedEvent()
 				require.NoError(t, err)
 
