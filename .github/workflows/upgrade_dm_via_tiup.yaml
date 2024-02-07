@@ -77,6 +77,10 @@ jobs:
       fail-fast: false
       matrix:
         previous_v2:
+          # versions <= 7.5 have been verified to work, starting from v8.0.0, we
+          # won't test upgrade from v2 to >= v8.x, as tiup doesn't support components
+          # like grafana below version v3.0.0.
+          # user can upgrade from v2 to version below v8.0.0, and then upgrade to v8.0.0+.
           ["v5.3.0"]
 
     steps:
@@ -111,21 +115,21 @@ jobs:
           echo "package dm-master"
           mkdir dm-master
           cp ${{ env.working-directory }}/bin/dm-master dm-master
-          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dm-master/scripts
+          cp -r ${{ env.working-directory }}/metrics/grafana/ dm-master/scripts
           cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dm-master/conf
           tar -czvf dm-master-nightly-linux-amd64.tar.gz dm-master
 
           echo "package dm-worker"
           mkdir dm-worker
           cp ${{ env.working-directory }}/bin/dm-worker dm-worker
-          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dm-worker/scripts
+          cp -r ${{ env.working-directory }}/metrics/grafana/ dm-worker/scripts
           cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dm-worker/conf
           tar -czvf dm-worker-nightly-linux-amd64.tar.gz dm-worker
 
           echo "package dmctl"
           mkdir dmctl
           cp ${{ env.working-directory }}/bin/dmctl dmctl
-          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dmctl/scripts
+          cp -r ${{ env.working-directory }}/metrics/grafana/ dmctl/scripts
           cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dmctl/conf
           tar -czvf dmctl-nightly-linux-amd64.tar.gz dmctl
 
