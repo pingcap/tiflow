@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -76,11 +77,15 @@ type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
 	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
-	hasher     func(tablepb.Span, int) int
-	frontiers  int
 
+	advanceInternalInMs uint
+
+	// how many goroutines to handle table frontiers.
+	frontiers int
 	// inputChs is used to collect events from client.
 	inputChs []chan kv.MultiplexingEvent
+	// how to hash a table span to a slot in inputChs.
+	hasher func(tablepb.Span, int) int
 	// advanceCh is used to handle resolved ts in frontier workers.
 	advanceCh chan *tableProgress
 
@@ -98,34 +103,71 @@ type MultiplexingPuller struct {
 	queueResolvedDuration  prometheus.Observer
 }
 
-// NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by
+// NewMultiplexingDMLPuller creates a MultiplexingPuller. Outputs are handled by
 // `consume`, which will be called in several sub-routines concurrently.
 //
 // `workers` specifies how many workers will be spawned to handle events.
 // `frontiers` specifies how many workers will be spawned to handle resolved timestamps.
-func NewMultiplexingPuller(
+func NewMultiplexingDMLPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
 	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+	// TODO: remove follow parameters after cfg.KVClient.AdvanceIntervalInMs is stabled.
 	workers int,
 	hasher func(tablepb.Span, int) int,
-	frontiers int,
 ) *MultiplexingPuller {
 	x := &MultiplexingPuller{
 		changefeed: changefeed,
 		client:     client,
 		consume:    consume,
-		hasher:     hasher,
-		frontiers:  frontiers,
-		advanceCh:  make(chan *tableProgress, 128),
 	}
 	x.subscriptions.m = make(map[kv.SubscriptionID]*tableProgress)
 	x.subscriptions.n = spanz.NewHashMap[tableProgressWithSubID]()
 
-	x.inputChs = make([]chan kv.MultiplexingEvent, 0, workers)
-	for i := 0; i < workers; i++ {
-		x.inputChs = append(x.inputChs, make(chan kv.MultiplexingEvent, 1024))
+	cfg := config.GetGlobalServerConfig()
+	if cfg.KVClient.AdvanceIntervalInMs > 0 {
+		x.advanceInternalInMs = cfg.KVClient.AdvanceIntervalInMs
+		x.frontiers = 0
+	} else {
+		x.frontiers = int(cfg.KVClient.FrontierConcurrent)
+		x.inputChs = make([]chan kv.MultiplexingEvent, 0, workers)
+		for i := 0; i < workers; i++ {
+			x.inputChs = append(x.inputChs, make(chan kv.MultiplexingEvent, 1024))
+		}
+		x.hasher = hasher
+		x.advanceCh = make(chan *tableProgress, 128)
 	}
+
+	return x
+}
+
+// NewMultiplexingDDLPuller is like NewMultiplexingDMLPuller, with some simplifications
+// for tiny input flow from DDL meta regions.
+func NewMultiplexingDDLPuller(
+	changefeed model.ChangeFeedID,
+	client *kv.SharedClient,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+) *MultiplexingPuller {
+	x := &MultiplexingPuller{
+		changefeed: changefeed,
+		client:     client,
+		consume:    consume,
+	}
+	x.subscriptions.m = make(map[kv.SubscriptionID]*tableProgress)
+	x.subscriptions.n = spanz.NewHashMap[tableProgressWithSubID]()
+
+	cfg := config.GetGlobalServerConfig()
+	if cfg.KVClient.AdvanceIntervalInMs > 0 {
+		x.advanceInternalInMs = cfg.KVClient.AdvanceIntervalInMs
+		x.frontiers = 0
+	} else {
+		x.frontiers = 1
+		x.inputChs = make([]chan kv.MultiplexingEvent, 0, 1)
+		x.inputChs = append(x.inputChs, make(chan kv.MultiplexingEvent, 1024))
+		x.hasher = func(tablepb.Span, int) int { return 0 }
+		x.advanceCh = make(chan *tableProgress, 128)
+	}
+
 	return x
 }
 
@@ -176,8 +218,38 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		p.subscriptions.m[subID] = progress
 		p.subscriptions.n.ReplaceOrInsert(span, tableProgressWithSubID{progress, subID})
 
-		slot := p.hasher(span, len(p.inputChs))
-		p.client.Subscribe(subID, span, startTs, p.inputChs[slot])
+		var eventHandler kv.EventHandler
+		if p.advanceInternalInMs > 0 {
+			eventHandler = func(ctx context.Context, event kv.MultiplexingEvent) error {
+				progress := p.getProgress(event.SubscriptionID)
+				if event.Val != nil {
+					p.CounterKv.Inc()
+					return progress.consume.f(ctx, event.Val, progress.spans)
+				} else if event.Resolved != nil {
+					// Table span ResolvedTs has been advanced in module kv-client.
+					if event.Resolved.ResolvedTs > progress.resolvedTs.Load() {
+						progress.initialized.Store(true)
+						progress.resolvedTs.Store(event.Resolved.ResolvedTs)
+						progress.resolvedTsUpdated.Store(time.Now().Unix())
+						resolved := &model.RawKVEntry{CRTs: event.Resolved.ResolvedTs, OpType: model.OpTypeResolved}
+						return progress.consume.f(ctx, resolved, progress.spans)
+					}
+				}
+				return errors.New("unexpected event without Val or Resolved")
+			}
+		} else {
+			slot := p.hasher(span, len(p.inputChs))
+			eventHandler = func(ctx context.Context, event kv.MultiplexingEvent) error {
+				select {
+				case p.inputChs[slot] <- event:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+
+		}
+		p.client.Subscribe(subID, span, startTs, eventHandler)
 	}
 	return progress.subIDs
 }

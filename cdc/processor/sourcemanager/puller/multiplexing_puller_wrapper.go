@@ -36,7 +36,6 @@ func NewMultiplexingPullerWrapper(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
 	eventSortEngine sorter.SortEngine,
-	frontiers int,
 ) *MultiplexingWrapper {
 	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
 		if len(spans) > 1 {
@@ -52,7 +51,7 @@ func NewMultiplexingPullerWrapper(
 	}
 
 	slots, hasher := eventSortEngine.SlotsAndHasher()
-	mp := puller.NewMultiplexingPuller(changefeed, client, consume, slots, hasher, frontiers)
+	mp := puller.NewMultiplexingDMLPuller(changefeed, client, consume, slots, hasher)
 	return &MultiplexingWrapper{
 		changefeed:         changefeed,
 		MultiplexingPuller: mp,

@@ -16,8 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -58,6 +56,9 @@ type MultiplexingEvent struct {
 	SubscriptionID SubscriptionID
 	Start          time.Time
 }
+
+// EventHandler is used to handle MultiplexingEvent.
+type EventHandler func(context.Context, MultiplexingEvent) error
 
 // SharedClient is shared in many tables. Methods are thread-safe.
 type SharedClient struct {
@@ -119,10 +120,12 @@ type requestedStore struct {
 type requestedTable struct {
 	subscriptionID SubscriptionID
 
-	span      tablepb.Span
-	startTs   model.Ts
-	rangeLock *regionlock.RegionRangeLock
-	eventCh   chan<- MultiplexingEvent
+	span         tablepb.Span
+	startTs      model.Ts
+	rangeLock    *regionlock.RegionRangeLock
+	eventHandler EventHandler
+
+	lastAdvanceTime atomic.Int64
 
 	// To handle table removing.
 	stopped atomic.Bool
@@ -181,14 +184,14 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
-func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
+func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventHandler EventHandler) {
 	if span.TableID == 0 {
 		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	rt := s.newRequestedTable(subID, span, startTs, eventCh)
+	rt := s.newRequestedTable(subID, span, startTs, eventHandler)
 	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
@@ -671,7 +674,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -725,7 +728,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -748,15 +751,11 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.Holes) > 0 {
-				holes := make([]string, 0, len(attr.Holes))
-				for _, hole := range attr.Holes {
-					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
-				}
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.String("holes", strings.Join(holes, ", ")))
+					zap.Any("holes", attr.Holes))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -765,7 +764,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 func (s *SharedClient) newRequestedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
-	eventCh chan<- MultiplexingEvent,
+	eventHandler EventHandler,
 ) *requestedTable {
 	cfName := s.changefeed.String()
 	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
@@ -775,12 +774,12 @@ func (s *SharedClient) newRequestedTable(
 		span:           span,
 		startTs:        startTs,
 		rangeLock:      rangeLock,
-		eventCh:        eventCh,
+		eventHandler:   eventHandler,
 	}
 
 	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}
