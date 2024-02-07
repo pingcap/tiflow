@@ -80,6 +80,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 					zap.String("key", key),
 					zap.String("value", string(kv.Value)),
 					zap.Error(err))
+				continue
 			}
 			nodesInfo[keyParts[0]] = &tidbInstance{
 				IP:   hostname,
@@ -92,6 +93,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 					zap.String("key", key),
 					zap.String("value", string(kv.Value)),
 					zap.Error(err))
+				continue
 			}
 			nodesAlive[keyParts[0]] = struct{}{}
 		}

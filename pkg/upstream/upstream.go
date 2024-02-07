@@ -396,7 +396,9 @@ func (up *Upstream) Verify(ctx context.Context, username, password string) error
 		if err == nil {
 			return nil
 		}
-		if err == nil || errorutil.IsAccessDeniedError(err) {
+		if errorutil.IsAccessDeniedError(err) {
+			// For access denied error, we can return immediately.
+			// For other errors, we need to continue to verify the next tidb instance.
 			return errors.Trace(err)
 		}
 	}
