@@ -42,6 +42,7 @@ func TestIsSchema(t *testing.T) {
 		{tifilter.InspectionSchemaName, true},
 		{tifilter.PerformanceSchemaName, true},
 		{tifilter.MetricSchemaName, true},
+		{TiCDCSystemSchema, true},
 	}
 	for _, c := range cases {
 		require.Equal(t, c.result, isSysSchema(c.schema))
