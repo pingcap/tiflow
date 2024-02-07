@@ -40,13 +40,15 @@ type Config struct {
 	Values url.Values
 }
 
+// parseAuthentication parses the authentication information from the config and
+// removes the user and password from the values.
 func (c *Config) parseAuthentication() {
 	c.authentication = BasicAuth{
-		User:     c.Values.Get(api.ApiOpVarTiCDCUser),
-		Password: c.Values.Get(api.ApiOpVarTiCDCPassword),
+		User:     c.Values.Get(api.APIOpVarTiCDCUser),
+		Password: c.Values.Get(api.APIOpVarTiCDCPassword),
 	}
-	c.Values.Del(api.ApiOpVarTiCDCUser)
-	c.Values.Del(api.ApiOpVarTiCDCPassword)
+	c.Values.Del(api.APIOpVarTiCDCUser)
+	c.Values.Del(api.APIOpVarTiCDCPassword)
 }
 
 // defaultServerURLFromConfig is used to build base URL and api path.

@@ -193,9 +193,9 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		serverCfg := config.GetGlobalServerConfig()
 		if serverCfg.Security.ClientUserRequired {
-			up, err := getUpstream(ctx, capture)
+			up, err := getUpstream(capture)
 			if err != nil {
-				ctx.Error(err)
+				_ = ctx.Error(err)
 				ctx.Abort()
 				return
 			}
@@ -210,7 +210,7 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	}
 }
 
-func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream, error) {
+func getUpstream(capture capture.Capture) (*upstream.Upstream, error) {
 	m, err := capture.GetUpstreamManager()
 	if err != nil {
 		return nil, errors.Trace(err)

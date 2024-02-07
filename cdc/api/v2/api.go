@@ -102,6 +102,6 @@ func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
 	namespace := getNamespaceValueWithDefault(ctx)
 	return model.ChangeFeedID{
 		Namespace: namespace,
-		ID:        ctx.Param(api.ApiOpVarChangefeedID),
+		ID:        ctx.Param(api.APIOpVarChangefeedID),
 	}
 }

@@ -58,6 +58,7 @@ type ClientGetter interface {
 	GetAuthParameters() url.Values
 }
 
+// ClientAuth specifies the authentication parameters.
 type ClientAuth struct {
 	User     string `toml:"ticdc_user,omitempty"`
 	Password string `toml:"ticdc_password,omitempty"`
@@ -152,6 +153,7 @@ func (c *ClientFlags) GetCredential() *security.Credential {
 	}
 }
 
+// CompleteAuthParameters completes the authentication parameters.
 func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	authType := "command line"
 	defer func() {
@@ -202,12 +204,13 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	return nil
 }
 
+// GetAuthParameters returns the authentication parameters.
 func (c *ClientFlags) GetAuthParameters() url.Values {
 	if c.User == "" {
 		return nil
 	}
 	return url.Values{
-		api.ApiOpVarTiCDCUser:     {c.User},
-		api.ApiOpVarTiCDCPassword: {c.Password},
+		api.APIOpVarTiCDCUser:     {c.User},
+		api.APIOpVarTiCDCPassword: {c.Password},
 	}
 }

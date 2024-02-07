@@ -119,7 +119,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 // @Router /api/v1/changefeeds [get]
 func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	state := c.Query(api.ApiOpVarChangefeedState)
+	state := c.Query(api.APIOpVarChangefeedState)
 	controller, err := h.capture.GetController()
 	if err != nil {
 		_ = c.Error(err)
@@ -195,7 +195,7 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 // @Router /api/v1/changefeeds/{changefeed_id} [get]
 func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -336,7 +336,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 func (h *OpenAPI) PauseChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -373,7 +373,7 @@ func (h *OpenAPI) PauseChangefeed(c *gin.Context) {
 // @Router	/api/v1/changefeeds/{changefeed_id}/resume [post]
 func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -411,7 +411,7 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
 func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
@@ -480,7 +480,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 // @Router	/api/v1/changefeeds/{changefeed_id} [delete]
 func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -551,7 +551,7 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/rebalance_table [post]
 func (h *OpenAPI) RebalanceTables(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
@@ -585,7 +585,7 @@ func (h *OpenAPI) RebalanceTables(c *gin.Context) {
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
 func (h *OpenAPI) MoveTable(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -651,14 +651,14 @@ func (h *OpenAPI) ResignController(c *gin.Context) {
 func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(api.ApiOpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(api.APIOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
 		return
 	}
 
-	captureID := c.Param(api.ApiOpVarCaptureID)
+	captureID := c.Param(api.APIOpVarCaptureID)
 	if err := model.ValidateChangefeedID(captureID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", captureID))
 		return
@@ -948,6 +948,6 @@ func SetLogLevel(c *gin.Context) {
 func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
 	return model.ChangeFeedID{
 		Namespace: model.DefaultNamespace,
-		ID:        ctx.Param(api.ApiOpVarChangefeedID),
+		ID:        ctx.Param(api.APIOpVarChangefeedID),
 	}
 }

@@ -56,6 +56,7 @@ type CDCRESTInterface interface {
 	Delete() *Request
 }
 
+// BasicAuth holds the basic authentication information.
 type BasicAuth struct {
 	User     string
 	Password string

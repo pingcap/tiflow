@@ -15,7 +15,6 @@ package upstream
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -76,7 +75,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 			address := keyParts[0]
 			hostname, port, err := netutil.ParseHostAndPortFromAddress(address)
 			if err != nil {
-				log.Warn(fmt.Sprintf("Ignored invalid tidb topology info entry"),
+				log.Warn("Ignored invalid tidb topology info entry",
 					zap.String("key", key),
 					zap.String("value", string(kv.Value)),
 					zap.Error(err))
@@ -89,7 +88,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 		case "ttl":
 			alive, err := parseTiDBAliveness(kv.Value)
 			if !alive || err != nil {
-				log.Warn(fmt.Sprintf("Ignored invalid tidb topology TTL entry"),
+				log.Warn("Ignored invalid tidb topology TTL entry",
 					zap.String("key", key),
 					zap.String("value", string(kv.Value)),
 					zap.Error(err))

@@ -37,7 +37,7 @@ import (
 func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 	ctx := c.Request.Context()
 	namespace := getNamespaceValueWithDefault(c)
-	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(api.ApiOpVarChangefeedID)}
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(api.APIOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(
 			cerror.ErrAPIInvalidParam.GenWithStack(
