@@ -167,6 +167,9 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 			break
 		}
 	}
+
+	t.tableSink.innerMu.Lock()
+	defer t.tableSink.innerMu.Unlock()
 	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
 		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
 		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
@@ -230,6 +233,9 @@ func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
 	if t.tableSink.s != nil {
 		return t.tableSink.s.GetLastSyncedTs()
 	}
+
+	t.tableSink.innerMu.Lock()
+	defer t.tableSink.innerMu.Unlock()
 	return t.tableSink.lastSyncedTs
 }
 
@@ -318,6 +324,9 @@ func (t *tableSinkWrapper) asyncStop() bool {
 func (t *tableSinkWrapper) initTableSink() bool {
 	t.tableSink.Lock()
 	defer t.tableSink.Unlock()
+	t.tableSink.innerMu.Lock()
+	defer t.tableSink.innerMu.Unlock()
+
 	if t.tableSink.s == nil {
 		t.tableSink.s, t.tableSink.version = t.tableSinkCreator()
 		if t.tableSink.s != nil {

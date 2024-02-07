@@ -189,7 +189,15 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
-func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
+func TestGenerateTableSinkTaskWithBarrierTsDebug(t *testing.T) {
+	testTime := 10000
+	for i := 0; i < testTime; i++ {
+		testGenerateTableSinkTaskWithBarrierTs(t)
+	}
+}
+
+func testGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
+	//t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
@@ -211,7 +219,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
 		return s.CheckpointTs == 4 && s.LastSyncedTs == 4
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond)
 
 	manager.UpdateBarrierTs(6, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 6)
@@ -221,7 +229,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
 		fmt.Printf("debug checkpoint ts %d, lastSyncedTs %d\n", s.CheckpointTs, s.LastSyncedTs)
 		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond)
 }
 
 func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
