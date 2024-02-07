@@ -62,7 +62,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	m, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
