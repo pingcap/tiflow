@@ -568,8 +568,8 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	return msg, nil
 }
 
-func newDMLMessage(
-	event *model.RowChangedEvent, config *common.Config,
+func (a *jsonMarshaller) newDMLMessage(
+	event *model.RowChangedEvent,
 	onlyHandleKey bool, claimCheckFileName string,
 ) (*message, error) {
 	m := &message{
@@ -610,7 +610,7 @@ func newDMLMessage(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	if config.EnableRowChecksum && event.Checksum != nil {
+	if a.config.EnableRowChecksum && event.Checksum != nil {
 		m.Checksum = &checksum{
 			Version:   event.Checksum.Version,
 			Corrupted: event.Checksum.Corrupted,
@@ -642,7 +642,7 @@ func formatColumns(
 	return result, nil
 }
 
-func encodeValue4Avro(
+func (a *avroMarshaller) encodeValue4Avro(
 	value interface{}, ft *types.FieldType,
 ) (interface{}, string, error) {
 	if value == nil {
@@ -673,6 +673,16 @@ func encodeValue4Avro(
 			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
 		value = setValue.Name
+	case mysql.TypeTimestamp:
+		v, ok := value.(string)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the timestamp value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+		return map[string]interface{}{
+			"timestamp": v,
+			"timezone":  a.config.TimeZone.String(),
+		}, "com.pingcap.simple.avro.Timestamp", nil
 	}
 
 	switch v := value.(type) {

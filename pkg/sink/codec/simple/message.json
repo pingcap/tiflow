@@ -285,6 +285,34 @@
   },
   {
     "namespace": "com.pingcap.simple.avro",
+    "name": "Timestamp",
+    "type": "record",
+    "docs": "the timestamp value format",
+    "fields": [
+      {
+        "name": "timestamp",
+        "type": "string"
+      },
+      {
+        "name": "timezone",
+        "type": "string"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "UnsignedBigint",
+    "type": "record",
+    "docs": "unsigned bigint value format",
+    "fields": [
+      {
+        "name": "value",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
     "name": "DML",
     "type": "record",
     "docs": "the message format of the DML event",
@@ -367,7 +395,9 @@
               "double",
               "string",
               "boolean",
-              "bytes"
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
             ],
             "default": null
           }
@@ -386,7 +416,9 @@
               "float",
               "double",
               "string",
-              "bytes"
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
             ],
             "default": null
           }

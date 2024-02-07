@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -228,8 +227,8 @@ var (
 	}
 )
 
-func newDMLMessageMap(
-	event *model.RowChangedEvent, config *common.Config,
+func (a *avroMarshaller) newDMLMessageMap(
+	event *model.RowChangedEvent,
 	onlyHandleKey bool,
 	claimCheckFileName string,
 ) (map[string]interface{}, error) {
@@ -243,19 +242,19 @@ func newDMLMessageMap(
 		"schemaVersion": int64(event.TableInfo.UpdateTS),
 	}
 
-	if !config.LargeMessageHandle.Disabled() && onlyHandleKey {
+	if !a.config.LargeMessageHandle.Disabled() && onlyHandleKey {
 		m["handleKeyOnly"] = map[string]interface{}{
 			"boolean": true,
 		}
 	}
 
-	if config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
+	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
 		m["claimCheckLocation"] = map[string]interface{}{
 			"string": claimCheckFileName,
 		}
 	}
 
-	if config.EnableRowChecksum && event.Checksum != nil {
+	if a.config.EnableRowChecksum && event.Checksum != nil {
 		cc := map[string]interface{}{
 			"version":   event.Checksum.Version,
 			"corrupted": event.Checksum.Corrupted,
@@ -269,26 +268,26 @@ func newDMLMessageMap(
 	}
 
 	if event.IsInsert() {
-		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		data, err := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["data"] = data
 		m["type"] = string(InsertType)
 	} else if event.IsDelete() {
-		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		old, err := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["old"] = old
 		m["type"] = string(DeleteType)
 	} else if event.IsUpdate() {
-		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		data, err := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["data"] = data
-		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		old, err := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -348,7 +347,7 @@ func recycleMap(m map[string]interface{}) {
 	messageHolderPool.Put(m)
 }
 
-func collectColumns(
+func (a *avroMarshaller) collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
@@ -359,7 +358,7 @@ func collectColumns(
 		if onlyHandleKey && !col.Flag.IsHandleKey() {
 			continue
 		}
-		value, avroType, err := encodeValue4Avro(col.Value, columnInfos[idx].Ft)
+		value, avroType, err := a.encodeValue4Avro(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err
 		}
