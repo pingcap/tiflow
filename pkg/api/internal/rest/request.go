@@ -55,6 +55,7 @@ type Request struct {
 	pathPrefix string
 	params     url.Values
 	headers    http.Header
+	basicAuth  BasicAuth
 
 	// retry options
 	backoffBaseDelay time.Duration
@@ -85,7 +86,8 @@ func NewRequest(c *CDCRESTClient) *Request {
 		timeout:    timeout,
 		pathPrefix: pathPrefix,
 		maxRetries: 1,
-		params:     c.values,
+		params:     c.params,
+		basicAuth:  c.basicAuth,
 	}
 	r.WithHeader("Accept", "application/json")
 	r.WithHeader(middleware.ClientVersionHeader, version.ReleaseVersion)
@@ -256,6 +258,7 @@ func (r *Request) newHTTPRequest(ctx context.Context) (*http.Request, error) {
 	}
 	req = req.WithContext(ctx)
 	req.Header = r.headers
+	req.SetBasicAuth(r.basicAuth.User, r.basicAuth.Password)
 	return req, nil
 }
 

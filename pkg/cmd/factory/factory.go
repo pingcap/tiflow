@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -58,8 +59,8 @@ type ClientGetter interface {
 }
 
 type ClientAuth struct {
-	User     string `json:"ticdc_user,omitempty" toml:"ticdc_user,omitempty" yaml:"ticdc_user,omitempty"`
-	Password string `json:"ticdc_password,omitempty" toml:"ticdc_password,omitempty" yaml:"ticdc_password,omitempty"`
+	User     string `toml:"ticdc_user,omitempty"`
+	Password string `toml:"ticdc_password,omitempty"`
 }
 
 // ClientFlags specifies the parameters needed to construct the client.
@@ -152,12 +153,14 @@ func (c *ClientFlags) GetCredential() *security.Credential {
 }
 
 func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
+	authType := "command line"
 	defer func() {
 		if err == nil {
 			if c.User == "" && c.Password != "" {
 				err = errors.ErrCredentialNotFound.GenWithStackByArgs("invalid atuhentication: password is specified without user")
 			}
 		}
+		log.Info(fmt.Sprintf("cli authentication type: %s", authType))
 	}()
 	// If user is specified via command line, password should be specified as well.
 	if c.User != "" {
@@ -174,6 +177,7 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	}
 
 	// If user is not specified via command line, try to get it from environment variable.
+	authType = "environment variable"
 	c.User = os.Getenv(envVarTiCDCUser)
 	c.Password = os.Getenv(envVarTiCDCPassword)
 	if c.User != "" {
@@ -181,6 +185,7 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 	}
 
 	// If user is not specified via command line or environment variable, try to get it from credential file.
+	authType = "credential file"
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return errors.WrapError(errors.ErrCredentialNotFound, err, "failed to get user home directory")
