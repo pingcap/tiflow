@@ -17,7 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// lagBucket returns the lag buckets for prometheus metric
+// LagBucket returns the lag buckets for prometheus metric
 // 10 seconds is the reasonable LAG for most cases,
 // for prometheus histogram_quantile func,
 // we use small bucket distance to do accurate approximation
