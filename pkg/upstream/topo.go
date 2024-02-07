@@ -45,6 +45,7 @@ type tidbInstance struct {
 	Port uint
 }
 
+// fetchTiDBTopology parses the TiDB topology from etcd.
 func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidbInstance, error) {
 	ctx2, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()

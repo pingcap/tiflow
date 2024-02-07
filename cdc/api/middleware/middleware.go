@@ -14,6 +14,7 @@
 package middleware
 
 import (
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -243,8 +244,8 @@ func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream,
 		Namespace  string `json:"namespace"`
 		PDConfig
 	}
-	err := ctx.BindJSON(&changefeedCfg)
-	if err != nil {
+	err := ctx.ShouldBindJSON(&changefeedCfg)
+	if err != nil && err != io.EOF {
 		return nil, errors.Trace(err)
 	}
 
