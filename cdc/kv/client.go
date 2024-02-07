@@ -454,7 +454,6 @@ func newEventFeedSession(
 			},
 		},
 	}
-
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context) error {
