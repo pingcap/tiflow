@@ -75,6 +75,7 @@ function upgrade_to_current_v2() {
 	# FIXME: It may be a bug in tiup mirror.
 	tiup uninstall dmctl --all
 
+	tiup install dmctl:v7.5.0 >> $tiup_dm_operation_log
 	# config export in PRE_VER
 	# on version >= 8.0.0, the `config export` command will connect to the master
 	# and fetch the config which previous version doesn't support, so we fix the version to 7.5.0
@@ -108,6 +109,7 @@ function migrate_in_v2() {
 	run_dmctl_with_retry $CUR_VER "shard-ddl-lock" "no DDL lock exists" 1
 
 	# config export in CUR_VER
+	tiup install dmctl:$CUR_VER
 	tiup dmctl:$CUR_VER --master-addr=master1:8261 config export -d new_configs
 }
 
