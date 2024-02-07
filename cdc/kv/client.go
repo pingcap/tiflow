@@ -701,7 +701,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
-			s.storeStreamsCache[stream.addr] = stream
+			s.addStream(stream)
 			log.Info("creating new stream to store to send request",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -1362,6 +1362,35 @@ func (s *eventFeedSession) sendResolvedTs(
 			}
 		}
 	}
+	return nil
+}
+
+// addStream adds a stream to the session.streams.
+// Note: It must be called with deleteStream in a same goroutine.
+func (s *eventFeedSession) addStream(stream *eventFeedStream) error {
+	oldStream, ok := s.storeStreamsCache[stream.addr]
+	if ok {
+		failpoint.Inject("kvClientAddDuplicatedStream", func() {
+			log.Error("A stream to a same store already exists, it shouldn't happen, please report a bug",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Uint64("oldStreamID", oldStream.id),
+				zap.Uint64("newStreamID", stream.id))
+		})
+		// There is no need to return an error here because even if it happens,
+		// it does not harm the data correctness, but may only cause some lag spikes.
+		// Log it to help us improve the code.
+		log.Error("A stream to a same store already exists, it shouldn't happen, please report a bug",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Uint64("oldStreamID", oldStream.id),
+			zap.Uint64("newStreamID", stream.id))
+	}
+	s.storeStreamsCache[stream.addr] = stream
 	return nil
 }
 
