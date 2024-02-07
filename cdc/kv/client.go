@@ -1393,7 +1393,7 @@ func (s *eventFeedSession) sendResolvedTs(
 
 // addStream adds a stream to the session.streams.
 // Note: It must be called with deleteStream in a same goroutine.
-func (s *eventFeedSession) addStream(stream *eventFeedStream) error {
+func (s *eventFeedSession) addStream(stream *eventFeedStream) {
 	oldStream, ok := s.storeStreamsCache[stream.addr]
 	if ok {
 		failpoint.Inject("kvClientAddDuplicatedStream", func() {
@@ -1417,7 +1417,6 @@ func (s *eventFeedSession) addStream(stream *eventFeedStream) error {
 			zap.Uint64("newStreamID", stream.id))
 	}
 	s.storeStreamsCache[stream.addr] = stream
-	return nil
 }
 
 // deleteStream deletes a stream from the session.streams.
