@@ -273,7 +273,7 @@ function patch_nightly_with_tiup_mirror() {
 	tiup mirror clone tidb-dm-nightly-linux-amd64 --os=linux --arch=amd64 \
 		--alertmanager=v0.17.0 --grafana=v5.0.1 --prometheus=v5.0.1 \
 		--dm-master=$1 --dm-worker=$1 \
-		--tiup=v$(tiup --version | grep 'tiup' | awk -F ' ' '{print $1}') --dm=v$(tiup --version | grep 'tiup' | awk -F ' ' '{print $1}')
+		--tiup=v$(tiup --version | grep 'tiup' | awk -F ' ' '{print $1}') --dm=$1
 
 	# change tiup mirror
 	tidb-dm-nightly-linux-amd64/local_install.sh
