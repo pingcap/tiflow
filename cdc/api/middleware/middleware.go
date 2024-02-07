@@ -14,9 +14,7 @@
 package middleware
 
 import (
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,12 +25,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 // ClientVersionHeader is the header name of client version
@@ -216,109 +210,10 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	}
 }
 
-// redeclare the function to avoid import cycle
-type PDConfig struct {
-	PDAddrs       []string `json:"pd_addrs,omitempty"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
-}
-
-// toCredential generates a security.Credential from a PDConfig
-func (cfg *PDConfig) toCredential() *security.Credential {
-	credential := &security.Credential{
-		CAPath:   cfg.CAPath,
-		CertPath: cfg.CertPath,
-		KeyPath:  cfg.KeyPath,
-	}
-	credential.CertAllowedCN = make([]string, len(cfg.CertAllowedCN))
-	copy(credential.CertAllowedCN, cfg.CertAllowedCN)
-	return credential
-}
-
 func getUpstream(ctx *gin.Context, capture capture.Capture) (*upstream.Upstream, error) {
-	var changefeedCfg struct {
-		UpstreamID uint64 `json:"upstream_id"`
-		ID         string `json:"changefeed_id"`
-		Namespace  string `json:"namespace"`
-		PDConfig
-	}
-	// Case 1, the upstream ID is specified in the request body.
-	err := ctx.ShouldBindJSON(&changefeedCfg)
-	if err != nil && err != io.EOF {
-		return nil, errors.Trace(err)
-	}
-
-	// Case 2, the upstream ID is not specified in the request body, try to get it from the changefeed info.
-	isUpstreamIDNotFound := changefeedCfg.UpstreamID == 0
-	if isUpstreamIDNotFound && changefeedCfg.ID != "" {
-		if changefeedCfg.Namespace == "" {
-			changefeedCfg.Namespace = model.DefaultNamespace
-		}
-		changefeedID := model.ChangeFeedID{
-			Namespace: changefeedCfg.Namespace,
-			ID:        changefeedCfg.ID,
-		}
-		cfInfo, _ := capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
-		if cfInfo != nil {
-			changefeedCfg.UpstreamID = cfInfo.UpstreamID
-		}
-	}
-
-	// Case 3, the upstream ID is not specified in the request body and the changefeed info, try to query it from PD.
-	isUpstreamIDNotFound = changefeedCfg.UpstreamID == 0
-	var upInfo *model.UpstreamInfo
-	if isUpstreamIDNotFound && len(changefeedCfg.PDAddrs) != 0 {
-		pdAddrs := changefeedCfg.PDAddrs
-		credential := changefeedCfg.toCredential()
-
-		grpcTLSOption, err := credential.ToGRPCDialOption()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		pdClient, err := pd.NewClientWithContext(
-			ctx, pdAddrs, credential.PDSecurityOption(),
-			pd.WithGRPCDialOptions(
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
-		}
-		id := pdClient.GetClusterID(ctx)
-
-		upInfo = &model.UpstreamInfo{
-			ID:            id,
-			PDEndpoints:   strings.Join(changefeedCfg.PDAddrs, ","),
-			KeyPath:       changefeedCfg.KeyPath,
-			CertPath:      changefeedCfg.CertPath,
-			CAPath:        changefeedCfg.CAPath,
-			CertAllowedCN: changefeedCfg.CertAllowedCN,
-		}
-	}
-
 	m, err := capture.GetUpstreamManager()
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-	up, ok := m.Get(changefeedCfg.UpstreamID)
-	if ok {
-		return up, nil
-	} else if upInfo != nil {
-		// upstream not found, and we have the upstream info, add it to the manager.
-		up = m.AddUpstream(upInfo)
-		return up, nil
 	}
 	return m.GetDefaultUpstream()
 }
