@@ -59,7 +59,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -741,7 +740,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							model.DefaultChangeFeedID("kafka-consumer"),
 							spanz.TableIDToComparableSpan(tableID),
 							events[0].CommitTs,
-							prometheus.NewCounter(prometheus.CounterOpts{}),
 						))
 					}
 					s, _ := sink.tableSinksMap.Load(tableID)

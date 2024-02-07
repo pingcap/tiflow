@@ -48,7 +48,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -506,8 +505,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					tableSink := c.sinkFactory.CreateTableSinkForConsumer(
 						model.DefaultChangeFeedID("pulsar-consumer"),
 						spanz.TableIDToComparableSpan(tableID),
-						events[0].CommitTs,
-						prometheus.NewCounter(prometheus.CounterOpts{}))
+						events[0].CommitTs)
 
 					log.Info("table sink created", zap.Any("tableID", tableID),
 						zap.Any("tableSink", tableSink.GetCheckpointTs()))
