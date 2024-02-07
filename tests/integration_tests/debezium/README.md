@@ -47,5 +47,7 @@ tiup cdc cli changefeed create \
 ```
 
 ```
-go run ./src
+go run ./src --db.mysql="root@tcp(127.0.0.1:3306)/{db}?allowNativePasswords=true" --cdc.kafka 127.0.0.1:9094
 ```
+
+
