@@ -15,6 +15,7 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -29,6 +30,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,15 +79,6 @@ func TestConfigFunctions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint32(101), cfg3.ServerID)
 
-	// test decrypt password
-	clone1.From.Password = "1234"
-	// fix empty map after marshal/unmarshal becomes nil
-	clone1.From.Session = cfg.From.Session
-	clone1.Tracer = map[string]interface{}{}
-	clone1.Filters = []*bf.BinlogEventRule{}
-	clone2 := cfg.DecryptPassword()
-	require.Equal(t, clone1, clone2)
-
 	cfg.From.Password = "xxx"
 	cfg.DecryptPassword()
 
@@ -129,6 +123,17 @@ aaa: xxx
 }
 
 func TestConfigVerify(t *testing.T) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	encryptedPass, err := utils.Encrypt("this is password")
+	require.NoError(t, err)
+
 	newConfig := func() *SourceConfig {
 		cfg, err := ParseYaml(SampleSourceConfig)
 		require.NoError(t, err)
@@ -136,13 +141,15 @@ func TestConfigVerify(t *testing.T) {
 		return cfg
 	}
 	testCases := []struct {
-		genFunc     func() *SourceConfig
-		errorFormat string
+		genFunc        func() *SourceConfig
+		expectPassword string
+		errorFormat    string
 	}{
 		{
 			func() *SourceConfig {
 				return newConfig()
 			},
+			"123456",
 			"",
 		},
 		{
@@ -151,6 +158,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.SourceID = ""
 				return cfg
 			},
+			"123456",
 			".*dm-worker should bind a non-empty source ID which represents a MySQL/MariaDB instance or a replica group.*",
 		},
 		{
@@ -159,6 +167,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.SourceID = "source-id-length-more-than-thirty-two"
 				return cfg
 			},
+			"123456",
 			fmt.Sprintf(".*the length of source ID .* is more than max allowed value %d.*", MaxSourceIDLength),
 		},
 		{
@@ -168,6 +177,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinLogName = "mysql-binlog"
 				return cfg
 			},
+			"123456",
 			".*not valid.*",
 		},
 		{
@@ -177,6 +187,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinLogName = "mysql-binlog"
 				return cfg
 			},
+			"123456",
 			".*not valid.*",
 		},
 		{
@@ -186,6 +197,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinlogGTID = "9afe121c-40c2-11e9-9ec7-0242ac110002:1-rtc"
 				return cfg
 			},
+			"123456",
 			".*relay-binlog-gtid 9afe121c-40c2-11e9-9ec7-0242ac110002:1-rtc:.*",
 		},
 		{
@@ -194,6 +206,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.From.Password = "not-encrypt"
 				return cfg
 			},
+			"not-encrypt",
 			"",
 		},
 		{
@@ -203,36 +216,54 @@ func TestConfigVerify(t *testing.T) {
 				return cfg
 			},
 			"",
-		},
-		{
-			func() *SourceConfig {
-				cfg := newConfig()
-				cfg.From.Password = "123456" // plaintext password
-				return cfg
-			},
 			"",
 		},
 		{
 			func() *SourceConfig {
 				cfg := newConfig()
-				cfg.From.Password = "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=" // encrypt password (123456)
+				cfg.From.Password = "aaaaaa" // plaintext password
 				return cfg
 			},
+			"aaaaaa",
+			"",
+		},
+		{
+			func() *SourceConfig {
+				cfg := newConfig()
+				cfg.From.Password = encryptedPass
+				return cfg
+			},
+			"this is password",
 			"",
 		},
 	}
 
-	for _, tc := range testCases {
-		cfg := tc.genFunc()
-		err := cfg.Verify()
-		if tc.errorFormat != "" {
-			require.Error(t, err)
-			lines := strings.Split(err.Error(), "\n")
-			require.Regexp(t, tc.errorFormat, lines[0])
-		} else {
-			require.NoError(t, err)
+	runCasesFn := func() {
+		for _, tc := range testCases {
+			cfg := tc.genFunc()
+			oldPass := cfg.From.Password
+			err := cfg.Verify()
+			if tc.errorFormat != "" {
+				require.Error(t, err)
+				lines := strings.Split(err.Error(), "\n")
+				require.Regexp(t, tc.errorFormat, lines[0])
+			} else {
+				require.NoError(t, err)
+			}
+			newCfg := cfg.DecryptPassword()
+			if encrypt.IsInitialized() {
+				require.Equal(t, tc.expectPassword, newCfg.From.Password)
+			} else {
+				require.Equal(t, oldPass, newCfg.From.Password)
+			}
 		}
 	}
+
+	require.True(t, encrypt.IsInitialized())
+	runCasesFn()
+	encrypt.InitCipher(nil)
+	require.False(t, encrypt.IsInitialized())
+	runCasesFn()
 }
 
 func TestSourceConfigForDowngrade(t *testing.T) {

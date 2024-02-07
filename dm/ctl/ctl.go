@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/ctl/master"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -113,6 +114,7 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 func Init(cfg *common.Config) error {
 	// set the log level temporarily
 	log.SetLevel(zapcore.InfoLevel)
+	encrypt.InitCipher(cfg.SecretKey)
 
 	return errors.Trace(common.InitUtils(cfg))
 }
@@ -191,32 +193,6 @@ func MainStart(args []string) {
 			os.Exit(0)
 		}
 
-		// Make it compatible to flags encrypt/decrypt
-		if encrypt, err := cmd.Flags().GetString(common.EncryptCmdName); err != nil {
-			return errors.Trace(err)
-		} else if encrypt != "" {
-			ciphertext, err := utils.Encrypt(encrypt)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			fmt.Println(ciphertext)
-			os.Exit(0)
-		}
-		if decrypt, err := cmd.Flags().GetString(common.DecryptCmdName); err != nil {
-			return errors.Trace(err)
-		} else if decrypt != "" {
-			plaintext, err := utils.Decrypt(decrypt)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			fmt.Println(plaintext)
-			os.Exit(0)
-		}
-
-		if cmd.Name() == common.DecryptCmdName || cmd.Name() == common.EncryptCmdName {
-			return nil
-		}
-
 		cfg := common.NewConfig(cmd.Flags())
 		err := cfg.Adjust()
 		if err != nil {
@@ -249,6 +225,9 @@ func newEncryptCmd() *cobra.Command {
 			if len(args) != 1 {
 				return cmd.Help()
 			}
+			if err := common.CheckSecretInitialized(); err != nil {
+				return err
+			}
 			ciphertext, err := utils.Encrypt(args[0])
 			if err != nil {
 				return errors.Trace(err)
@@ -266,6 +245,9 @@ func newDecryptCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return cmd.Help()
+			}
+			if err := common.CheckSecretInitialized(); err != nil {
+				return err
 			}
 			plaintext, err := utils.Decrypt(args[0])
 			if err != nil {

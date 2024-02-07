@@ -146,28 +146,91 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	}
 }
 
+func TestEncodeDDLSequence(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+
+			enc := b.Build()
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
+
+			createTableDDLEvent := helper.DDL2Event("CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
+			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+
+			event, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+
+			changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
+			m, err = enc.EncodeDDLEvent(changeColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+
+			modifyColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `value2` VARCHAR(512) FIRST")
+			m, err = enc.EncodeDDLEvent(modifyColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			helper.Tk().MustExec("drop table TBL1")
+		}
+	}
+}
+
 func TestEncodeDDLEvent(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
-
-	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
-	createTableDDLEvent := helper.DDL2Event(sql)
-	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDLEvent.TableInfo.Columns), func(i, j int) {
-		createTableDDLEvent.TableInfo.Columns[i], createTableDDLEvent.TableInfo.Columns[j] = createTableDDLEvent.TableInfo.Columns[j], createTableDDLEvent.TableInfo.Columns[i]
-	})
-
-	sql = `insert into test.t values (1, "jack", "male", "jack@abc.com")`
-	insertEvent := helper.DML2Event(sql, "test", "t")
-
-	sql = `rename table test.t to test.abc`
-	renameTableDDLEvent := helper.DDL2Event(sql)
-
-	sql = `insert into test.abc values (2, "anna", "female", "anna@abc.com")`
-	insertEvent2 := helper.DML2Event(sql, "test", "abc")
-
-	helper.Tk().MustExec("drop table test.abc")
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
@@ -190,6 +253,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
+			createTableSQL := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
+			createTableDDLEvent := helper.DDL2Event(createTableSQL)
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
 
@@ -208,26 +273,31 @@ func TestEncodeDDLEvent(t *testing.T) {
 			sort.Slice(sortedColumns, func(i, j int) bool {
 				return sortedColumns[i].ID < sortedColumns[j].ID
 			})
+
 			for idx, column := range sortedColumns {
 				require.Equal(t, column.Name.O, columnSchemas[idx].Name)
 			}
 
 			event, err := dec.NextDDLEvent()
+
 			require.NoError(t, err)
 			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
+
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
+
 			require.Equal(t, createTableDDLEvent.CommitTs, event.StartTs)
 			require.Equal(t, createTableDDLEvent.Query, event.Query)
 			require.Equal(t, len(createTableDDLEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-			require.Equal(t, len(createTableDDLEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
+			require.Equal(t, 2, len(event.TableInfo.Indices))
 			require.Nil(t, event.PreTableInfo)
 
 			item := dec.memo.Read(createTableDDLEvent.TableInfo.TableName.Schema,
 				createTableDDLEvent.TableInfo.TableName.Table, createTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
+			insertEvent := helper.DML2Event(`insert into test.t values (1, "jack", "male", "jack@abc.com")`, "test", "t")
 			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 			require.NoError(t, err)
 
@@ -250,6 +320,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
+			renameTableDDLEvent := helper.DDL2Event(`rename table test.t to test.abc`)
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
 			require.NoError(t, err)
 
@@ -278,6 +349,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 				renameTableDDLEvent.TableInfo.TableName.Table, renameTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
+			insertEvent2 := helper.DML2Event(`insert into test.abc values (2, "anna", "female", "anna@abc.com")`, "test", "abc")
 			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent2, func() {})
 			require.NoError(t, err)
 
@@ -299,6 +371,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), insertEvent2.TableInfo.GetSchemaName())
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent2.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
+
+			helper.Tk().MustExec("drop table test.abc")
 		}
 	}
 }

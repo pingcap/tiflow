@@ -87,7 +87,7 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 		err error
 	)
 	if event.IsBootstrap {
-		msg, err = newBootstrapMessage(event)
+		msg, err = newBootstrapMessage(event.TableInfo)
 	} else {
 		msg, err = newDDLMessage(event)
 	}
