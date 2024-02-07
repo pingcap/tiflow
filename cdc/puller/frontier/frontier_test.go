@@ -15,6 +15,8 @@ package frontier
 
 import (
 	"bytes"
+	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -390,4 +392,65 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	require.Equal(t, uint64(4), f.Frontier())
 	f.Forward(8, tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}, 5)
 	require.Equal(t, uint64(5), f.Frontier())
+}
+
+func TestFrontierEntries(t *testing.T) {
+	t.Parallel()
+
+	ab := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	bc := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	cd := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	de := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
+	ef := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	af := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("f")}
+	f := NewFrontier(0, af)
+
+	var slowestTs uint64 = math.MaxUint64
+	var slowestRange tablepb.Span
+	getSlowestRange := func() {
+		slowestTs = math.MaxUint64
+		slowestRange = tablepb.Span{}
+		f.Entries(func(key []byte, ts uint64) {
+			if ts < slowestTs {
+				slowestTs = ts
+				slowestRange.StartKey = key
+				slowestRange.EndKey = nil
+			} else if slowestTs != math.MaxUint64 && len(slowestRange.EndKey) == 0 {
+				slowestRange.EndKey = key
+			}
+		})
+	}
+
+	getSlowestRange()
+	require.Equal(t, uint64(0), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("f"), []byte(slowestRange.EndKey))
+
+	f.Forward(1, ab, 100)
+	f.Forward(2, bc, 200)
+	f.Forward(3, cd, 300)
+	f.Forward(4, de, 400)
+	f.Forward(5, ef, 500)
+	getSlowestRange()
+	require.Equal(t, uint64(100), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
+}
+
+func TestMergeSpitWithDifferentRegionID(t *testing.T) {
+	frontier := NewFrontier(100, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")})
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1222)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 102)
+	frontier.Forward(4, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 103)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")}, 104)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1223)
+	frontier.Forward(3, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 105)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 107)
+	frontier.(*spanFrontier).spanList.Entries(func(node *skipListNode) bool {
+		fmt.Printf("%d:[%s: %s) %d\n", node.regionID,
+			string(node.Key()),
+			string(node.End()), node.value.key)
+		return true
+	})
+	require.Equal(t, uint64(107), frontier.Frontier())
 }

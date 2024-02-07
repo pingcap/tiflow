@@ -47,7 +47,7 @@ func TestConnAndClientPool(t *testing.T) {
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	pool := newConnAndClientPool(&security.Credential{}, 2)
+	pool := newConnAndClientPool(&security.Credential{}, nil, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc1)
@@ -95,7 +95,7 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	pool := newConnAndClientPool(&security.Credential{}, 2)
+	pool := newConnAndClientPool(&security.Credential{}, nil, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc1)
@@ -106,11 +106,12 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 }
 
 func TestConnectToUnavailable(t *testing.T) {
+	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
+
 	targets := []string{"127.0.0.1:9999", "2.2.2.2:9999"}
 	for _, target := range targets {
 		ctx := context.Background()
-
-		conn, err := connect(ctx, &security.Credential{}, target)
+		conn, err := pool.connect(ctx, target)
 		require.NotNil(t, conn)
 		require.Nil(t, err)
 
@@ -136,7 +137,7 @@ func TestConnectToUnavailable(t *testing.T) {
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	conn, err := connect(context.Background(), &security.Credential{}, addr)
+	conn, err := pool.connect(context.Background(), addr)
 	require.NotNil(t, conn)
 	require.Nil(t, err)
 
@@ -148,6 +149,40 @@ func TestConnectToUnavailable(t *testing.T) {
 	_, err = client.Recv()
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 
+	require.Nil(t, conn.Close())
+}
+
+func TestCancelStream(t *testing.T) {
+	service := make(chan *grpc.Server, 1)
+	var addr string
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, runGrpcService(&srv{}, &addr, service))
+	}()
+
+	svc := <-service
+	require.NotNil(t, svc)
+	defer svc.GracefulStop()
+
+	connCtx, connCancel := context.WithCancel(context.Background())
+	defer connCancel()
+
+	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
+	conn, err := pool.connect(connCtx, addr)
+	require.NotNil(t, conn)
+	require.Nil(t, err)
+
+	rpcCtx, rpcCancel := context.WithCancel(context.Background())
+	rpc := cdcpb.NewChangeDataClient(conn)
+	client, err := rpc.EventFeed(rpcCtx)
+	require.Nil(t, err)
+
+	rpcCancel()
+	_, err = client.Recv()
+	require.Equal(t, grpccodes.Canceled, grpcstatus.Code(err))
 	require.Nil(t, conn.Close())
 }
 

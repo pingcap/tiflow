@@ -73,6 +73,8 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
+
+	scanRegionsConcurrency = 1024
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -376,9 +378,10 @@ func newEventFeedSession(
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
-	id := strconv.FormatUint(allocID(), 10)
+	id := allocID()
+	idStr := strconv.FormatUint(id, 10)
 	rangeLock := regionlock.NewRegionRangeLock(
-		totalSpan.StartKey, totalSpan.EndKey, startTs,
+		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
 		client:     client,
@@ -391,7 +394,7 @@ func newEventFeedSession(
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
-		id:                id,
+		id:                idStr,
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
@@ -431,6 +434,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	g.Go(func() error {
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(scanRegionsConcurrency)
 		for {
 			select {
 			case <-ctx.Done():
@@ -1011,7 +1016,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(parentCtx, s.changefeed, s, addr)
+	worker := newRegionWorker(parentCtx, s.changefeed, s, addr, pendingRegions)
 	defer worker.evictAllRegions()
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -1057,7 +1062,7 @@ func (s *eventFeedSession) receiveFromStream(
 			})
 			if err != nil {
 				if status.Code(errors.Cause(err)) == codes.Canceled {
-					log.Debug(
+					log.Info(
 						"receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
@@ -1326,7 +1331,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 }
 
 func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -1335,12 +1340,18 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		currTime := s.client.pdClock.CurrentTime()
 		attr := s.rangeLock.CollectLockedRangeAttrs(nil)
+		ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+		currTime := s.client.pdClock.CurrentTime()
+		log.Info("event feed starts to check locked regions",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName))
+
 		if attr.SlowestRegion.Initialized {
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
-				log.Info("event feed finds a slow region",
+				log.Info("event feed finds a initialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Int64("tableID", s.tableID),
@@ -1349,6 +1360,13 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 			}
 		} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
 			log.Info("event feed initializes a region too slow",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Any("slowRegion", attr.SlowestRegion))
+		} else if currTime.Sub(ckptTime) > 10*time.Minute {
+			log.Info("event feed finds a uninitialized slow region",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),

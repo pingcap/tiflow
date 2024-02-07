@@ -44,6 +44,7 @@ func StatusIsEOF(status *grpcstatus.Status) bool {
 // ConnAndClientPool is a pool of ConnAndClient.
 type ConnAndClientPool struct {
 	credential        *security.Credential
+	grpcMetrics       *grpc_prometheus.ClientMetrics
 	maxStreamsPerConn int
 
 	sync.Mutex
@@ -74,14 +75,23 @@ type connArray struct {
 }
 
 // NewConnAndClientPool creates a new ConnAndClientPool.
-func NewConnAndClientPool(credential *security.Credential, maxStreamsPerConn ...int) *ConnAndClientPool {
-	return newConnAndClientPool(credential, 1000)
+func NewConnAndClientPool(
+	credential *security.Credential,
+	grpcMetrics *grpc_prometheus.ClientMetrics,
+	maxStreamsPerConn ...int,
+) *ConnAndClientPool {
+	return newConnAndClientPool(credential, grpcMetrics, 1000)
 }
 
-func newConnAndClientPool(credential *security.Credential, maxStreamsPerConn int) *ConnAndClientPool {
+func newConnAndClientPool(
+	credential *security.Credential,
+	grpcMetrics *grpc_prometheus.ClientMetrics,
+	maxStreamsPerConn int,
+) *ConnAndClientPool {
 	stores := make(map[string]*connArray, 64)
 	return &ConnAndClientPool{
 		credential:        credential,
+		grpcMetrics:       grpcMetrics,
 		maxStreamsPerConn: maxStreamsPerConn,
 		stores:            stores,
 	}
@@ -105,7 +115,7 @@ func (c *ConnAndClientPool) Connect(ctx context.Context, addr string) (cc *ConnA
 
 		conns.Unlock()
 		var conn *Conn
-		if conn, err = conns.connect(ctx, c.credential); err != nil {
+		if conn, err = conns.connect(ctx); err != nil {
 			return
 		}
 		if conn != nil {
@@ -162,11 +172,11 @@ func (c *ConnAndClient) Release() {
 	}
 }
 
-func (c *connArray) connect(ctx context.Context, credential *security.Credential) (conn *Conn, err error) {
+func (c *connArray) connect(ctx context.Context) (conn *Conn, err error) {
 	if c.inConnecting.CompareAndSwap(false, true) {
 		defer c.inConnecting.Store(false)
 		var clientConn *grpc.ClientConn
-		if clientConn, err = connect(ctx, credential, c.addr); err != nil {
+		if clientConn, err = c.pool.connect(ctx, c.addr); err != nil {
 			return
 		}
 
@@ -240,21 +250,17 @@ func (c *connArray) sort(locked bool) {
 	})
 }
 
-func connect(ctx context.Context, credential *security.Credential, target string) (*grpc.ClientConn, error) {
-	grpcTLSOption, err := credential.ToGRPCDialOption()
+func (c *ConnAndClientPool) connect(ctx context.Context, target string) (*grpc.ClientConn, error) {
+	grpcTLSOption, err := c.credential.ToGRPCDialOption()
 	if err != nil {
 		return nil, err
 	}
 
-	return grpc.DialContext(
-		ctx,
-		target,
+	dialOptions := []grpc.DialOption{
 		grpcTLSOption,
 		grpc.WithInitialWindowSize(grpcInitialWindowSize),
 		grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxCallRecvMsgSize)),
-		grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
 				BaseDelay:  time.Second,
@@ -269,7 +275,14 @@ func connect(ctx context.Context, credential *security.Credential, target string
 			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
-	)
+	}
+
+	if c.grpcMetrics != nil {
+		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(c.grpcMetrics.UnaryClientInterceptor()))
+		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(c.grpcMetrics.StreamClientInterceptor()))
+	}
+
+	return grpc.DialContext(ctx, target, dialOptions...)
 }
 
 const (
@@ -289,8 +302,6 @@ const (
 	// 2. TiCDC can deregister all regions with a same request ID by specifying the `RequestId`.
 	rpcMetaFeatureStreamMultiplexing string = "stream-multiplexing"
 )
-
-var grpcMetrics = grpc_prometheus.NewClientMetrics()
 
 func getContextFromFeatures(ctx context.Context, features []string) context.Context {
 	return metadata.NewOutgoingContext(

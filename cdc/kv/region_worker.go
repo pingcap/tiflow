@@ -114,6 +114,8 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
+
+	pendingRegions *syncRegionFeedStateMap
 }
 
 func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
@@ -147,6 +149,7 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetric
 
 func newRegionWorker(
 	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
 		parentCtx:     ctx,
@@ -161,6 +164,8 @@ func newRegionWorker(
 		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
 		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
+
+		pendingRegions: pendingRegions,
 	}
 }
 
@@ -196,7 +201,7 @@ func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
-	if empty {
+	if empty && w.pendingRegions.len() == 0 {
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}

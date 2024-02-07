@@ -58,6 +58,7 @@ type tableSinkWrapper struct {
 		advanced     time.Time
 		resolvedTs   model.ResolvedTs
 		checkpointTs model.ResolvedTs
+		lastSyncedTs model.Ts
 	}
 
 	// state used to control the lifecycle of the table.
@@ -166,6 +167,11 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 			break
 		}
 	}
+	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
+		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
+		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
+		t.tableSink.advanced = time.Now()
+	}
 	t.state.Store(tablepb.TableStateReplicating)
 	return nil
 }
@@ -216,6 +222,15 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	defer t.tableSink.innerMu.Unlock()
 	t.tableSink.resolvedTs = ts
 	return t.tableSink.s.UpdateResolvedTs(ts)
+}
+
+func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	if t.tableSink.s != nil {
+		return t.tableSink.s.GetLastSyncedTs()
+	}
+	return t.tableSink.lastSyncedTs
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
@@ -357,10 +372,20 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 		t.tableSink.checkpointTs = checkpointTs
 	}
 	t.tableSink.resolvedTs = checkpointTs
+	t.tableSink.lastSyncedTs = t.tableSink.s.GetLastSyncedTs()
 	t.tableSink.advanced = time.Now()
 	t.tableSink.innerMu.Unlock()
 	t.tableSink.s = nil
 	t.tableSink.version = 0
+}
+
+func (t *tableSinkWrapper) checkTableSinkHealth() (err error) {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	if t.tableSink.s != nil {
+		err = t.tableSink.s.CheckHealth()
+	}
+	return
 }
 
 // When the attached sink fail, there can be some events that have already been
