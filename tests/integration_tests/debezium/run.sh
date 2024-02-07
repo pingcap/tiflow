@@ -21,8 +21,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-sleep 60 
-
 curl -i -X POST \
   -H "Accept:application/json" \
   -H "Content-Type:application/json" \
@@ -32,13 +30,13 @@ curl -i -X POST \
   "config": {
     "connector.class": "io.debezium.connector.mysql.MySqlConnector",
     "tasks.max": "1",
-    "database.hostname": "mysql",
-    "database.port": "3306",
+    "database.hostname": "127.0.0.1",
+    "database.port": "3310",
     "database.user": "debezium",
     "database.password": "dbz",
     "database.server.id": "184054",
     "topic.prefix": "dbserver1",
-    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+    "schema.history.internal.kafka.bootstrap.servers": "127.0.0.1:9092",
     "schema.history.internal.kafka.topic": "schemahistory.test",
     "transforms": "x",
     "transforms.x.type": "org.apache.kafka.connect.transforms.RegexRouter",
