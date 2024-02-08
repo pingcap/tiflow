@@ -17,12 +17,12 @@ function deploy_previous_v2() {
 	# install TiUP-DM
 	curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
 	source /root/.profile
-	tiup install dm >> $tiup_dm_operation_log
+	tiup install dm >>$tiup_dm_operation_log
 
-	tiup install dmctl:$PRE_VER >> $tiup_dm_operation_log
+	tiup install dmctl:$PRE_VER >>$tiup_dm_operation_log
 
-	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >> $tiup_dm_operation_log
-	tiup dm start --yes $CLUSTER_NAME >> $tiup_dm_operation_log
+	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >>$tiup_dm_operation_log
+	tiup dm start --yes $CLUSTER_NAME >>$tiup_dm_operation_log
 }
 
 function migrate_in_previous_v2() {
@@ -69,7 +69,7 @@ function migrate_in_previous_v2() {
 function upgrade_to_current_v2() {
 	tiup uninstall dmctl --all
 
-	tiup install dmctl:v7.5.0 >> $tiup_dm_operation_log
+	tiup install dmctl:v7.5.0 >>$tiup_dm_operation_log
 	# config export in PRE_VER
 	# on version >= 8.0.0, the `config export` command will connect to the master
 	# and fetch the config which previous version doesn't support, so we fix the version to 7.5.0
@@ -82,7 +82,7 @@ function upgrade_to_current_v2() {
 	# uninstall previous dmctl, otherwise dmctl:nightly still use PRE_VER.
 	# FIXME: It may be a bug in tiup mirror.
 
-	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER >> $tiup_dm_operation_log
+	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER >>$tiup_dm_operation_log
 
 	restart_relay
 }
@@ -140,13 +140,13 @@ function downgrade_to_previous_v2() {
 	echo "downgrade to previous version $PRE_VER"
 
 	# destory current cluster
-	tiup dm destroy --yes $CLUSTER_NAME >> $tiup_dm_operation_log
+	tiup dm destroy --yes $CLUSTER_NAME >>$tiup_dm_operation_log
 
 	exec_incremental_stage3
 
 	# deploy previous cluster
-	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >> $tiup_dm_operation_log
-	tiup dm start --yes $CLUSTER_NAME >> $tiup_dm_operation_log
+	tiup dm deploy --yes $CLUSTER_NAME $PRE_VER $CUR/conf/topo.yaml >>$tiup_dm_operation_log
+	tiup dm start --yes $CLUSTER_NAME >>$tiup_dm_operation_log
 
 	# config import
 	tiup dmctl:$CUR_VER --master-addr=master1:8261 config import -d new_configs
@@ -166,7 +166,7 @@ function downgrade_to_previous_v2() {
 function destroy_v2_by_tiup() {
 	export DM_MASTER_ADDR="master1:8261"
 	tiup dmctl:$CUR_VER stop-task $TASK_NAME
-	tiup dm destroy --yes $CLUSTER_NAME >> $tiup_dm_operation_log
+	tiup dm destroy --yes $CLUSTER_NAME >>$tiup_dm_operation_log
 }
 
 function test() {
