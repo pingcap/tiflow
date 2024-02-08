@@ -159,7 +159,16 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		&tikv.RPCContext{}), 0)
 	state.sri.lockedRange = &regionlock.LockedRange{}
 	state.start()
+<<<<<<< HEAD
 	worker := newRegionWorker(ctx, model.ChangeFeedID{}, s, "", newSyncRegionFeedStateMap())
+=======
+	stream := &eventFeedStream{
+		storeID: 1,
+		id:      2,
+		regions: newSyncRegionFeedStateMap(),
+	}
+	worker := newRegionWorker(ctx, stream, s)
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	require.Equal(t, 2, cap(worker.outputCh))
 
 	// Receive prewrite2 with empty value.
@@ -322,7 +331,16 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 	s1.sri.lockedRange = &regionlock.LockedRange{}
 	s1.sri.lockedRange.CheckpointTs.Store(9)
 	s1.start()
+<<<<<<< HEAD
 	w := newRegionWorker(ctx, model.ChangeFeedID{}, s, "", newSyncRegionFeedStateMap())
+=======
+	stream := &eventFeedStream{
+		storeID: 1,
+		id:      2,
+		regions: newSyncRegionFeedStateMap(),
+	}
+	w := newRegionWorker(ctx, stream, s)
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 5,
