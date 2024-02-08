@@ -16,12 +16,3 @@ master_servers:
 worker_servers:
   - host: 172.28.0.111
   - host: 172.28.0.112
-
-monitoring_servers:
-  - host: 172.28.0.121
-
-grafana_servers:
-  - host: 172.28.0.121
-
-alertmanager_servers:
-  - host: 172.28.0.121

@@ -102,11 +102,11 @@ services:
       dm-tiup:
         ipv4_address: 172.28.0.112
 
-  monitor: # node for deploy Prometheus and Grafana
-    <<: *default-node
-    container_name: monitor
-    hostname: monitor
-    networks:
-      dm-tiup:
-        ipv4_address: 172.28.0.121
+#  monitor: # node for deploy Prometheus and Grafana
+#    <<: *default-node
+#    container_name: monitor
+#    hostname: monitor
+#    networks:
+#      dm-tiup:
+#        ipv4_address: 172.28.0.121
 
