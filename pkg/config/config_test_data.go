@@ -142,6 +142,7 @@ const (
     "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
+    "advance-interval-in-ms": 300,
     "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
