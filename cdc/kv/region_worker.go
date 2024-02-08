@@ -109,12 +109,17 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
+<<<<<<< HEAD
 	storeAddr string
 
 	// how many pending input events
 	inputPending int32
 
 	pendingRegions *syncRegionFeedStateMap
+=======
+	// how many pending input events from the input channel
+	inputPendingEvents int32
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 }
 
 func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
@@ -147,6 +152,7 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetric
 }
 
 func newRegionWorker(
+<<<<<<< HEAD
 	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
 	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
@@ -165,6 +171,25 @@ func newRegionWorker(
 		inputPending:  0,
 
 		pendingRegions: pendingRegions,
+=======
+	ctx context.Context,
+	stream *eventFeedStream,
+	s *eventFeedSession,
+) *regionWorker {
+	return &regionWorker{
+		parentCtx:          ctx,
+		session:            s,
+		inputCh:            make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:           s.eventCh,
+		stream:             stream,
+		errorCh:            make(chan error, 1),
+		statesManager:      newRegionStateManager(-1),
+		rtsManager:         newRegionTsManager(),
+		rtsUpdateCh:        make(chan *rtsUpdateEvent, 1024),
+		concurrency:        int(s.client.config.KVClient.WorkerConcurrent),
+		metrics:            newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		inputPendingEvents: 0,
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	}
 }
 
@@ -200,7 +225,20 @@ func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
+<<<<<<< HEAD
 	if empty && w.pendingRegions.len() == 0 {
+=======
+	if empty && w.stream.regions.len() == 0 {
+		log.Info("A single region error happens before, "+
+			"and there is no region maintained by the stream, "+
+			"exit it and cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.stream.addr),
+			zap.Uint64("streamID", w.stream.id),
+			zap.Int64("tableID", w.session.tableID),
+			zap.String("tableName", w.session.tableName))
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
@@ -471,6 +509,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		regionEventsBatchSize.Observe(float64(len(events)))
 
+<<<<<<< HEAD
 		inputPending := atomic.LoadInt32(&w.inputPending)
 		if highWatermarkMet {
 			highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
@@ -520,6 +559,25 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// ensure low processing latency.
 			for _, event := range events {
 				err = w.processEvent(ctx, event)
+=======
+			start := time.Now()
+			inputPending := atomic.LoadInt32(&w.inputPendingEvents)
+			if highWatermarkMet {
+				highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
+			} else {
+				highWatermarkMet = int(inputPending) >= regionWorkerHighWatermark
+			}
+			atomic.AddInt32(&w.inputPendingEvents, -int32(len(events)))
+
+			if highWatermarkMet {
+				// All events in one batch can be hashed into one handle slot.
+				slot := w.inputCalcSlot(events[0].regionID)
+				eventsX := make([]interface{}, 0, len(events))
+				for _, event := range events {
+					eventsX = append(eventsX, event)
+				}
+				err := w.handles[slot].AddEvents(ctx, eventsX)
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 				if err != nil {
 					return err
 				}
@@ -566,6 +624,7 @@ func (w *regionWorker) checkErrorReconnect(err error) error {
 }
 
 func (w *regionWorker) cancelStream(delay time.Duration) {
+<<<<<<< HEAD
 	cancel, ok := w.session.getStreamCancel(w.storeAddr)
 	if ok {
 		// cancel the stream to trigger strem.Recv with context cancel error
@@ -581,6 +640,17 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 			zap.String("namespace", w.session.client.changefeed.Namespace),
 			zap.String("changefeed", w.session.client.changefeed.ID))
 	}
+=======
+	// cancel the stream to make strem.Recv returns a context cancel error
+	// This will make the receiveFromStream goroutine exit and the stream can
+	// be re-established by the caller.
+	// Note: use context cancel is the only way to terminate a gRPC stream.
+	w.stream.close()
+	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+	// should be called after stream has been deleted. Add a delay here
+	// to avoid too frequent region rebuilt.
+	time.Sleep(delay)
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 }
 
 func (w *regionWorker) run() error {
@@ -839,10 +909,10 @@ func (w *regionWorker) evictAllRegions() {
 // sendEvents puts events into inputCh and updates some internal states.
 // Callers must ensure that all items in events can be hashed into one handle slot.
 func (w *regionWorker) sendEvents(ctx context.Context, events []*regionStatefulEvent) error {
-	atomic.AddInt32(&w.inputPending, int32(len(events)))
+	atomic.AddInt32(&w.inputPendingEvents, int32(len(events)))
 	select {
 	case <-ctx.Done():
-		atomic.AddInt32(&w.inputPending, -int32(len(events)))
+		atomic.AddInt32(&w.inputPendingEvents, -int32(len(events)))
 		return ctx.Err()
 	case w.inputCh <- events:
 		return nil
