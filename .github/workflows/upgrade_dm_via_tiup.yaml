@@ -24,7 +24,7 @@ concurrency:
 jobs:
   from_v1:
     name: From V1
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
 
