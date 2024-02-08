@@ -25,6 +25,9 @@ jobs:
   from_v1:
     name: From V1
     runs-on: ubuntu-20.04
+    # skip it now, the ansible script fails with "Could not find the requested service prometheus-9090.service: host"
+    # TODO enable it later.
+    if: ${{ false }}
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
 
