@@ -139,6 +139,8 @@ func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 type eventFeedStream struct {
 	client cdcpb.ChangeData_EventFeedClient
 	conn   *sharedConn
+	// regions is used to store the state of the regions that are being processed by the stream.
+	regions *syncRegionFeedStateMap
 	// addr is the address of the TiKV store
 	addr string
 	// storeID is the ID of the TiKV store
@@ -146,7 +148,15 @@ type eventFeedStream struct {
 	// id is the stream ID, which is used to identify the stream.
 	id uint64
 	// cancel is used to cancel the gRPC stream
-	cancel context.CancelFunc
+	cancel     context.CancelFunc
+	isCanceled atomic.Bool
+	createTime time.Time
+}
+
+func (s *eventFeedStream) close() {
+	if s.isCanceled.CompareAndSwap(false, true) {
+		s.cancel()
+	}
 }
 
 // CDCKVClient is an interface to receives kv changed logs from TiKV
@@ -245,59 +255,58 @@ func NewCDCClient(
 
 func (c *CDCClient) newStream(
 	ctx context.Context,
-	cancel context.CancelFunc,
 	addr string,
 	storeID uint64,
-) (stream *eventFeedStream, newStreamErr error) {
-	streamFunc := func() (err error) {
-		var conn *sharedConn
-		defer func() {
-			if err != nil && conn != nil {
-				c.grpcPool.ReleaseConn(conn, addr)
-			}
-		}()
-		conn, err = c.grpcPool.GetConn(addr)
-		if err != nil {
-			return errors.Trace(err)
+) (stream *eventFeedStream, err error) {
+	var conn *sharedConn
+	defer func() {
+		if err != nil && conn != nil {
+			c.grpcPool.ReleaseConn(conn, addr)
 		}
-		err = version.CheckStoreVersion(ctx, c.pd, storeID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		client := cdcpb.NewChangeDataClient(conn.ClientConn)
-		var streamClient cdcpb.ChangeData_EventFeedClient
-		streamClient, err = client.EventFeed(ctx)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrTiKVEventFeed, err)
-		}
-		stream = &eventFeedStream{
-			client:  streamClient,
-			conn:    conn,
-			addr:    addr,
-			storeID: storeID,
-			id:      allocateStreamID(),
-			cancel:  cancel,
-		}
-		log.Info("created stream to store",
-			zap.String("namespace", c.changefeed.Namespace),
-			zap.String("changefeed", c.changefeed.ID),
-			zap.Int64("tableID", c.tableID),
-			zap.String("tableName", c.tableName),
-			zap.String("store", addr),
-			zap.Uint64("storeID", storeID),
-			zap.Uint64("streamID", stream.id))
-		return nil
+	}()
+
+	conn, err = c.grpcPool.GetConn(addr)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-	if c.config.Debug.EnableKVConnectBackOff {
-		newStreamErr = retry.Do(ctx, streamFunc,
-			retry.WithBackoffBaseDelay(100),
-			retry.WithMaxTries(2),
-			retry.WithIsRetryableErr(cerror.IsRetryableError),
-		)
-		return
+
+	ctx, cancel := context.WithCancel(ctx)
+	err = version.CheckStoreVersion(ctx, c.pd, storeID)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
 	}
-	newStreamErr = streamFunc()
-	return
+
+	client := cdcpb.NewChangeDataClient(conn.ClientConn)
+	var streamClient cdcpb.ChangeData_EventFeedClient
+
+	streamClient, err = client.EventFeed(ctx)
+	if err != nil {
+		cancel()
+		return nil, cerror.WrapError(cerror.ErrTiKVEventFeed, err)
+	}
+
+	stream = &eventFeedStream{
+		client:     streamClient,
+		conn:       conn,
+		regions:    newSyncRegionFeedStateMap(),
+		addr:       addr,
+		storeID:    storeID,
+		id:         allocateStreamID(),
+		cancel:     cancel,
+		isCanceled: atomic.Bool{},
+		createTime: time.Now(),
+	}
+
+	log.Info("created stream to store",
+		zap.String("namespace", c.changefeed.Namespace),
+		zap.String("changefeed", c.changefeed.ID),
+		zap.Int64("tableID", c.tableID),
+		zap.String("tableName", c.tableName),
+		zap.String("store", addr),
+		zap.Uint64("storeID", storeID),
+		zap.Uint64("streamID", stream.id))
+	return stream, nil
 }
 
 // EventFeed divides a EventFeed request on range boundaries and establishes
@@ -400,14 +409,9 @@ type eventFeedSession struct {
 	rangeChSizeGauge   prometheus.Gauge
 
 	// storeStreamsCache is used to cache the established gRPC streams to TiKV stores.
-	storeStreamsCache struct {
-		sync.RWMutex
-		m map[string]*eventFeedStream
-		// lastAlterTime is used to record last time a stream is created/deleted to/from the cache.
-		// It is used to avoid creation/deleting streams too frequently, which may cause
-		// huge overhead of incremental region scanning in TiKV.
-		lastAlterTime map[string]time.Time
-	}
+	// Note: The cache is not thread-safe, so it should be accessed in the same goroutine.
+	// For now, it is only accessed in the `requestRegionToStore` goroutine.
+	storeStreamsCache map[string]*eventFeedStream
 
 	// use sync.Pool to store resolved ts event only, because resolved ts event
 	// has the same size and generate cycle.
@@ -430,13 +434,13 @@ func newEventFeedSession(
 	rangeLock := regionlock.NewRegionRangeLock(
 		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
-	res := &eventFeedSession{
-		client:     client,
-		startTs:    startTs,
-		changefeed: client.changefeed,
-		tableID:    client.tableID,
-		tableName:  client.tableName,
-
+	return &eventFeedSession{
+		client:             client,
+		startTs:            startTs,
+		changefeed:         client.changefeed,
+		tableID:            client.tableID,
+		tableName:          client.tableName,
+		storeStreamsCache:  make(map[string]*eventFeedStream),
 		totalSpan:          totalSpan,
 		eventCh:            eventCh,
 		rangeLock:          rangeLock,
@@ -456,9 +460,6 @@ func newEventFeedSession(
 			},
 		},
 	}
-	res.storeStreamsCache.m = make(map[string]*eventFeedStream)
-	res.storeStreamsCache.lastAlterTime = make(map[string]time.Time)
-	return res
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context) error {
@@ -637,11 +638,6 @@ func (s *eventFeedSession) requestRegionToStore(
 	ctx context.Context,
 	g *errgroup.Group,
 ) error {
-	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
-	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
-	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
-	storePendingRegions := make(map[uint64]*syncRegionFeedStateMap)
-
 	header := &cdcpb.Header{
 		ClusterId:    s.client.clusterID,
 		TicdcVersion: version.ReleaseSemver(),
@@ -678,18 +674,18 @@ func (s *eventFeedSession) requestRegionToStore(
 		// each TiKV store has an independent pendingRegions.
 		storeAddr := rpcCtx.Addr
 		storeID := rpcCtx.Peer.GetStoreId()
+
 		var (
 			stream *eventFeedStream
 			err    error
 		)
-		stream, ok := s.getStream(storeAddr)
-		if !ok {
-			// when a new stream is established, always create a new pending
-			// regions map, the old map will be used in old `receiveFromStream`
-			// and won't be deleted until that goroutine exits.
-			pendingRegions := newSyncRegionFeedStateMap()
-			streamCtx, streamCancel := context.WithCancel(ctx)
-			stream, err = s.client.newStream(streamCtx, streamCancel, storeAddr, storeID)
+		stream, ok := s.storeStreamsCache[storeAddr]
+		if !ok || stream.isCanceled.Load() {
+			if ok {
+				// If the stream is canceled, we need to delete it from the cache and close it.
+				s.deleteStream(stream)
+			}
+			stream, err = s.client.newStream(ctx, storeAddr, storeID)
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
@@ -715,8 +711,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				continue
 			}
 
-			storePendingRegions[stream.id] = pendingRegions
 			s.addStream(stream)
+
 			log.Info("creating new stream to store to send request",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -727,29 +723,13 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Uint64("storeID", storeID),
 				zap.String("store", storeAddr),
 				zap.Uint64("streamID", stream.id))
-
 			g.Go(func() error {
-				return s.receiveFromStream(ctx, stream, pendingRegions)
+				return s.receiveFromStream(ctx, stream)
 			})
 		}
 
-		pendingRegions, ok := storePendingRegions[stream.id]
-		if !ok {
-			// Should never happen
-			log.Error("pending regions is not found for store",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Int64("tableID", s.tableID),
-				zap.String("tableName", s.tableName),
-				zap.Uint64("storeID", storeID),
-				zap.String("store", storeAddr),
-				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Uint64("requestID", requestID))
-			return cerror.ErrUnexpected.FastGenByArgs("pending regions is not found for store")
-		}
-
 		state := newRegionFeedState(sri, requestID)
-		pendingRegions.setByRequestID(requestID, state)
+		stream.regions.setByRequestID(requestID, state)
 		s.client.logRegionDetails("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -762,8 +742,6 @@ func (s *eventFeedSession) requestRegionToStore(
 			zap.Stringer("span", &sri.span))
 
 		err = stream.client.Send(req)
-		// If Send returns an error, the stream.client.Recv (In s.receiveFromStream)
-		// would also receive an error.
 		if err != nil {
 			log.Warn("send request to stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -787,18 +765,13 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("store", storeAddr),
 					zap.Error(err))
 			}
-			// Delete the stream from the cache so that when next time the store is accessed,
-			// the stream can be re-established.
-			s.deleteStream(stream)
-			// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
-			// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
-			// pending regions, the new pending regions that are requested after reconnecting won't be stopped
-			// incorrectly.
-			delete(storePendingRegions, stream.id)
 
+			// Delete the stream from the cache so that when next time a region of
+			// this store is requested, a new stream to this store will be created.
+			s.deleteStream(stream)
 			// Remove the region from pendingRegions. If it's already removed, it should be already retried by
 			// `receiveFromStream`, so no need to retry here.
-			_, ok := pendingRegions.takeByRequestID(requestID)
+			_, ok := stream.regions.takeByRequestID(requestID)
 			if !ok {
 				continue
 			}
@@ -1059,7 +1032,6 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 func (s *eventFeedSession) receiveFromStream(
 	parentCtx context.Context,
 	stream *eventFeedStream,
-	pendingRegions *syncRegionFeedStateMap,
 ) error {
 	var tsStat *tableStoreStat
 	s.client.tableStoreStats.Lock()
@@ -1085,7 +1057,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		failpoint.Inject("kvClientStreamCloseDelay", nil)
 
-		remainingRegions := pendingRegions.takeAll()
+		remainingRegions := stream.regions.takeAll()
 		for _, state := range remainingRegions {
 			s.client.logRegionDetails("region canceled",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1108,11 +1080,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(
-		parentCtx,
-		stream,
-		s,
-		pendingRegions)
+	worker := newRegionWorker(parentCtx, stream, s)
 	defer worker.evictAllRegions()
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -1246,7 +1214,7 @@ func (s *eventFeedSession) receiveFromStream(
 				maxCommitTs = commitTs
 			}
 
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, stream.regions)
 			if err != nil {
 				return err
 			}
@@ -1422,34 +1390,41 @@ func (s *eventFeedSession) sendResolvedTs(
 	return nil
 }
 
+// addStream adds a stream to the session.streams.
+// Note: It must be called with deleteStream in a same goroutine.
 func (s *eventFeedSession) addStream(stream *eventFeedStream) {
-	s.storeStreamsCache.Lock()
-	defer s.storeStreamsCache.Unlock()
-	if lastTime, ok := s.storeStreamsCache.lastAlterTime[stream.addr]; ok {
-		if time.Since(lastTime) < streamAlterInterval {
-			log.Warn(
-				"add a stream of a same store too frequently, wait a while and try again",
+	oldStream, ok := s.storeStreamsCache[stream.addr]
+	if ok {
+		failpoint.Inject("kvClientAddDuplicatedStream", func() {
+			log.Error("A stream to a same store already exists, it shouldn't happen, please report a bug",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
-				zap.Uint64("storeID", stream.storeID),
-				zap.Duration("sinceLastTime", time.Since(lastTime)))
-			time.Sleep(streamAlterInterval - time.Since(lastTime))
-		}
+				zap.Uint64("oldStreamID", oldStream.id),
+				zap.Uint64("newStreamID", stream.id))
+		})
+		// There is no need to return an error here because even if it happens,
+		// it does not harm the data correctness, but may only cause some lag spikes.
+		// Log it to help us improve the code.
+		log.Error("A stream to a same store already exists, it shouldn't happen, please report a bug",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Uint64("oldStreamID", oldStream.id),
+			zap.Uint64("newStreamID", stream.id))
 	}
-	s.storeStreamsCache.m[stream.addr] = stream
-	s.storeStreamsCache.lastAlterTime[stream.addr] = time.Now()
+	s.storeStreamsCache[stream.addr] = stream
 }
 
 // deleteStream deletes a stream from the session.streams.
-// If the stream is not found, it will be ignored.
+// If the stream is not found, it takes no effect.
 func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
-	s.storeStreamsCache.Lock()
-	defer s.storeStreamsCache.Unlock()
-
-	streamInMap, ok := s.storeStreamsCache.m[streamToDelete.addr]
+	streamInMap, ok := s.storeStreamsCache[streamToDelete.addr]
 	if !ok {
+		// This should not happen, but it will be no harm if it happens.
+		// Log a warning message to help us diagnose the problem.
 		log.Warn("delete stream failed, stream not found, ignore it",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -1459,8 +1434,9 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 			zap.Uint64("streamIDInMap", streamInMap.id))
 		return
 	}
-
 	if streamInMap.id != streamToDelete.id {
+		// This should not happen, but it will be no harm if it happens.
+		// Log a warning message to help us diagnose the problem.
 		log.Warn("delete stream failed, stream id mismatch, ignore it",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -1471,25 +1447,20 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 		return
 	}
 
-	if lastTime, ok := s.storeStreamsCache.lastAlterTime[streamToDelete.addr]; ok {
-		if time.Since(lastTime) < streamAlterInterval {
-			log.Warn(
-				"delete a stream of a same store too frequently, wait a while and try again",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Int64("tableID", s.tableID),
-				zap.String("tableName", s.tableName),
-				zap.Uint64("streamID", streamToDelete.id),
-				zap.Duration("sinceLastTime", time.Since(lastTime)))
-			time.Sleep(streamAlterInterval - time.Since(lastTime))
-		}
+	if time.Since(streamToDelete.createTime) < streamAlterInterval {
+		log.Warn("It's too soon to delete a stream, wait for a while",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Uint64("streamID", streamToDelete.id),
+			zap.Duration("sinceCreateDuration", time.Since(streamToDelete.createTime)))
+		time.Sleep(streamAlterInterval - time.Since(streamToDelete.createTime))
 	}
 
 	s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
-	delete(s.storeStreamsCache.m, streamToDelete.addr)
-	streamToDelete.cancel()
-	s.storeStreamsCache.lastAlterTime[streamToDelete.addr] = time.Now()
-
+	streamToDelete.close()
+	delete(s.storeStreamsCache, streamToDelete.addr)
 	log.Info("A stream to store has been removed",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
@@ -1497,14 +1468,8 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 		zap.String("tableName", s.tableName),
 		zap.String("store", streamToDelete.addr),
 		zap.Uint64("storeID", streamToDelete.storeID),
-		zap.Uint64("streamID", streamToDelete.id))
-}
-
-func (s *eventFeedSession) getStream(storeAddr string) (stream *eventFeedStream, ok bool) {
-	s.storeStreamsCache.RLock()
-	defer s.storeStreamsCache.RUnlock()
-	stream, ok = s.storeStreamsCache.m[storeAddr]
-	return
+		zap.Uint64("streamID", streamToDelete.id),
+		zap.Duration("sinceCreateDuration", time.Since(streamToDelete.createTime)))
 }
 
 func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
