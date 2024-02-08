@@ -67,12 +67,6 @@ function migrate_in_previous_v2() {
 }
 
 function upgrade_to_current_v2() {
-	if [[ "$CUR_VER" == "nightly" && ("$ref" == "refs/pull"* || "$id" != "") ]]; then
-		patch_nightly_with_tiup_mirror $PRE_VER
-	fi
-
-	# uninstall previous dmctl, otherwise dmctl:nightly still use PRE_VER.
-	# FIXME: It may be a bug in tiup mirror.
 	tiup uninstall dmctl --all
 
 	tiup install dmctl:v7.5.0 >> $tiup_dm_operation_log
@@ -80,6 +74,13 @@ function upgrade_to_current_v2() {
 	# on version >= 8.0.0, the `config export` command will connect to the master
 	# and fetch the config which previous version doesn't support, so we fix the version to 7.5.0
 	tiup dmctl:v7.5.0 --master-addr=master1:8261 config export -d old_configs
+
+	if [[ "$CUR_VER" == "nightly" && ("$ref" == "refs/pull"* || "$id" != "") ]]; then
+		patch_nightly_with_tiup_mirror $PRE_VER
+	fi
+
+	# uninstall previous dmctl, otherwise dmctl:nightly still use PRE_VER.
+	# FIXME: It may be a bug in tiup mirror.
 
 	tiup dm upgrade --yes $CLUSTER_NAME $CUR_VER >> $tiup_dm_operation_log
 
