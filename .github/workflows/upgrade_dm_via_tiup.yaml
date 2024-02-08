@@ -77,11 +77,7 @@ jobs:
       fail-fast: false
       matrix:
         previous_v2:
-          # versions <= 7.5 have been verified to work, starting from v8.0.0, we
-          # won't test upgrade from v2 to >= v8.x, as tiup doesn't support components
-          # like grafana below version v3.0.0.
-          # user can upgrade from v2 to version below v8.0.0, and then upgrade to v8.0.0+.
-          ["v5.3.0"]
+          ["v2.0.1", "v2.0.7", "v5.3.0"]
 
     steps:
       - name: Set up Go env
