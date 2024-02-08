@@ -263,7 +263,10 @@ func (c *CDCClient) newStream(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+<<<<<<< HEAD
 
+=======
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	err = version.CheckStoreVersion(ctx, c.pd, storeID)
 	if err != nil {
 		cancel()
@@ -272,6 +275,10 @@ func (c *CDCClient) newStream(
 
 	client := cdcpb.NewChangeDataClient(conn.ClientConn)
 	var streamClient cdcpb.ChangeData_EventFeedClient
+<<<<<<< HEAD
+=======
+
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	streamClient, err = client.EventFeed(ctx)
 	if err != nil {
 		cancel()
@@ -298,7 +305,10 @@ func (c *CDCClient) newStream(
 		zap.String("store", addr),
 		zap.Uint64("storeID", storeID),
 		zap.Uint64("streamID", stream.id))
+<<<<<<< HEAD
 
+=======
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	return stream, nil
 }
 
@@ -427,7 +437,10 @@ func newEventFeedSession(
 	rangeLock := regionspan.NewRegionRangeLock(
 		id, totalSpan.Start, totalSpan.End, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
+<<<<<<< HEAD
 
+=======
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	return &eventFeedSession{
 		client:             client,
 		startTs:            startTs,
@@ -667,6 +680,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		// each TiKV store has an independent pendingRegions.
 		storeAddr := rpcCtx.Addr
 		storeID := rpcCtx.Peer.GetStoreId()
+
 		var (
 			stream *eventFeedStream
 			err    error
@@ -701,7 +715,12 @@ func (s *eventFeedSession) requestRegionToStore(
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
+<<<<<<< HEAD
+=======
+
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 			s.addStream(stream)
+
 			log.Info("creating new stream to store to send request",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -710,7 +729,6 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Uint64("storeID", storeID),
 				zap.String("store", storeAddr),
 				zap.Uint64("streamID", stream.id))
-
 			g.Go(func() error {
 				return s.receiveFromStream(ctx, stream)
 			})
@@ -718,7 +736,11 @@ func (s *eventFeedSession) requestRegionToStore(
 
 		state := newRegionFeedState(sri, requestID)
 		stream.regions.setByRequestID(requestID, state)
+<<<<<<< HEAD
 		log.Debug("start new request",
+=======
+		s.client.logRegionDetails("start new request",
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
@@ -727,8 +749,6 @@ func (s *eventFeedSession) requestRegionToStore(
 			zap.String("addr", storeAddr))
 
 		err = stream.client.Send(req)
-		// If Send returns an error, the stream.client.Recv (In s.receiveFromStream)
-		// would also receive an error.
 		if err != nil {
 			log.Warn("send request to stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1186,7 +1206,12 @@ func (s *eventFeedSession) receiveFromStream(
 					}
 				}
 			}
+<<<<<<< HEAD
 			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker)
+=======
+
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, stream.regions)
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 			if err != nil {
 				return err
 			}

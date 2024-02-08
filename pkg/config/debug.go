@@ -45,9 +45,14 @@ type DebugConfig struct {
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
+<<<<<<< HEAD
 	// EnableNewSink enables the new sink.
 	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
+=======
+	// CDCV2 enables ticdc version 2 implementation with new metastore
+	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`

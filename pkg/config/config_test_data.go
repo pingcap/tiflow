@@ -161,7 +161,19 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
+<<<<<<< HEAD
     "enable-new-sink": true,
+=======
+    "cdc-v2": {
+      "enable": false,
+      "meta-store": {
+        "uri": "",
+        "ssl-ca": "",
+        "ssl-cert": "",
+        "ssl-key": ""
+      }
+    },
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
     "puller": {
       "enable-resolved-ts-stuck-detection": false,
       "resolved-ts-stuck-interval": 300000000000

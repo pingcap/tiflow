@@ -1381,6 +1381,10 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientAddDuplicatedStream")
 	}()
+<<<<<<< HEAD
+=======
+
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError", failpointStr)
 	require.Nil(t, err)
 	defer func() {

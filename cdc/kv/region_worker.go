@@ -163,7 +163,11 @@ func newRegionWorker(
 		statesManager:      newRegionStateManager(-1),
 		rtsManager:         newRegionTsManager(),
 		rtsUpdateCh:        make(chan *rtsUpdateEvent, 1024),
+<<<<<<< HEAD
 		concurrency:        s.client.config.KVClient.WorkerConcurrent,
+=======
+		concurrency:        int(s.client.config.KVClient.WorkerConcurrent),
+>>>>>>> a609ffc488 (kv (ticdc): Improve the codebase of kvClient. (#10585))
 		metrics:            newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
 		inputPendingEvents: 0,
 	}
@@ -203,7 +207,7 @@ func (w *regionWorker) checkShouldExit() error {
 	// cancel the gRPC stream.
 	if empty && w.stream.regions.len() == 0 {
 		log.Info("A single region error happens before, "+
-			"and there is no region maintained by this region worker, "+
+			"and there is no region maintained by the stream, "+
 			"exit it and cancel the gRPC stream",
 			zap.String("namespace", w.session.client.changefeed.Namespace),
 			zap.String("changefeed", w.session.client.changefeed.ID),
