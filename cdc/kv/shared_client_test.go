@@ -132,8 +132,12 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	client := NewSharedClient(
 		model.ChangeFeedID{ID: "test"},
 		&config.ServerConfig{
-			KVClient: &config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1},
-			Debug:    &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
+			KVClient: &config.KVClientConfig{
+				WorkerConcurrent:     1,
+				GrpcStreamConcurrent: 1,
+				AdvanceIntervalInMs:  10,
+			},
+			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
 		},
 		false, pdClient, grpcPool, regionCache, pdClock, lockResolver,
 	)
