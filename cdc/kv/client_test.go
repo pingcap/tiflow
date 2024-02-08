@@ -1376,6 +1376,12 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientAddDuplicatedStream", failpointStr)
+	require.Nil(t, err)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientAddDuplicatedStream")
+	}()
+
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError", failpointStr)
 	require.Nil(t, err)
 	defer func() {

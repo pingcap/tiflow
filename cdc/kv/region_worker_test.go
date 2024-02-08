@@ -162,8 +162,9 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	stream := &eventFeedStream{
 		storeID: 1,
 		id:      2,
+		regions: newSyncRegionFeedStateMap(),
 	}
-	worker := newRegionWorker(ctx, stream, s, newSyncRegionFeedStateMap())
+	worker := newRegionWorker(ctx, stream, s)
 	require.Equal(t, 2, cap(worker.outputCh))
 
 	// Receive prewrite2 with empty value.
@@ -329,8 +330,9 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 	stream := &eventFeedStream{
 		storeID: 1,
 		id:      2,
+		regions: newSyncRegionFeedStateMap(),
 	}
-	w := newRegionWorker(ctx, stream, s, newSyncRegionFeedStateMap())
+	w := newRegionWorker(ctx, stream, s)
 
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 5,
