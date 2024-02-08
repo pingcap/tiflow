@@ -62,7 +62,7 @@ func NewLogWriter(
 		cancel: lwCancel,
 	}
 
-	lw.encodeWorkers = newEncodingWorkerGroup(cfg.EncodingWorkerNum)
+	lw.encodeWorkers = newEncodingWorkerGroup(cfg)
 	eg.Go(func() error {
 		return lw.encodeWorkers.Run(lwCtx)
 	})
@@ -78,6 +78,8 @@ func (l *memoryLogWriter) WriteEvents(ctx context.Context, events ...writer.Redo
 	for _, event := range events {
 		if event == nil {
 			log.Warn("writing nil event to redo log, ignore this",
+				zap.String("namespace", l.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", l.cfg.ChangeFeedID.ID),
 				zap.String("capture", l.cfg.CaptureID))
 			continue
 		}

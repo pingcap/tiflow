@@ -106,6 +106,8 @@ func NewMetaManager(
 
 	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
 		log.Warn("redo flush interval is too small, use default value",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
 			zap.Int64("interval", m.flushIntervalInMs))
 		m.flushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
 	}
@@ -264,6 +266,8 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
 	if checkpointTs == 0 || resolvedTs == 0 {
 		log.Panic("checkpointTs or resolvedTs is 0 when initializing redo meta in owner",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.Uint64("resolvedTs", resolvedTs))
 	}
@@ -325,11 +329,17 @@ func (m *metaManager) shouldRemoved(path string, checkPointTs uint64) bool {
 
 	commitTs, fileType, err := redo.ParseLogFileName(path)
 	if err != nil {
-		log.Error("parse file name failed", zap.String("path", path), zap.Error(err))
+		log.Error("parse file name failed",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.String("path", path), zap.Error(err))
 		return false
 	}
 	if fileType != redo.RedoDDLLogFileType && fileType != redo.RedoRowLogFileType {
-		log.Panic("unknown file type", zap.String("path", path), zap.Any("fileType", fileType))
+		log.Panic("unknown file type",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.String("path", path), zap.Any("fileType", fileType))
 	}
 
 	// if commitTs == checkPointTs, the DDL may be executed in the owner,
@@ -451,6 +461,8 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 	m.preMetaFile = metaFile
 
 	log.Debug("flush meta to s3",
+		zap.String("namespace", m.changeFeedID.Namespace),
+		zap.String("changefeed", m.changeFeedID.ID),
 		zap.String("metaFile", metaFile),
 		zap.Any("cost", time.Since(start).Milliseconds()))
 	m.metricFlushLogDuration.Observe(time.Since(start).Seconds())
