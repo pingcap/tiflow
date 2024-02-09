@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -32,6 +33,7 @@ import (
 func Validate(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI string, cfg *config.ReplicaConfig,
+	pdClock pdutil.Clock,
 ) error {
 	uri, err := preCheckSinkURI(sinkURI)
 	if err != nil {
@@ -50,7 +52,7 @@ func Validate(ctx context.Context,
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	s, err := factory.New(ctx, changefeedID, sinkURI, cfg, make(chan error))
+	s, err := factory.New(ctx, changefeedID, sinkURI, cfg, make(chan error), pdClock)
 	if err != nil {
 		cancel()
 		return err
