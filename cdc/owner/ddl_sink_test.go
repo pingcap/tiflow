@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
@@ -61,7 +62,13 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 
 func newDDLSink4Test(reportErr func(err error), reportWarn func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr, reportWarn)
+	ddlSink := newDDLSink(
+		model.DefaultChangeFeedID("changefeed-test"),
+		&model.ChangeFeedInfo{
+			Config: config.GetDefaultReplicaConfig(),
+		},
+		reportErr,
+		reportWarn)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
 		s.sink = mockSink
 		return nil
@@ -545,15 +552,17 @@ func TestAddSpecialComment(t *testing.T) {
 	}
 
 	s := &ddlSinkImpl{}
+	s.info = &model.ChangeFeedInfo{
+		Config: config.GetDefaultReplicaConfig(),
+	}
 	for _, ca := range testCase {
 		re, err := s.addSpecialComment(ca.event)
 		require.Nil(t, err)
 		require.Equal(t, ca.result, re)
 	}
-	require.Panics(t, func() {
-		_, _ = s.addSpecialComment(&model.DDLEvent{
-			Query: "alter table t force, auto_increment = 12;alter table t force, " +
-				"auto_increment = 12;",
-		})
-	}, "invalid ddlQuery statement size")
+	_, err := s.addSpecialComment(&model.DDLEvent{
+		Query: "alter table t force, auto_increment = 12;alter table t force, " +
+			"auto_increment = 12;",
+	})
+	require.NotNil(t, err)
 }

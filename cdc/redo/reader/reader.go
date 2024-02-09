@@ -87,7 +87,7 @@ type LogReaderConfig struct {
 type LogReader struct {
 	cfg   *LogReaderConfig
 	meta  *common.LogMeta
-	rowCh chan *model.RowChangedEvent
+	rowCh chan *model.RowChangedEventInRedoLog
 	ddlCh chan *model.DDLEvent
 }
 
@@ -106,7 +106,7 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 
 	logReader := &LogReader{
 		cfg:   cfg,
-		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		rowCh: make(chan *model.RowChangedEventInRedoLog, defaultReaderChanSize),
 		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
 	}
 	// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
@@ -189,22 +189,6 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for i := 0; i < len(fileReaders); i++ {
-		rl, err := fileReaders[i].Read()
-		if err != nil {
-			if err != io.EOF {
-				return errors.Trace(err)
-			}
-			continue
-		}
-
-		ld := &logWithIdx{
-			data: rl,
-			idx:  i,
-		}
-		redoLogHeap = append(redoLogHeap, ld)
-	}
-	heap.Init(&redoLogHeap)
 
 	for redoLogHeap.Len() != 0 {
 		item := heap.Pop(&redoLogHeap).(*logWithIdx)
@@ -259,8 +243,27 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
-	case row := <-l.rowCh:
-		return row, nil
+	case rowInRedoLog := <-l.rowCh:
+		if rowInRedoLog != nil {
+			row := &model.RowChangedEvent{
+				StartTs:         rowInRedoLog.StartTs,
+				CommitTs:        rowInRedoLog.CommitTs,
+				PhysicalTableID: rowInRedoLog.Table.TableID,
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema:      rowInRedoLog.Table.Schema,
+						Table:       rowInRedoLog.Table.Table,
+						TableID:     rowInRedoLog.Table.TableID,
+						IsPartition: rowInRedoLog.Table.IsPartition,
+					},
+					IndexColumnsOffset: rowInRedoLog.IndexColumns,
+				},
+				Columns:    rowInRedoLog.Columns,
+				PreColumns: rowInRedoLog.PreColumns,
+			}
+			return row, nil
+		}
+		return nil, nil
 	}
 }
 

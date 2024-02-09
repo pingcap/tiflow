@@ -22,9 +22,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
-	schema "github.com/pingcap/tiflow/cdc/entry/schema"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -44,6 +45,20 @@ type SchemaStorage interface {
 	GetLastSnapshot() *schema.Snapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
+
+	// AllPhysicalTables returns the table IDs of all tables and partition tables.
+	AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error)
+
+	// AllTables returns table info of all tables that are being replicated.
+	AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error)
+
+	// BuildDDLEvents by parsing the DDL job
+	BuildDDLEvents(ctx context.Context, job *timodel.Job) (ddlEvents []*model.DDLEvent, err error)
+
+	// IsIneligibleTable returns whether the table is ineligible.
+	// Ineligible means that the table does not have a primary key or unique key.
+	IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error)
+
 	// AdvanceResolvedTs advances the resolved ts
 	AdvanceResolvedTs(ts uint64)
 	// ResolvedTs returns the resolved ts of the schema storage
@@ -53,12 +68,15 @@ type SchemaStorage interface {
 	DoGC(ts uint64) (lastSchemaTs uint64)
 }
 
-type schemaStorageImpl struct {
-	snaps         []*schema.Snapshot
-	snapsMu       sync.RWMutex
+type schemaStorage struct {
+	snaps   []*schema.Snapshot
+	snapsMu sync.RWMutex
+
 	gcTs          uint64
 	resolvedTs    uint64
 	schemaVersion int64
+
+	filter filter.Filter
 
 	forceReplicate bool
 
@@ -68,18 +86,20 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64,
+	storage tidbkv.Storage, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
-		err     error
 		version int64
+		err     error
 	)
-	if meta == nil {
+	// storage may be nil in some unit test cases.
+	if storage == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
+		meta := kv.GetSnapshotMeta(storage, startTs)
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -89,24 +109,20 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	schema := &schemaStorageImpl{
+	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
+		filter:         filter,
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
-	}
-	return schema, nil
+	}, nil
 }
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)
 // or equal to the ts.
-func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
+func (s *schemaStorage) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
 		// Unexpected error, caller should fail immediately.
@@ -136,7 +152,7 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
+func (s *schemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
 	var snap *schema.Snapshot
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
@@ -168,14 +184,14 @@ func isRetryable(err error) bool {
 }
 
 // GetLastSnapshot returns the last snapshot
-func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
+func (s *schemaStorage) GetLastSnapshot() *schema.Snapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
 }
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
-func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
+func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
 		s.schemaVersion = job.BinlogInfo.SchemaVersion
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
@@ -189,7 +205,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 		// Unexecuted DDL jobs should have largest schemaVersions.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-			log.Info("ignore foregone DDL",
+			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
@@ -205,44 +221,131 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
 	}
 	if err := snap.HandleDDL(job); err != nil {
-		log.Error("handle DDL failed",
+		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
-			zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.String("role", s.role.String()))
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("role", s.role.String()),
+			zap.Error(err))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-		zap.String("role", s.role.String()))
-
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+	log.Info("schemaStorage: update snapshot by the DDL job",
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID),
+		zap.String("schema", job.SchemaName),
+		zap.String("table", job.TableName),
+		zap.String("query", job.Query),
+		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
+		zap.String("role", s.role.String()))
 	return nil
+}
+
+// AllPhysicalTables returns the table IDs of all tables and partition tables.
+func (s *schemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error) {
+	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
+	// we can't know how many valid tables in the snapshot.
+	res := make([]model.TableID, 0)
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if s.shouldIgnoreTable(tblInfo) {
+			return
+		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				res = append(res, partition.ID)
+			}
+		} else {
+			res = append(res, tblInfo.ID)
+		}
+	})
+	log.Debug("get new schema snapshot",
+		zap.Uint64("ts", ts),
+		zap.Uint64("snapTs", snap.CurrentTs()),
+		zap.Any("tables", res),
+		zap.String("snapshot", snap.DumpToString()))
+
+	return res, nil
+}
+
+// AllTables returns table info of all tables that are being replicated.
+func (s *schemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	tables := make([]*model.TableInfo, 0)
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if !s.shouldIgnoreTable(tblInfo) {
+			tables = append(tables, tblInfo)
+		}
+	})
+	return tables, nil
+}
+
+func (s *schemaStorage) shouldIgnoreTable(t *model.TableInfo) bool {
+	schemaName := t.TableName.Schema
+	tableName := t.TableName.Table
+	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
+		return true
+	}
+	if t.IsEligible(s.forceReplicate) {
+		return false
+	}
+
+	// Sequence is not supported yet, and always ineligible.
+	// Skip Warn to avoid confusion.
+	// See https://github.com/pingcap/tiflow/issues/4559
+	if !t.IsSequence() {
+		log.Warn("skip ineligible table",
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID),
+			zap.Int64("tableID", t.ID),
+			zap.Stringer("tableName", t.TableName),
+		)
+	}
+	return true
+}
+
+// IsIneligibleTable returns whether the table is ineligible.
+// It uses the snapshot of the given ts to check the table.
+// Ineligible means that the table does not have a primary key
+// or not null unique key.
+func (s *schemaStorage) IsIneligibleTable(
+	ctx context.Context, tableID model.TableID, ts model.Ts,
+) (bool, error) {
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return false, err
+	}
+	return snap.IsIneligibleTableID(tableID), nil
 }
 
 // AdvanceResolvedTs advances the resolved. Not thread safe.
 // NOTE: SHOULD NOT call it concurrently
-func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
+func (s *schemaStorage) AdvanceResolvedTs(ts uint64) {
 	if ts > s.ResolvedTs() {
 		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
 }
 
 // ResolvedTs returns the resolved ts of the schema storage
-func (s *schemaStorageImpl) ResolvedTs() uint64 {
+func (s *schemaStorage) ResolvedTs() uint64 {
 	return atomic.LoadUint64(&s.resolvedTs)
 }
 
 // DoGC removes snaps which of ts less than this specified ts
-func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
+func (s *schemaStorage) DoGC(ts uint64) (lastSchemaTs uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -284,7 +387,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it writes DDL Binlog in the txn that the state of
 // job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
+func (s *schemaStorage) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
@@ -293,9 +396,137 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	return !job.IsDone()
 }
 
+// BuildDDLEvents by parsing the DDL job
+func (s *schemaStorage) BuildDDLEvents(
+	ctx context.Context, job *timodel.Job,
+) (ddlEvents []*model.DDLEvent, err error) {
+	switch job.Type {
+	case timodel.ActionRenameTables:
+		// The result contains more than one DDLEvent for a rename tables job.
+		ddlEvents, err = s.buildRenameEvents(ctx, job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	default:
+		// parse preTableInfo
+		preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preTableInfo, err := preSnap.PreTableInfo(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		// parse tableInfo
+		var tableInfo *model.TableInfo
+		err = preSnap.FillSchemaName(job)
+		if err != nil {
+			log.Error("build DDL event fail", zap.Any("job", job), zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+		// TODO: find a better way to refactor this. For example, drop table job should not
+		// have table info.
+		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
+			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+
+			// TODO: remove this after job is fixed by TiDB.
+			// ref: https://github.com/pingcap/tidb/issues/43819
+			if job.Type == timodel.ActionExchangeTablePartition {
+				oldTableInfo, ok := preSnap.PhysicalTableByID(job.BinlogInfo.TableInfo.ID)
+				if !ok {
+					return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
+				}
+				tableInfo.SchemaID = oldTableInfo.SchemaID
+				tableInfo.TableName = oldTableInfo.TableName
+			}
+		} else {
+			// Just retrieve the schema name for a DDL job that does not contain TableInfo.
+			// Currently supported by cdc are: ActionCreateSchema, ActionDropSchema,
+			// and ActionModifySchemaCharsetAndCollate.
+			tableInfo = &model.TableInfo{
+				TableName: model.TableName{Schema: job.SchemaName},
+				Version:   job.BinlogInfo.FinishedTS,
+			}
+		}
+		event := new(model.DDLEvent)
+		event.FromJob(job, preTableInfo, tableInfo)
+		ddlEvents = append(ddlEvents, event)
+	}
+	return ddlEvents, nil
+}
+
+// TODO: find a better way to refactor this function.
+// buildRenameEvents gets a list of DDLEvent from a rename tables DDL job.
+func (s *schemaStorage) buildRenameEvents(
+	ctx context.Context, job *timodel.Job,
+) ([]*model.DDLEvent, error) {
+	var (
+		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+		newTableNames, oldSchemaNames           []*timodel.CIStr
+		ddlEvents                               []*model.DDLEvent
+	)
+	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
+		&newTableNames, &oldTableIDs, &oldSchemaNames)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	multiTableInfos := job.BinlogInfo.MultipleTableInfos
+	if len(multiTableInfos) != len(oldSchemaIDs) ||
+		len(multiTableInfos) != len(newSchemaIDs) ||
+		len(multiTableInfos) != len(newTableNames) ||
+		len(multiTableInfos) != len(oldTableIDs) ||
+		len(multiTableInfos) != len(oldSchemaNames) {
+		return nil, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+
+	preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for i, tableInfo := range multiTableInfos {
+		newSchema, ok := preSnap.SchemaByID(newSchemaIDs[i])
+		if !ok {
+			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
+				newSchemaIDs[i])
+		}
+		newSchemaName := newSchema.Name.O
+		oldSchemaName := oldSchemaNames[i].O
+		event := new(model.DDLEvent)
+		preTableInfo, ok := preSnap.PhysicalTableByID(tableInfo.ID)
+		if !ok {
+			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(
+				job.TableID)
+		}
+
+		tableInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
+			job.BinlogInfo.FinishedTS, tableInfo)
+		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
+		ddlEvents = append(ddlEvents, event)
+	}
+	return ddlEvents, nil
+}
+
 // MockSchemaStorage is for tests.
 type MockSchemaStorage struct {
 	Resolved uint64
+}
+
+// AllPhysicalTables implements SchemaStorage.
+func (s *MockSchemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error) {
+	return nil, nil
+}
+
+// IsIneligibleTable implements SchemaStorage.
+func (s *MockSchemaStorage) IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error) {
+	return true, nil
+}
+
+// AllTables implements SchemaStorage.
+func (s *MockSchemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	return nil, nil
 }
 
 // GetSnapshot implements SchemaStorage.
@@ -311,6 +542,13 @@ func (s *MockSchemaStorage) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob implements SchemaStorage.
 func (s *MockSchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
+}
+
+// BuildDDLEvents implements SchemaStorage.
+func (s *MockSchemaStorage) BuildDDLEvents(
+	_ context.Context, _ *timodel.Job,
+) (ddlEvents []*model.DDLEvent, err error) {
+	return nil, nil
 }
 
 // AdvanceResolvedTs implements SchemaStorage.

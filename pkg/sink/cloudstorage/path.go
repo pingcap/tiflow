@@ -17,10 +17,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -29,6 +33,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -127,11 +134,12 @@ type VersionedTableName struct {
 
 // FilePathGenerator is used to generate data file path and index file path.
 type FilePathGenerator struct {
-	extension string
-	config    *Config
-	clock     clock.Clock
-	storage   storage.ExternalStorage
-	fileIndex map[VersionedTableName]*indexWithDate
+	changefeedID model.ChangeFeedID
+	extension    string
+	config       *Config
+	pdClock      pdutil.Clock
+	storage      storage.ExternalStorage
+	fileIndex    map[VersionedTableName]*indexWithDate
 
 	hasher     *hash.PositionInertia
 	versionMap map[VersionedTableName]uint64
@@ -139,19 +147,27 @@ type FilePathGenerator struct {
 
 // NewFilePathGenerator creates a FilePathGenerator.
 func NewFilePathGenerator(
+	changefeedID model.ChangeFeedID,
 	config *Config,
 	storage storage.ExternalStorage,
 	extension string,
-	clock clock.Clock,
+	pdclock pdutil.Clock,
 ) *FilePathGenerator {
+	if pdclock == nil {
+		pdclock = pdutil.NewMonotonicClock(clock.New())
+		log.Warn("pd clock is not set in storage sink, use local clock instead",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeedID", changefeedID.ID))
+	}
 	return &FilePathGenerator{
-		config:     config,
-		extension:  extension,
-		storage:    storage,
-		clock:      clock,
-		fileIndex:  make(map[VersionedTableName]*indexWithDate),
-		hasher:     hash.NewPositionInertia(),
-		versionMap: make(map[VersionedTableName]uint64),
+		changefeedID: changefeedID,
+		config:       config,
+		extension:    extension,
+		storage:      storage,
+		pdClock:      pdclock,
+		fileIndex:    make(map[VersionedTableName]*indexWithDate),
+		hasher:       hash.NewPositionInertia(),
+		versionMap:   make(map[VersionedTableName]uint64),
 	}
 }
 
@@ -170,8 +186,12 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	def.FromTableInfo(tableInfo, table.TableInfoVersion, f.config.OutputColumnID)
 	if !def.IsTableSchema() {
 		// only check schema for table
-		log.Panic("invalid table schema", zap.Any("versionedTableName", table),
+		log.Error("invalid table schema",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeedID", f.changefeedID.ID),
+			zap.Any("versionedTableName", table),
 			zap.Any("tableInfo", tableInfo))
+		return errors.ErrInternalCheckFailed.GenWithStackByArgs("invalid table schema in FilePathGenerator")
 	}
 
 	// Case 1: point check if the schema file exists.
@@ -192,45 +212,51 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	_, checksum := mustParseSchemaName(tblSchemaFile)
 	schemaFileCnt := 0
 	lastVersion := uint64(0)
-	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
+	subDir := fmt.Sprintf(tableSchemaPrefix, def.Schema, def.Table)
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
-	err = f.storage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
-		func(path string, _ int64) error {
-			schemaFileCnt++
-			if !strings.HasSuffix(path, checksumSuffix) {
-				return nil
-			}
-			version, parsedChecksum := mustParseSchemaName(path)
-			if parsedChecksum != checksum {
-				// TODO: parsedChecksum should be ignored, remove this panic
-				// after the new path protocol is verified.
-				log.Panic("invalid schema file name",
-					zap.String("path", path), zap.Any("checksum", checksum))
-			}
-			if version > lastVersion {
-				lastVersion = version
-			}
+	err = f.storage.WalkDir(ctx, &storage.WalkOption{
+		SubDir:    subDir, /* use subDir to prevent walk the whole storage */
+		ObjPrefix: subDir + "schema_",
+	}, func(path string, _ int64) error {
+		schemaFileCnt++
+		if !strings.HasSuffix(path, checksumSuffix) {
 			return nil
-		},
-	)
+		}
+		version, parsedChecksum := mustParseSchemaName(path)
+		if parsedChecksum != checksum {
+			log.Error("invalid schema file name",
+				zap.String("namespace", f.changefeedID.Namespace),
+				zap.String("changefeedID", f.changefeedID.ID),
+				zap.String("path", path), zap.Any("checksum", checksum))
+			errMsg := fmt.Sprintf("invalid schema filename in storage sink, "+
+				"expected checksum: %d, actual checksum: %d", checksum, parsedChecksum)
+			return errors.ErrInternalCheckFailed.GenWithStackByArgs(errMsg)
+		}
+		if version > lastVersion {
+			lastVersion = version
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 
 	// Case 2: the table meta path is not empty.
-	if schemaFileCnt != 0 {
-		if lastVersion == 0 {
-			log.Panic("no table schema file found in an non-empty meta path",
-				zap.Any("versionedTableName", table),
-				zap.Uint32("checksum", checksum))
-		}
+	if schemaFileCnt != 0 && lastVersion != 0 {
 		f.versionMap[table] = lastVersion
 		return nil
 	}
 
-	// Case 3: the table meta path is empty, which only happens when the table is
-	// existed before changefeed started. We need to write schema file to external
-	// storage.
+	// Case 3: the table meta path is empty, which happens when:
+	//  a. the table is existed before changefeed started. We need to write schema file to external storage.
+	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
+	if schemaFileCnt != 0 && lastVersion == 0 {
+		log.Warn("no table schema file found in an non-empty meta path",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeedID", f.changefeedID.ID),
+			zap.Any("versionedTableName", table),
+			zap.Uint32("checksum", checksum))
+	}
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
 		return err
@@ -240,8 +266,8 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 }
 
 // SetClock is used for unit test
-func (f *FilePathGenerator) SetClock(clock clock.Clock) {
-	f.clock = clock
+func (f *FilePathGenerator) SetClock(pdClock pdutil.Clock) {
+	f.pdClock = pdClock
 }
 
 // GenerateDateStr generates a date string base on current time
@@ -249,7 +275,7 @@ func (f *FilePathGenerator) SetClock(clock clock.Clock) {
 func (f *FilePathGenerator) GenerateDateStr() string {
 	var dateStr string
 
-	currTime := f.clock.Now()
+	currTime := f.pdClock.CurrentTime()
 	switch f.config.DateSeparator {
 	case config.DateSeparatorYear.String():
 		dateStr = currTime.Format("2006")
@@ -401,4 +427,71 @@ func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, err
 	}
 
 	return fileIdx, nil
+}
+
+var dateSeparatorDayRegexp *regexp.Regexp
+
+// RemoveExpiredFiles removes expired files from external storage.
+func RemoveExpiredFiles(
+	ctx context.Context,
+	_ model.ChangeFeedID,
+	storage storage.ExternalStorage,
+	cfg *Config,
+	checkpointTs model.Ts,
+) (uint64, error) {
+	if cfg.DateSeparator != config.DateSeparatorDay.String() {
+		return 0, nil
+	}
+	if dateSeparatorDayRegexp == nil {
+		dateSeparatorDayRegexp = regexp.MustCompile(config.DateSeparatorDay.GetPattern())
+	}
+
+	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
+	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
+	expiredDate := currTime.Format("2006-01-02")
+
+	cnt := uint64(0)
+	err := util.RemoveFilesIf(ctx, storage, func(path string) bool {
+		// the path is like: <schema>/<table>/<tableVersion>/<partitionID>/<date>/CDC{num}.extension
+		match := dateSeparatorDayRegexp.FindString(path)
+		if match != "" && match < expiredDate {
+			cnt++
+			return true
+		}
+		return false
+	}, nil)
+	return cnt, err
+}
+
+// RemoveEmptyDirs removes empty directories from external storage.
+func RemoveEmptyDirs(
+	ctx context.Context,
+	id model.ChangeFeedID,
+	target string,
+) (uint64, error) {
+	cnt := uint64(0)
+	err := filepath.Walk(target, func(path string, info fs.FileInfo, err error) error {
+		if os.IsNotExist(err) || path == target || info == nil {
+			// if path not exists, we should return nil to continue.
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			files, err := os.ReadDir(path)
+			if err == nil && len(files) == 0 {
+				log.Debug("Deleting empty directory",
+					zap.String("namespace", id.Namespace),
+					zap.String("changeFeedID", id.ID),
+					zap.String("path", path))
+				os.Remove(path)
+				cnt++
+				return filepath.SkipDir
+			}
+		}
+		return nil
+	})
+
+	return cnt, err
 }

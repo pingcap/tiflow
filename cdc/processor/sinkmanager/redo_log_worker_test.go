@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -39,10 +39,10 @@ type redoLogWorkerSuite struct {
 }
 
 func (suite *redoLogWorkerSuite) SetupSuite() {
-	requestMemSize = testEventSize
+	requestMemSize = uint64(testEventSize)
 	// For one batch size.
 	// Advance table sink per 2 events.
-	maxUpdateIntervalSize = testEventSize * 2
+	maxUpdateIntervalSize = uint64(testEventSize * 2)
 	suite.testChangefeedID = model.DefaultChangeFeedID("1")
 	suite.testSpan = spanz.TableIDToComparableSpan(1)
 }
@@ -59,7 +59,7 @@ func TestRedoLogWorkerSuite(t *testing.T) {
 //nolint:unparam
 func (suite *redoLogWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64,
-) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
+) (*redoWorker, sorter.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
 	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
 	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
@@ -69,18 +69,17 @@ func (suite *redoLogWorkerSuite) createWorker(
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
-	quota.ForceAcquire(testEventSize)
+	quota.ForceAcquire(uint64(testEventSize))
 	quota.AddTable(suite.testSpan)
 	redoDMLManager := newMockRedoDMLManager()
-	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache), sortEngine, redoDMLManager
+		redoDMLManager), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(
 	events []*model.PolymorphicEvent,
-	sortEngine engine.SortEngine,
+	sortEngine sorter.SortEngine,
 ) {
 	sortEngine.AddTable(suite.testSpan, 0)
 	for _, event := range events {
@@ -115,12 +114,12 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -137,7 +136,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished() {
@@ -165,12 +163,12 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos, "we only write 3 events because of the memory quota")
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -187,7 +185,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
@@ -213,8 +210,8 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  0,
 			CommitTs: 0,
 		}, lastWritePos)
@@ -235,7 +232,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	w.memQuota.Close()
 	cancel()
 	wg.Wait()
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
 }
 
@@ -259,12 +255,12 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  4,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -311,7 +307,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithoutMemory() {
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWritePos engine.Position) {
+	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
 		close(chShouldBeClosed)
 	}

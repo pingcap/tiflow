@@ -381,6 +381,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -401,6 +402,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroBigintUnsignedHandlingMode: aws.String("ab"),
 			AvroDecimalHandlingMode:        aws.String("cd"),
+			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
 			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
@@ -413,6 +415,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -438,6 +441,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(false),
 			AvroBigintUnsignedHandlingMode: aws.String("adb"),
 			AvroDecimalHandlingMode:        aws.String("cde"),
+			EncodingFormat:                 aws.String("avro"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
 			LargeMessageHandleOption: config.LargeMessageHandleOptionClaimCheck,
@@ -451,9 +455,61 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
 	require.Equal(t, 456, c.MaxBatchSize)
 	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
+
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.ContentCompatible = aws.Bool(true)
+	uri = "kafka://127.0.0.1:9092/content-compatible?protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	c = NewConfig(config.ProtocolCanalJSON)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.ContentCompatible)
+	require.True(t, c.OnlyOutputUpdatedColumns)
+}
+
+func TestApplyConfig4CanalJSON(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&content-compatible=true"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolCanalJSON)
+	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.True(t, codecConfig.ContentCompatible)
+	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
+}
+
+func TestConfig4Simple(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=simple"
+	sinkURL, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatJSON, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=avro"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatAvro, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=xxx"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
 }

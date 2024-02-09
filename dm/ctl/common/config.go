@@ -24,6 +24,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/google/shlex"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/common/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -33,11 +34,6 @@ import (
 
 const (
 	defaultRPCTimeout = "10m"
-
-	// EncryptCmdName is special command.
-	EncryptCmdName = "encrypt"
-	// DecryptCmdName is special command.
-	DecryptCmdName = "decrypt"
 
 	// Master specifies member master type.
 	Master = "master"
@@ -54,7 +50,7 @@ const (
 	DefaultWarnCnt = 10
 )
 
-var argsNeedAdjust = [...]string{"-version", "-config", "-master-addr", "-rpc-timeout", "-ssl-ca", "-ssl-cert", "-ssl-key", "-" + EncryptCmdName, "-" + DecryptCmdName}
+var argsNeedAdjust = [...]string{"-version", "-config", "-master-addr", "-rpc-timeout", "-ssl-ca", "-ssl-cert", "-ssl-key"}
 
 // NewConfig creates a new base config for dmctl.
 func NewConfig(fs *pflag.FlagSet) *Config {
@@ -72,10 +68,7 @@ func DefineConfigFlagSet(fs *pflag.FlagSet) {
 	fs.String("ssl-ca", "", "Path of file that contains list of trusted SSL CAs for connection.")
 	fs.String("ssl-cert", "", "Path of file that contains X509 certificate in PEM format for connection.")
 	fs.String("ssl-key", "", "Path of file that contains X509 key in PEM format for connection.")
-	fs.String(EncryptCmdName, "", "Encrypts plaintext to ciphertext.")
-	fs.String(DecryptCmdName, "", "Decrypts ciphertext to plaintext.")
-	_ = fs.MarkHidden(EncryptCmdName)
-	_ = fs.MarkHidden(DecryptCmdName)
+	fs.String("secret-key-path", "", "Path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex AES-256 key of length 64.")
 }
 
 // AdjustArgumentsForPflags adjust flag format args to pflags format.
@@ -116,6 +109,10 @@ func (c *Config) getConfigFromFlagSet() error {
 		return err
 	}
 	c.SSLKey, err = fs.GetString("ssl-key")
+	if err != nil {
+		return err
+	}
+	c.SecretKeyPath, err = fs.GetString("secret-key-path")
 	return err
 }
 
@@ -131,6 +128,7 @@ type Config struct {
 	ConfigFile string `json:"config-file"`
 
 	security.Security
+	config.Common `yaml:",inline" toml:",inline" json:",inline"`
 }
 
 func (c *Config) String() string {
@@ -169,6 +167,9 @@ func (c *Config) Adjust() error {
 	}
 	if c.MasterAddr == "" {
 		return errors.Errorf("--master-addr not provided, this parameter is required when interacting with the dm-master, you can also use environment variable 'DM_MASTER_ADDR' to specify the value. Use `dmctl --help` to see more help messages")
+	}
+	if err = c.Common.Adjust(); err != nil {
+		return errors.Trace(err)
 	}
 
 	return errors.Trace(c.adjust())

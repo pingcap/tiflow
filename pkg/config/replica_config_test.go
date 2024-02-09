@@ -22,6 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/compression"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -65,8 +66,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.ContentCompatible = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
+	conf.Sink.DebeziumDisableSchema = util.AddressOf(false)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
 		ReplicationFactor:            aws.Int16(1),
@@ -100,6 +103,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
+			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
@@ -176,7 +180,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
@@ -233,6 +237,22 @@ func TestReplicaConfigValidate(t *testing.T) {
 	}
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.Error(t, err)
+}
+
+func TestValidateIntegrity(t *testing.T) {
+	sinkURL, err := url.Parse("kafka://topic?protocol=avro")
+	require.NoError(t, err)
+
+	cfg := GetDefaultReplicaConfig()
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	cfg.Sink.ColumnSelectors = []*ColumnSelector{
+		{
+			Matcher: []string{"a.b"}, Columns: []string{"c"},
+		},
+	}
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
 func TestValidateAndAdjust(t *testing.T) {

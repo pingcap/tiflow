@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -254,8 +254,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
 ) (*model.RowChangedEvent, error) {
 	var (
-		schema   = handleKeyOnlyEvent.Table.Schema
-		table    = handleKeyOnlyEvent.Table.Table
+		schema   = handleKeyOnlyEvent.TableInfo.GetSchemaName()
+		table    = handleKeyOnlyEvent.TableInfo.GetTableName()
 		commitTs = handleKeyOnlyEvent.CommitTs
 	)
 

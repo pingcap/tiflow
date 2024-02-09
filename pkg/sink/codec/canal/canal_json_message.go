@@ -15,14 +15,18 @@ package canal
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	canal "github.com/pingcap/tiflow/proto/canal"
+	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
@@ -153,9 +157,11 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
-	result.Table = &model.TableName{
-		Schema: *msg.getSchema(),
-		Table:  *msg.getTable(),
+	result.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: *msg.getSchema(),
+			Table:  *msg.getTable(),
+		},
 	}
 
 	mysqlType := msg.getMySQLType()
@@ -197,11 +203,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
-		isBinary := isBinaryMySQLType(mysqlTypeStr)
-		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal.NewColumn(value, mysqlType).
-			ToCanalJSONFormatColumn(name, isBinary)
+		col := canalJSONFormatColumn(value, name, mysqlTypeStr)
 		result = append(result, col)
 	}
 	if len(result) == 0 {
@@ -213,8 +215,72 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
-func isBinaryMySQLType(mysqlType string) bool {
-	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
+func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
+	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
+	result := &model.Column{
+		Type:  mysqlType,
+		Name:  name,
+		Value: value,
+	}
+	if result.Value == nil {
+		return result
+	}
+
+	data, ok := value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	var err error
+	if utils.IsBinaryMySQLType(mysqlTypeStr) {
+		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+		encoder := charmap.ISO8859_1.NewEncoder()
+		value, err = encoder.String(data)
+		if err != nil {
+			log.Panic("invalid column value, please report a bug", zap.Any("col", result), zap.Error(err))
+		}
+		result.Value = value
+		return result
+	}
+
+	switch mysqlType {
+	case mysql.TypeBit, mysql.TypeSet:
+		value, err = strconv.ParseUint(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit", zap.Any("col", result), zap.Error(err))
+		}
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+		value, err = strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for int", zap.Any("col", result), zap.Error(err))
+		}
+	case mysql.TypeEnum:
+		value, err = strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for enum", zap.Any("col", result), zap.Error(err))
+		}
+	case mysql.TypeLonglong:
+		value, err = strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			value, err = strconv.ParseUint(data, 10, 64)
+			if err != nil {
+				log.Panic("invalid column value for bigint", zap.Any("col", result), zap.Error(err))
+			}
+		}
+	case mysql.TypeFloat:
+		value, err = strconv.ParseFloat(data, 32)
+		if err != nil {
+			log.Panic("invalid column value for float", zap.Any("col", result), zap.Error(err))
+		}
+	case mysql.TypeDouble:
+		value, err = strconv.ParseFloat(data, 64)
+		if err != nil {
+			log.Panic("invalid column value for double", zap.Any("col", result), zap.Error(err))
+		}
+	}
+
+	result.Value = value
+	return result
 }
 
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {

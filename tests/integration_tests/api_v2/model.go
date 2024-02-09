@@ -185,7 +185,6 @@ type ReplicaConfig struct {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
@@ -209,19 +208,6 @@ type EventFilterRule struct {
 	IgnoreDeleteValueExpr    string `json:"ignore_delete_value_expr"`
 }
 
-// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
-type MySQLReplicationRules struct {
-	// DoTables is an allowlist of tables.
-	DoTables []*Table `json:"do_tables,omitempty"`
-	// DoDBs is an allowlist of schemas.
-	DoDBs []string `json:"do_dbs,omitempty"`
-
-	// IgnoreTables is a blocklist of tables.
-	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
-	// IgnoreDBs is a blocklist of schemas.
-	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
-}
-
 // Table represents a qualified table name.
 type Table struct {
 	// Schema is the name of the schema (database) containing this table.
@@ -233,16 +219,21 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol,omitempty"`
-	SchemaRegistry           string            `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig        `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors,omitempty"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       *int              `json:"encoder_concurrency,omitempty"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
+	Protocol                    string            `json:"protocol,omitempty"`
+	SchemaRegistry              string            `json:"schema_registry,omitempty"`
+	CSVConfig                   *CSVConfig        `json:"csv,omitempty"`
+	DispatchRules               []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors             []*ColumnSelector `json:"column_selectors,omitempty"`
+	TxnAtomicity                string            `json:"transaction_atomicity"`
+	EncoderConcurrency          *int              `json:"encoder_concurrency,omitempty"`
+	Terminator                  string            `json:"terminator"`
+	DateSeparator               string            `json:"date_separator,omitempty"`
+	EnablePartitionSeparator    *bool             `json:"enable_partition_separator,omitempty"`
+	ContentCompatible           *bool             `json:"content_compatible"`
+	SendBootstrapIntervalInSec  *int64            `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount     *int32            `json:"send_bootstrap_in_msg_count,omitempty"`
+	SendBootstrapToAllPartition *bool             `json:"send_bootstrap_to_all_partition,omitempty"`
+	DebeziumDisableSchema       *bool             `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -272,11 +263,14 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
-	UseFileBackend    bool   `json:"use_file_backend"`
+	Level                 string `json:"level"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncoderWorkerNum      int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
+	Storage               string `json:"storage"`
+	UseFileBackend        bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

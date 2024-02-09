@@ -94,7 +94,6 @@ type Owner interface {
 	UpdateChangefeedAndUpstream(ctx context.Context,
 		upstreamInfo *model.UpstreamInfo,
 		changeFeedInfo *model.ChangeFeedInfo,
-		changeFeedID model.ChangeFeedID,
 	) error
 	UpdateChangefeed(ctx context.Context,
 		changeFeedInfo *model.ChangeFeedInfo) error
@@ -192,7 +191,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			cfReactor = o.newChangefeed(changefeedID, changefeedState.Info, changefeedState.Status,
-				newFeedStateManager(up, changefeedState),
+				NewFeedStateManager(up, changefeedState),
 				up, o.cfg)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -405,9 +404,8 @@ func (o *ownerImpl) AsyncStop() {
 func (o *ownerImpl) UpdateChangefeedAndUpstream(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	changeFeedInfo *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
 ) error {
-	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo)
 }
 
 func (o *ownerImpl) UpdateChangefeed(ctx context.Context,
@@ -596,6 +594,25 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret := &model.ChangeFeedStatusForAPI{}
 		ret.ResolvedTs = cfReactor.resolvedTs
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		query.Data = ret
+	case QueryChangeFeedSyncedStatus:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		ret := &model.ChangeFeedSyncedStatusForAPI{}
+		ret.LastSyncedTs = cfReactor.lastSyncedTs
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
+
+		if cfReactor.latestInfo == nil {
+			ret.CheckpointInterval = 0
+			ret.SyncedCheckInterval = 0
+		} else {
+			ret.CheckpointInterval = cfReactor.latestInfo.Config.SyncedStatus.CheckpointInterval
+			ret.SyncedCheckInterval = cfReactor.latestInfo.Config.SyncedStatus.SyncedCheckInterval
+		}
 		query.Data = ret
 	case QueryChangefeedInfo:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]

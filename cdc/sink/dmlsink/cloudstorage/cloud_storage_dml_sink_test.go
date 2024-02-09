@@ -22,22 +22,23 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
 func setClock(s *DMLSink, clock clock.Clock) {
 	for _, w := range s.workers {
-		w.filePathGenerator.SetClock(clock)
+		w.filePathGenerator.SetClock(pdutil.NewMonotonicClock(clock))
 	}
 }
 
@@ -71,7 +72,6 @@ func generateTxnEvents(
 		txn := &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				CommitTs:         100,
-				Table:            &model.TableName{Schema: "test", Table: "table1"},
 				TableInfoVersion: 33,
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
@@ -94,7 +94,6 @@ func generateTxnEvents(
 		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
 				CommitTs:  100,
-				Table:     &model.TableName{Schema: "test", Table: "table1"},
 				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, Version: 33},
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},
@@ -129,6 +128,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx,
 		model.DefaultChangeFeedID("test"),
+		pdutil.NewMonotonicClock(clock.New()),
 		sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 	var cnt uint64 = 0
@@ -197,11 +197,12 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
 
 	errCh := make(chan error, 5)
-	s, err := NewDMLSink(ctx,
-		model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, errCh)
-	require.Nil(t, err)
 	mockClock := clock.NewMock()
-	setClock(s, mockClock)
+	s, err := NewDMLSink(ctx,
+		model.DefaultChangeFeedID("test"),
+		pdutil.NewMonotonicClock(mockClock),
+		sinkURI, replicaConfig, errCh)
+	require.Nil(t, err)
 
 	var cnt uint64 = 0
 	batch := 100
@@ -272,12 +273,14 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	// test table is scheduled from one node to another
 	cnt = 0
 	ctx, cancel = context.WithCancel(context.Background())
-	s, err = NewDMLSink(ctx,
-		model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, errCh)
-	require.Nil(t, err)
+
 	mockClock = clock.NewMock()
 	mockClock.Set(time.Date(2023, 3, 9, 0, 1, 10, 0, time.UTC))
-	setClock(s, mockClock)
+	s, err = NewDMLSink(ctx,
+		model.DefaultChangeFeedID("test"),
+		pdutil.NewMonotonicClock(mockClock),
+		sinkURI, replicaConfig, errCh)
+	require.Nil(t, err)
 
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)

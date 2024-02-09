@@ -18,11 +18,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -742,7 +743,9 @@ func TestCSVMessageEncode(t *testing.T) {
 		tableName  string
 		schemaName string
 		commitTs   uint64
+		preColumns []any
 		columns    []any
+		HandleKey  kv.Handle
 	}
 	testCases := []struct {
 		name   string
@@ -784,6 +787,48 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    []any{"a!b!c", "def"},
 			},
 			want: []byte(`U!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+					OutputHandleKey: true,
+				},
+				opType:     operationUpdate,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				preColumns: []any{"a!b!c", "abc"},
+				columns:    []any{"a!b!c", "def"},
+				HandleKey:  kv.IntHandle(1),
+			},
+			want: []byte(`D!table2!test!435661838416609281!true!1!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!true!1!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+				},
+				opType:     operationInsert,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				columns:    []any{"a!b!c", "def"},
+			},
+			want: []byte(`I!table2!test!435661838416609281!false!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, with quote mark",
@@ -903,7 +948,9 @@ func TestCSVMessageEncode(t *testing.T) {
 				schemaName: tc.fields.schemaName,
 				commitTs:   tc.fields.commitTs,
 				columns:    tc.fields.columns,
+				preColumns: tc.fields.preColumns,
 				newRecord:  true,
+				HandleKey:  tc.fields.HandleKey,
 			}
 
 			require.Equal(t, tc.want, c.encode())
@@ -932,9 +979,11 @@ func TestRowChangeEventConversion(t *testing.T) {
 			colInfos = append(colInfos, c.colInfo)
 		}
 		row.ColInfos = colInfos
-		row.Table = &model.TableName{
-			Table:  fmt.Sprintf("table%d", idx),
-			Schema: "test",
+		row.TableInfo = &model.TableInfo{
+			TableName: model.TableName{
+				Table:  fmt.Sprintf("table%d", idx),
+				Schema: "test",
+			},
 		}
 
 		if idx%3 == 0 { // delete operation

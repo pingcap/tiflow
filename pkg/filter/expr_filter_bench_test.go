@@ -55,9 +55,9 @@ func BenchmarkSkipDML(b *testing.B) {
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "",
+		"time_zone": "UTC",
 	})
-	f, err := newExprFilter("", cfg)
+	f, err := newExprFilter("", cfg, config.GetDefaultReplicaConfig().SQLMode)
 	require.Nil(b, err)
 
 	type innerCase struct {
@@ -130,9 +130,11 @@ func BenchmarkSkipDML(b *testing.B) {
 		preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
 		require.Nil(t, err)
 		row := &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: c.schema,
-				Table:  c.table,
+			TableInfo: &model.TableInfo{
+				TableName: model.TableName{
+					Schema: c.schema,
+					Table:  c.table,
+				},
 			},
 			Columns:    c.columns,
 			PreColumns: c.preColumns,

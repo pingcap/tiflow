@@ -745,7 +745,8 @@ func (h *OpenAPI) ListProcessor(c *gin.Context) {
 	for i, info := range infos {
 		resp := &model.ProcessorCommonInfo{
 			Namespace: info.CfID.Namespace,
-			CfID:      info.CfID.ID, CaptureID: info.CaptureID,
+			CfID:      info.CfID.ID,
+			CaptureID: info.CaptureID,
 		}
 		resps[i] = resp
 	}

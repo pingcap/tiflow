@@ -40,7 +40,7 @@ func TestConflictBasics(t *testing.T) {
 		numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize, numSlots),
 	).WithExecFunc(
 		func(txn *txnForTest) error {
-			for _, key := range txn.ConflictKeys(numSlots) {
+			for _, key := range txn.GenSortedDedupKeysHash(numSlots) {
 				// Access a position in the array without synchronization,
 				// so that if causality check is buggy, the Go race detection would fail.
 				conflictArray[key]++

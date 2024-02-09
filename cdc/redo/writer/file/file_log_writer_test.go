@@ -33,6 +33,12 @@ func TestLogWriterWriteLog(t *testing.T) {
 		ctx  context.Context
 		rows []writer.RedoEvent
 	}
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t",
+		},
+	}
 	tests := []struct {
 		name      string
 		args      arg
@@ -46,7 +52,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			args: arg{
 				ctx: context.Background(),
 				rows: []writer.RedoEvent{
-					&model.RowChangedEvent{Table: &model.TableName{TableID: 111}, CommitTs: 1},
+					&model.RowChangedEvent{CommitTs: 1, PhysicalTableID: 111, TableInfo: tableInfo},
 				},
 			},
 			isRunning: true,
@@ -58,7 +64,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 				ctx: context.Background(),
 				rows: []writer.RedoEvent{
 					nil,
-					&model.RowChangedEvent{Table: &model.TableName{TableID: 11}, CommitTs: 11},
+					&model.RowChangedEvent{CommitTs: 1, PhysicalTableID: 11, TableInfo: tableInfo},
 				},
 			},
 			writerErr: errors.New("err"),

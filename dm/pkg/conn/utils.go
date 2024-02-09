@@ -23,7 +23,7 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

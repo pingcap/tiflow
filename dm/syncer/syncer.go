@@ -32,15 +32,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	tidbddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
+	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -50,6 +50,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -216,6 +217,8 @@ type Syncer struct {
 		endLocation   *binlog.Location
 		isQueryEvent  bool
 	}
+
+	cutOverLocation atomic.Pointer[binlog.Location]
 
 	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
@@ -1112,7 +1115,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			err = s.flushIfOutdated()
+			if cutoverLocation := s.cutOverLocation.Load(); cutoverLocation != nil && binlog.CompareLocation(*cutoverLocation, job.currentLocation, s.cfg.EnableGTID) <= 0 {
+				err = s.flushJobs()
+				s.cutOverLocation.Store(nil)
+			} else {
+				err = s.flushIfOutdated()
+			}
 		}
 	}()
 
@@ -2427,6 +2435,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.XIDEvent:
 					eventType = "XID"
 					needContinue, err2 = funcCommit()
+				case *replication.TableMapEvent:
+				case *replication.FormatDescriptionEvent:
 				default:
 					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
 				}
@@ -2434,6 +2444,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
+		case *replication.TableMapEvent:
+		case *replication.FormatDescriptionEvent:
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
@@ -2982,6 +2994,11 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
+	// TODO: delete this check after we support parallel reading the files to improve load speed
+	if !storage.IsLocalDiskPath(s.cfg.LoaderConfig.Dir) {
+		logger.Warn("skip load table structure from dump files for non-local-dir loader because it may be slow", zap.String("loaderDir", s.cfg.LoaderConfig.Dir))
+		return nil
+	}
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
@@ -3036,7 +3053,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				zap.String("db", db),
 				zap.String("path", s.cfg.LoaderConfig.Dir),
 				zap.String("file", file),
-				zap.Error(err))
+				zap.Error(err2))
 			setFirstErr(err2)
 			continue
 		}
@@ -3497,7 +3514,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	// 2. location already has GTID position
 	// 3. location is totally new, has no position info
 	// 4. location is too early thus not a COMMIT location, which happens when it's reset by other logic
-	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" || location.Position.Pos == 4 {
+	if !s.cfg.EnableGTID || !gtid.CheckGTIDSetEmpty(location.GetGTID()) || location.Position.Name == "" || location.Position.Pos == 4 {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController

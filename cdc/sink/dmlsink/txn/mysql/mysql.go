@@ -28,10 +28,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -170,7 +170,9 @@ func NewMySQLBackends(
 	var maxAllowedPacket int64
 	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
 	if err != nil {
-		log.Warn("failed to query max_allowed_packet, use default value", zap.Error(err))
+		log.Warn("failed to query max_allowed_packet, use default value",
+			zap.String("changefeed", changefeed),
+			zap.Error(err))
 		maxAllowedPacket = int64(variable.DefMaxAllowedPacket)
 	}
 
@@ -205,7 +207,7 @@ func NewMySQLBackends(
 func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
-	return event.Event.ToWaitFlush() || s.rows >= s.cfg.MaxTxnRow
+	return s.rows >= s.cfg.MaxTxnRow
 }
 
 // Flush implements interface backend.
@@ -226,13 +228,13 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
+	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
 		if errors.Cause(err) != context.Canceled {
-			log.Error("execute DMLs failed", zap.Error(err))
+			log.Error("execute DMLs failed", zap.String("changefeed", s.changefeed), zap.Error(err))
 		}
 		return errors.Trace(err)
 	}
@@ -312,7 +314,7 @@ func convert2RowChanges(
 	switch changeType {
 	case sqlmodel.RowChangeInsert:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			nil,
 			postValues,
@@ -320,7 +322,7 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeUpdate:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			preValues,
 			postValues,
@@ -328,7 +330,7 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&row.TableInfo.TableName,
 			nil,
 			preValues,
 			nil,
@@ -489,12 +491,11 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 }
 
 func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]interface{}) {
-	size, count := 0, 0
+	size := 0
 	for _, r := range rows {
 		size += int(r.GetApproximateDataSize())
-		count++
 	}
-	if size < s.cfg.MaxMultiUpdateRowSize*count {
+	if size < s.cfg.MaxMultiUpdateRowSize*len(rows) {
 		// use multi update in one SQL
 		sql, value := sqlmodel.GenUpdateSQL(rows...)
 		return []string{sql}, [][]interface{}{value}
@@ -551,6 +552,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 		log.Debug("translate to insert",
+			zap.String("changefeed", s.changefeed),
 			zap.Bool("translateToInsert", translateToInsert),
 			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
 			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
@@ -568,8 +570,11 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 			// only use batch dml when the table has a handle key
 			if hasHandleKey(tableColumns) {
-				// TODO(dongmen): find a better way to get table info.
-				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				// TODO: will use firstRow.TableInfo.TableInfo directly after we build a more complete TableInfo in later pr
+				tableInfo := model.BuildTiDBTableInfo(
+					firstRow.TableInfo.GetTableName(),
+					tableColumns,
+					firstRow.TableInfo.IndexColumnsOffset)
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
@@ -584,7 +589,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 		}
 
-		quoteTable := firstRow.Table.QuoteString()
+		quoteTable := firstRow.TableInfo.TableName.QuoteString()
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
@@ -658,7 +663,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	}
 	multiStmtSQL := strings.Join(dmls.sqls, ";")
 
-	log.Debug("exec row", zap.Int("workerID", s.workerID),
+	log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
 		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
@@ -670,7 +675,7 @@ func (s *mysqlBackend) multiStmtExecute(
 			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
 		if rbErr := tx.Rollback(); rbErr != nil {
 			if errors.Cause(rbErr) != context.Canceled {
-				log.Warn("failed to rollback txn", zap.Error(rbErr))
+				log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
 			}
 		}
 		return err
@@ -685,7 +690,7 @@ func (s *mysqlBackend) sequenceExecute(
 	start := time.Now()
 	for i, query := range dmls.sqls {
 		args := dmls.values[i]
-		log.Debug("exec row", zap.Int("workerID", s.workerID),
+		log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
 			zap.String("sql", query), zap.Any("args", args))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
 
@@ -717,7 +722,7 @@ func (s *mysqlBackend) sequenceExecute(
 				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 			if rbErr := tx.Rollback(); rbErr != nil {
 				if errors.Cause(rbErr) != context.Canceled {
-					log.Warn("failed to rollback txn", zap.Error(rbErr))
+					log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
 				}
 			}
 			cancelFunc()
@@ -730,9 +735,11 @@ func (s *mysqlBackend) sequenceExecute(
 
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Panic("unexpected number of sqls and values",
+		log.Error("unexpected number of sqls and values",
+			zap.String("changefeed", s.changefeed),
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
+		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
 	}
 
 	start := time.Now()
@@ -750,12 +757,30 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
 
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
+			}
+
+			// Set session variables first and then execute the transaction.
+			// we try to set write source for each txn,
+			// so we can use it to trace the data source
+			if err = pmysql.SetWriteSource(pctx, s.cfg, tx); err != nil {
+				err := logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeed,
+					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
+						s.cfg.SourceID),
+					dmls.rowCount, dmls.startTs)
+				if rbErr := tx.Rollback(); rbErr != nil {
+					if errors.Cause(rbErr) != context.Canceled {
+						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
+					}
+				}
+				return 0, 0, err
 			}
 
 			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
@@ -767,45 +792,28 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
 					fallbackToSeqWay = true
-					return 0, err
+					return 0, 0, err
 				}
 			} else {
 				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
-					return 0, err
+					return 0, 0, err
 				}
-			}
-
-			// we try to set write source for each txn,
-			// so we can use it to trace the data source
-			if err = s.setWriteSource(pctx, tx); err != nil {
-				err := logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeed,
-					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
-						s.cfg.SourceID),
-					dmls.rowCount, dmls.startTs)
-				if rbErr := tx.Rollback(); rbErr != nil {
-					if errors.Cause(rbErr) != context.Canceled {
-						log.Warn("failed to rollback txn", zap.Error(rbErr))
-					}
-				}
-				return 0, err
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-			return dmls.rowCount, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
 		}
 		log.Debug("Exec Rows succeeded",
-			zap.Int("workerID", s.workerID),
 			zap.String("changefeed", s.changefeed),
+			zap.Int("workerID", s.workerID),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
@@ -865,25 +873,4 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 // Only for testing.
 func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
-}
-
-// setWriteSource sets write source for the transaction.
-func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
-	// we only set write source when donwstream is TiDB and write source is existed.
-	if !s.cfg.IsWriteSourceExisted {
-		return nil
-	}
-	// downstream is TiDB, set system variables.
-	// We should always try to set this variable, and ignore the error if
-	// downstream does not support this variable, it is by design.
-	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
-	_, err := txn.ExecContext(ctx, query)
-	if err != nil {
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
-			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-			return nil
-		}
-		return err
-	}
-	return nil
 }

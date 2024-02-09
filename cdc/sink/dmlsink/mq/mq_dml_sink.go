@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -48,6 +49,8 @@ type dmlSink struct {
 
 	alive struct {
 		sync.RWMutex
+
+		transformer transformer.Transformer
 		// eventRouter used to route events to the right topic and partition.
 		eventRouter *dispatcher.EventRouter
 		// topicManager used to manage topics.
@@ -77,6 +80,7 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
+	transformer transformer.Transformer,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	scheme string,
@@ -95,6 +99,7 @@ func newDMLSink(
 		dead:        make(chan struct{}),
 		scheme:      scheme,
 	}
+	s.alive.transformer = transformer
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
 	s.alive.worker = worker
@@ -141,15 +146,18 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-	// merge the split row callback into one callback
-	mergedCallback := func(outCallback func(), totalCount uint64) func() {
-		var acked atomic.Uint64
+	// Because we split txn to rows when sending to the MQ.
+	// So we need to convert the txn level callback to row level callback.
+	toRowCallback := func(txnCallback func(), totalCount uint64) func() {
+		var calledCount atomic.Uint64
+		// The callback of the last row will trigger the callback of the txn.
 		return func() {
-			if acked.Add(1) == totalCount {
-				outCallback()
+			if calledCount.Inc() == totalCount {
+				txnCallback()
 			}
 		}
 	}
+
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -157,8 +165,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
-		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
-
+		rowCallback := toRowCallback(txn.Callback, uint64(len(txn.Event.Rows)))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
@@ -170,19 +177,33 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				s.cancel(err)
 				return errors.Trace(err)
 			}
+
+			err = s.alive.transformer.Apply(row)
+			if err != nil {
+				s.cancel(err)
+				return errors.Trace(err)
+			}
+			// Note: Calculate the partition index after the transformer is applied.
+			// Because the transformer may change the row of the event.
 			index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			if err != nil {
 				s.cancel(err)
 				return errors.Trace(err)
 			}
+
 			// This never be blocked because this is an unbounded channel.
+			// We already limit the memory usage by MemoryQuota at SinkManager level.
+			// So it is safe to send the event to a unbounded channel here.
 			s.alive.worker.msgChan.In() <- mqEvent{
-				key: TopicPartitionKey{
-					Topic: topic, Partition: index, PartitionKey: key,
+				key: model.TopicPartitionKey{
+					Topic:          topic,
+					Partition:      index,
+					PartitionKey:   key,
+					TotalPartition: partitionNum,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,
-					Callback:  callback,
+					Callback:  rowCallback,
 					SinkState: txn.SinkState,
 				},
 			}

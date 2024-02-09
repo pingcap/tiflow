@@ -26,8 +26,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -1320,12 +1320,12 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 
 func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
 	var (
-		pos *mysql.Position
+		pos = mysql.Position{}
 		gs  mysql.GTIDSet
 		err error
 	)
 	if len(req.BinlogPos) > 0 {
-		pos, err = binlog.VerifyBinlogPos(req.BinlogPos)
+		pos, err = binlog.PositionFromPosStr(req.BinlogPos)
 		if err != nil {
 			return err
 		}
@@ -1336,8 +1336,9 @@ func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) e
 			return err
 		}
 	}
-	cutOverLocation := binlog.NewLocation(*pos, gs)
+	cutOverLocation := binlog.NewLocation(pos, gs)
 	v.cutOverLocation.Store(&cutOverLocation)
+	v.syncer.cutOverLocation.Store(&cutOverLocation)
 	return nil
 }
 
@@ -1404,6 +1405,14 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
 	}
+	var cutoverBinlogPos, cutoverBinlogGTID string
+	if cutOverLoc := v.cutOverLocation.Load(); cutOverLoc != nil {
+		cutoverBinlogPos = cutOverLoc.Position.String()
+		if cutOverLoc.GetGTID() != nil {
+			cutoverBinlogGTID = cutOverLoc.GetGTID().String()
+		}
+	}
+
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
@@ -1415,5 +1424,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
+		CutoverBinlogPos:    cutoverBinlogPos,
+		CutoverBinlogGtid:   cutoverBinlogGTID,
 	}
 }

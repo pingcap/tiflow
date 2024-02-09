@@ -48,24 +48,28 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 	defer r.lock.Unlock()
 	r.hasher.Reset()
 
-	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	r.hasher.Write([]byte(row.TableInfo.GetSchemaName()), []byte(row.TableInfo.GetTableName()))
 
 	dispatchCols := row.Columns
 	if len(dispatchCols) == 0 {
 		dispatchCols = row.PreColumns
 	}
 
-	offsets, ok := row.TableInfo.ColumnsByNames(r.Columns)
+	offsets, ok := row.TableInfo.OffsetsByNames(r.Columns)
 	if !ok {
 		log.Error("columns not found when dispatch event",
-			zap.Any("tableName", row.Table),
+			zap.Any("tableName", row.TableInfo.GetTableName()),
 			zap.Strings("columns", r.Columns))
 		return 0, "", errors.ErrDispatcherFailed.GenWithStack(
-			"columns not found when dispatch event, table: %v, columns: %v", row.Table, r.Columns)
+			"columns not found when dispatch event, table: %v, columns: %v", row.TableInfo.GetTableName(), r.Columns)
 	}
 
 	for idx := 0; idx < len(r.Columns); idx++ {
-		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))
+		col := dispatchCols[offsets[idx]]
+		if col == nil {
+			continue
+		}
+		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(col.Value)))
 	}
 
 	sum32 := r.hasher.Sum32()

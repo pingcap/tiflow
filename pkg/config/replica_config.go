@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -38,13 +39,20 @@ const (
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
 	minSyncPointRetention           = time.Hour * 1
 	minChangeFeedErrorStuckDuration = time.Minute * 30
+	// The default SQL Mode of TiDB: "ONLY_FULL_GROUP_BY,
+	// STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,
+	// NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+	// Note: The SQL Mode of TiDB is not the same as ORACLE.
+	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
+	defaultSQLMode = mysql.DefaultSQLMode
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    util.AddressOf(false),
+	EnableTableMonitor: util.AddressOf(false),
 	SyncPointInterval:  util.AddressOf(10 * time.Minute),
 	SyncPointRetention: util.AddressOf(24 * time.Hour),
 	BDRMode:            util.AddressOf(false),
@@ -68,15 +76,27 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		TiDBSourceID:                     1,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
+		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
+		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
+		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
+		Compression:           "",
+		MemoryUsage: &ConsistentMemoryUsage{
+			MemoryQuotaPercentage: 50,
+		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -88,6 +108,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
+	SQLMode:                      defaultSQLMode,
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -116,7 +138,8 @@ type replicaConfig struct {
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
-	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	EnableSyncPoint    *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	EnableTableMonitor *bool `toml:"enable-table-monitor" json:"enable-table-monitor"`
 	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
 	// not used in the changefeed's lifecycle.
 	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
@@ -137,8 +160,10 @@ type replicaConfig struct {
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	// Integrity is only available when the downstream is MQ.
-	Integrity                    *integrity.Config `toml:"integrity" json:"integrity"`
-	ChangefeedErrorStuckDuration *time.Duration    `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
+	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string              `toml:"sql-mode" json:"sql-mode"`
+	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
 }
 
 // Value implements the driver.Valuer interface
@@ -280,6 +305,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 
 		if err := c.Integrity.Validate(); err != nil {
 			return err
+		}
+
+		if c.Integrity.Enabled() && len(c.Sink.ColumnSelectors) != 0 {
+			log.Error("it's not allowed to enable the integrity check and column selector at the same time")
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"integrity check enabled and column selector set, not allowed")
+
 		}
 	}
 

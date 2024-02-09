@@ -23,8 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/format"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -426,15 +427,27 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 
 // addSpecialComment translate tidb feature to comment
 func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
-	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
+	p := parser.New()
+	// We need to use the correct SQL mode to parse the DDL query.
+	// Otherwise, the parser may fail to parse the DDL query.
+	// For example, it is needed to parse the following DDL query:
+	//  `alter table "t" add column "c" int default 1;`
+	// by adding `ANSI_QUOTES` to the SQL mode.
+	mode, err := mysql.GetSQLMode(s.info.Config.SQLMode)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	p.SetSQLMode(mode)
+	stms, _, err := p.Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size",
+		log.Error("invalid ddlQuery statement size",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.String("ddlQuery", ddl.Query))
+		return "", cerror.ErrUnexpected.FastGenByArgs("invalid ddlQuery statement size")
 	}
 	var sb strings.Builder
 	// translate TiDB feature to special comment

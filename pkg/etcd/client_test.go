@@ -71,6 +71,8 @@ func (m mockWatcher) RequestProgress(ctx context.Context) error {
 }
 
 func TestRetry(t *testing.T) {
+	t.Parallel()
+
 	originValue := maxTries
 	// to speedup the test
 	maxTries = 2
@@ -116,6 +118,8 @@ func TestRetry(t *testing.T) {
 }
 
 func TestDelegateLease(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	url, server, err := SetupEmbedEtcd(t.TempDir())
 	defer func() {
@@ -148,6 +152,8 @@ func TestDelegateLease(t *testing.T) {
 
 // test no data lost when WatchCh blocked
 func TestWatchChBlocked(t *testing.T) {
+	t.Parallel()
+
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := int32(0)
 	requestCount := int32(0)
@@ -209,6 +215,8 @@ func TestWatchChBlocked(t *testing.T) {
 
 // test no data lost when OutCh blocked
 func TestOutChBlocked(t *testing.T) {
+	t.Parallel()
+
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := int32(0)
 	requestCount := int32(0)
@@ -260,8 +268,9 @@ func TestOutChBlocked(t *testing.T) {
 }
 
 func TestRevisionNotFallBack(t *testing.T) {
-	cli := clientv3.NewCtxClient(context.TODO())
+	t.Parallel()
 
+	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := int32(0)
 	requestCount := int32(0)
 	rev := int64(0)

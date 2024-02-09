@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -89,10 +89,13 @@ func TestDeframenter(t *testing.T) {
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
 				row := &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
+					PhysicalTableID: 100,
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema:  "test",
+							Table:   "table1",
+							TableID: 100,
+						},
 					},
 					Columns: []*model.Column{
 						{Name: "c1", Value: j + 1},

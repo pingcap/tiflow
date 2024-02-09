@@ -15,7 +15,9 @@ package factory
 
 import (
 	"context"
+	"strings"
 
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/cdc/redo/writer/file"
@@ -28,14 +30,23 @@ import (
 func NewRedoLogWriter(
 	ctx context.Context, lwCfg *writer.LogWriterConfig,
 ) (writer.RedoLogWriter, error) {
-	scheme := lwCfg.URI.Scheme
-	if !redo.IsValidConsistentStorage(scheme) {
-		return nil, errors.ErrConsistentStorage.GenWithStackByArgs(scheme)
+	uri, err := storage.ParseRawURL(lwCfg.Storage)
+	if err != nil {
+		return nil, err
 	}
 
-	if redo.IsBlackholeStorage(scheme) {
-		return blackhole.NewLogWriter(), nil
+	if !redo.IsValidConsistentStorage(uri.Scheme) {
+		return nil, errors.ErrConsistentStorage.GenWithStackByArgs(uri.Scheme)
 	}
+
+	lwCfg.URI = uri
+	lwCfg.UseExternalStorage = redo.IsExternalStorage(uri.Scheme)
+
+	if redo.IsBlackholeStorage(uri.Scheme) {
+		invalid := strings.HasSuffix(uri.Scheme, "invalid")
+		return blackhole.NewLogWriter(invalid), nil
+	}
+
 	if lwCfg.UseFileBackend {
 		return file.NewLogWriter(ctx, lwCfg)
 	}

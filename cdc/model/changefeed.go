@@ -334,6 +334,12 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.ChangefeedErrorStuckDuration == nil {
 		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
 	}
+	if info.Config.SQLMode == "" {
+		info.Config.SQLMode = defaultConfig.SQLMode
+	}
+	if info.Config.SyncedStatus == nil {
+		info.Config.SyncedStatus = defaultConfig.SyncedStatus
+	}
 	info.RmUnusedFields()
 }
 
@@ -348,6 +354,10 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 			zap.Error(err),
 			zap.Any("sinkUri", info.SinkURI),
 		)
+		return
+	}
+	// blackhole is for testing purpose, no need to remove fields
+	if sink.IsBlackHoleScheme(uri.Scheme) {
 		return
 	}
 	if !sink.IsMQScheme(uri.Scheme) {
@@ -383,6 +393,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
+	info.Config.Sink.ContentCompatible = nil
 	info.Config.Sink.KafkaConfig = nil
 }
 
@@ -563,24 +574,6 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	info.Config.Sink.Protocol = util.AddressOf(newProtocol)
 }
 
-// DownstreamType returns the type of the downstream.
-func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
-	uri, err := url.Parse(info.SinkURI)
-	if err != nil {
-		return Unknown, errors.Trace(err)
-	}
-	if sink.IsMySQLCompatibleScheme(uri.Scheme) {
-		return DB, nil
-	}
-	if sink.IsMQScheme(uri.Scheme) {
-		return MQ, nil
-	}
-	if sink.IsStorageScheme(uri.Scheme) {
-		return Storage, nil
-	}
-	return Unknown, nil
-}
-
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
@@ -589,35 +582,17 @@ func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
 	info.Config.FixScheduler(inheritV66)
 }
 
-// DownstreamType is the type of downstream.
-type DownstreamType int
-
-const (
-	// DB is the type of Database.
-	DB DownstreamType = iota
-	// MQ is the type of MQ or Cloud Storage.
-	MQ
-	// Storage is the type of Cloud Storage.
-	Storage
-	// Unknown is the type of Unknown.
-	Unknown
-)
-
-// String implements fmt.Stringer interface.
-func (t DownstreamType) String() string {
-	switch t {
-	case DB:
-		return "DB"
-	case MQ:
-		return "MQ"
-	case Storage:
-		return "Storage"
-	}
-	return "Unknown"
-}
-
 // ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
 type ChangeFeedStatusForAPI struct {
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
+}
+
+// ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.
+type ChangeFeedSyncedStatusForAPI struct {
+	CheckpointTs        uint64 `json:"checkpoint-ts"`
+	LastSyncedTs        uint64 `json:"last-sync-time"`
+	PullerResolvedTs    uint64 `json:"puller-resolved-ts"`
+	SyncedCheckInterval int64  `json:"synced-check-interval"`
+	CheckpointInterval  int64  `json:"checkpoint-interval"`
 }

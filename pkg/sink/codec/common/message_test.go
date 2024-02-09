@@ -16,9 +16,9 @@ package common
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -27,9 +27,11 @@ import (
 func TestCreate(t *testing.T) {
 	t.Parallel()
 	rowEvent := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t1",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 		},
 		PreColumns: []*model.Column{
 			{
@@ -46,14 +48,20 @@ func TestCreate(t *testing.T) {
 		CommitTs: 5678,
 	}
 
-	msg := NewMsg(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
+	msg := NewMsg(config.ProtocolOpen,
+		[]byte("key1"),
+		[]byte("value1"),
+		rowEvent.CommitTs,
+		model.MessageTypeRow,
+		&rowEvent.TableInfo.TableName.Schema,
+		&rowEvent.TableInfo.TableName.Table)
 
 	require.Equal(t, []byte("key1"), msg.Key)
 	require.Equal(t, []byte("value1"), msg.Value)
 	require.Equal(t, rowEvent.CommitTs, msg.Ts)
 	require.Equal(t, model.MessageTypeRow, msg.Type)
-	require.Equal(t, rowEvent.Table.Schema, *msg.Schema)
-	require.Equal(t, rowEvent.Table.Table, *msg.Table)
+	require.Equal(t, rowEvent.TableInfo.GetSchemaName(), *msg.Schema)
+	require.Equal(t, rowEvent.TableInfo.GetTableName(), *msg.Table)
 	require.Equal(t, config.ProtocolOpen, msg.Protocol)
 
 	ft := types.NewFieldType(0)

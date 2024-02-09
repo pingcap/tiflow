@@ -22,19 +22,22 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	tikvconfig "github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	uatomic "github.com/uber-go/atomic"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -51,17 +54,22 @@ const (
 	closed
 
 	maxIdleDuration = time.Minute * 30
+	// topologyKey is /topology/ticdc/{clusterID}/{ip:port}
+	topologyTiCDC = "/topology/ticdc/%s/%s"
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
 // and processors. All public fields and method of an upstream should be thread-safe.
 // Please be careful that never change any exported field of an Upstream.
 type Upstream struct {
-	ID             uint64
+	ID uint64
+
 	PdEndpoints    []string
 	SecurityConfig *security.Credential
+	PDClient       pd.Client
+	etcdCli        *etcd.Client
+	session        *concurrency.Session
 
-	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
 	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
@@ -85,8 +93,11 @@ func newUpstream(pdEndpoints []string,
 	securityConfig *security.Credential,
 ) *Upstream {
 	return &Upstream{
-		PdEndpoints: pdEndpoints, status: uninit,
-		SecurityConfig: securityConfig, wg: new(sync.WaitGroup), clock: clock.New(),
+		PdEndpoints:    pdEndpoints,
+		SecurityConfig: securityConfig,
+		status:         uninit,
+		wg:             new(sync.WaitGroup),
+		clock:          clock.New(),
 	}
 }
 
@@ -112,9 +123,8 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 }
 
 // init initializes the upstream
-func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
-	ctx, cancel := context.WithCancel(ctx)
-	up.cancel = cancel
+func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) error {
+	ctx, up.cancel = context.WithCancel(ctx)
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
 		up.err.Store(err)
@@ -146,6 +156,12 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 			up.err.Store(err)
 			return errors.Trace(err)
 		}
+
+		etcdCli, err := etcd.CreateRawEtcdClient(up.SecurityConfig, grpcTLSOption, up.PdEndpoints...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		up.etcdCli = etcd.Wrap(etcdCli, make(map[string]prometheus.Counter))
 	}
 	clusterID := up.PDClient.GetClusterID(ctx)
 	if up.ID != 0 && up.ID != clusterID {
@@ -183,7 +199,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		return errors.Trace(err)
 	}
 
-	up.GCManager = gc.NewManager(gcServiceID, up.PDClient, up.PDClock)
+	up.GCManager = gc.NewManager(cfg.GCServiceID, up.PDClient, up.PDClock)
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
 	pc, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
@@ -199,6 +215,10 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 			zap.Error(err),
 			zap.Uint64("upstreamID", up.ID),
 			zap.Strings("upstreamEndpoints", up.PdEndpoints))
+	}
+	err = up.registerTopologyInfo(ctx, cfg)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	up.wg.Add(1)
@@ -242,10 +262,18 @@ func (up *Upstream) Close() {
 	}
 	atomic.StoreInt32(&up.status, closing)
 
-	// should never close default upstream's pdClient here
-	// because it's shared by the cdc server
-	if up.PDClient != nil && !up.isDefaultUpstream {
-		up.PDClient.Close()
+	// should never close default upstream's pdClient and etcdClient here
+	// because it's shared in the cdc server
+	if !up.isDefaultUpstream {
+		if up.PDClient != nil {
+			up.PDClient.Close()
+		}
+		if up.etcdCli != nil {
+			err := up.etcdCli.Unwrap().Close()
+			if err != nil {
+				log.Warn("etcd client close failed", zap.Error(err))
+			}
+		}
 	}
 
 	if up.KVStorage != nil {
@@ -263,6 +291,12 @@ func (up *Upstream) Close() {
 	}
 	if up.PDClock != nil {
 		up.PDClock.Stop()
+	}
+	if up.session != nil {
+		err := up.session.Close()
+		if err != nil {
+			log.Warn("etcd session close failed", zap.Error(err))
+		}
 	}
 
 	up.wg.Wait()
@@ -307,6 +341,25 @@ func (up *Upstream) trySetIdleTime() {
 			zap.Uint64("id", up.ID))
 		up.idleTime = up.clock.Now()
 	}
+}
+
+func (up *Upstream) registerTopologyInfo(ctx context.Context, cfg CaptureTopologyCfg) error {
+	lease, err := up.etcdCli.Grant(ctx, cfg.SessionTTL)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	up.session, err = concurrency.NewSession(up.etcdCli.Unwrap(), concurrency.WithLease(lease.ID))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// register capture info to upstream pd
+	key := fmt.Sprintf(topologyTiCDC, cfg.GCServiceID, cfg.AdvertiseAddr)
+	value, err := cfg.CaptureInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = up.etcdCli.Put(ctx, key, string(value), clientv3.WithLease(up.session.Lease()))
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 }
 
 // shouldClose returns true if

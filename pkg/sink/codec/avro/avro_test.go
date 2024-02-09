@@ -24,31 +24,16 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro/v2"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 )
-
-func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
-	types.SetBinChsClnFlag(ft)
-	return ft
-}
-
-//nolint:unparam
-func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
-	ft.SetFlag(flag)
-	return ft
-}
-
-func setElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.SetElems(elems)
-	return ft
-}
 
 type avroTestColumnTuple struct {
 	col            model.Column
@@ -125,7 +110,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            6,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setFlag(types.NewFieldType(mysql.TypeTiny), uint(model.UnsignedFlag)),
+			Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny)),
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
@@ -141,7 +126,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            7,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setFlag(types.NewFieldType(mysql.TypeShort), uint(model.UnsignedFlag)),
+			Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeShort)),
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
@@ -157,7 +142,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            8,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setFlag(types.NewFieldType(mysql.TypeInt24), uint(model.UnsignedFlag)),
+			Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24)),
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
@@ -173,7 +158,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            9,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setFlag(types.NewFieldType(mysql.TypeLong), uint(model.UnsignedFlag)),
+			Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLong)),
 		},
 		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int64(1), "long",
@@ -189,10 +174,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            10,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft: setFlag(
-				types.NewFieldType(mysql.TypeLonglong),
-				uint(model.UnsignedFlag),
-			),
+			Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
 		},
 		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "BIGINT UNSIGNED"}},
 		int64(1), "long",
@@ -337,7 +319,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            22,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeTinyBlob)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeTinyBlob)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -353,7 +335,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            23,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeMediumBlob)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeMediumBlob)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -369,7 +351,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            24,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeBlob)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeBlob)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -385,7 +367,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            25,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeLongBlob)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeLongBlob)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -401,7 +383,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            26,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -417,7 +399,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            27,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeVarString)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeVarString)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -433,7 +415,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            28,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeString)),
+			Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeString)),
 		},
 		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
@@ -444,7 +426,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            29,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
+			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
@@ -458,7 +440,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            30,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
+			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
@@ -657,10 +639,6 @@ func newLargeEvent() *model.RowChangedEvent {
 
 	return &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "testdb",
-			Table:  "avroencode",
-		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema: "testdb",
@@ -694,7 +672,7 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 
 	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -715,7 +693,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -724,7 +702,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	encoder = NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err = encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err = encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -963,7 +941,6 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
-		Table:     &model.TableName{Schema: "a", Table: "b"},
 		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
 		Columns: []*model.Column{{
 			Name:  "col1",

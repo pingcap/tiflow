@@ -203,6 +203,218 @@ func NewChangefeedReactorState(clusterID string,
 	}
 }
 
+// GetID returns the changefeed ID.
+func (s *ChangefeedReactorState) GetID() model.ChangeFeedID {
+	return s.ID
+}
+
+// GetChangefeedInfo returns the changefeed info.
+func (s *ChangefeedReactorState) GetChangefeedInfo() *model.ChangeFeedInfo {
+	return s.Info
+}
+
+// GetChangefeedStatus returns the changefeed status.
+func (s *ChangefeedReactorState) GetChangefeedStatus() *model.ChangeFeedStatus {
+	return s.Status
+}
+
+// SetWarning sets the warning to changefeed
+func (s *ChangefeedReactorState) SetWarning(lastError *model.RunningError) {
+	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info == nil {
+			return nil, false, nil
+		}
+		info.Warning = lastError
+		return info, true, nil
+	})
+}
+
+// SetError sets the error to changefeed
+func (s *ChangefeedReactorState) SetError(lastError *model.RunningError) {
+	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info == nil {
+			return nil, false, nil
+		}
+		info.Error = lastError
+		return info, true, nil
+	})
+}
+
+// RemoveChangefeed removes the changefeed and clean the information and status.
+func (s *ChangefeedReactorState) RemoveChangefeed() {
+	// remove info
+	s.PatchInfo(func(info *model.ChangeFeedInfo) (
+		*model.ChangeFeedInfo, bool, error,
+	) {
+		return nil, true, nil
+	})
+	// remove changefeedStatus
+	s.PatchStatus(
+		func(status *model.ChangeFeedStatus) (
+			*model.ChangeFeedStatus, bool, error,
+		) {
+			return nil, true, nil
+		})
+}
+
+// ResumeChnagefeed resumes the changefeed and set the checkpoint ts.
+func (s *ChangefeedReactorState) ResumeChnagefeed(overwriteCheckpointTs uint64) {
+	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		changed := false
+		if info == nil {
+			return nil, changed, nil
+		}
+		if overwriteCheckpointTs > 0 {
+			info.StartTs = overwriteCheckpointTs
+			changed = true
+		}
+		if info.Error != nil {
+			info.Error = nil
+			changed = true
+		}
+		return info, changed, nil
+	})
+
+	s.PatchStatus(func(status *model.ChangeFeedStatus) (
+		*model.ChangeFeedStatus, bool, error,
+	) {
+		if overwriteCheckpointTs > 0 {
+			oldCheckpointTs := status.CheckpointTs
+			status = &model.ChangeFeedStatus{
+				CheckpointTs:      overwriteCheckpointTs,
+				MinTableBarrierTs: overwriteCheckpointTs,
+				AdminJobType:      model.AdminNone,
+			}
+			log.Info("overwriting the tableCheckpoint ts",
+				zap.String("namespace", s.ID.Namespace),
+				zap.String("changefeed", s.ID.ID),
+				zap.Any("oldCheckpointTs", oldCheckpointTs),
+				zap.Any("newCheckpointTs", status.CheckpointTs),
+			)
+			return status, true, nil
+		}
+		return status, false, nil
+	})
+}
+
+// TakeProcessorErrors reuturns the error of the changefeed and clean the error.
+func (s *ChangefeedReactorState) TakeProcessorErrors() []*model.RunningError {
+	var runningErrors map[string]*model.RunningError
+	for captureID, position := range s.TaskPositions {
+		if position.Error != nil {
+			if runningErrors == nil {
+				runningErrors = make(map[string]*model.RunningError)
+			}
+			runningErrors[position.Error.Code] = position.Error
+			log.Error("processor reports an error",
+				zap.String("namespace", s.ID.Namespace),
+				zap.String("changefeed", s.ID.ID),
+				zap.String("captureID", captureID),
+				zap.Any("error", position.Error))
+			s.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position == nil {
+					return nil, false, nil
+				}
+				position.Error = nil
+				return position, true, nil
+			})
+		}
+	}
+	if runningErrors == nil {
+		return nil
+	}
+	result := make([]*model.RunningError, 0, len(runningErrors))
+	for _, err := range runningErrors {
+		result = append(result, err)
+	}
+	return result
+}
+
+// TakeProcessorWarnings reuturns the warning of the changefeed and clean the warning.
+func (s *ChangefeedReactorState) TakeProcessorWarnings() []*model.RunningError {
+	var runningWarnings map[string]*model.RunningError
+	for captureID, position := range s.TaskPositions {
+		if position.Warning != nil {
+			if runningWarnings == nil {
+				runningWarnings = make(map[string]*model.RunningError)
+			}
+			runningWarnings[position.Warning.Code] = position.Warning
+			log.Warn("processor reports a warning",
+				zap.String("namespace", s.ID.Namespace),
+				zap.String("changefeed", s.ID.ID),
+				zap.String("captureID", captureID),
+				zap.Any("warning", position.Warning))
+			s.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position == nil {
+					return nil, false, nil
+				}
+				// set Warning to nil after it has been handled
+				position.Warning = nil
+				return position, true, nil
+			})
+		}
+	}
+	if runningWarnings == nil {
+		return nil
+	}
+	result := make([]*model.RunningError, 0, len(runningWarnings))
+	for _, err := range runningWarnings {
+		result = append(result, err)
+	}
+	return result
+}
+
+// CleanUpTaskPositions removes the task positions of the changefeed.
+func (s *ChangefeedReactorState) CleanUpTaskPositions() {
+	for captureID := range s.TaskPositions {
+		s.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return nil, true, nil
+		})
+	}
+}
+
+// UpdateChangefeedState returns the task status of the changefeed.
+func (s *ChangefeedReactorState) UpdateChangefeedState(feedState model.FeedState,
+	adminJobType model.AdminJobType,
+	epoch uint64,
+) {
+	s.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		if status == nil {
+			return status, false, nil
+		}
+		if status.AdminJobType != adminJobType {
+			status.AdminJobType = adminJobType
+			return status, true, nil
+		}
+		return status, false, nil
+	})
+	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		changed := false
+		if info == nil {
+			return nil, changed, nil
+		}
+		if info.State != feedState {
+			info.State = feedState
+			changed = true
+		}
+		if info.AdminJobType != adminJobType {
+			info.AdminJobType = adminJobType
+			changed = true
+
+			if epoch > 0 {
+				previous := info.Epoch
+				info.Epoch = epoch
+				log.Info("update changefeed epoch",
+					zap.String("namespace", s.ID.Namespace),
+					zap.String("changefeed", s.ID.ID),
+					zap.Uint64("perviousEpoch", previous),
+					zap.Uint64("currentEpoch", info.Epoch))
+			}
+		}
+		return info, changed, nil
+	})
+}
+
 // UpdatePendingChange implements the ReactorState interface
 func (s *ChangefeedReactorState) UpdatePendingChange() {
 }

@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -25,14 +26,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
@@ -111,9 +112,7 @@ func NewMounter(schemaStorage SchemaStorage,
 		integrity: integrity,
 
 		encoder: &rowcodec.Encoder{},
-		sctx: &stmtctx.StatementContext{
-			TimeZone: tz,
-		},
+		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -172,10 +171,18 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
+			// for truncate table and truncate table partition DDL, the table ID is changed, but DML can be inserted to TiKV with old table ID.
+			// normally, cdc will close the old table pipeline and create a new one, and these invalid DMLs keys will not be pulled by CDC,
+			// but if redo is enabled or push based table pipeline is enabled, puller and mounter are not blocked by barrier ts.
+			// So some invalid DML keys will be decoded before processor removing the table pipeline
 			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
+			log.Error("can not found table schema",
+				zap.Uint64("ts", raw.CRTs),
+				zap.String("key", hex.EncodeToString(raw.Key)),
+				zap.Int64("tableID", physicalTableID))
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		if bytes.HasPrefix(key, recordPrefix) {
@@ -316,20 +323,21 @@ func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*
 
 // parseJob unmarshal the job from "v".
 func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
-	job := &timodel.Job{}
-	err := json.Unmarshal(v, job)
+	var job timodel.Job
+	err := json.Unmarshal(v, &job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("get new DDL job", zap.String("detail", job.String()))
 	if !job.IsDone() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
 	job.StartTS = startTs
+	// Since ddl in stateDone doesn't contain the FinishedTS,
+	// we need to set it as the txn's commit ts.
 	job.BinlogInfo.FinishedTS = CRTs
-	return job, nil
+	return &job, nil
 }
 
 func datum2Column(
@@ -375,7 +383,7 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetDDLDefaultDefinition(colInfo)
+		defaultValue := GetColumnDefaultValue(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -550,8 +558,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 	}
 
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
 	var intRowID int64
 	if row.RecordID.IsInt() {
 		intRowID = row.RecordID.IntValue()
@@ -572,23 +578,18 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	return &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    intRowID,
-		Table: &model.TableName{
-			Schema:      schemaName,
-			Table:       tableName,
-			TableID:     row.PhysicalTableID,
-			IsPartition: tableInfo.GetPartitionInfo() != nil,
-		},
-		ColInfos:   extendColumnInfos,
-		TableInfo:  tableInfo,
-		Columns:    cols,
-		PreColumns: preCols,
+		StartTs:         row.StartTs,
+		CommitTs:        row.CRTs,
+		RowID:           intRowID,
+		HandleKey:       row.RecordID,
+		PhysicalTableID: row.PhysicalTableID,
+		ColInfos:        extendColumnInfos,
+		TableInfo:       tableInfo,
+		Columns:         cols,
+		PreColumns:      preCols,
 
 		Checksum: checksum,
 
-		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
 	}, rawRow, nil
 }
@@ -651,7 +652,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(types.DefaultStmtNoWarningContext)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
@@ -738,8 +739,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	return d, v, size, warn, err
 }
 
-// GetDDLDefaultDefinition returns the default definition of a column.
-func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
+// GetColumnDefaultValue returns the default definition of a column.
+func GetColumnDefaultValue(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()
 	if defaultValue == nil {
 		defaultValue = col.GetOriginDefaultValue()

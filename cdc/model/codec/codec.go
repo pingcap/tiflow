@@ -16,7 +16,7 @@ package codec
 import (
 	"encoding/binary"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	codecv1 "github.com/pingcap/tiflow/cdc/model/codec/v1"
 	"github.com/tinylib/msgp/msgp"
@@ -161,15 +161,6 @@ func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
 	return
 }
 
-// MarshalRowAsRedoLog converts a RowChangedEvent into RedoLog, and then marshals it.
-func MarshalRowAsRedoLog(r *model.RowChangedEvent, b []byte) (o []byte, err error) {
-	log := &model.RedoLog{
-		RedoRow: model.RedoRowChangedEvent{Row: r},
-		Type:    model.RedoLogTypeRow,
-	}
-	return MarshalRedoLog(log, b)
-}
-
 // MarshalDDLAsRedoLog converts a DDLEvent into RedoLog, and then marshals it.
 func MarshalDDLAsRedoLog(d *model.DDLEvent, b []byte) (o []byte, err error) {
 	log := &model.RedoLog{
@@ -187,19 +178,13 @@ func decodeVersion(bts []byte) (uint16, []byte) {
 func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 	r = &model.RedoLog{Type: (model.RedoLogType)(rv1.Type)}
 	if rv1.RedoRow != nil && rv1.RedoRow.Row != nil {
-		r.RedoRow.Row = &model.RowChangedEvent{
-			StartTs:             rv1.RedoRow.Row.StartTs,
-			CommitTs:            rv1.RedoRow.Row.CommitTs,
-			RowID:               rv1.RedoRow.Row.RowID,
-			Table:               tableNameFromV1(rv1.RedoRow.Row.Table),
-			ColInfos:            rv1.RedoRow.Row.ColInfos,
-			TableInfo:           rv1.RedoRow.Row.TableInfo,
-			Columns:             make([]*model.Column, 0, len(rv1.RedoRow.Row.Columns)),
-			PreColumns:          make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),
-			IndexColumns:        rv1.RedoRow.Row.IndexColumns,
-			ApproximateDataSize: rv1.RedoRow.Row.ApproximateDataSize,
-			SplitTxn:            rv1.RedoRow.Row.SplitTxn,
-			ReplicatingTs:       rv1.RedoRow.Row.ReplicatingTs,
+		r.RedoRow.Row = &model.RowChangedEventInRedoLog{
+			StartTs:      rv1.RedoRow.Row.StartTs,
+			CommitTs:     rv1.RedoRow.Row.CommitTs,
+			Table:        tableNameFromV1(rv1.RedoRow.Row.Table),
+			Columns:      make([]*model.Column, 0, len(rv1.RedoRow.Row.Columns)),
+			PreColumns:   make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),
+			IndexColumns: rv1.RedoRow.Row.IndexColumns,
 		}
 		for _, c := range rv1.RedoRow.Row.Columns {
 			r.RedoRow.Row.Columns = append(r.RedoRow.Row.Columns, columnFromV1(c))

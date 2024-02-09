@@ -18,8 +18,8 @@ import (
 	"database/sql"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -42,7 +42,9 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 var (
 	testEvent = &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "a", Table: "b"},
+		},
 		Columns: []*model.Column{
 			{
 				Name:  "col1",
@@ -59,7 +61,9 @@ var (
 	}
 	largeTestEvent = &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "a", Table: "b"},
+		},
 		Columns: []*model.Column{
 			{
 				Name:  "col1",
@@ -462,7 +466,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 
-	a := 241
+	a := 244
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
@@ -497,7 +501,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, largeTestEvent.CommitTs, decodedLargeEvent.CommitTs)
-	require.Equal(t, largeTestEvent.Table, decodedLargeEvent.Table)
+	require.Equal(t, largeTestEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 
 	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
 	for _, column := range decodedLargeEvent.Columns {

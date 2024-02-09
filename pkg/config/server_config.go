@@ -111,6 +111,7 @@ var defaultServerConfig = &ServerConfig{
 		EnableMultiplexing:   true,
 		WorkerConcurrent:     8,
 		GrpcStreamConcurrent: 1,
+		AdvanceIntervalInMs:  300,
 		FrontierConcurrent:   8,
 		WorkerPoolSize:       0, // 0 will use NumCPU() * 2
 		RegionScanLimit:      40,
@@ -132,9 +133,13 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:              NewDefaultSchedulerConfig(),
-		EnableKVConnectBackOff: false,
-		CDCV2:                  &CDCV2{Enable: false},
+		Scheduler: NewDefaultSchedulerConfig(),
+		CDCV2:     &CDCV2{Enable: false},
+		Puller: &PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+			LogRegionDetails:               false,
+		},
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

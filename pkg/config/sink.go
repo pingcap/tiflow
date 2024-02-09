@@ -81,6 +81,14 @@ const (
 
 	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
 	DefaultEncoderGroupConcurrency = 32
+
+	// DefaultSendBootstrapIntervalInSec is the default interval to send bootstrap message.
+	DefaultSendBootstrapIntervalInSec = int64(120)
+	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
+	DefaultSendBootstrapInMsgCount = int32(10000)
+	// DefaultSendBootstrapToAllPartition is the default value of
+	// whether to send bootstrap message to all partitions.
+	DefaultSendBootstrapToAllPartition = true
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -122,7 +130,7 @@ type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
 	// CSVConfig is only available when the downstream is Storage.
 	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
-	// ColumnSelectors is Deprecated.
+
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
 	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
 	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
@@ -147,6 +155,9 @@ type SinkConfig struct {
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
 
+	// ContentCompatible is only available when the downstream is MQ.
+	ContentCompatible *bool `toml:"content-compatible" json:"content-compatible,omitempty"`
+
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
@@ -162,6 +173,21 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+
+	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
+	// Note: When one of the following conditions is set to negative value,
+	// bootstrap sending function will be disabled.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -177,9 +203,25 @@ func (s *SinkConfig) MaskSensitiveData() {
 	}
 }
 
+// ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
+// Only enable bootstrap sending function for simple protocol
+// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
+func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
+	if s == nil {
+		return false
+	}
+	protocol := util.GetOrZero(s.Protocol)
+
+	return protocol == ProtocolSimple.String() &&
+		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
+		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
+}
+
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
-	// delimiter between fields
+	// delimiter between fields, it can be 1 character or at most 2 characters
+	// It can not be CR or LF or contains CR or LF.
+	// It should have exclusive characters with quote.
 	Delimiter string `toml:"delimiter" json:"delimiter"`
 	// quoting character
 	Quote string `toml:"quote" json:"quote"`
@@ -189,6 +231,10 @@ type CSVConfig struct {
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
 	// encoding method of binary type
 	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
+	// output old value
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
+	// output handle key
+	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
@@ -214,19 +260,24 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1:
+	case 1, 2, 3:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than one character"))
+			errors.New("csv config delimiter contains more than three characters, note that escape "+
+				"sequences can only be used in double quotes in toml configuration items."))
 	}
 
-	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote and delimiter cannot be the same"))
+	if len(c.Quote) > 0 {
+		for _, r := range c.Delimiter {
+			if strings.ContainsRune(c.Quote, r) {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+					errors.New("csv config quote and delimiter has common characters which is not allowed"))
+			}
+		}
 	}
 
 	// validate binary encoding method
@@ -267,6 +318,22 @@ func (d *DateSeparator) FromString(separator string) error {
 	}
 
 	return nil
+}
+
+// GetPattern returns the pattern of the date separator.
+func (d DateSeparator) GetPattern() string {
+	switch d {
+	case DateSeparatorNone:
+		return ""
+	case DateSeparatorYear:
+		return `\d{4}`
+	case DateSeparatorMonth:
+		return `\d{4}-\d{2}`
+	case DateSeparatorDay:
+		return `\d{4}-\d{2}-\d{2}`
+	default:
+		return ""
+	}
 }
 
 func (d DateSeparator) String() string {
@@ -315,6 +382,7 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
 	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+	EncodingFormat                 *string `toml:"encoding-format" json:"encoding-format,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration
@@ -574,7 +642,10 @@ type CloudStorageConfig struct {
 	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 
-	OutputColumnID *bool `toml:"output-column-id" json:"output-column-id,omitempty"`
+	OutputColumnID      *bool   `toml:"output-column-id" json:"output-column-id,omitempty"`
+	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
+	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
+	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {

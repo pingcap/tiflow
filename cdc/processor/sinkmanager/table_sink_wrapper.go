@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -58,6 +58,7 @@ type tableSinkWrapper struct {
 		advanced     time.Time
 		resolvedTs   model.ResolvedTs
 		checkpointTs model.ResolvedTs
+		lastSyncedTs model.Ts
 	}
 
 	// state used to control the lifecycle of the table.
@@ -81,7 +82,7 @@ type tableSinkWrapper struct {
 	// lastCleanTime indicates the last time the table has been cleaned.
 	lastCleanTime time.Time
 
-	// rangeEventCounts is for clean the table engine.
+	// rangeEventCounts is for clean the table sorter.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
 	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
@@ -90,12 +91,12 @@ type tableSinkWrapper struct {
 
 type rangeEventCount struct {
 	// firstPos and lastPos are used to merge many rangeEventCount into one.
-	firstPos engine.Position
-	lastPos  engine.Position
+	firstPos sorter.Position
+	lastPos  sorter.Position
 	events   int
 }
 
-func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+func newRangeEventCount(pos sorter.Position, events int) rangeEventCount {
 	return rangeEventCount{
 		firstPos: pos,
 		lastPos:  pos,
@@ -166,6 +167,11 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 			break
 		}
 	}
+	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
+		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
+		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
+		t.tableSink.advanced = time.Now()
+	}
 	t.state.Store(tablepb.TableStateReplicating)
 	return nil
 }
@@ -216,6 +222,15 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	defer t.tableSink.innerMu.Unlock()
 	t.tableSink.resolvedTs = ts
 	return t.tableSink.s.UpdateResolvedTs(ts)
+}
+
+func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	if t.tableSink.s != nil {
+		return t.tableSink.s.GetLastSyncedTs()
+	}
+	return t.tableSink.lastSyncedTs
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
@@ -357,10 +372,20 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 		t.tableSink.checkpointTs = checkpointTs
 	}
 	t.tableSink.resolvedTs = checkpointTs
+	t.tableSink.lastSyncedTs = t.tableSink.s.GetLastSyncedTs()
 	t.tableSink.advanced = time.Now()
 	t.tableSink.innerMu.Unlock()
 	t.tableSink.s = nil
 	t.tableSink.version = 0
+}
+
+func (t *tableSinkWrapper) checkTableSinkHealth() (err error) {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	if t.tableSink.s != nil {
+		err = t.tableSink.s.CheckHealth()
+	}
+	return
 }
 
 // When the attached sink fail, there can be some events that have already been
@@ -403,7 +428,7 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 	}
 }
 
-func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, minEvents int) bool {
+func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound sorter.Position, minEvents int) bool {
 	t.rangeEventCountsMu.Lock()
 	defer t.rangeEventCountsMu.Unlock()
 
@@ -421,7 +446,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	shouldClean := count >= minEvents
 
 	if !shouldClean {
-		// To reduce engine.CleanByTable calls.
+		// To reduce sorter.CleanByTable calls.
 		t.rangeEventCounts[idx-1].events = count
 		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
 	} else {
