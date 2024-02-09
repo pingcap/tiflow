@@ -493,7 +493,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.Any("upstreamInfo", newUpInfo))
 
 	err = h.capture.GetEtcdClient().
-		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

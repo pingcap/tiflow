@@ -1348,7 +1348,7 @@ meta operation fail
 
 ["DFLOW:ErrMetaOpFailed"]
 error = '''
-meta operation %s is failed
+unexpected meta operation failure: %s
 '''
 
 ["DFLOW:ErrMetaOptionConflict"]
