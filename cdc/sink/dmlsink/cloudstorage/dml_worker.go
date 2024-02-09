@@ -239,9 +239,32 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 	}
 
 	if err := d.statistics.RecordBatchExecution(func() (int, int64, error) {
-		err := d.storage.WriteFile(ctx, path, buf.Bytes())
-		if err != nil {
-			return 0, 0, err
+		if d.config.FlushConcurrency <= 1 {
+			return rowsCnt, bytesCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
+		}
+
+		writer, inErr := d.storage.Create(ctx, path, &storage.WriterOption{
+			Concurrency: d.config.FlushConcurrency,
+		})
+		if inErr != nil {
+			return 0, 0, inErr
+		}
+
+		defer func() {
+			closeErr := writer.Close(ctx)
+			if inErr != nil {
+				log.Error("failed to close writer", zap.Error(closeErr),
+					zap.Int("workerID", d.id),
+					zap.Any("table", task.tableInfo.TableName),
+					zap.String("namespace", d.changeFeedID.Namespace),
+					zap.String("changefeed", d.changeFeedID.ID))
+				if inErr == nil {
+					inErr = closeErr
+				}
+			}
+		}()
+		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
+			return 0, 0, inErr
 		}
 		return rowsCnt, bytesCnt, nil
 	}); err != nil {
