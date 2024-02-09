@@ -99,9 +99,6 @@ CREATE TABLE t10 (
 DROP TABLE t9;
 
 
----Test TiCDC can handle DDLs that across databases
----Please note that we should write the database name explicitly in the DDLs
-
 drop database if exists `cross_db_1`;
 create database `cross_db_1`;
 
@@ -116,13 +113,9 @@ CREATE TABLE t1 (
                     col0 INT NOT NULL
 );
 
-RENAME TABLE `cross_db_1.t1` TO `cross_db_2.t1`;
+RENAME TABLE `cross_db_1`.`t1` TO `cross_db_2`.`t1`;
 
-CREATE TABLE `cross_db_1.t2` like `cross_db_2.t1` (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    val INT DEFAULT 0,
-                    col0 INT NOT NULL
-);
+CREATE TABLE `cross_db_1`.`t2` like `cross_db_2`.`t1`;
 
 
 CREATE TABLE finish_mark (

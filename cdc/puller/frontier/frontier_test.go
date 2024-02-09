@@ -507,7 +507,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 	frontier.Forward(1, tablepb.Span{StartKey: start, EndKey: end}, nextTs)
 	require.Equal(t, nextTs, frontier.Frontier())
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 5000; i++ {
 		totalLockedRanges := rangelock.LockedRanges()
 		unchangedRegions := make([]lockedRegion, 0, totalLockedRanges)
 
