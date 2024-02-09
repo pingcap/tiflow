@@ -118,7 +118,7 @@ RENAME TABLE `cross_db_1`.`t1` TO `cross_db_2`.`t1`;
 CREATE TABLE `cross_db_1`.`t2` like `cross_db_2`.`t1`;
 
 
-CREATE TABLE finish_mark (
+CREATE TABLE ddl_manager.finish_mark (
                      id INT AUTO_INCREMENT PRIMARY KEY,
                      val INT DEFAULT 0,
                      col0 INT NOT NULL
