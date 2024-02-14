@@ -244,7 +244,7 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL:    pulsarURL,
-		Logger: tpulsar.NewPulsarLogger(),
+		Logger: tpulsar.NewPulsarLogger(log.L()),
 	})
 	if err != nil {
 		log.Fatal("can't create pulsar client: %v", zap.Error(err))
