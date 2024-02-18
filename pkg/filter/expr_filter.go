@@ -419,6 +419,9 @@ func (f *dmlExprFilter) shouldSkipDML(
 	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {
+	if len(f.rules) == 0 {
+		return false, nil
+	}
 	// for defense purpose, normally the row and ti should not be nil.
 	if ti == nil || row == nil || rawRow.IsEmpty() {
 		return false, nil

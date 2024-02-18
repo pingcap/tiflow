@@ -14,14 +14,9 @@
 package filter
 
 import (
-	"fmt"
-	"sync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -84,8 +79,8 @@ func newSQLEventFilterRule(cfg *config.EventFilterRule) (*sqlEventRule, error) {
 }
 
 func verifyIgnoreEvents(types []bf.EventType) error {
-	typesMap := make(map[bf.EventType]struct{}, len(supportedEventTypes))
-	for _, et := range supportedEventTypes {
+	typesMap := make(map[bf.EventType]struct{}, len(SupportedEventTypes()))
+	for _, et := range SupportedEventTypes() {
 		typesMap[et] = struct{}{}
 	}
 	for _, et := range types {
@@ -98,28 +93,11 @@ func verifyIgnoreEvents(types []bf.EventType) error {
 
 // sqlEventFilter is a filter that filters DDL/DML event by its type or query.
 type sqlEventFilter struct {
-	// Please be careful, parser.Parser is not thread safe.
-	pLock sync.Mutex
-	// Currently, parser is only used to parse ddl query.
-	// So we can use a lock to protect it.
-	// If we want to use it to parse dml query in the future,
-	// we should create a parser for each goroutine.
-	ddlParser *parser.Parser
-	rules     []*sqlEventRule
+	rules []*sqlEventRule
 }
 
-func newSQLEventFilter(cfg *config.FilterConfig, sqlMode string) (*sqlEventFilter, error) {
-	p := parser.New()
-	mode, err := mysql.GetSQLMode(sqlMode)
-	if err != nil {
-		log.Error("failed to get sql mode", zap.Error(err))
-		return nil, cerror.ErrInvalidReplicaConfig.FastGenByArgs(fmt.Sprintf("invalid sqlMode %s", sqlMode))
-	}
-	p.SetSQLMode(mode)
-
-	res := &sqlEventFilter{
-		ddlParser: p,
-	}
+func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
+	res := &sqlEventFilter{}
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {
 			return nil, errors.Trace(err)
@@ -155,17 +133,12 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 
 // skipDDLEvent skips ddl event by its type and query.
 func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
+	if len(f.rules) == 0 {
+		return false, nil
+	}
 	schema := ddl.TableInfo.TableName.Schema
 	table := ddl.TableInfo.TableName.Table
-	log.Info("sql event filter handle ddl event",
-		zap.Any("ddlType", ddl.Type), zap.String("schema", schema),
-		zap.String("table", table), zap.String("query", ddl.Query))
-	f.pLock.Lock()
-	evenType, err := ddlToEventType(f.ddlParser, ddl.Query, ddl.Type)
-	f.pLock.Unlock()
-	if err != nil {
-		return false, err
-	}
+	evenType := ddlToEventType(ddl.Type)
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
 			zap.String("type", ddl.Type.String()),
@@ -185,12 +158,31 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 		if action == bf.Ignore {
 			return true, nil
 		}
+
+		// If the ddl is alter table's subtype,
+		// we need try to filter it by bf.AlterTable.
+		if isAlterTable(ddl.Type) {
+			action, err = rule.bf.Filter(
+				binlogFilterSchemaPlaceholder,
+				binlogFilterTablePlaceholder,
+				bf.AlterTable, ddl.Query)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if action == bf.Ignore {
+				return true, nil
+			}
+		}
 	}
 	return false, nil
 }
 
 // shouldSkipDML skips dml event by its type.
 func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, error) {
+	if len(f.rules) == 0 {
+		return false, nil
+	}
+
 	var et bf.EventType
 	switch {
 	case event.IsInsert():
@@ -215,30 +207,4 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 		}
 	}
 	return false, nil
-}
-
-var supportedEventTypes = []bf.EventType{
-	bf.AllDML,
-	bf.AllDDL,
-
-	// dml events
-	bf.InsertEvent,
-	bf.UpdateEvent,
-	bf.DeleteEvent,
-
-	// ddl events
-	bf.CreateSchema,
-	bf.CreateDatabase,
-	bf.DropSchema,
-	bf.DropDatabase,
-	bf.CreateTable,
-	bf.DropTable,
-	bf.RenameTable,
-	bf.TruncateTable,
-	bf.AlterTable,
-	bf.CreateView,
-	bf.DropView,
-	bf.AddTablePartition,
-	bf.DropTablePartition,
-	bf.TruncateTablePartition,
 }
