@@ -38,7 +38,7 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		OperationTimeout:  config.OperationTimeout.Duration(),
 		// add pulsar default metrics
 		MetricsRegisterer: mq.GetMetricRegistry(),
-		Logger:            NewPulsarLogger(),
+		Logger:            NewPulsarLogger(log.L()),
 	}
 	var err error
 
