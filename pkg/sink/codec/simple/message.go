@@ -707,7 +707,10 @@ func (a *avroMarshaller) encodeValue4Avro(
 	switch v := value.(type) {
 	case uint64:
 		if v > math.MaxInt64 {
-			return strconv.FormatUint(v, 10), "string", nil
+			//return strconv.FormatUint(v, 10), "string", nil
+			return map[string]interface{}{
+				"value": v,
+			}, "com.pingcap.simple.avro.UnsignedBigint", nil
 		}
 		return int64(v), "long", nil
 	case int64:
