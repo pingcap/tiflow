@@ -379,8 +379,8 @@ func (up *Upstream) shouldClose() bool {
 	return false
 }
 
-// Verify checks if the username and password are valid.
-func (up *Upstream) Verify(ctx context.Context, username, password string) error {
+// VerifyTiDBUser checks if the username and password are valid.
+func (up *Upstream) VerifyTiDBUser(ctx context.Context, username, password string) error {
 	tidbs, err := fetchTiDBTopology(ctx, up.etcdCli.Unwrap())
 	if err != nil {
 		return errors.Trace(err)

@@ -238,7 +238,7 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 		errMsg := "The user is not allowed."
 		return errors.ErrUnauthorized.GenWithStackByArgs(username, errMsg)
 	}
-	if err := up.Verify(ctx, username, password); err != nil {
+	if err := up.VerifyTiDBUser(ctx, username, password); err != nil {
 		return errors.ErrUnauthorized.GenWithStackByArgs(username, err.Error())
 	}
 	return nil

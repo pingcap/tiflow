@@ -170,7 +170,7 @@ func TestVerify(t *testing.T) {
 	}
 
 	// case 1: no tidb instance
-	err = up.Verify(ctx, "test", "")
+	err = up.VerifyTiDBUser(ctx, "test", "")
 	require.ErrorContains(t, err, "tidb instance not found in topology")
 
 	// case 2: tidb instance not alive
@@ -190,6 +190,6 @@ func TestVerify(t *testing.T) {
 		rawEtcdCli.Put(ctx, infoKey, "test")
 		rawEtcdCli.Put(ctx, ttlKey, strconv.FormatInt(time.Now().Unix(), 10))
 	}
-	err = up.Verify(ctx, "test", "")
+	err = up.VerifyTiDBUser(ctx, "test", "")
 	require.ErrorContains(t, err, "connection refused")
 }
