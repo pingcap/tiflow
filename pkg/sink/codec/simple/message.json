@@ -385,7 +385,6 @@
               "float",
               "double",
               "string",
-              "boolean",
               "bytes",
               "com.pingcap.simple.avro.Timestamp",
               "com.pingcap.simple.avro.UnsignedBigint"
