@@ -272,7 +272,7 @@ func (d *decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		value, err := encodeValue(value, fieldType)
+		value, err := encodeValue(value, fieldType, d.config.TimeZone.String())
 		if err != nil {
 			return nil, err
 		}

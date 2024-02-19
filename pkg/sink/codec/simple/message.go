@@ -605,23 +605,23 @@ func (a *jsonMarshaller) newDMLMessage(
 	var err error
 	if event.IsInsert() {
 		m.Type = DMLTypeInsert
-		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
 		m.Type = DMLTypeDelete
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
 		m.Type = DMLTypeUpdate
-		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -641,7 +641,7 @@ func (a *jsonMarshaller) newDMLMessage(
 	return m, nil
 }
 
-func formatColumns(
+func (a *jsonMarshaller) formatColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
@@ -652,7 +652,7 @@ func formatColumns(
 		if onlyHandleKey && !col.Flag.IsHandleKey() {
 			continue
 		}
-		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
+		value, err := encodeValue(col.Value, columnInfos[idx].Ft, a.config.TimeZone.String())
 		if err != nil {
 			return nil, err
 		}
@@ -699,17 +699,17 @@ func (a *avroMarshaller) encodeValue4Avro(
 				GenWithStack("unexpected type for the timestamp value: %+v, tp: %+v", value, reflect.TypeOf(value))
 		}
 		return map[string]interface{}{
-			"timestamp": v,
-			"timezone":  a.config.TimeZone.String(),
+			"location": a.config.TimeZone.String(),
+			"value":    v,
 		}, "com.pingcap.simple.avro.Timestamp", nil
 	}
 
 	switch v := value.(type) {
 	case uint64:
 		if v > math.MaxInt64 {
-			//return strconv.FormatUint(v, 10), "string", nil
+			// return strconv.FormatUint(v, 10), "string", nil
 			return map[string]interface{}{
-				"value": v,
+				"value": int64(v),
 			}, "com.pingcap.simple.avro.UnsignedBigint", nil
 		}
 		return int64(v), "long", nil
@@ -733,7 +733,16 @@ func (a *avroMarshaller) encodeValue4Avro(
 	return value, "", nil
 }
 
-func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
+type timestamp struct {
+	// location specifies the location of the `timestamp` typed value,
+	// so that the consumer can convert it to any other timezone location.
+	Location string `json:"location"`
+	Value    string `json:"value"`
+}
+
+func encodeValue(
+	value interface{}, ft *types.FieldType, location string,
+) (interface{}, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -777,6 +786,11 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			value = bitValue
 		default:
 		}
+	case mysql.TypeTimestamp:
+		return timestamp{
+			Location: location,
+			Value:    value.(string),
+		}, nil
 	default:
 	}
 
@@ -874,6 +888,8 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 					return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 				}
 			}
+		case map[string]interface{}:
+			value = uint64(v["value"].(int64))
 		default:
 			value = v
 		}

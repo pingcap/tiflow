@@ -282,11 +282,11 @@
     "docs": "the timestamp value format",
     "fields": [
       {
-        "name": "timestamp",
+        "name": "location",
         "type": "string"
       },
       {
-        "name": "timezone",
+        "name": "value",
         "type": "string"
       }
     ]
