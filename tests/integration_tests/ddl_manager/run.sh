@@ -33,8 +33,9 @@ function run() {
 	case $SINK_TYPE in
 	pulsar) 
 	  ca_path=$(cd $CUR/../_certificates/pulsar_certs/ca && pwd)
+	  ca_path="${ca_path}/ca.cert.pem"
 	  echo "[sink.pulsar-config]" >> $CUR/conf/pulsar_test.toml
-	  echo "tls-trust-certs-file-path=$ca_path/ca.cert.pem" >> $CUR/conf/pulsar_test.toml
+	  echo "tls-trust-certs-file-path=\"${ca_path}\"" >> $CUR/conf/pulsar_test.toml
 	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
 	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
 	esac
