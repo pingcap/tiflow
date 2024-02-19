@@ -29,10 +29,11 @@ function run() {
 	*) SINK_URI="mysql://root@127.0.0.1:3306/" ;;
 	esac
 	changefeed_id="ddl-manager"
-	
+
 	case $SINK_TYPE in
 	pulsar) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
 	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
+	esac
 
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
