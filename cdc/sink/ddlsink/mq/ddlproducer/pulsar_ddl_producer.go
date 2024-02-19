@@ -202,14 +202,16 @@ func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.
 	return producer, nil
 }
 
-// Close close all producers
+// Close async close all producers
 func (p *pulsarProducers) Close() {
-	keys := p.producers.Keys()
-	p.producersMutex.Lock()
-	defer p.producersMutex.Unlock()
-	for _, topic := range keys {
-		p.producers.Remove(topic) // callback func will be called
-	}
+	go func() {
+		keys := p.producers.Keys()
+		p.producersMutex.Lock()
+		defer p.producersMutex.Unlock()
+		for _, topic := range keys {
+			p.producers.Remove(topic) // callback func will be called
+		}
+	}()
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic

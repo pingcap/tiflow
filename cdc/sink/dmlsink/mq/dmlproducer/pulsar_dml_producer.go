@@ -193,33 +193,35 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 }
 
 func (p *pulsarDMLProducer) Close() {
-	// We have to hold the lock to synchronize closing with writing.
-	p.closedMu.Lock()
-	defer p.closedMu.Unlock()
-	// If the producer has already been closed, we should skip this close operation.
-	if p.closed {
-		// We need to guard against double closing the clients,
-		// which could lead to panic.
-		log.Warn("Pulsar DML producer already closed",
-			zap.String("namespace", p.id.Namespace),
-			zap.String("changefeed", p.id.ID))
-		return
-	}
-	close(p.failpointCh)
-	p.closed = true
+	go func() {
+		// We have to hold the lock to synchronize closing with writing.
+		p.closedMu.Lock()
+		defer p.closedMu.Unlock()
+		// If the producer has already been closed, we should skip this close operation.
+		if p.closed {
+			// We need to guard against double closing the clients,
+			// which could lead to panic.
+			log.Warn("Pulsar DML producer already closed",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID))
+			return
+		}
+		close(p.failpointCh)
+		p.closed = true
 
-	start := time.Now()
-	keys := p.producers.Keys()
-	for _, topic := range keys {
-		p.producers.Remove(topic) // callback func will be called
-		topicName, _ := topic.(string)
-		log.Info("Async client closed in pulsar DML producer",
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", p.id.Namespace),
-			zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
-	}
+		start := time.Now()
+		keys := p.producers.Keys()
+		for _, topic := range keys {
+			p.producers.Remove(topic) // callback func will be called
+			topicName, _ := topic.(string)
+			log.Info("Async client closed in pulsar DML producer",
+				zap.Duration("duration", time.Since(start)),
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
+		}
 
-	p.client.Close()
+		p.client.Close()
+	}()
 }
 
 // newProducer creates a pulsar producer
