@@ -246,7 +246,7 @@ var (
 		errors.RFCCodeText("CDC:ErrPulsarInvalidVersion"),
 	)
 	ErrPulsarInvalidConfig = errors.Normalize(
-		"pulsar config invalid",
+		"pulsar config invalid %s",
 		errors.RFCCodeText("CDC:ErrPulsarInvalidConfig"),
 	)
 	ErrPulsarCreateTopic = errors.Normalize(
