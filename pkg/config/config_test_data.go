@@ -123,7 +123,7 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128,
+    "cache-size-in-mb": 128
   },
   "security": {
     "ca-path": "",
@@ -132,7 +132,6 @@ const (
     "cert-allowed-cn": null,
     "mtls": false
   },
-  "per-table-memory-quota": 0,
   "kv-client": {
     "enable-multiplexing": true,
     "worker-concurrent": 8,
