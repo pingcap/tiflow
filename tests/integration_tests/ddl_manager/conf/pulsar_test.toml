@@ -1,0 +1,2 @@
+[sink.pulsar-config]
+tls-trust-certs-file-path="../../_certificate/pulsar_certs/ca/ca.cert.pem"
