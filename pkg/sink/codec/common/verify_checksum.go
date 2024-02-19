@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -149,27 +150,34 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 			log.Panic("unknown golang type for the string value",
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
-	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+	case mysql.TypeTimestamp:
+		var (
+			location  string
+			timestamp string
+		)
 		var v string
 		switch a := value.(type) {
 		case string:
-			v = a
+			location = config.GetDefaultServerConfig().TZ
+			timestamp = a
 		case map[string]interface{}:
-			timezone := a["location"].(string)
-			timestamp := a["value"].(string)
-
-			loc, err := util.GetTimezone(timezone)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			v = t.UTC().Format("2006-01-02 15:04:05")
+			location = a["location"].(string)
+			timestamp = a["value"].(string)
 		}
+
+		loc, err := util.GetTimezone(location)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		v = t.UTC().Format("2006-01-02 15:04:05")
 		buf = appendLengthValue(buf, []byte(v))
+	// all encoded as string
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+		buf = appendLengthValue(buf, []byte(value.(string)))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.
 	case mysql.TypeNewDecimal:
 		buf = appendLengthValue(buf, []byte(value.(string)))
