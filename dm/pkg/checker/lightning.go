@@ -16,7 +16,6 @@ package checker
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/importer"
