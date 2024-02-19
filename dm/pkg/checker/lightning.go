@@ -171,9 +171,12 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	clusterAvail := uint64(0)
+	var (
+		clusterAvail uint64
+		avail        int64
+	)
 	for _, store := range storeInfo.Stores {
-		avail, err := units.RAMInBytes(store.Status.Available)
+		avail, err = units.RAMInBytes(store.Status.Available)
 		if err != nil {
 			markCheckError(result, err)
 			return result
