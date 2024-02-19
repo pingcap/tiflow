@@ -188,7 +188,7 @@ func TestVerify(t *testing.T) {
 		infoKey := fmt.Sprintf("/topology/tidb/%s:%d/info", tidb.IP, tidb.Port)
 		ttlKey := fmt.Sprintf("/topology/tidb/%s:%d/ttl", tidb.IP, tidb.Port)
 		rawEtcdCli.Put(ctx, infoKey, "test")
-		rawEtcdCli.Put(ctx, ttlKey, strconv.FormatInt(time.Now().Unix(), 10))
+		rawEtcdCli.Put(ctx, ttlKey, strconv.FormatInt(time.Now().UnixNano(), 10))
 	}
 	err = up.VerifyTiDBUser(ctx, "test", "")
 	require.ErrorContains(t, err, "connection refused")
