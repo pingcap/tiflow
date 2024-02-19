@@ -379,7 +379,8 @@ func (up *Upstream) shouldClose() bool {
 	return false
 }
 
-// VerifyTiDBUser checks if the username and password are valid.
+// VerifyTiDBUser verify whether the username and password are valid in TiDB. It does the validation via
+// the successfully build of a connection with upstream TiDB with the username and password.
 func (up *Upstream) VerifyTiDBUser(ctx context.Context, username, password string) error {
 	tidbs, err := fetchTiDBTopology(ctx, up.etcdCli.Unwrap())
 	if err != nil {
