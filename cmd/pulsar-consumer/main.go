@@ -238,14 +238,28 @@ func run(cmd *cobra.Command, args []string) {
 
 // NewPulsarConsumer creates a pulsar consumer
 func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) {
-	pulsarURL := "pulsar" + "://" + option.address[0]
+	var pulsarURL string
+	if len(option.ca) != 0 {
+		pulsarURL = "pulsar+ssl" + "://" + option.address[0]
+	} else {
+		pulsarURL = "pulsar" + "://" + option.address[0]
+	}
+
 	topicName := option.topic
 	subscriptionName := "pulsar-test-subscription"
 
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
+	clientOption := pulsar.ClientOptions{
 		URL:    pulsarURL,
 		Logger: tpulsar.NewPulsarLogger(log.L()),
-	})
+	}
+
+	if len(option.ca) != 0 {
+		clientOption.TLSTrustCertsFilePath = option.ca
+		clientOption.TLSCertificateFile = option.cert
+		clientOption.TLSKeyFilePath = option.key
+	}
+
+	client, err := pulsar.NewClient(clientOption)
 	if err != nil {
 		log.Fatal("can't create pulsar client: %v", zap.Error(err))
 	}

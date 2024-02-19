@@ -522,8 +522,11 @@ func (o *OAuth2) validate() (err error) {
 
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
-	TLSKeyFilePath        *string `toml:"tls-key-file-path" json:"tls-key-file-path,omitempty"`
-	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-certificate-file,omitempty"`
+	// TLSKeyFilePath is the path to the private key file for the client
+	TLSKeyFilePath *string `toml:"tls-key-file-path" json:"tls-key-file-path,omitempty"`
+	// TLSCertificateFile is the path to the certificate file for the client
+	TLSCertificateFile *string `toml:"tls-certificate-file" json:"tls-certificate-file,omitempty"`
+	// TLSTrustCertsFilePath is the path to the CA certificate file, it is used to verify the server's certificate (or certificate chain)
 	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
 
 	// PulsarProducerCacheSize is the size of the cache of pulsar producers
