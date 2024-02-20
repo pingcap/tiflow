@@ -82,23 +82,11 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	}
 
 	for i := range eventSorter.dbs {
-		fetchTokens := make(chan struct{}, 1)
-		ioTokens := make(chan struct{}, 1)
-		fetchTokens <- struct{}{}
-		ioTokens <- struct{}{}
-
-		// Start 2 goroutines for every db instance. When one goroutine is busy on I/O,
-		// the another one can still keep retrieving events.
 		eventSorter.wg.Add(1)
-		go func(x int, fetchTokens, ioTokens chan struct{}) {
+		go func(x int) {
 			defer eventSorter.wg.Done()
-			eventSorter.handleEvents(x, dbs[x], channs[x].Out(), fetchTokens, ioTokens)
-		}(i, fetchTokens, ioTokens)
-		eventSorter.wg.Add(1)
-		go func(x int, fetchTokens, ioTokens chan struct{}) {
-			defer eventSorter.wg.Done()
-			eventSorter.handleEvents(x, dbs[x], channs[x].Out(), fetchTokens, ioTokens)
-		}(i, fetchTokens, ioTokens)
+			eventSorter.handleEvents(x, dbs[x], channs[x].Out())
+		}(i)
 	}
 
 	return eventSorter
@@ -124,7 +112,7 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 		uniqueID: genUniqueID(),
 		ch:       s.channs[getDB(span, len(s.dbs))],
 	}
-	state.maxReceivedResolvedTs.Store(startTs)
+	state.maxReceivedResolvedTs.Store(startTs) // 为啥要这个
 	s.tables.ReplaceOrInsert(span, state)
 	s.mu.Unlock()
 }
@@ -147,6 +135,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 // Add implements sorter.SortEngine.
 //
 // Panics if the table doesn't exist.
+// 这里的 event 还是一个 rawKV 数据
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
@@ -371,17 +360,78 @@ type tableState struct {
 	cleaned sorter.Position
 }
 
-func (s *EventSorter) handleEvents(
-	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
-	fetchTokens, ioTokens chan struct{},
-) {
+type DBBatchEvent struct {
+	batch         *pebble.Batch
+	batchResolved *spanz.HashMap[model.Ts]
+}
+
+// batchCommitAndUpdateResolvedTs commits the batch and updates the resolved ts of the table.
+func (s *EventSorter) batchCommitAndUpdateResolvedTs(
+	db *pebble.DB,
+	batch_ch chan *DBBatchEvent,
+	id int,
+	writeOpts *pebble.WriteOptions) {
 	idstr := strconv.Itoa(id + 1)
 	writeDuration := sorter.WriteDuration().WithLabelValues(idstr)
 	writeBytes := sorter.WriteBytes().WithLabelValues(idstr)
 
-	batch := db.NewBatch()
+	for {
+		select {
+		case <-s.closed:
+			return
+		case batchEvent := <-batch_ch:
+			// do batch commit
+			batch := batchEvent.batch
+			writeBytes.Observe(float64(len(batch.Repr())))
+			start := time.Now()
+			if err := batch.Commit(writeOpts); err != nil {
+				log.Panic("failed to commit pebble batch", zap.Error(err),
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID))
+			}
+			writeDuration.Observe(time.Since(start).Seconds())
+
+			// update resolved ts after commit successfully
+			batchResolved := batchEvent.batchResolved
+			batchResolved.Range(func(span tablepb.Span, resolved uint64) bool {
+				s.mu.RLock()
+				ts, ok := s.tables.Get(span)
+				if !ok {
+					log.Debug("Table is removed, skip updating resolved",
+						zap.String("namespace", s.changefeedID.Namespace),
+						zap.String("changefeed", s.changefeedID.ID),
+						zap.Stringer("span", &span),
+						zap.Uint64("resolved", resolved))
+					s.mu.RUnlock()
+					return false
+				}
+				ts.sortedResolved.Store(resolved)
+				for _, onResolve := range s.onResolves {
+					onResolve(span, resolved)
+				}
+				s.mu.RUnlock()
+				return true
+			})
+		}
+	}
+}
+
+// handleEvents encode events from channel and try to write them into pebble.
+// It will commit the batch when the size of the batch is larger than batchCommitSize or
+// the time since the last commit is larger than batchCommitInterval.
+// It will also update the resolved ts of the table when the batch is committed.
+// Considering commit is a heavy operation, we make [fetch and decode event] and
+// [do commit and update resolved ts] as two separate goroutines to make pipeline.
+func (s *EventSorter) handleEvents(
+	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
+) {
 	writeOpts := &pebble.WriteOptions{Sync: false}
+	batch_ch := make(chan *DBBatchEvent, 1000)
+	go s.batchCommitAndUpdateResolvedTs(db, batch_ch, id, writeOpts)
+
+	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
+	startToCollectBatch := time.Now()
 
 	handleItem := func(item eventWithTableID) {
 		if item.event.IsResolved() {
@@ -403,93 +453,19 @@ func (s *EventSorter) handleEvents(
 	}
 
 	for {
-		// Wait for a fetch token.
-		select {
-		case <-fetchTokens:
-		case <-s.closed:
-			return
-		}
-
-		startToCollectBatch := time.Now()
-		select {
-		case item := <-inputCh:
-			handleItem(item)
-		case <-s.closed:
-			return
-		}
-	LOOP1: // Keep retrieving events until a batch is collected.
 		for len(batch.Repr()) < batchCommitSize && time.Since(startToCollectBatch) < batchCommitInterval {
 			select {
 			case item := <-inputCh:
 				handleItem(item)
 			case <-s.closed:
 				return
-			default:
-				break LOOP1
 			}
 		}
-	LOOP2: // Keep retrieving events until an io token is available.
-		for {
-			if len(batch.Repr()) < batchCommitSize {
-				select {
-				case <-ioTokens:
-					break LOOP2
-				case <-s.closed:
-					return
-				default:
-				}
-				select {
-				case <-ioTokens:
-					break LOOP2
-				case <-s.closed:
-					return
-				case item := <-inputCh:
-					handleItem(item)
-				}
-			} else {
-				select {
-				case <-ioTokens:
-					break LOOP2
-				case <-s.closed:
-					return
-				}
-			}
-		}
+		batch_ch <- &DBBatchEvent{batch, newResolved}
 
-		fetchTokens <- struct{}{}
-		if batch.Count() > 0 {
-			writeBytes.Observe(float64(len(batch.Repr())))
-			start := time.Now()
-			if err := batch.Commit(writeOpts); err != nil {
-				log.Panic("failed to commit pebble batch", zap.Error(err),
-					zap.String("namespace", s.changefeedID.Namespace),
-					zap.String("changefeed", s.changefeedID.ID))
-			}
-			writeDuration.Observe(time.Since(start).Seconds())
-			batch = db.NewBatch()
-		}
-
-		newResolved.Range(func(span tablepb.Span, resolved uint64) bool {
-			s.mu.RLock()
-			ts, ok := s.tables.Get(span)
-			if !ok {
-				log.Debug("Table is removed, skip updating resolved",
-					zap.String("namespace", s.changefeedID.Namespace),
-					zap.String("changefeed", s.changefeedID.ID),
-					zap.Stringer("span", &span),
-					zap.Uint64("resolved", resolved))
-				s.mu.RUnlock()
-				return false
-			}
-			ts.sortedResolved.Store(resolved)
-			for _, onResolve := range s.onResolves {
-				onResolve(span, resolved)
-			}
-			s.mu.RUnlock()
-			return true
-		})
+		batch = db.NewBatch()
 		newResolved = spanz.NewHashMap[model.Ts]()
-		ioTokens <- struct{}{}
+		startToCollectBatch = time.Now()
 	}
 }
 
