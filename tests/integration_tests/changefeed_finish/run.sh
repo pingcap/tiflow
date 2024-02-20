@@ -28,7 +28,7 @@ function run() {
 	# 90s after now
 	target_ts=$(($now + 90 * 10 ** 3 * 2 ** 18))
 
-	changefeed_id="changefeed_finish"
+	changefeed_id="changefeed-finish"
 
 	case $SINK_TYPE in
 	pulsar) 
