@@ -68,19 +68,11 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20230925123611-87bebcc0d071
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20231010115255-ec2731b8f539
-	github.com/pingcap/tidb-tools v0.0.0-20231010140451-6189b1bea2fd
+	github.com/pingcap/tidb-tools v0.0.0-20240220032153-0792ce9410ca
 	github.com/pingcap/tidb/parser v0.0.0-20231010115255-ec2731b8f539
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
-=======
-	github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73
-	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73
-	github.com/prometheus/client_golang v1.17.0
-	github.com/prometheus/client_model v0.5.0
->>>>>>> fdef38b920 (binlog-filter: log error instead of return it (#10380))
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
@@ -390,3 +382,9 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
+
+// TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
+// Please remove these dependencies.
+replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
+
+replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
