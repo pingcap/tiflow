@@ -1,0 +1,6 @@
+[sink.pulsar-config]
+tls-trust-certs-file-path="/Users/dongmen/dongmen/works/tiflow/tests/integration_tests/_certificates/pulsar_certs/ca/ca.cert.pem"
+oauth2.oauth2-private-key="/Users/dongmen/dongmen/works/tiflow/tests/integration_tests/_certificates/pulsar_certs/client_credentials.json"
+oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
+oauth2.oauth2-audience="pulsar"
+oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
