@@ -128,11 +128,6 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-chunk-size-limit = 10000000
-max-memory-consumption = 2000000
-max-memory-percentage = 3
-num-concurrent-worker = 4
-num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 
 [security]

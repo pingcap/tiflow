@@ -758,7 +758,7 @@ invalid pulsar client ID '%s'
 
 ["CDC:ErrPulsarInvalidConfig"]
 error = '''
-pulsar config invalid
+pulsar config invalid %s
 '''
 
 ["CDC:ErrPulsarInvalidPartitionNum"]
