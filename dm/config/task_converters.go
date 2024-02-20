@@ -664,8 +664,6 @@ func TaskConfigToOpenAPITask(c *TaskConfig, sourceCfgMap map[string]*SourceConfi
 	cfgs := make(map[string]dbconfig.DBConfig)
 	for _, source := range c.MySQLInstances {
 		if cfg, ok := sourceCfgMap[source.SourceID]; ok {
-			// check the password
-			cfg.DecryptPassword()
 			cfgs[source.SourceID] = cfg.From
 		}
 	}

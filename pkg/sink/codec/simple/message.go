@@ -26,8 +26,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	tiTypes "github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -146,7 +144,7 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 		tp.Decimal = col.GetDecimal()
 	}
 
-	defaultValue := entry.GetColumnDefaultValue(col)
+	defaultValue := model.GetColumnDefaultValue(col)
 	if defaultValue != nil && col.GetType() == mysql.TypeBit {
 		var err error
 		defaultValue, err = common.BinaryLiteralToInt([]byte(defaultValue.(string)))
@@ -164,9 +162,10 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 
 // newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
 func newTiColumnInfo(
-	column *columnSchema, indexes []*IndexSchema,
+	column *columnSchema, colID int64, indexes []*IndexSchema,
 ) (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
+	col.ID = colID
 	col.Name = timodel.NewCIStr(column.Name)
 
 	col.FieldType = *types.NewFieldType(types.StrToType(column.DataType.MySQLType))
@@ -338,33 +337,37 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 		tableID = m.TableID
 		schemaVersion = m.Version
 	}
-	info := &model.TableInfo{
-		TableName: model.TableName{
-			Schema:  database,
-			Table:   table,
-			TableID: tableID,
-		},
-		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(table),
-			UpdateTS: schemaVersion,
-		},
+	tidbTableInfo := &timodel.TableInfo{
+		ID:       tableID,
+		Name:     timodel.NewCIStr(table),
+		UpdateTS: schemaVersion,
 	}
 
 	if m == nil {
-		return info, nil
+		return &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  database,
+				Table:   table,
+				TableID: tableID,
+			},
+			TableInfo: tidbTableInfo,
+		}, nil
 	}
 
+	nextMockID := int64(100)
 	for _, col := range m.Columns {
-		tiCol, err := newTiColumnInfo(col, m.Indexes)
+		tiCol, err := newTiColumnInfo(col, nextMockID, m.Indexes)
+		nextMockID += 100
 		if err != nil {
 			return nil, err
 		}
-		info.Columns = append(info.Columns, tiCol)
+		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
 	}
 	for _, idx := range m.Indexes {
 		index := newTiIndexInfo(idx)
-		info.Indices = append(info.Indices, index)
+		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
 	}
+	info := model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
 
 	return info, nil
 }
@@ -411,26 +414,20 @@ func buildRowChangedEvent(
 	if err != nil {
 		return nil, err
 	}
-	result.Columns = columns
+	result.Columns = model.Columns2ColumnDatas(columns, tableInfo)
 
-	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
+	preColumns, err := decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns = columns
-
-	primaryKeySet := make(map[string]struct{})
-	for _, name := range tableInfo.GetPrimaryKeyColumnNames() {
-		primaryKeySet[name] = struct{}{}
-	}
-	result.WithHandlePrimaryFlag(primaryKeySet)
+	result.PreColumns = model.Columns2ColumnDatas(preColumns, tableInfo)
 
 	if enableRowChecksum && msg.Checksum != nil {
-		err = common.VerifyChecksum(result.PreColumns, msg.Checksum.Previous)
+		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		err = common.VerifyChecksum(result.Columns, msg.Checksum.Current)
+		err = common.VerifyChecksum(columns, msg.Checksum.Current)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
@@ -446,7 +443,7 @@ func buildRowChangedEvent(
 			log.Warn("cdc detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
-			for _, col := range result.PreColumns {
+			for _, col := range preColumns {
 				log.Info("data corrupted, print each previous column for debugging",
 					zap.String("name", col.Name),
 					zap.Any("type", col.Type),
@@ -455,7 +452,7 @@ func buildRowChangedEvent(
 					zap.Any("value", col.Value),
 					zap.Any("default", col.Default))
 			}
-			for _, col := range result.Columns {
+			for _, col := range columns {
 				log.Info("data corrupted, print each column for debugging",
 					zap.String("name", col.Name),
 					zap.Any("type", col.Type),
@@ -604,23 +601,23 @@ func (a *jsonMarshaller) newDMLMessage(
 	var err error
 	if event.IsInsert() {
 		m.Type = DMLTypeInsert
-		m.Data, err = a.formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
 		m.Type = DMLTypeDelete
-		m.Old, err = a.formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
 		m.Type = DMLTypeUpdate
-		m.Data, err = a.formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = a.formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -641,21 +638,23 @@ func (a *jsonMarshaller) newDMLMessage(
 }
 
 func (a *jsonMarshaller) formatColumns(
-	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
+	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
-	for idx, col := range columns {
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
+	for i, col := range columns {
 		if col == nil {
 			continue
 		}
-		if onlyHandleKey && !col.Flag.IsHandleKey() {
+		flag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
+		if onlyHandleKey && !flag.IsHandleKey() {
 			continue
 		}
-		value, err := encodeValue(col.Value, columnInfos[idx].Ft, a.config.TimeZone.String())
+		value, err := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
 		if err != nil {
 			return nil, err
 		}
-		result[col.Name] = value
+		result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 	}
 	return result, nil
 }
