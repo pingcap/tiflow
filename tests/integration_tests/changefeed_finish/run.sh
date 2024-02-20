@@ -45,8 +45,8 @@ oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
 oauth2.oauth2-audience="pulsar"
 oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
 EOF
-	  cdc cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" --target-ts=$target_ts 2>&1 | tail -n2 | head -n1 | awk '{print $2}';;
-	*) cdc cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --target-ts=$target_ts 2>&1 | tail -n2 | head -n1 | awk '{print $2}';;
+	  cdc cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" --target-ts=$target_ts;;
+	*) cdc cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --target-ts=$target_ts 2>&1;;
 	esac
 
 	case $SINK_TYPE in
