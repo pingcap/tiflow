@@ -45,15 +45,15 @@ func createSources(ctx context.Context, cli pb.MasterClient, cfg *config) error 
 		return err
 	}
 
-	cfg1, err := config2.ParseYaml(string(s1Content))
+	cfg1, err := config2.SourceCfgFromYaml(string(s1Content))
 	if err != nil {
 		return err
 	}
-	cfg2, err := config2.ParseYaml(string(s2Content))
+	cfg2, err := config2.SourceCfgFromYaml(string(s2Content))
 	if err != nil {
 		return err
 	}
-	cfg3, err := config2.ParseYaml(string(s3Content))
+	cfg3, err := config2.SourceCfgFromYaml(string(s3Content))
 	if err != nil {
 		return err
 	}

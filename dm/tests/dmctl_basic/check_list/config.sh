@@ -82,10 +82,6 @@ function diff_get_config() {
 		"config source mysql-replica-02 --path $WORK_DIR/get_source2.yaml" \
 		"\"result\": true" 1
 	diff -I '^case-sensitive*' $WORK_DIR/get_source2.yaml $cur/conf/get_source2.yaml || exit 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"config export -p /tmp/configs" \
-		"cipher is not initialized" 1
 }
 
 function config_to_file() {

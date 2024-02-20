@@ -52,7 +52,7 @@ func (c *Config) String() string {
 
 // FromSourceCfg gen relay config from source config.
 func FromSourceCfg(sourceCfg *config.SourceConfig) *Config {
-	clone := sourceCfg.DecryptPassword()
+	clone := sourceCfg.GetDecryptedClone()
 	cfg := &Config{
 		EnableGTID: clone.EnableGTID,
 		Flavor:     clone.Flavor,
