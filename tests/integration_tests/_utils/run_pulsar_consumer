@@ -14,6 +14,7 @@ pwd=$pwd
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TLS_DIR=$(cd $CUR/../_certificates/pulsar_certs && pwd)
 CA_PATH=$TLS_DIR/ca/ca.cert.pem
+OAUTH2_PATH=$TLS_DIR/client_credentials.json
 
 echo "[$(date)] <<<<<< START Pulsar consumer in $TEST_NAME case >>>>>>"
 cd $workdir
@@ -23,6 +24,6 @@ cd $workdir
 downstream_uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false"
 
 # output debug log to allow us to check the consumer's behavior when it encounters errors
-cdc_pulsar_consumer --ca $CA_PATH --log-file $workdir/cdc_pulsar_consumer$log_suffix.log --log-level debug --upstream-uri $changefeed_sink_uri --downstream-uri ${downstream_uri} >>$workdir/cdc_pulsar_consumer_stdout$log_suffix.log 2>&1 &
+cdc_pulsar_consumer --ca $CA_PATH --oauth2 $OAUTH2_PATH --log-file $workdir/cdc_pulsar_consumer$log_suffix.log --log-level debug --upstream-uri $changefeed_sink_uri --downstream-uri ${downstream_uri} >>$workdir/cdc_pulsar_consumer_stdout$log_suffix.log 2>&1 &
 
 cd $pwd

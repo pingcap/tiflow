@@ -52,7 +52,28 @@ function try_to_run_cdc() {
 	pulsar) SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+
+	changefeed_id="cdc-server-tips"
+
+	case $SINK_TYPE in
+	pulsar) 
+	  ca_path=$(cd $CUR/../_certificates/pulsar_certs/ca && pwd)
+	  ca_path="${ca_path}/ca.cert.pem"
+	  client_token_path=$(cd $CUR/../_certificates/pulsar_certs && pwd)
+	  client_token_path="${client_token_path}/client_credentials.json"
+	  touch $CUR/conf/pulsar_test.toml
+	  cat <<EOF >> $CUR/conf/pulsar_test.toml
+[sink.pulsar-config]
+tls-trust-certs-file-path="${ca_path}"
+oauth2.oauth2-private-key="${client_token_path}"
+oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
+oauth2.oauth2-audience="pulsar"
+oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
+EOF
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
+	esac
+
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;

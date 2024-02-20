@@ -65,6 +65,7 @@ type ConsumerOption struct {
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+	oauth2Path    string
 
 	downstreamURI string
 	partitionNum  int
@@ -143,6 +144,7 @@ func main() {
 	cmd.Flags().StringVar(&consumerOption.key, "key", "", "Private key path for pulsar SSL connection")
 	cmd.Flags().StringVar(&consumerOption.logPath, "log-file", "cdc_pulsar_consumer.log", "log file path")
 	cmd.Flags().StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
+	cmd.Flags().StringVar(&consumerOption.oauth2Path, "oauth2", "", "oauth2 private key path")
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -257,6 +259,18 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 		clientOption.TLSTrustCertsFilePath = option.ca
 		clientOption.TLSCertificateFile = option.cert
 		clientOption.TLSKeyFilePath = option.key
+	}
+
+	var auth pulsar.Authentication
+	if len(option.oauth2Path) != 0 {
+		auth = pulsar.NewAuthenticationOAuth2(map[string]string{
+			"type":       "client_credentials",
+			"issuerUrl":  "https://dev-ys3tcsktsrfqui44.us.auth0.com",
+			"privateKey": option.oauth2Path,
+			"clientId":   "h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z",
+			"audience":   "pulsar",
+		})
+		clientOption.Authentication = auth
 	}
 
 	client, err := pulsar.NewClient(clientOption)

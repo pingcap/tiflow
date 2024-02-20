@@ -31,8 +31,29 @@ function run() {
 	fi
 
 	if [ "$SINK_TYPE" == "pulsar" ]; then
-		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
+		SINK_URI="pulsar+ssl://127.0.0.1:6651/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
 	fi
+	
+	changefeed_id="canal-json-basic"
+
+	case $SINK_TYPE in
+	pulsar) 
+	  ca_path=$(cd $CUR/../_certificates/pulsar_certs/ca && pwd)
+	  ca_path="${ca_path}/ca.cert.pem"
+	  client_token_path=$(cd $CUR/../_certificates/pulsar_certs && pwd)
+	  client_token_path="${client_token_path}/client_credentials.json"
+	  touch $CUR/conf/pulsar_test.toml
+	  cat <<EOF >> $CUR/conf/pulsar_test.toml
+[sink.pulsar-config]
+tls-trust-certs-file-path="${ca_path}"
+oauth2.oauth2-private-key="${client_token_path}"
+oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
+oauth2.oauth2-audience="pulsar"
+oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
+EOF
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
+	esac
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 	sleep 5 # wait for changefeed to start
