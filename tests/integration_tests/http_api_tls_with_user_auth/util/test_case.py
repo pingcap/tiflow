@@ -3,6 +3,7 @@ import os
 import requests as rq
 import time
 import json
+from requests.auth import HTTPBasicAuth
 
 # the max retry time
 RETRY_TIME = 10
@@ -504,7 +505,7 @@ if __name__ == "__main__":
     CA_PEM_PATH = CERTIFICATE_PATH + '/ca.pem'
     CERT=(CLIENT_PEM_PATH, CLIENT_KEY_PEM_PATH)
     VERIFY=(CA_PEM_PATH)
-    Auth = rq.HTTPBasicAuth('ticdc', 'ticdc_secret')
+    Auth = HTTPBasicAuth('ticdc', 'ticdc_secret')
 
     # test all the case as the order list in this map
     FUNC_MAP = {
