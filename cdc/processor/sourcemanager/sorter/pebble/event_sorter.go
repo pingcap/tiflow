@@ -135,7 +135,6 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 // Add implements sorter.SortEngine.
 //
 // Panics if the table doesn't exist.
-// 这里的 event 还是一个 rawKV 数据
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
