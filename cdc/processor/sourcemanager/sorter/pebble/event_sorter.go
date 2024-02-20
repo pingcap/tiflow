@@ -112,7 +112,7 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 		uniqueID: genUniqueID(),
 		ch:       s.channs[getDB(span, len(s.dbs))],
 	}
-	state.maxReceivedResolvedTs.Store(startTs) // 为啥要这个
+	state.maxReceivedResolvedTs.Store(startTs)
 	s.tables.ReplaceOrInsert(span, state)
 	s.mu.Unlock()
 }
