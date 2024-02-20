@@ -37,6 +37,8 @@ var (
 	_ sorter.EventIterator = (*EventIter)(nil)
 )
 
+var pebbleWriteOptions = pebble.WriteOptions{Sync: false}
+
 // EventSorter is an event sort engine.
 type EventSorter struct {
 	// Read-only fields.
@@ -369,7 +371,6 @@ type DBBatchEvent struct {
 func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 	batchCh chan *DBBatchEvent,
 	id int,
-	writeOpts *pebble.WriteOptions,
 ) {
 	idstr := strconv.Itoa(id + 1)
 	writeDuration := sorter.WriteDuration().WithLabelValues(idstr)
@@ -384,7 +385,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 			batch := batchEvent.batch
 			writeBytes.Observe(float64(len(batch.Repr())))
 			start := time.Now()
-			if err := batch.Commit(writeOpts); err != nil {
+			if err := batch.Commit(&pebbleWriteOptions); err != nil {
 				log.Panic("failed to commit pebble batch", zap.Error(err),
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID))
@@ -424,9 +425,8 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 func (s *EventSorter) handleEvents(
 	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
 ) {
-	writeOpts := &pebble.WriteOptions{Sync: false}
 	batchCh := make(chan *DBBatchEvent, 1000)
-	go s.batchCommitAndUpdateResolvedTs(batchCh, id, writeOpts)
+	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
 
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
@@ -444,7 +444,7 @@ func (s *EventSorter) handleEvents(
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
-		if err = batch.Set(key, value, writeOpts); err != nil {
+		if err = batch.Set(key, value, &pebbleWriteOptions); err != nil {
 			log.Panic("failed to update pebble batch", zap.Error(err),
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
@@ -495,7 +495,7 @@ func (s *EventSorter) cleanTable(
 		state.uniqueID, uint64(span.TableID), toCleanNext.CommitTs, toCleanNext.StartTs)
 
 	db := s.dbs[getDB(span, len(s.dbs))]
-	err := db.DeleteRange(start, end, &pebble.WriteOptions{Sync: false})
+	err := db.DeleteRange(start, end, &pebbleWriteOptions)
 	if err != nil {
 		return err
 	}
