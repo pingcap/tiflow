@@ -257,8 +257,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 			}
 			if !c.Security.IsTLSEnabled() {
 				log.Error("client user required but TLS is not enabled")
-				// TODO: we should strengthen the security check here in the future.
-				// return cerror.ErrInvalidServerOption.GenWithStack("client user required but TLS is not enabled, please check the security config")
+				return cerror.ErrInvalidServerOption.GenWithStack("TLS should be enabled when client-user-required is true")
 			}
 		}
 		if c.Security.IsTLSEnabled() {
