@@ -33,7 +33,7 @@ def create_changefeed(sink_uri):
 
         data = json.dumps(data)
         headers = {"Content-Type": "application/json"}
-        resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+        resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
         assert resp.status_code == rq.codes.accepted
 
     # create changefeed fail because sink_uri is invalid
@@ -43,7 +43,7 @@ def create_changefeed(sink_uri):
         "ignore_ineligible_table": True
     })
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: create changefeed")
@@ -93,7 +93,7 @@ def pause_changefeed():
     # pause changefeed
     url = BASE_URL0+"/changefeeds/changefeed-test2/pause"
     for i in range(RETRY_TIME):
-        resp = rq.post(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+        resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
         if resp.status_code == rq.codes.accepted:
             break
         time.sleep(1)
@@ -110,7 +110,7 @@ def pause_changefeed():
     assert data["state"] == "stopped"
     # test pause changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists/pause"
-    resp = rq.post(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
@@ -123,14 +123,14 @@ def update_changefeed():
     url = BASE_URL0+"/changefeeds/changefeed-test1"
     data = json.dumps({"mounter_worker_num": 32})
     headers = {"Content-Type": "application/json"}
-    resp = rq.put(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.put(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     # update success
     url = BASE_URL0+"/changefeeds/changefeed-test2"
     data = json.dumps({"mounter_worker_num": 32})
     headers = {"Content-Type": "application/json"}
-    resp = rq.put(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.put(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # update fail
@@ -138,7 +138,7 @@ def update_changefeed():
     url = BASE_URL0+"/changefeeds/changefeed-test2"
     data = json.dumps({"start_ts": 0})
     headers = {"Content-Type": "application/json"}
-    resp = rq.put(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.put(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: update changefeed")
@@ -147,7 +147,7 @@ def update_changefeed():
 def resume_changefeed():
     # resume changefeed
     url = BASE_URL1+"/changefeeds/changefeed-test2/resume"
-    resp = rq.post(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # check if resume changefeed success
@@ -163,7 +163,7 @@ def resume_changefeed():
 
     # test resume changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists/resume"
-    resp = rq.post(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
@@ -174,13 +174,13 @@ def resume_changefeed():
 def remove_changefeed():
     # remove changefeed
     url = BASE_URL0+"/changefeeds/changefeed-test3"
-    resp = rq.delete(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # check if remove changefeed success
     url = BASE_URL0+"/changefeeds/changefeed-test3"
     for i in range(RETRY_TIME):
-        resp = rq.get(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+        resp = rq.get(url, auth=Auth, cert=CERT, verify=VERIFY)
         if resp.status_code == rq.codes.bad_request:
             break
         time.sleep(1)
@@ -189,7 +189,7 @@ def remove_changefeed():
 
     # test remove changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists"
-    resp = rq.delete(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert (resp.status_code == rq.codes.bad_request or resp.status_code == rq.codes.internal_server_error)
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
@@ -200,7 +200,7 @@ def remove_changefeed():
 def rebalance_table():
     # rebalance_table
     url = BASE_URL0 + "/changefeeds/changefeed-test1/tables/rebalance_table"
-    resp = rq.post(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     print("pass test: rebalance table")
@@ -211,14 +211,14 @@ def move_table():
     url = BASE_URL0 + "/changefeeds/changefeed-test1/tables/move_table"
     data = json.dumps({"capture_id": "test-aaa-aa", "table_id": 11})
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # move table fail
     # not allow empty capture_id
     data = json.dumps({"capture_id": "", "table_id": 11})
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: move table")
@@ -383,7 +383,7 @@ def create_changefeed_v2():
     }
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     # create changefeed 2
@@ -404,7 +404,7 @@ def create_changefeed_v2():
     }
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     # create changefeed fail because sink_uri is invalid
@@ -421,14 +421,14 @@ def create_changefeed_v2():
         "cert_allowed_cn":["client"],
     })
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: create changefeed v2")
 
 def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/metadata"
-    resp = rq.get(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.get(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     print("status code", resp.status_code)
     print("pass test: show metadata")
@@ -444,13 +444,13 @@ def unsafe_apis():
     }
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
-    resp = rq.delete(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
     assert resp.status_code == rq.codes.ok
 
     data = json.dumps({})
     headers = {"Content-Type": "application/json"}
-    resp = rq.delete(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
     assert resp.status_code == rq.codes.ok
     print("pass test: delete service_gc_safepoint")
@@ -459,7 +459,7 @@ def unsafe_apis():
     data = json.dumps({})
     url = BASE_URL1_V2+"/unsafe/resolve_lock"
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, params=Auth_PARAMS, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
     assert resp.status_code != rq.codes.not_found
     print("pass test: resolve lock")
@@ -467,13 +467,13 @@ def unsafe_apis():
 def delete_changefeed_v2():
     # remove changefeed
     url = BASE_URL0_V2+"/changefeeds/changefeed-test4"
-    resp = rq.delete(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     # check if remove changefeed success
     url = BASE_URL0+"/changefeeds/changefeed-test4"
     for i in range(RETRY_TIME):
-        resp = rq.get(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+        resp = rq.get(url, auth=Auth, cert=CERT, verify=VERIFY)
         if resp.status_code == rq.codes.bad_request:
             break
         time.sleep(1)
@@ -482,7 +482,7 @@ def delete_changefeed_v2():
 
     # test remove changefeed not exists
     url = BASE_URL0_V2+"/changefeeds/changefeed-not-exists"
-    resp = rq.delete(url, params=Auth_PARAMS, cert=CERT, verify=VERIFY)
+    resp = rq.delete(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert (resp.status_code == rq.codes.ok)
 
     print("pass test: remove changefeed v2")
@@ -504,7 +504,7 @@ if __name__ == "__main__":
     CA_PEM_PATH = CERTIFICATE_PATH + '/ca.pem'
     CERT=(CLIENT_PEM_PATH, CLIENT_KEY_PEM_PATH)
     VERIFY=(CA_PEM_PATH)
-    Auth_PARAMS = {'user': 'ticdc', 'password': 'ticdc_secret'}
+    Auth = rq.HTTPBasicAuth('ticdc', 'ticdc_secret')
 
     # test all the case as the order list in this map
     FUNC_MAP = {
