@@ -395,8 +395,8 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 			batchResolved := batchEvent.batchResolved
 			batchResolved.Range(func(span tablepb.Span, resolved uint64) bool {
 				s.mu.RLock()
-				defer s.mu.RUnlock()
 				ts, ok := s.tables.Get(span)
+				s.mu.RUnlock()
 				if !ok {
 					log.Debug("Table is removed, skip updating resolved",
 						zap.String("namespace", s.changefeedID.Namespace),
