@@ -941,6 +941,9 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case uint64:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
+	case mysql.TypeTimestamp:
+		v := value.(map[string]interface{})
+		value = v["value"].(string)
 	default:
 	}
 

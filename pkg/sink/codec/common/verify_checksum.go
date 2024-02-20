@@ -151,19 +151,8 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		var (
-			location  string
-			timestamp string
-		)
-		var v string
-		switch a := value.(type) {
-		case string:
-			location = config.GetDefaultServerConfig().TZ
-			timestamp = a
-		case map[string]interface{}:
-			location = a["location"].(string)
-			timestamp = a["value"].(string)
-		}
+		location := config.GetDefaultServerConfig().TZ
+		timestamp := value.(string)
 
 		loc, err := util.GetTimezone(location)
 		if err != nil {
@@ -173,8 +162,8 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		v = t.UTC().Format("2006-01-02 15:04:05")
-		buf = appendLengthValue(buf, []byte(v))
+		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		buf = appendLengthValue(buf, []byte(timestamp))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		buf = appendLengthValue(buf, []byte(value.(string)))

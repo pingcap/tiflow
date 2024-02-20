@@ -727,11 +727,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					require.Equal(t, col.Type, decoded.Type)
 					require.Equal(t, col.Charset, decoded.Charset)
 					require.Equal(t, col.Collation, decoded.Collation)
-					if decoded.Type == mysql.TypeTimestamp {
-						require.EqualValues(t, col.Value, decoded.Value.(map[string]interface{})["value"].(string))
-					} else {
-						require.EqualValues(t, col.Value, decoded.Value)
-					}
+					require.EqualValues(t, col.Value, decoded.Value)
 				}
 
 				decodedPreviousColumns := make(map[string]*model.Column, len(decodedRow.PreColumns))
@@ -744,11 +740,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					require.Equal(t, col.Type, decoded.Type)
 					require.Equal(t, col.Charset, decoded.Charset)
 					require.Equal(t, col.Collation, decoded.Collation)
-					if decoded.Type == mysql.TypeTimestamp {
-						require.EqualValues(t, col.Value, decoded.Value.(map[string]interface{})["value"].(string))
-					} else {
-						require.EqualValues(t, col.Value, decoded.Value)
-					}
+					require.EqualValues(t, col.Value, decoded.Value)
 				}
 			}
 		}
@@ -867,11 +859,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				require.Equal(t, col.Type, decoded.Type)
 				require.Equal(t, col.Charset, decoded.Charset)
 				require.Equal(t, col.Collation, decoded.Collation)
-				if decoded.Type == mysql.TypeTimestamp {
-					require.EqualValues(t, col.Value, decoded.Value.(map[string]interface{})["value"].(string))
-				} else {
-					require.EqualValues(t, col.Value, decoded.Value)
-				}
+				require.EqualValues(t, col.Value, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
@@ -883,11 +871,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				require.Equal(t, col.Type, decoded.Type)
 				require.Equal(t, col.Charset, decoded.Charset)
 				require.Equal(t, col.Collation, decoded.Collation)
-				if decoded.Type == mysql.TypeTimestamp {
-					require.EqualValues(t, col.Value, decoded.Value.(map[string]interface{})["value"].(string))
-				} else {
-					require.EqualValues(t, col.Value, decoded.Value)
-				}
+				require.EqualValues(t, col.Value, decoded.Value)
 			}
 		}
 	}
