@@ -458,6 +458,7 @@ func (s *EventSorter) handleEvents(
 				handleItem(item)
 			case <-s.closed:
 				return
+			default:
 			}
 		}
 		batchCh <- &DBBatchEvent{batch, newResolved}
