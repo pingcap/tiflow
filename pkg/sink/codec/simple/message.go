@@ -16,7 +16,6 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -702,16 +701,21 @@ func (a *avroMarshaller) encodeValue4Avro(
 			"location": a.config.TimeZone.String(),
 			"value":    v,
 		}, "com.pingcap.simple.avro.Timestamp", nil
-	}
-
-	switch v := value.(type) {
-	case uint64:
-		if v > math.MaxInt64 {
-			// return strconv.FormatUint(v, 10), "string", nil
+	case mysql.TypeLonglong:
+		if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			v, ok := value.(uint64)
+			if !ok {
+				return nil, "", cerror.ErrEncodeFailed.
+					GenWithStack("unexpected type for the unsigned bigint value: %+v, tp: %+v", value, reflect.TypeOf(value))
+			}
 			return map[string]interface{}{
 				"value": int64(v),
 			}, "com.pingcap.simple.avro.UnsignedBigint", nil
 		}
+	}
+
+	switch v := value.(type) {
+	case uint64:
 		return int64(v), "long", nil
 	case int64:
 		return v, "long", nil
