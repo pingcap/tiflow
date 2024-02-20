@@ -41,7 +41,7 @@ type Credential struct {
 	// 2) connections between TiCDC and PD
 	// 3) http server of TiCDC which is used for open API
 	// 4) p2p server of TiCDC which is used sending messages between TiCDC nodes
-	// Todo: just enable mTLS for 4) and 5) by default
+	// Todo: just enable mTLS for 3) and 4) by default
 	MTLS bool `toml:"mtls" json:"mtls"`
 }
 

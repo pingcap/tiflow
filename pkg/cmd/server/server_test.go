@@ -164,6 +164,7 @@ func TestParseCfg(t *testing.T) {
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -208,8 +209,7 @@ func TestParseCfg(t *testing.T) {
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -312,6 +312,7 @@ check-balance-interval = "10s"
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -355,8 +356,7 @@ check-balance-interval = "10s"
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -450,6 +450,7 @@ cert-allowed-cn = ["dd","ee"]
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -494,8 +495,7 @@ cert-allowed-cn = ["dd","ee"]
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 

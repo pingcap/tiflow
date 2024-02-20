@@ -98,8 +98,30 @@ CREATE TABLE t10 (
 
 DROP TABLE t9;
 
-CREATE TABLE finish_mark (
+
+drop database if exists `cross_db_1`;
+create database `cross_db_1`;
+
+drop database if exists `cross_db_2`;
+create database `cross_db_2`;
+
+use `cross_db_1`;
+
+CREATE TABLE t1 (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    val INT DEFAULT 0,
+                    col0 INT NOT NULL
+);
+
+RENAME TABLE `cross_db_1`.`t1` TO `cross_db_2`.`t1`;
+
+CREATE TABLE `cross_db_1`.`t2` like `cross_db_2`.`t1`;
+
+
+CREATE TABLE ddl_manager.finish_mark (
                      id INT AUTO_INCREMENT PRIMARY KEY,
                      val INT DEFAULT 0,
                      col0 INT NOT NULL
 );
+
+

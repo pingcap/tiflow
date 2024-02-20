@@ -33,7 +33,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("performance_schema", ""))
 	require.False(t, filter.ShouldIgnoreTable("metric_schema", "query_duration"))
 	require.False(t, filter.ShouldIgnoreTable("sns", "user"))
-	require.False(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
+	require.True(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
 }
 
 func TestShouldUseCustomRules(t *testing.T) {
@@ -371,13 +371,14 @@ func TestShouldDiscardDDL(t *testing.T) {
 }
 
 func TestIsAllowedDDL(t *testing.T) {
+	require.Len(t, ddlWhiteListMap, 36)
 	type testCase struct {
 		timodel.ActionType
 		allowed bool
 	}
-	testCases := make([]testCase, 0, len(allowDDLList))
-	for _, action := range allowDDLList {
-		testCases = append(testCases, testCase{action, true})
+	testCases := make([]testCase, 0, len(ddlWhiteListMap))
+	for ddlType := range ddlWhiteListMap {
+		testCases = append(testCases, testCase{ddlType, true})
 	}
 	testCases = append(testCases, testCase{timodel.ActionAddForeignKey, false})
 	testCases = append(testCases, testCase{timodel.ActionDropForeignKey, false})
