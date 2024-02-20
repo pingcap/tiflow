@@ -38,6 +38,7 @@ func LogMiddleware() gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
+		user, _, _ := c.Request.BasicAuth()
 		c.Next()
 
 		cost := time.Since(start)
@@ -55,6 +56,7 @@ func LogMiddleware() gin.HandlerFunc {
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()), zap.String("client-version", version),
+			zap.String("username", user),
 			zap.Error(stdErr),
 			zap.Duration("duration", cost),
 		)
