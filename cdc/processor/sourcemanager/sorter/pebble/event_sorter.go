@@ -359,7 +359,7 @@ type tableState struct {
 	cleaned sorter.Position
 }
 
-// DBBatchEvent is used to contains a batch of events and the correpsonding resolvedTs info.
+// DBBatchEvent is used to contains a batch of events and the corresponding resolvedTs info.
 type DBBatchEvent struct {
 	batch         *pebble.Batch
 	batchResolved *spanz.HashMap[model.Ts]
@@ -395,6 +395,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 			batchResolved := batchEvent.batchResolved
 			batchResolved.Range(func(span tablepb.Span, resolved uint64) bool {
 				s.mu.RLock()
+				defer s.mu.RUnlock()
 				ts, ok := s.tables.Get(span)
 				if !ok {
 					log.Debug("Table is removed, skip updating resolved",
@@ -402,14 +403,12 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 						zap.String("changefeed", s.changefeedID.ID),
 						zap.Stringer("span", &span),
 						zap.Uint64("resolved", resolved))
-					s.mu.RUnlock()
 					return true
 				}
 				ts.sortedResolved.Store(resolved)
 				for _, onResolve := range s.onResolves {
 					onResolve(span, resolved)
 				}
-				s.mu.RUnlock()
 				return true
 			})
 		}
