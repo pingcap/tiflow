@@ -359,6 +359,7 @@ type tableState struct {
 	cleaned sorter.Position
 }
 
+// DBBatchEvent is used to contains a batch of events and the correpsonding resolvedTs info.
 type DBBatchEvent struct {
 	batch         *pebble.Batch
 	batchResolved *spanz.HashMap[model.Ts]
@@ -366,8 +367,7 @@ type DBBatchEvent struct {
 
 // batchCommitAndUpdateResolvedTs commits the batch and updates the resolved ts of the table.
 func (s *EventSorter) batchCommitAndUpdateResolvedTs(
-	db *pebble.DB,
-	batch_ch chan *DBBatchEvent,
+	batchCh chan *DBBatchEvent,
 	id int,
 	writeOpts *pebble.WriteOptions,
 ) {
@@ -379,7 +379,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 		select {
 		case <-s.closed:
 			return
-		case batchEvent := <-batch_ch:
+		case batchEvent := <-batchCh:
 			// do batch commit
 			batch := batchEvent.batch
 			writeBytes.Observe(float64(len(batch.Repr())))
@@ -403,7 +403,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 						zap.Stringer("span", &span),
 						zap.Uint64("resolved", resolved))
 					s.mu.RUnlock()
-					return false
+					return true
 				}
 				ts.sortedResolved.Store(resolved)
 				for _, onResolve := range s.onResolves {
@@ -426,8 +426,8 @@ func (s *EventSorter) handleEvents(
 	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
 ) {
 	writeOpts := &pebble.WriteOptions{Sync: false}
-	batch_ch := make(chan *DBBatchEvent, 1000)
-	go s.batchCommitAndUpdateResolvedTs(db, batch_ch, id, writeOpts)
+	batchCh := make(chan *DBBatchEvent, 1000)
+	go s.batchCommitAndUpdateResolvedTs(batchCh, id, writeOpts)
 
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
@@ -461,7 +461,7 @@ func (s *EventSorter) handleEvents(
 				return
 			}
 		}
-		batch_ch <- &DBBatchEvent{batch, newResolved}
+		batchCh <- &DBBatchEvent{batch, newResolved}
 
 		batch = db.NewBatch()
 		newResolved = spanz.NewHashMap[model.Ts]()
