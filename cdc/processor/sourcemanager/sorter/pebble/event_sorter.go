@@ -369,7 +369,8 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 	db *pebble.DB,
 	batch_ch chan *DBBatchEvent,
 	id int,
-	writeOpts *pebble.WriteOptions) {
+	writeOpts *pebble.WriteOptions,
+) {
 	idstr := strconv.Itoa(id + 1)
 	writeDuration := sorter.WriteDuration().WithLabelValues(idstr)
 	writeBytes := sorter.WriteBytes().WithLabelValues(idstr)
