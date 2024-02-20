@@ -69,7 +69,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20230925123611-87bebcc0d071
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20231010115255-ec2731b8f539
-	github.com/pingcap/tidb-tools v0.0.0-20231010140451-6189b1bea2fd
+	github.com/pingcap/tidb-tools v0.0.0-20240220032153-0792ce9410ca
 	github.com/pingcap/tidb/parser v0.0.0-20231010115255-ec2731b8f539
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
