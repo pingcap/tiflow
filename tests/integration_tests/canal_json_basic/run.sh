@@ -55,7 +55,6 @@ EOF
 	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
 	esac
 
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 	sleep 5 # wait for changefeed to start
 	# determine the sink uri and run corresponding consumer
 	# currently only kafka and pulsar are supported
