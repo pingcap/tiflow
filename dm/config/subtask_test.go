@@ -69,12 +69,12 @@ func TestSubTask(t *testing.T) {
 	require.Equal(t, cfg, clone1)
 
 	clone1.From.Password = "1234"
-	clone2, err := cfg.DecryptPassword()
+	clone2, err := cfg.DecryptedClone()
 	require.NoError(t, err)
 	require.Equal(t, clone1, clone2)
 
 	cfg.From.Password = "xxx"
-	_, err = cfg.DecryptPassword()
+	_, err = cfg.DecryptedClone()
 	require.NoError(t, err)
 	err = cfg.Adjust(true)
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestSubTask(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg.From.Password = ""
-	clone3, err := cfg.DecryptPassword()
+	clone3, err := cfg.DecryptedClone()
 	require.NoError(t, err)
 	require.Equal(t, cfg, clone3)
 

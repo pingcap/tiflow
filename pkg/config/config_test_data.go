@@ -123,12 +123,7 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128,
-    "max-memory-percentage": 0,
-    "max-memory-consumption": 0,
-    "num-workerpool-goroutine": 0,
-    "num-concurrent-worker": 0,
-    "chunk-size-limit": 0
+    "cache-size-in-mb": 128
   },
   "security": {
     "ca-path": "",
@@ -137,7 +132,6 @@ const (
     "cert-allowed-cn": null,
     "mtls": false
   },
-  "per-table-memory-quota": 0,
   "kv-client": {
     "enable-multiplexing": true,
     "worker-concurrent": 8,
@@ -193,7 +187,6 @@ const (
     }
   },
   "cluster-id": "default",
-  "max-memory-percentage": 0,
   "gc-tuner-memory-threshold": 0
 }`
 

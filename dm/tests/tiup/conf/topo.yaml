@@ -17,11 +17,12 @@ worker_servers:
   - host: 172.28.0.111
   - host: 172.28.0.112
 
-monitoring_servers:
-  - host: 172.28.0.121
-
-grafana_servers:
-  - host: 172.28.0.121
-
-alertmanager_servers:
-  - host: 172.28.0.121
+# tiup doesn't support components like grafana below version v3.0.0, skip them.
+#monitoring_servers:
+#  - host: 172.28.0.121
+#
+#grafana_servers:
+#  - host: 172.28.0.121
+#
+#alertmanager_servers:
+#  - host: 172.28.0.121
