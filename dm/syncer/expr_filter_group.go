@@ -16,9 +16,9 @@ package syncer
 import (
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -201,7 +201,7 @@ func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableIn
 	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, ti)
 	if err != nil {
 		// if expression contains an unknown column, we return an expression that skips nothing
-		if core.ErrUnknownColumn.Equal(err) {
+		if plannererrors.ErrUnknownColumn.Equal(err) {
 			logger.Warn("meet unknown column when generating expression, return a FALSE expression instead",
 				zap.String("expression", expr),
 				zap.Error(err))
