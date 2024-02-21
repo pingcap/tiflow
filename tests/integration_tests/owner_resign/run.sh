@@ -17,6 +17,8 @@ function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
+	
+	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	export GO_FAILPOINTS=''
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
@@ -47,8 +49,8 @@ oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
 oauth2.oauth2-audience="pulsar"
 oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
 EOF
-	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" --server="127.0.0.1:8301";;
-	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301";;
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" --server="127.0.0.1:8301" --start-ts=$start_ts;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301" --start-ts=$start_ts;;
 	esac
 	
 	case $SINK_TYPE in

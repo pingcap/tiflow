@@ -17,7 +17,7 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
-
+	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	# create $DB_COUNT databases and import initial workload
 	for i in $(seq $DB_COUNT); do
 		db="multi_capture_$i"
@@ -54,8 +54,8 @@ oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
 oauth2.oauth2-audience="pulsar"
 oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
 EOF
-	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301" --config="$CUR/conf/pulsar_test.toml" ;;
-	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301";;
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301" --config="$CUR/conf/pulsar_test.toml" --start-ts=$start_ts;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --server="127.0.0.1:8301" --start-ts=$start_ts;;
 	esac
 
 	case $SINK_TYPE in

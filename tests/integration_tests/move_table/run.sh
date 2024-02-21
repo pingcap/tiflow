@@ -15,6 +15,8 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
+	
+	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_sql "CREATE DATABASE move_table;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=move_table
@@ -45,8 +47,8 @@ oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
 oauth2.oauth2-audience="pulsar"
 oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
 EOF
-	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
-	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" --start-ts=$start_ts;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --start-ts=$start_ts;;
 	esac
 
 	case $SINK_TYPE in
