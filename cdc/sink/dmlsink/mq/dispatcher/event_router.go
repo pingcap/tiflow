@@ -262,32 +262,10 @@ func getTopicDispatcher(
 	}
 
 	// check if this rule is a valid topic expression
-<<<<<<< HEAD
-	topicExpr := topic.Expression(ruleConfig.TopicRule)
-
-	if protocol != "" {
-		p, err := config.ParseSinkProtocolFromString(protocol)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-
-		if p == config.ProtocolAvro {
-			err := topicExpr.ValidateForAvro()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			err := topicExpr.Validate()
-			if err != nil {
-				return nil, err
-			}
-		}
-=======
 	topicExpr := topic.Expression(rule)
 	err := validateTopicExpression(topicExpr, schema, protocol)
 	if err != nil {
 		return nil, err
->>>>>>> ef7a972df8 (kafka(ticdc): event router allow hard code topics and set the schema optional in the topic expression (#9755))
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
 }
