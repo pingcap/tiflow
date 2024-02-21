@@ -202,34 +202,32 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
 	require.NoError(t, err)
 
+	cols := []*model.Column{
+		{
+			Name:  "id",
+			Value: 1,
+			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+		},
+	}
+	tableInfo := model.BuildTableInfo("test_default1", "table", cols, [][]int{{0}})
 	p, _, err := d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName:          model.TableName{Schema: "test_default1", Table: "table"},
-			IndexColumnsOffset: [][]int{{0}},
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "id",
-				Value: 1,
-				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-			},
-		},
+		TableInfo: tableInfo,
+		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
 	}, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(14), p)
 
+	cols = []*model.Column{
+		{
+			Name:  "id",
+			Value: 1,
+			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+		},
+	}
+	tableInfo = model.BuildTableInfo("test_default2", "table", cols, [][]int{{0}})
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName:          model.TableName{Schema: "test_default2", Table: "table"},
-			IndexColumnsOffset: [][]int{{0}},
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "id",
-				Value: 1,
-				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-			},
-		},
+		TableInfo: tableInfo,
+		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
 	}, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(0), p)
@@ -243,21 +241,21 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(15), p)
 
+	cols = []*model.Column{
+		{
+			Name:  "a",
+			Value: 11,
+			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+		}, {
+			Name:  "b",
+			Value: 22,
+			Flag:  0,
+		},
+	}
+	tableInfo = model.BuildTableInfo("test_index_value", "table", cols, [][]int{{0}})
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test_index_value", Table: "table"},
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "a",
-				Value: 11,
-				Flag:  model.HandleKeyFlag,
-			}, {
-				Name:  "b",
-				Value: 22,
-				Flag:  0,
-			},
-		},
+		TableInfo: tableInfo,
+		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
 	}, 10)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), p)

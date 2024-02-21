@@ -55,12 +55,13 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 
 	// the most normal case, index-name is not set, use the handle key columns.
 	if r.IndexName == "" {
+		tableInfo := row.TableInfo
 		for _, col := range dispatchCols {
 			if col == nil {
 				continue
 			}
-			if col.Flag.IsHandleKey() {
-				r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+			if tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
+				r.hasher.Write([]byte(tableInfo.ForceGetColumnName(col.ColumnID)), []byte(model.ColumnValueString(col.Value)))
 			}
 		}
 	} else {

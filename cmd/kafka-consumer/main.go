@@ -684,7 +684,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				var partitionID int64
-				if row.TableInfo.TableName.IsPartition {
+				if row.TableInfo.IsPartitionTable() {
 					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.
@@ -750,8 +750,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")

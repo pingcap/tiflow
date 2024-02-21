@@ -120,7 +120,7 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 		}
 		// If source is configured with tls certificate related content
 		// the contents of the certificate need to be read and transferred to the dm-master
-		cfg, yamlErr := config.ParseYaml(string(content))
+		cfg, yamlErr := config.SourceCfgFromYaml(string(content))
 		if yamlErr != nil {
 			return yamlErr
 		}
