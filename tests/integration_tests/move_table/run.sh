@@ -16,7 +16,6 @@ function run() {
 
 	cd $WORK_DIR
 
-	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_sql "CREATE DATABASE move_table;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=move_table
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "1" --addr 127.0.0.1:8300
@@ -29,7 +28,27 @@ function run() {
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
 	esac
 
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+	changefeed_id="move-table"
+
+	case $SINK_TYPE in
+	pulsar) 
+	  ca_path=$(cd $CUR/../_certificates/pulsar_certs/ca && pwd)
+	  ca_path="${ca_path}/ca.cert.pem"
+	  client_token_path=$(cd $CUR/../_certificates/pulsar_certs && pwd)
+	  client_token_path="${client_token_path}/client_credentials.json"
+	  touch $CUR/conf/pulsar_test.toml
+	  cat <<EOF >> $CUR/conf/pulsar_test.toml
+[sink.pulsar-config]
+tls-trust-certs-file-path="${ca_path}"
+oauth2.oauth2-private-key="${client_token_path}"
+oauth2.oauth2-issuer-url="https://dev-ys3tcsktsrfqui44.us.auth0.com"
+oauth2.oauth2-audience="pulsar"
+oauth2.oauth2-client-id="h2IA1jjyTkVAGKOxlxq5o91BFZBgpX6z"
+EOF
+	  run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id} --config="$CUR/conf/pulsar_test.toml" ;;
+	*) run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id};;
+	esac
+
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
