@@ -60,10 +60,10 @@ type EventSorter struct {
 
 // EventIter implements sorter.EventIterator.
 type EventIter struct {
-	tableID  model.TableID
-	iter     *pebble.Iterator
-	headItem *model.PolymorphicEvent
-	serde    encoding.MsgPackGenSerde
+	tableID      model.TableID
+	iter         *pebble.Iterator
+	currentEvent *model.PolymorphicEvent
+	serde        encoding.MsgPackGenSerde
 
 	nextDuration prometheus.Observer
 }
@@ -307,29 +307,37 @@ func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span,
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, pos sorter.Position, err error) {
+// txnFinished indicates whether all events in the current transaction are
+// fetched or not.
+func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished sorter.Position, err error) {
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
+	var nextEvent *model.PolymorphicEvent
+
+	// We need to decide whether the current event is the last event in this transactions
+	// If the current event is the last one, we need to set txnFinished
+	// Thus, we need to fetch the next event and compare the commitTs and startTs with it
 	for valid {
 		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
-		event = &model.PolymorphicEvent{}
-		if _, err = s.serde.Unmarshal(event, value); err != nil {
+		nextEvent = &model.PolymorphicEvent{}
+		if _, err = s.serde.Unmarshal(nextEvent, value); err != nil {
 			return
 		}
-		if s.headItem != nil {
+		if s.currentEvent != nil {
 			break
 		}
-		s.headItem, event = event, nil
+		s.currentEvent, nextEvent = nextEvent, nil
 	}
-	if s.headItem != nil {
-		if event == nil || s.headItem.CRTs != event.CRTs || s.headItem.StartTs != event.StartTs {
-			pos.CommitTs = s.headItem.CRTs
-			pos.StartTs = s.headItem.StartTs
+	if s.currentEvent != nil {
+		if nextEvent == nil || s.currentEvent.CRTs != nextEvent.CRTs || s.currentEvent.StartTs != nextEvent.StartTs {
+			txnFinished.CommitTs = s.currentEvent.CRTs
+			txnFinished.StartTs = s.currentEvent.StartTs
 		}
-		event, s.headItem = s.headItem, event
+		event = s.currentEvent
+		s.currentEvent = nextEvent
 	}
 	return
 }
