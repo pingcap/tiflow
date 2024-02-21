@@ -144,6 +144,7 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		// We have to record the event ID for the callback.
 		postEventFlushFunc := e.progressTracker.addEvent()
 		evCommitTs := ev.GetCommitTs()
+		phyCommitTs := oracle.ExtractPhysical(evCommitTs)
 		ce := &dmlsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
@@ -160,7 +161,6 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 				}
 				pdTime := e.pdClock.CurrentTime()
 				currentTs := oracle.GetPhysical(pdTime)
-				phyCommitTs := oracle.ExtractPhysical(evCommitTs)
 				flushLag := float64(currentTs-phyCommitTs) / 1e3
 				e.metricsTableSinkFlushLagDuration.Observe(flushLag)
 				postEventFlushFunc()
