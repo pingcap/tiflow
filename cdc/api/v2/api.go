@@ -50,14 +50,15 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
 	changefeedGroup.GET("/:changefeed_id", api.getChangeFeed)
-	changefeedGroup.POST("", api.createChangefeed)
+	changefeedGroup.POST("", authenticateMiddleware, api.createChangefeed)
 	changefeedGroup.GET("", api.listChangeFeeds)
-	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", authenticateMiddleware, api.updateChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", authenticateMiddleware, api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
-	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", api.pauseChangefeed)
+	changefeedGroup.POST("/:changefeed_id/resume", authenticateMiddleware, api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", authenticateMiddleware, api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", api.status)
 	changefeedGroup.GET("/:changefeed_id/synced", api.synced)
 
@@ -80,9 +81,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
 	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
-	unsafeGroup.GET("/metadata", api.CDCMetaData)
-	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
-	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+	unsafeGroup.GET("/metadata", authenticateMiddleware, api.CDCMetaData)
+	unsafeGroup.POST("/resolve_lock", authenticateMiddleware, api.ResolveLock)
+	unsafeGroup.DELETE("/service_gc_safepoint", authenticateMiddleware, api.DeleteServiceGcSafePoint)
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")

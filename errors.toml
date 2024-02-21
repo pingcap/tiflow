@@ -261,6 +261,7 @@ error = '''
 craft codec invalid data
 '''
 
+<<<<<<< HEAD
 ["CDC:ErrCreateMarkTableFailed"]
 error = '''
 create mark table failed
@@ -274,6 +275,11 @@ db error: %s
 ["CDC:ErrDDLEventIgnored"]
 error = '''
 ddl event is ignored
+=======
+["CDC:ErrCredentialNotFound"]
+error = '''
+credential not found: %s
+>>>>>>> e859e112b (api, cli, upstream(ticdc): support basic authentication via upstream tidb (#10583))
 '''
 
 ["CDC:ErrDDLSchemaNotFound"]
@@ -1206,7 +1212,16 @@ error = '''
 url format is invalid
 '''
 
+<<<<<<< HEAD
 ["CDC:ErrUnexpectedSnapshot"]
+=======
+["CDC:ErrUnauthorized"]
+error = '''
+user %s unauthorized, error: %s
+'''
+
+["CDC:ErrUnexpected"]
+>>>>>>> e859e112b (api, cli, upstream(ticdc): support basic authentication via upstream tidb (#10583))
 error = '''
 unexpected snapshot, table %d
 '''

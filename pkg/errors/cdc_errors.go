@@ -1183,4 +1183,14 @@ var (
 		"unexpected meta operation failure: %s",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
 	)
+
+	// credential related errors
+	ErrCredentialNotFound = errors.Normalize(
+		"credential not found: %s",
+		errors.RFCCodeText("CDC:ErrCredentialNotFound"),
+	)
+	ErrUnauthorized = errors.Normalize(
+		"user %s unauthorized, error: %s",
+		errors.RFCCodeText("CDC:ErrUnauthorized"),
+	)
 )

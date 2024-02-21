@@ -22,13 +22,16 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	tikvconfig "github.com/tikv/client-go/v2/config"
@@ -323,4 +326,56 @@ func (up *Upstream) shouldClose() bool {
 	}
 
 	return false
+}
+
+// VerifyTiDBUser verify whether the username and password are valid in TiDB. It does the validation via
+// the successfully build of a connection with upstream TiDB with the username and password.
+func (up *Upstream) VerifyTiDBUser(ctx context.Context, username, password string) error {
+	tidbs, err := fetchTiDBTopology(ctx, up.etcdCli.Unwrap())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(tidbs) == 0 {
+		return errors.New("tidb instance not found in topology, please check if the tidb is running")
+	}
+
+	for _, tidb := range tidbs {
+		// connect tidb
+		host := fmt.Sprintf("%s:%d", tidb.IP, tidb.Port)
+		dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/", username, password, host)
+		err = up.doVerify(ctx, dsnStr)
+		if err == nil {
+			return nil
+		}
+		if errorutil.IsAccessDeniedError(err) {
+			// For access denied error, we can return immediately.
+			// For other errors, we need to continue to verify the next tidb instance.
+			return errors.Trace(err)
+		}
+	}
+	return errors.Trace(err)
+}
+
+func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// TODO: use client tls config for tidb connection if mutual tls is enabled.
+	if up.SecurityConfig != nil {
+		dsn.TLS, err = up.SecurityConfig.ToTLSConfig()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer db.Close()
+	// TODO: check authentication here if needed
+	return db.Ping()
 }

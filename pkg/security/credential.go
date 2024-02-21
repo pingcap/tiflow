@@ -41,6 +41,9 @@ type Credential struct {
 	// 4) p2p server of TiCDC which is used sending messages between TiCDC nodes
 	// Todo: just enable mTLS for 4) and 5) by default
 	MTLS bool `toml:"mtls" json:"mtls"`
+
+	ClientUserRequired bool     `toml:"client-user-required" json:"client-user-required"`
+	ClientAllowedUser  []string `toml:"client-allowed-user" json:"client-allowed-user"`
 }
 
 // IsTLSEnabled checks whether TLS is enabled or not.
