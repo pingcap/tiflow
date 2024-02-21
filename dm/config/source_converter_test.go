@@ -29,7 +29,7 @@ type testConfig struct{}
 var _ = check.Suite(&testConfig{})
 
 func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
-	sourceCfg1, err := ParseYaml(SampleSourceConfig)
+	sourceCfg1, err := SourceCfgFromYaml(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 
 	// 1. test user create source from dmctl, after convert to openapi.Source then convert back to source config

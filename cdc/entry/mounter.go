@@ -342,27 +342,22 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 
 func datum2Column(
 	tableInfo *model.TableInfo, datums map[int64]types.Datum,
-) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
-	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
+) ([]*model.ColumnData, []types.Datum, []*timodel.ColumnInfo, error) {
+	cols := make([]*model.ColumnData, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
-	// columnInfos and rowColumnInfos hold different column metadata,
-	// they should have the same length and order.
+	// columnInfos should have the same length and order with cols
 	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
-	rowColumnInfos := make([]rowcodec.ColInfo, len(tableInfo.RowColumnsOffset))
 
-	_, _, extendColumnInfos := tableInfo.GetRowColInfos()
-
-	for idx, colInfo := range tableInfo.Columns {
+	for _, colInfo := range tableInfo.Columns {
 		if !model.IsColCDCVisible(colInfo) {
 			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
 
-		colName := colInfo.Name.O
 		colID := colInfo.ID
-		colDatums, exist := datums[colID]
+		colDatum, exist := datums[colID]
 
 		var (
 			colValue interface{}
@@ -371,36 +366,29 @@ func datum2Column(
 			err      error
 		)
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo)
+			colValue, size, warn, err = formatColVal(colDatum, colInfo)
 		} else {
-			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetColumnDefaultValue(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
-		rawCols[offset] = colDatums
-		cols[offset] = &model.Column{
-			Name:      colName,
-			Type:      colInfo.GetType(),
-			Charset:   colInfo.GetCharset(),
-			Collation: colInfo.GetCollate(),
-			Value:     colValue,
-			Default:   defaultValue,
-			Flag:      tableInfo.ColumnsFlag[colID],
+		rawCols[offset] = colDatum
+		cols[offset] = &model.ColumnData{
+			ColumnID: colID,
+			Value:    colValue,
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
 		columnInfos[offset] = colInfo
-		rowColumnInfos[offset] = extendColumnInfos[idx]
 	}
-	return cols, rawCols, columnInfos, rowColumnInfos, nil
+	return cols, rawCols, columnInfos, nil
 }
 
 // return error if cannot get the expected checksum from the decoder
@@ -486,11 +474,10 @@ func (m *mounter) verifyChecksum(
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
-		rawRow            model.RowChangedDatums
-		columnInfos       []*timodel.ColumnInfo
-		extendColumnInfos []rowcodec.ColInfo
-		matched           bool
-		err               error
+		rawRow      model.RowChangedDatums
+		columnInfos []*timodel.ColumnInfo
+		matched     bool
+		err         error
 
 		checksum *integrity.Checksum
 
@@ -500,14 +487,14 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 	// Decode previous columns.
 	var (
-		preCols     []*model.Column
+		preCols     []*model.ColumnData
 		preRawCols  []types.Datum
 		preChecksum uint32
 	)
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
+		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -531,23 +518,23 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	var (
-		cols    []*model.Column
-		rawCols []types.Datum
-		current uint32
+		cols            []*model.ColumnData
+		rawCols         []types.Datum
+		currentChecksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
+		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		currentChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 		if !matched {
 			log.Error("columns checksum mismatch",
-				zap.Uint32("checksum", preChecksum),
+				zap.Uint32("checksum", currentChecksum),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
@@ -568,9 +555,9 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 	// if both are 0, it means the checksum is not enabled
 	// so the checksum is nil to reduce memory allocation.
-	if preChecksum != 0 || current != 0 {
+	if preChecksum != 0 || currentChecksum != 0 {
 		checksum = &integrity.Checksum{
-			Current:   current,
+			Current:   currentChecksum,
 			Previous:  preChecksum,
 			Corrupted: corrupted,
 			Version:   checksumVersion,
@@ -583,7 +570,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		RowID:           intRowID,
 		HandleKey:       row.RecordID,
 		PhysicalTableID: row.PhysicalTableID,
-		ColInfos:        extendColumnInfos,
 		TableInfo:       tableInfo,
 		Columns:         cols,
 		PreColumns:      preCols,
@@ -737,16 +723,6 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	}
 	v, size, warn, err := formatColVal(d, col)
 	return d, v, size, warn, err
-}
-
-// GetColumnDefaultValue returns the default definition of a column.
-func GetColumnDefaultValue(col *timodel.ColumnInfo) interface{} {
-	defaultValue := col.GetDefaultValue()
-	if defaultValue == nil {
-		defaultValue = col.GetOriginDefaultValue()
-	}
-	defaultDatum := types.NewDatum(defaultValue)
-	return defaultDatum.GetValue()
 }
 
 // DecodeTableID decodes the raw key to a table ID
