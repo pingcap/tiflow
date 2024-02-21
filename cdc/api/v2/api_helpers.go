@@ -403,13 +403,8 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		ctx,
 		pdClient,
 		gcServiceID,
-<<<<<<< HEAD
-		model.DefaultChangeFeedID(changefeedID.ID),
-		gcTTL, checkpointTs)
-=======
 		changefeedID,
 		gcTTL, overrideCheckpointTs)
->>>>>>> 6600096034 (api(ticdc): Check min service gc safepoint when resume changefeed (#10546))
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return cerror.ErrPDEtcdAPIError.Wrap(err)
