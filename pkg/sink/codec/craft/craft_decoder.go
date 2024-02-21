@@ -65,28 +65,23 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 	ev := &model.RowChangedEvent{}
-	var cols, preCols []*model.Column
 	if oldValue != nil {
-		if preCols, err = oldValue.ToModel(); err != nil {
+		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	if newValue != nil {
-		if cols, err = newValue.ToModel(); err != nil {
+		if ev.Columns, err = newValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	ev.CommitTs = b.headers.GetTs(b.index)
-	if len(preCols) > 0 {
-		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), preCols, nil)
-	} else {
-		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), cols, nil)
-	}
-	if len(preCols) > 0 {
-		ev.PreColumns = model.Columns2ColumnDatas(preCols, ev.TableInfo)
-	}
-	if len(cols) > 0 {
-		ev.Columns = model.Columns2ColumnDatas(cols, ev.TableInfo)
+	ev.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema:      b.headers.GetSchema(b.index),
+			Table:       b.headers.GetTable(b.index),
+			IsPartition: false,
+		},
 	}
 	partition := b.headers.GetPartition(b.index)
 	if partition >= 0 {

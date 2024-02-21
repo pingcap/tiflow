@@ -40,159 +40,108 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 }
 
 var (
-	tableInfo = model.BuildTableInfo("a", "b", []*model.Column{
-		{
-			Name: "col1",
-			Type: mysql.TypeVarchar,
-			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-		},
-		{
-			Name: "col2",
-			Type: mysql.TypeVarchar,
-		},
-	}, [][]int{{0}})
 	testEvent = &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 1,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "a", Table: "b"},
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "col1",
+				Type:  mysql.TypeVarchar,
 				Value: []byte("aa"),
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 			},
 			{
 				Name:  "col2",
+				Type:  mysql.TypeVarchar,
 				Value: []byte("bb"),
 			},
-		}, tableInfo),
+		},
 	}
-	tableInfoWithManyCols = model.BuildTableInfo("a", "b", []*model.Column{
-		{
-			Name: "col1",
-			Type: mysql.TypeVarchar,
-			Flag: model.HandleKeyFlag | model.UniqueKeyFlag,
-		},
-		{
-			Name: "col2",
-			Type: mysql.TypeVarchar,
-		},
-		{
-			Name: "col3",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col4",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col5",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col6",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col7",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col8",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col9",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col10",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col11",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col12",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col13",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col14",
-			Type: mysql.TypeBlob,
-		},
-		{
-			Name: "col15",
-			Type: mysql.TypeBlob,
-		},
-	}, [][]int{{0}})
 	largeTestEvent = &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfoWithManyCols,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 1,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{Schema: "a", Table: "b"},
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "col1",
+				Type:  mysql.TypeVarchar,
 				Value: []byte("12345678910"),
+				Flag:  model.HandleKeyFlag,
 			},
 			{
 				Name:  "col2",
+				Type:  mysql.TypeVarchar,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col3",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col4",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col5",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col6",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col7",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col8",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col9",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col10",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col11",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col12",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col13",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col14",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
 			{
 				Name:  "col15",
+				Type:  mysql.TypeBlob,
 				Value: []byte("12345678910"),
 			},
-		}, tableInfoWithManyCols),
+		},
 	}
 
 	testCaseDDL = &model.DDLEvent{
@@ -401,16 +350,13 @@ func TestEncodeDecodeE2E(t *testing.T) {
 	decoded, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 
-	obtainedColumns := make(map[string]*model.ColumnData, len(decoded.Columns))
-	for _, column := range decoded.Columns {
-		colName := decoded.TableInfo.ForceGetColumnName(column.ColumnID)
-		obtainedColumns[colName] = column
+	obtainedColumns := make(map[string]*model.Column)
+	for _, col := range decoded.Columns {
+		obtainedColumns[col.Name] = col
 	}
+
 	for _, col := range testEvent.Columns {
-		colName := testEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		decoded, ok := obtainedColumns[colName]
-		require.True(t, ok)
-		require.EqualValues(t, col.Value, decoded.Value)
+		require.Contains(t, obtainedColumns, col.Name)
 	}
 }
 
@@ -501,17 +447,15 @@ func TestE2EHandleKeyOnlyEvent(t *testing.T) {
 	nextEvent := decoder.(*BatchDecoder).nextEvent
 	require.NotNil(t, nextEvent)
 
-	obtainedColumns := make(map[string]*model.ColumnData, len(nextEvent.Columns))
+	obtainedColumns := make(map[string]*model.Column)
 	for _, col := range nextEvent.Columns {
-		colName := nextEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		obtainedColumns[colName] = col
-		require.True(t, nextEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey())
+		obtainedColumns[col.Name] = col
+		require.True(t, col.Flag.IsHandleKey())
 	}
 
 	for _, col := range largeTestEvent.Columns {
-		colName := largeTestEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		if largeTestEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-			require.Contains(t, obtainedColumns, colName)
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, obtainedColumns, col.Name)
 		}
 	}
 }
@@ -559,16 +503,15 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	require.Equal(t, largeTestEvent.CommitTs, decodedLargeEvent.CommitTs)
 	require.Equal(t, largeTestEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 
-	decodedColumns := make(map[string]*model.ColumnData, len(decodedLargeEvent.Columns))
+	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
 	for _, column := range decodedLargeEvent.Columns {
-		colName := decodedLargeEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-		decodedColumns[colName] = column
+		decodedColumns[column.Name] = column
 	}
 
 	for _, column := range largeTestEvent.Columns {
-		colName := largeTestEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-		decodedColumn, ok := decodedColumns[colName]
+		decodedColumn, ok := decodedColumns[column.Name]
 		require.True(t, ok)
+		require.Equal(t, column.Type, decodedColumn.Type)
 		require.Equal(t, column.Value, decodedColumn.Value)
 	}
 }

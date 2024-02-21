@@ -259,61 +259,50 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		commitTs = handleKeyOnlyEvent.CommitTs
 	)
 
-	tableInfo := handleKeyOnlyEvent.TableInfo
 	if handleKeyOnlyEvent.IsInsert() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
-			colName := tableInfo.ForceGetColumnName(col.ColumnID)
-			conditions[colName] = col.Value
+			conditions[col.Name] = col.Value
 		}
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
 		columns := b.buildColumns(holder, conditions)
-		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
-		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
-		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
+		handleKeyOnlyEvent.Columns = columns
 	} else if handleKeyOnlyEvent.IsDelete() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
-			colName := tableInfo.ForceGetColumnName(col.ColumnID)
-			conditions[colName] = col.Value
+			conditions[col.Name] = col.Value
 		}
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
 		preColumns := b.buildColumns(holder, conditions)
-		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preColumns)
-		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, preColumns, indexColumns)
-		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
+		handleKeyOnlyEvent.PreColumns = preColumns
 	} else if handleKeyOnlyEvent.IsUpdate() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
-			colName := tableInfo.ForceGetColumnName(col.ColumnID)
-			conditions[colName] = col.Value
+			conditions[col.Name] = col.Value
 		}
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
 		columns := b.buildColumns(holder, conditions)
-		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
-		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
-		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
+		handleKeyOnlyEvent.Columns = columns
 
 		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
-			colName := tableInfo.ForceGetColumnName(col.ColumnID)
-			conditions[colName] = col.Value
+			conditions[col.Name] = col.Value
 		}
 		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
 		preColumns := b.buildColumns(holder, conditions)
-		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
+		handleKeyOnlyEvent.PreColumns = preColumns
 	}
 
 	return handleKeyOnlyEvent, nil

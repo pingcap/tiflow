@@ -144,15 +144,14 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.Col
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
-	colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
-	for idx, column := range e.GetColumns() {
+	for idx, column := range e.Columns {
 		if column == nil {
 			continue
 		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", colInfos[idx].ID)
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
 		}
 		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
@@ -163,17 +162,17 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 
 	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
-	for idx, column := range e.GetPreColumns() {
+	for idx, column := range e.PreColumns {
 		if column == nil {
 			continue
 		}
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", colInfos[idx].ID)
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
 		}
 		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {

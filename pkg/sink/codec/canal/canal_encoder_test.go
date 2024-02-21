@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -26,36 +27,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type rowTestData struct {
-	CommitTs uint64
-	Columns  []*model.Column
-}
-
 var (
-	rowCases = [][]rowTestData{
-		{
-			{
-				CommitTs: 1,
-				Columns: []*model.Column{{
-					Name:  "a",
-					Value: []byte("aa"),
-				}},
+	rowCases = [][]*model.RowChangedEvent{
+		{{
+			CommitTs: 1,
+			TableInfo: &model.TableInfo{
+				TableName: model.TableName{Schema: "test", Table: "t"},
 			},
-		},
+			Columns: []*model.Column{{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+			}},
+		}},
 		{
 			{
 				CommitTs: 1,
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "test", Table: "t"},
+				},
 				Columns: []*model.Column{{
-					Name:  "a",
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
 			},
 			{
 				CommitTs: 2,
-				Columns: []*model.Column{{
-					Name:  "a",
-					Value: []byte("bb"),
-				}},
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "test", Table: "t"},
+				},
+				Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
 		},
 	}
@@ -106,12 +108,10 @@ func TestCanalBatchEncoder(t *testing.T) {
 
 	for _, cs := range rowCases {
 		encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
-		for _, c := range cs {
-			row := &model.RowChangedEvent{
-				CommitTs:  c.CommitTs,
-				TableInfo: tableInfo,
-				Columns:   model.Columns2ColumnDatas(c.Columns, tableInfo),
-			}
+		for _, row := range cs {
+			_, _, colInfo := tableInfo.GetRowColInfos()
+			row.TableInfo = tableInfo
+			row.ColInfos = colInfo
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.NoError(t, err)
 		}
@@ -164,13 +164,16 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
+	_, _, colInfo := tableInfo.GetRowColInfos()
 	row := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "a",
+		CommitTs: 1,
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}}, tableInfo),
+		}},
+		TableInfo: tableInfo,
+		ColInfos:  colInfo,
 	}
 
 	encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))

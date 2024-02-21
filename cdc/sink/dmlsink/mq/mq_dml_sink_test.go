@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -86,12 +87,14 @@ func TestWriteEvents(t *testing.T) {
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
 
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "aa"}}, tableInfo),
+		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos:  colInfo,
 	}
 
 	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)

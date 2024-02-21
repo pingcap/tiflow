@@ -608,7 +608,7 @@ func newLargeEvent() *model.RowChangedEvent {
 			Name:  "id",
 			Value: int64(1),
 			Type:  mysql.TypeLong,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+			Flag:  model.HandleKeyFlag,
 		},
 	)
 	colInfos = append(
@@ -637,21 +637,16 @@ func newLargeEvent() *model.RowChangedEvent {
 		colInfos = append(colInfos, colInfoNew)
 	}
 
-	nameToIDMap := make(map[string]int64, len(cols))
-	for i, col := range cols {
-		nameToIDMap[col.Name] = colInfos[i].ID
-	}
-	tidbTableInfo := model.BuildTiDBTableInfoImpl(
-		"avroencode",
-		cols,
-		[][]int{{0}},
-		model.NewNameBasedColumnIDAllocator(nameToIDMap))
-	model.AddExtraColumnInfo(tidbTableInfo, colInfos)
-	tableInfo := model.WrapTableInfo(100, "testdb", 100, tidbTableInfo)
 	return &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "testdb",
+				Table:  "avroencode",
+			},
+		},
+		Columns:  cols,
+		ColInfos: colInfos,
 	}
 }
 
@@ -659,11 +654,9 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := event.GetColumns()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
-		columns,
-		colInfos,
+		event.Columns,
+		event.ColInfos,
 	}
 
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
@@ -692,11 +685,9 @@ func TestRowToAvroSchema(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := event.GetColumns()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
-		columns,
-		colInfos,
+		event.Columns,
+		event.ColInfos,
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolAvro)
@@ -722,11 +713,9 @@ func TestRowToAvroData(t *testing.T) {
 	t.Parallel()
 
 	event := newLargeEvent()
-	columns := event.GetColumns()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
-		columns,
-		colInfos,
+		columns:  event.Columns,
+		colInfos: event.ColInfos,
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolAvro)
@@ -950,19 +939,20 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	cols := []*model.Column{{
-		Name: "col1",
-		Type: mysql.TypeVarchar,
-		Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-	}}
-	tableInfo := model.BuildTableInfo("a", "b", cols, [][]int{{0}})
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
+		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
+		Columns: []*model.Column{{
 			Name:  "col1",
+			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}}, tableInfo),
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID:            1000,
+			IsPKHandle:    true,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeVarchar),
+		}},
 	}
 
 	expected := 0

@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -976,17 +978,21 @@ func TestRowChangeEventConversion(t *testing.T) {
 			cols = append(cols, &c.col)
 			colInfos = append(colInfos, c.colInfo)
 		}
-		tidbTableInfo := model.BuildTiDBTableInfo(fmt.Sprintf("table%d", idx), cols, nil)
-		model.AddExtraColumnInfo(tidbTableInfo, colInfos)
-		row.TableInfo = model.WrapTableInfo(100, "test", 100, tidbTableInfo)
+		row.ColInfos = colInfos
+		row.TableInfo = &model.TableInfo{
+			TableName: model.TableName{
+				Table:  fmt.Sprintf("table%d", idx),
+				Schema: "test",
+			},
+		}
 
 		if idx%3 == 0 { // delete operation
-			row.PreColumns = model.Columns2ColumnDatas(cols, row.TableInfo)
+			row.PreColumns = cols
 		} else if idx%3 == 1 { // insert operation
-			row.Columns = model.Columns2ColumnDatas(cols, row.TableInfo)
+			row.Columns = cols
 		} else { // update operation
-			row.PreColumns = model.Columns2ColumnDatas(cols, row.TableInfo)
-			row.Columns = model.Columns2ColumnDatas(cols, row.TableInfo)
+			row.PreColumns = cols
+			row.Columns = cols
 		}
 		csvMsg, err := rowChangedEvent2CSVMsg(&common.Config{
 			Delimiter:            "\t",
@@ -999,9 +1005,23 @@ func TestRowChangeEventConversion(t *testing.T) {
 		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
 
+		ticols := make([]*timodel.ColumnInfo, 0)
+		for _, col := range cols {
+			ticol := &timodel.ColumnInfo{
+				Name:      timodel.NewCIStr(col.Name),
+				FieldType: *types.NewFieldType(col.Type),
+			}
+			if col.Flag.IsBinary() {
+				ticol.SetCharset(charset.CharsetBin)
+			} else {
+				ticol.SetCharset(mysql.DefaultCharset)
+			}
+			ticols = append(ticols, ticol)
+		}
+
 		row2, err := csvMsg2RowChangedEvent(&common.Config{
 			BinaryEncodingMethod: group[0].BinaryEncodingMethod,
-		}, csvMsg, row.TableInfo)
+		}, csvMsg, ticols)
 		require.Nil(t, err)
 		require.NotNil(t, row2)
 	}

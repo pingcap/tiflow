@@ -324,10 +324,10 @@ func TestShouldSkipDML(t *testing.T) {
 					},
 				}
 				if c.columns != "" {
-					event.Columns = []*model.ColumnData{{Value: c.columns}}
+					event.Columns = []*model.Column{{Value: c.columns}}
 				}
 				if c.preColumns != "" {
-					event.PreColumns = []*model.ColumnData{{Value: c.preColumns}}
+					event.PreColumns = []*model.Column{{Value: c.preColumns}}
 				}
 				skip, err := f.shouldSkipDML(event)
 				require.NoError(t, err)

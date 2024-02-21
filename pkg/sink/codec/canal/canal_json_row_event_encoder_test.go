@@ -79,15 +79,14 @@ func TestDMLE2E(t *testing.T) {
 		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
 
-		decodedColumns := make(map[string]*model.ColumnData, len(decodedEvent.Columns))
+		decodedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 		for _, column := range decodedEvent.Columns {
-			colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-			decodedColumns[colName] = column
+			decodedColumns[column.Name] = column
 		}
 		for _, col := range insertEvent.Columns {
-			colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-			decoded, ok := decodedColumns[colName]
+			decoded, ok := decodedColumns[col.Name]
 			require.True(t, ok)
+			require.Equal(t, col.Type, decoded.Type)
 			require.EqualValues(t, col.Value, decoded.Value)
 		}
 
@@ -244,15 +243,15 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 	require.Nil(t, nil, decodedLargeEvent.PreColumns)
 
-	decodedColumns := make(map[string]*model.ColumnData, len(decodedLargeEvent.Columns))
+	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
 	for _, column := range decodedLargeEvent.Columns {
-		colName := decodedLargeEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-		decodedColumns[colName] = column
+		decodedColumns[column.Name] = column
 	}
+
 	for _, col := range insertEvent.Columns {
-		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		decoded, ok := decodedColumns[colName]
+		decoded, ok := decodedColumns[col.Name]
 		require.True(t, ok)
+		require.Equal(t, col.Type, decoded.Type)
 		require.EqualValues(t, col.Value, decoded.Value)
 	}
 }
@@ -291,15 +290,14 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 	require.True(t, handleKeyOnlyMessage.Extensions.OnlyHandleKey)
 
 	for _, col := range insertEvent.Columns {
-		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		if insertEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-			require.Contains(t, handleKeyOnlyMessage.Data[0], colName)
-			require.Contains(t, handleKeyOnlyMessage.SQLType, colName)
-			require.Contains(t, handleKeyOnlyMessage.MySQLType, colName)
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.Contains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.Contains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		} else {
-			require.NotContains(t, handleKeyOnlyMessage.Data[0], colName)
-			require.NotContains(t, handleKeyOnlyMessage.SQLType, colName)
-			require.NotContains(t, handleKeyOnlyMessage.MySQLType, colName)
+			require.NotContains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		}
 	}
 }
@@ -654,16 +652,16 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	require.Equal(t, decodedEvent.TableInfo.GetSchemaName(), insertEvent.TableInfo.GetSchemaName())
 	require.Equal(t, decodedEvent.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 
-	obtainedColumns := make(map[string]*model.ColumnData, len(decodedEvent.Columns))
+	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 	for _, column := range decodedEvent.Columns {
-		colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-		obtainedColumns[colName] = column
+		obtainedColumns[column.Name] = column
 	}
+
 	for _, col := range insertEvent.Columns {
-		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		decoded, ok := obtainedColumns[colName]
+		obtained, ok := obtainedColumns[col.Name]
 		require.True(t, ok)
-		require.EqualValues(t, col.Value, decoded.Value)
+		require.Equal(t, col.Type, obtained.Type)
+		require.EqualValues(t, col.Value, obtained.Value)
 	}
 }
 
@@ -709,15 +707,14 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 			require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
 
-			decodedColumns := make(map[string]*model.ColumnData, len(decodedEvent.Columns))
+			decodedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 			for _, column := range decodedEvent.Columns {
-				colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-				decodedColumns[colName] = column
+				decodedColumns[column.Name] = column
 			}
 			for _, col := range insertEvent.Columns {
-				colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-				decoded, ok := decodedColumns[colName]
+				decoded, ok := decodedColumns[col.Name]
 				require.True(t, ok)
+				require.Equal(t, col.Type, decoded.Type)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 

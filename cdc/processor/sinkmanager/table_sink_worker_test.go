@@ -79,20 +79,24 @@ func genPolymorphicEvent(startTs, commitTs uint64, span tablepb.Span) *model.Pol
 }
 
 func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
-	columns := []*model.Column{
-		{Name: "a", Value: 2},
-	}
-	preColumns := []*model.Column{
-		{Name: "a", Value: 1},
-	}
-	tableInfo := model.BuildTableInfo("table", "table", columns, nil)
 	return &model.RowChangedEvent{
 		StartTs:         startTs,
 		CommitTs:        commitTs,
 		PhysicalTableID: span.TableID,
-		TableInfo:       tableInfo,
-		Columns:         model.Columns2ColumnDatas(columns, tableInfo),
-		PreColumns:      model.Columns2ColumnDatas(preColumns, tableInfo),
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:      "table",
+				Table:       "table",
+				TableID:     span.TableID,
+				IsPartition: false,
+			},
+		},
+		Columns: []*model.Column{
+			{Name: "a", Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "a", Value: 1},
+		},
 	}
 }
 

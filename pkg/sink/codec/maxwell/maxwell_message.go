@@ -64,45 +64,38 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 	}
 	physicalTime := oracle.GetTimeFromTS(e.CommitTs)
 	value.Ts = physicalTime.Unix()
-	tableInfo := e.TableInfo
 	if e.IsDelete() {
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
-			colFlag := tableInfo.ForceGetColumnFlagType(v.ColumnID)
-			if onlyHandleKeyColumns && !colFlag.IsHandleKey() {
+			if onlyHandleKeyColumns && !v.Flag.IsHandleKey() {
 				continue
 			}
-			colInfo := tableInfo.ForceGetColumnInfo(v.ColumnID)
-			colName := tableInfo.ForceGetColumnName(v.ColumnID)
-			switch colInfo.GetType() {
+			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 				if v.Value == nil {
-					value.Old[colName] = nil
-				} else if colFlag.IsBinary() {
-					value.Old[colName] = v.Value
+					value.Old[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Old[v.Name] = v.Value
 				} else {
-					value.Old[colName] = string(v.Value.([]byte))
+					value.Old[v.Name] = string(v.Value.([]byte))
 				}
 			default:
-				value.Old[colName] = v.Value
+				value.Old[v.Name] = v.Value
 			}
 		}
 	} else {
 		for _, v := range e.Columns {
-			colFlag := tableInfo.ForceGetColumnFlagType(v.ColumnID)
-			colInfo := tableInfo.ForceGetColumnInfo(v.ColumnID)
-			colName := tableInfo.ForceGetColumnName(v.ColumnID)
-			switch colInfo.GetType() {
+			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 				if v.Value == nil {
-					value.Data[colName] = nil
-				} else if colFlag.IsBinary() {
-					value.Data[colName] = v.Value
+					value.Data[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Data[v.Name] = v.Value
 				} else {
-					value.Data[colName] = string(v.Value.([]byte))
+					value.Data[v.Name] = string(v.Value.([]byte))
 				}
 			default:
-				value.Data[colName] = v.Value
+				value.Data[v.Name] = v.Value
 			}
 		}
 		if e.PreColumns == nil {
@@ -110,27 +103,24 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 		} else {
 			value.Type = "update"
 			for _, v := range e.PreColumns {
-				colFlag := tableInfo.ForceGetColumnFlagType(v.ColumnID)
-				colInfo := tableInfo.ForceGetColumnInfo(v.ColumnID)
-				colName := tableInfo.ForceGetColumnName(v.ColumnID)
-				switch colInfo.GetType() {
+				switch v.Type {
 				case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 					if v.Value == nil {
-						if value.Data[colName] != nil {
-							value.Old[colName] = nil
+						if value.Data[v.Name] != nil {
+							value.Old[v.Name] = nil
 						}
-					} else if colFlag.IsBinary() {
-						if value.Data[colName] != v.Value {
-							value.Old[colName] = v.Value
+					} else if v.Flag.IsBinary() {
+						if value.Data[v.Name] != v.Value {
+							value.Old[v.Name] = v.Value
 						}
 					} else {
-						if value.Data[colName] != string(v.Value.([]byte)) {
-							value.Old[colName] = string(v.Value.([]byte))
+						if value.Data[v.Name] != string(v.Value.([]byte)) {
+							value.Old[v.Name] = string(v.Value.([]byte))
 						}
 					}
 				default:
-					if value.Data[colName] != v.Value {
-						value.Old[colName] = v.Value
+					if value.Data[v.Name] != v.Value {
+						value.Old[v.Name] = v.Value
 					}
 				}
 			}

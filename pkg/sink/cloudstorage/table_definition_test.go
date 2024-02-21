@@ -373,7 +373,7 @@ func TestTableCol(t *testing.T) {
 		require.Nil(t, err, tc.name)
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
 
-		_, err = tableCol.ToTiColumnInfo(100)
+		_, err = tableCol.ToTiColumnInfo()
 		require.NoError(t, err)
 	}
 }

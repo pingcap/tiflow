@@ -26,26 +26,24 @@ import (
 
 func TestCreate(t *testing.T) {
 	t.Parallel()
-	tableInfo := model.BuildTableInfo("test", "t1", []*model.Column{
-		{
-			Name: "a",
-			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-		}, {
-			Name: "b",
-			Flag: 0,
-		},
-	}, [][]int{{0}})
 	rowEvent := &model.RowChangedEvent{
-		TableInfo: tableInfo,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
+		},
+		PreColumns: []*model.Column{
 			{
 				Name:  "a",
 				Value: 1,
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 			}, {
 				Name:  "b",
 				Value: 2,
+				Flag:  0,
 			},
-		}, tableInfo),
+		},
 		StartTs:  1234,
 		CommitTs: 5678,
 	}
@@ -101,9 +99,9 @@ func TestCreate(t *testing.T) {
 			},
 		},
 	}
-	tableInfo2 := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+	tableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	ddlEvent := &model.DDLEvent{}
-	ddlEvent.FromJob(job, preTableInfo, tableInfo2)
+	ddlEvent.FromJob(job, preTableInfo, tableInfo)
 
 	msg = NewDDLMsg(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	require.Nil(t, msg.Key)

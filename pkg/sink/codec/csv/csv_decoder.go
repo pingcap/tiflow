@@ -109,7 +109,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed, errors.New("no csv row can be found"))
 	}
 
-	e, err := csvMsg2RowChangedEvent(b.codecConfig, b.msg, b.tableInfo)
+	e, err := csvMsg2RowChangedEvent(b.codecConfig, b.msg, b.tableInfo.Columns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

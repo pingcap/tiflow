@@ -42,6 +42,8 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	// the size of `testEvent` after being encoded by canal-json is 200
 	testEvent := &model.SingleTableTxn{
 		TableInfo: tableInfo,
@@ -49,11 +51,12 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 			{
 				CommitTs:  1,
 				TableInfo: tableInfo,
-				Columns: model.Columns2ColumnDatas([]*model.Column{{
-					Name:  "a",
+				Columns: []*model.Column{{
+					Name:  "col1",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
-				}}, tableInfo),
+				}},
+				ColInfos: colInfos,
 			},
 		},
 	}
@@ -80,6 +83,8 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 	encoder := NewJSONTxnEventEncoderBuilder(cfg).Build()
 	require.NotNil(t, encoder)
@@ -92,20 +97,22 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 			{
 				CommitTs:  1,
 				TableInfo: tableInfo,
-				Columns: model.Columns2ColumnDatas([]*model.Column{{
+				Columns: []*model.Column{{
 					Name:  "a",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
-				}}, tableInfo),
+				}},
+				ColInfos: colInfos,
 			},
 			{
 				CommitTs:  2,
 				TableInfo: tableInfo,
-				Columns: model.Columns2ColumnDatas([]*model.Column{{
+				Columns: []*model.Column{{
 					Name:  "a",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("bb"),
-				}}, tableInfo),
+				}},
+				ColInfos: colInfos,
 			},
 		},
 	}

@@ -100,26 +100,27 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolOpen)
 	codecConfig.OnlyOutputUpdatedColumns = true
 
-	tableInfo := model.BuildTableInfo("test", "test", []*model.Column{
-		{
-			Name: "test",
-			Type: mysql.TypeString,
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "test",
 		},
-	}, nil)
+	}
+
 	event := &model.RowChangedEvent{
 		TableInfo: tableInfo,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		PreColumns: []*model.Column{
 			{
 				Name:  "test",
 				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
 			},
-		}, tableInfo),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "test",
 				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
 			},
-		}, tableInfo),
+		},
 	}
 
 	// column not updated, so ignore it.
@@ -130,18 +131,18 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 
 	event = &model.RowChangedEvent{
 		TableInfo: tableInfo,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		PreColumns: []*model.Column{
 			{
 				Name:  "test",
 				Value: nil,
 			},
-		}, tableInfo),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "test",
 				Value: nil,
 			},
-		}, tableInfo),
+		},
 	}
 	_, row, err = rowChangeToMsg(event, codecConfig, false)
 	require.NoError(t, err)
@@ -149,52 +150,40 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 	require.False(t, ok)
 
 	// column type updated, so output it.
-	tableInfoWithFloatCols := model.BuildTableInfo("test", "test", []*model.Column{
-		{
-			Name: "test",
-			Type: mysql.TypeFloat,
-		},
-	}, nil)
 	event = &model.RowChangedEvent{
-		TableInfo: tableInfoWithFloatCols,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		TableInfo: tableInfo,
+		PreColumns: []*model.Column{
 			{
 				Name:  "test",
 				Value: float64(6.2),
 			},
-		}, tableInfoWithFloatCols),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "test",
 				Value: float32(6.2),
 			},
-		}, tableInfoWithFloatCols),
+		},
 	}
 	_, row, err = rowChangeToMsg(event, codecConfig, false)
 	require.NoError(t, err)
 	_, ok = row.PreColumns["test"]
 	require.True(t, ok)
 
-	tableInfoWithIntCols := model.BuildTableInfo("test", "test", []*model.Column{
-		{
-			Name: "test",
-			Type: mysql.TypeLong,
-		},
-	}, nil)
 	event = &model.RowChangedEvent{
-		TableInfo: tableInfoWithIntCols,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		TableInfo: tableInfo,
+		PreColumns: []*model.Column{
 			{
 				Name:  "test",
 				Value: uint64(1),
 			},
-		}, tableInfoWithIntCols),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		Columns: []*model.Column{
 			{
 				Name:  "test",
 				Value: int64(1),
 			},
-		}, tableInfoWithIntCols),
+		},
 	}
 	_, row, err = rowChangeToMsg(event, codecConfig, false)
 	require.NoError(t, err)
@@ -204,17 +193,19 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 
 func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	t.Parallel()
-	tableInfoWithHandleKey := model.BuildTableInfo("schema", "table", []*model.Column{
-		{Name: "id", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeLonglong},
-		{Name: "a", Type: mysql.TypeLonglong, Value: 1},
-	}, [][]int{{0}})
+
 	insertEvent := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithHandleKey,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		Columns: []*model.Column{
 			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
-		}, tableInfoWithHandleKey),
+		},
 	}
 
 	config := common.NewConfig(config.ProtocolOpen)
@@ -232,33 +223,38 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	require.Contains(t, value.Update, "id")
 	require.NotContains(t, value.Update, "a")
 
-	tableInfoWithoutHandleKey := model.BuildTableInfo("schema", "table", []*model.Column{
-		{Name: "id", Type: mysql.TypeLonglong},
-		{Name: "a", Type: mysql.TypeLonglong},
-	}, [][]int{{0}})
 	insertEventNoHandleKey := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithoutHandleKey,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
-		}, tableInfoWithoutHandleKey),
+		},
 	}
 	_, _, err = rowChangeToMsg(insertEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	updateEvent := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithHandleKey,
-
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		Columns: []*model.Column{
 			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
-		}, tableInfoWithHandleKey),
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		PreColumns: []*model.Column{
 			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
-		}, tableInfoWithHandleKey),
+		},
 	}
 
 	config.DeleteOnlyHandleKeyColumns = true
@@ -274,27 +270,37 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	require.NotContains(t, value.Update, "a")
 
 	updateEventNoHandleKey := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithoutHandleKey,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
-		}, tableInfoWithoutHandleKey),
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		},
+		PreColumns: []*model.Column{
 			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
-		}, tableInfoWithoutHandleKey),
+		},
 	}
 	_, _, err = rowChangeToMsg(updateEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	deleteEvent := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithHandleKey,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		PreColumns: []*model.Column{
 			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
-		}, tableInfoWithHandleKey),
+		},
 	}
 	config.DeleteOnlyHandleKeyColumns = true
 	_, value, err = rowChangeToMsg(deleteEvent, config, false)
@@ -313,12 +319,17 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	require.NotContains(t, value.Delete, "a")
 
 	deleteEventNoHandleKey := &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfoWithoutHandleKey,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "schema",
+				Table:  "table",
+			},
+		},
+		PreColumns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
-		}, tableInfoWithoutHandleKey),
+		},
 	}
 
 	_, _, err = rowChangeToMsg(deleteEventNoHandleKey, config, true)

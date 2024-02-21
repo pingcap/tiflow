@@ -43,11 +43,14 @@ func TestDecodeEvent(t *testing.T) {
 	require.NotNil(t, encoder)
 
 	event := newLargeEvent()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
+	input := &avroEncodeInput{
+		columns:  event.Columns,
+		colInfos: event.ColInfos,
+	}
 
-	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(event.Columns), func(i, j int) {
-		event.Columns[i], event.Columns[j] = event.Columns[j], event.Columns[i]
-		colInfos[i], colInfos[j] = colInfos[j], colInfos[i]
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
+		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
+		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
 	})
 
 	topic := "avro-test-topic"

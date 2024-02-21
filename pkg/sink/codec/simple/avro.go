@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -106,7 +108,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"nullable": !mysql.HasNotNullFlag(col.GetFlag()),
 			"default":  nil,
 		}
-		defaultValue := model.GetColumnDefaultValue(col)
+		defaultValue := entry.GetColumnDefaultValue(col)
 		if defaultValue != nil {
 			// according to TiDB source code, the default value is converted to string if not nil.
 			column["default"] = map[string]interface{}{
@@ -269,26 +271,26 @@ func (a *avroMarshaller) newDMLMessageMap(
 	}
 
 	if event.IsInsert() {
-		data, err := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		data, err := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["data"] = data
 		m["type"] = string(DMLTypeInsert)
 	} else if event.IsDelete() {
-		old, err := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		old, err := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["old"] = old
 		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
-		data, err := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		data, err := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 		m["data"] = data
-		old, err := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		old, err := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -350,27 +352,24 @@ func recycleMap(m map[string]interface{}) {
 }
 
 func (a *avroMarshaller) collectColumns(
-	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
-	for _, col := range columns {
+	for idx, col := range columns {
 		if col == nil {
 			continue
 		}
-		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		colName := tableInfo.ForceGetColumnName(col.ColumnID)
-		if onlyHandleKey && !colFlag.IsHandleKey() {
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
 			continue
 		}
-		value, avroType, err := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
+		value, avroType, err := a.encodeValue4Avro(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err
 		}
 
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
-		result[colName] = holder
+		result[col.Name] = holder
 	}
 
 	return map[string]interface{}{

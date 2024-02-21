@@ -160,14 +160,9 @@ func newJSONMessageForDML(
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)
 		emptyColumn := true
-		tableInfo := e.TableInfo
-		for _, col := range columns {
+		for idx, col := range columns {
 			if col != nil {
-				colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-				columnInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-				colType := columnInfo.GetType()
-				colName := tableInfo.ForceGetColumnName(col.ColumnID)
-				if onlyHandleKey && !colFlag.IsHandleKey() {
+				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -176,14 +171,19 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				javaType, err := getJavaSQLType(col.Value, colType, *colFlag)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
-				out.String(colName)
+				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				mysqlTypeMap[colName] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
@@ -218,8 +218,7 @@ func newJSONMessageForDML(
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			e.GetPreColumns(),
-			false, onlyHandleKey, nil, out, builder,
+			e.PreColumns, false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
 		}
@@ -227,8 +226,7 @@ func newJSONMessageForDML(
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			e.GetColumns(),
-			false, onlyHandleKey, nil, out, builder,
+			e.Columns, false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
 		}
@@ -236,21 +234,19 @@ func newJSONMessageForDML(
 		var newColsMap map[string]*model.Column
 		if config.OnlyOutputUpdatedColumns {
 			newColsMap = make(map[string]*model.Column, len(e.Columns))
-			for _, col := range e.GetColumns() {
+			for _, col := range e.Columns {
 				newColsMap[col.Name] = col
 			}
 		}
 		out.RawString(",\"old\":")
 		if err := fillColumns(
-			e.GetPreColumns(),
-			config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
+			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
 		); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			e.GetColumns(),
-			false, onlyHandleKey, nil, out, builder,
+			e.Columns, false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
 		}

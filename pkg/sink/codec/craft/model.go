@@ -418,21 +418,13 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent, 
 	groups := allocator.columnGroupSlice(numGroups)
 	estimatedSize := 0
 	idx := 0
-	if size, group := newColumnGroup(
-		allocator,
-		columnGroupTypeNew,
-		ev.GetColumns(),
-		false); group != nil {
+	if size, group := newColumnGroup(allocator, columnGroupTypeNew, ev.Columns, false); group != nil {
 		groups[idx] = group
 		idx++
 		estimatedSize += size
 	}
 	onlyHandleKeyColumns = onlyHandleKeyColumns && ev.IsDelete()
-	if size, group := newColumnGroup(
-		allocator,
-		columnGroupTypeOld,
-		ev.GetPreColumns(),
-		onlyHandleKeyColumns); group != nil {
+	if size, group := newColumnGroup(allocator, columnGroupTypeOld, ev.PreColumns, onlyHandleKeyColumns); group != nil {
 		groups[idx] = group
 		estimatedSize += size
 	}
