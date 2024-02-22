@@ -151,6 +151,7 @@ INSERT INTO t4 (id, name) VALUES (29, 'Michael 7');
 INSERT INTO t4 (id, name) VALUES (30, 'Sophia 7');
 
 
+DO SLEEP(30); -- waiting for `add index` finish in downstream TiDB
 -- drop not unique index
 ALTER TABLE t3 DROP INDEX idx_name_age;
 

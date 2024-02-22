@@ -26,9 +26,6 @@ type DebugConfig struct {
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
-	// EnableKVConnectBackOff enables the backoff for kv connect.
-	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
-
 	// CDCV2 enables ticdc version 2 implementation with new metastore
 	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
 

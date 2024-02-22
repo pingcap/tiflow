@@ -62,7 +62,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	m, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -272,7 +272,7 @@ func (d *decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		value, err := encodeValue(value, fieldType)
+		value, err := encodeValue(value, fieldType, d.config.TimeZone.String())
 		if err != nil {
 			return nil, err
 		}

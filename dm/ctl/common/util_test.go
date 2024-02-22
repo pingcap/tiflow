@@ -14,11 +14,9 @@
 package common
 
 import (
-	"crypto/rand"
 	"testing"
 
 	"github.com/pingcap/tiflow/dm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,17 +28,4 @@ func TestHTMLEscape(t *testing.T) {
 	require.NoError(t, err)
 	// TODO: how can we turn it off? https://github.com/gogo/protobuf/issues/484
 	require.Contains(t, output, "checksum mismatched remote vs local =\\u003e")
-}
-
-func TestCheckSecretInitialized(t *testing.T) {
-	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		encrypt.InitCipher(nil)
-	})
-	require.Error(t, CheckSecretInitialized())
-	encrypt.InitCipher(key)
-	require.NoError(t, CheckSecretInitialized())
 }

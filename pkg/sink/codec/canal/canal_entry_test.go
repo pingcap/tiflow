@@ -36,25 +36,22 @@ func TestInsert(t *testing.T) {
 	sql := `create table test.t(
 		id int primary key,
 		name varchar(32),
-		tiny tinyint unsigned,
+		tiny tinyint,
 		comment text,
 		bb blob)`
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
 		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-			{Name: "bb", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		},
-		ColInfos: colInfos,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{Name: "id", Value: 1},
+			{Name: "name", Value: "Bob"},
+			{Name: "tiny", Value: 255},
+			{Name: "comment", Value: []byte("测试")},
+			{Name: "bb", Value: []byte("测试blob")},
+		}, tableInfo),
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
@@ -126,20 +123,17 @@ func TestUpdate(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
 		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		Columns: []*model.Column{
+		Columns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-		},
-		PreColumns: []*model.Column{
+		}, tableInfo),
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 2},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Nancy"},
-		},
-		ColInfos: colInfos,
+		}, tableInfo),
 	}
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := newCanalEntryBuilder(codecConfig)
@@ -211,15 +205,12 @@ func TestDelete(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
 		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		PreColumns: []*model.Column{
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		},
-		ColInfos: colInfos,
+		}, tableInfo),
 	}
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := newCanalEntryBuilder(codecConfig)
