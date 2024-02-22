@@ -283,6 +283,10 @@ func (d *decoder) buildData(
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if d.msg == nil {
+		return nil, cerror.ErrCodecDecode.GenWithStack(
+			"no message found when decode DDL event")
+	}
 	ddl, err := newDDLEvent(d.msg)
 	if err != nil {
 		return nil, err

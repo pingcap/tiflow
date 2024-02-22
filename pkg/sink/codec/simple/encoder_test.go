@@ -192,6 +192,38 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
 
+			addColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ADD COLUMN `nn` INT")
+			m, err = enc.EncodeDDLEvent(addColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 5)
+
+			dropColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` DROP COLUMN `nn`")
+			m, err = enc.EncodeDDLEvent(dropColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+
 			changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
 			m, err = enc.EncodeDDLEvent(changeColumnDDLEvent)
 			require.NoError(t, err)
@@ -217,13 +249,210 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 			_, _, err = dec.HasNext()
 			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			helper.Tk().MustExec("drop table TBL1")
+			setDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` SET DEFAULT _UTF8MB4'a'")
+
+			m, err = enc.EncodeDDLEvent(setDefaultDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "payload" {
+					require.Equal(t, "a", col.DefaultValue)
+				}
+			}
+
+			dropDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` DROP DEFAULT")
+			m, err = enc.EncodeDDLEvent(dropDefaultDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "payload" {
+					require.Nil(t, col.DefaultValue)
+				}
+			}
+
+			autoIncrementDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` AUTO_INCREMENT = 5")
+			m, err = enc.EncodeDDLEvent(autoIncrementDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			modifyColumnNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NULL")
+			m, err = enc.EncodeDDLEvent(modifyColumnNullDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "a" {
+					require.True(t, !mysql.HasNotNullFlag(col.GetFlag()))
+				}
+			}
+
+			modifyColumnNotNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NOT NULL")
+			m, err = enc.EncodeDDLEvent(modifyColumnNotNullDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "a" {
+					require.True(t, mysql.HasNotNullFlag(col.GetFlag()))
+				}
+			}
+
+			addIndexDDLEvent := helper.DDL2Event("CREATE INDEX `idx_a` ON `TBL1` (`a`)")
+			m, err = enc.EncodeDDLEvent(addIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeCIndex, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `idx_a` ON `TBL1`")
+			m, err = enc.EncodeDDLEvent(dropIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeDIndex, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			truncateTableDDLEvent := helper.DDL2Event("TRUNCATE TABLE TBL1")
+			m, err = enc.EncodeDDLEvent(truncateTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeTruncate, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			renameTableDDLEvent := helper.DDL2Event("RENAME TABLE TBL1 TO TBL2")
+			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeRename, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			helper.Tk().MustExec("set @@tidb_allow_remove_auto_inc = 1")
+			renameColumnDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHANGE COLUMN `id` `id2` INT")
+			m, err = enc.EncodeDDLEvent(renameColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropTableDDLEvent := helper.DDL2Event("DROP TABLE TBL2")
+			m, err = enc.EncodeDDLEvent(dropTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeErase, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
 		}
 	}
 }
