@@ -69,6 +69,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20240109063850-932639606bcf
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20240219052425-e3e0f7e1bc44
+	github.com/pingcap/tidb-dashboard v0.0.0-20240127080020-2171c6e6b9d7
 	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240219043455-3ceeb3ff70bf
 	github.com/prometheus/client_golang v1.18.0
@@ -160,6 +161,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.0.1 // indirect
 	github.com/jfcg/sixb v1.3.8 // indirect
 	github.com/jfcg/sorty/v2 v2.1.0 // indirect
+	github.com/joomcode/errorx v1.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/ks3sdklib/aws-sdk-go v1.2.9 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -369,7 +371,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/mod v0.15.0 // indirect
-	golang.org/x/term v0.17.0 // indirect
+	golang.org/x/term v0.17.0
 	golang.org/x/tools v0.18.0 // indirect
 	google.golang.org/api v0.156.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect

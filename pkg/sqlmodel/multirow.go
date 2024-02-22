@@ -178,10 +178,6 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	for i, col := range first.sourceTableInfo.Columns {
 		if _, ok := targetGeneratedColSet[col.Name.L]; ok {
 			skipColIdx = append(skipColIdx, i)
-			//// non cdc visible column's value won't be in `RowChange`
-			//if model.IsColCDCVisible(col) {
-			//	skipColIdx = append(skipColIdx, i)
-			//}
 			continue
 		}
 		assignValueColumnCount++
@@ -255,10 +251,6 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	for i, col := range first.sourceTableInfo.Columns {
 		if _, ok := generatedColumns[col.Name.L]; ok {
 			skipColIdx = append(skipColIdx, i)
-			//// non cdc visible column's value won't be in `RowChange`
-			//if model.IsColCDCVisible(col) {
-			//	skipColIdx = append(skipColIdx, i)
-			//}
 			continue
 		}
 
