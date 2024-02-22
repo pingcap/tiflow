@@ -178,6 +178,9 @@ func TestRemoveTable(t *testing.T) {
 
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
+	// This test is unstable, so skip it.
+	// issue: https://github.com/pingcap/tiflow/issues/10523
+	t.Skip("Note(dongmen): Skip this case since it is unstable.")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	changefeedInfo := getChangefeedInfo()
