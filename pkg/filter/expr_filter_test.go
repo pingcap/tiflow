@@ -17,7 +17,11 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/planner/core"
+=======
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
+>>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -772,11 +776,11 @@ func TestGetColumnFromError(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			err:      core.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
+			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
 			expected: "mother",
 		},
 		{
-			err:      core.ErrUnknownColumn.FastGenByArgs("company", "expression"),
+			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("company", "expression"),
 			expected: "company",
 		},
 		{

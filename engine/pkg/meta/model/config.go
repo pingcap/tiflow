@@ -14,6 +14,7 @@
 package model
 
 import (
+	"crypto/tls"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -127,7 +128,8 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) (strin
 		cfg, err := util.NewTLSConfig(
 			util.WithCAPath(storeConf.Security.CAPath),
 			util.WithCertAndKeyPath(storeConf.Security.CertPath, storeConf.Security.KeyPath),
-			util.WithVerifyCommonName(storeConf.Security.CertAllowedCN))
+			util.WithVerifyCommonName(storeConf.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10))
 		if err != nil {
 			return "", errors.ErrMetaParamsInvalid.Wrap(err)
 		}
