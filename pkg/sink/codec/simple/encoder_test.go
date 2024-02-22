@@ -385,11 +385,11 @@ func TestEncodeIntegerTypes(t *testing.T) {
 
 	createTableDDL := `create table test.t(
 		id int primary key auto_increment,
-		a tinyint, b tinyint unsigned,
-		c smallint, d smallint unsigned,
-		e mediumint, f mediumint unsigned,
-		g int, h int unsigned,
-		i bigint, j bigint unsigned)`
+ 		a tinyint, b tinyint unsigned,
+ 		c smallint, d smallint unsigned,
+ 		e mediumint, f mediumint unsigned,
+ 		g int, h int unsigned,
+ 		i bigint, j bigint unsigned)`
 	ddlEvent := helper.DDL2Event(createTableDDL)
 
 	sql := `insert into test.t values(
@@ -403,11 +403,11 @@ func TestEncodeIntegerTypes(t *testing.T) {
 
 	sql = `insert into test.t values (
 		2,
-		127, 255,
-		32767, 65535,
-		8388607, 16777215,
-		2147483647, 4294967295,
-		9223372036854775807, 18446744073709551615)`
+ 		127, 255,
+ 		32767, 65535,
+ 		8388607, 16777215,
+ 		2147483647, 4294967295,
+ 		9223372036854775807, 18446744073709551615)`
 	maxValues := helper.DML2Event(sql, "test", "t")
 
 	ctx := context.Background()
@@ -439,8 +439,10 @@ func TestEncodeIntegerTypes(t *testing.T) {
 		_, err = dec.NextDDLEvent()
 		require.NoError(t, err)
 
-		events := []*model.RowChangedEvent{minValues, maxValues}
-		for _, event := range events {
+		for _, event := range []*model.RowChangedEvent{
+			minValues,
+			maxValues,
+		} {
 			err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
 			require.NoError(t, err)
 

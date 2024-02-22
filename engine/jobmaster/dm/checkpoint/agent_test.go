@@ -289,6 +289,9 @@ func TestFetchTableStmt(t *testing.T) {
 	p := parser.New()
 	tracker, err := schema.NewTestTracker(context.Background(), "test-tracker", nil, dlog.L())
 	require.NoError(t, err)
+	defer func() {
+		tracker.Close()
+	}()
 	stmt := "CREATE DATABASE `db`"
 	ret, err := p.ParseOneStmt(stmt, "", "")
 	require.NoError(t, err)
