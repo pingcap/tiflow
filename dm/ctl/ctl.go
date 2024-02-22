@@ -14,6 +14,7 @@
 package ctl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -23,9 +24,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/ctl/master"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
@@ -85,7 +85,6 @@ func NewRootCmd() *cobra.Command {
 		master.NewSourceTableSchemaCmd(),
 		master.NewConfigCmd(),
 		master.NewValidationCmd(),
-		newDecryptCmd(),
 		newEncryptCmd(),
 	)
 	// copied from (*cobra.Command).InitDefaultHelpCmd
@@ -114,7 +113,6 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 func Init(cfg *common.Config) error {
 	// set the log level temporarily
 	log.SetLevel(zapcore.InfoLevel)
-	encrypt.InitCipher(cfg.SecretKey)
 
 	return errors.Trace(common.InitUtils(cfg))
 }
@@ -225,35 +223,24 @@ func newEncryptCmd() *cobra.Command {
 			if len(args) != 1 {
 				return cmd.Help()
 			}
-			if err := common.CheckSecretInitialized(); err != nil {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			resp := &pb.EncryptResponse{}
+			err := common.SendRequest(
+				ctx,
+				"Encrypt",
+				&pb.EncryptRequest{
+					Plaintext: args[0],
+				},
+				&resp,
+			)
+			if err != nil {
 				return err
 			}
-			ciphertext, err := utils.Encrypt(args[0])
-			if err != nil {
-				return errors.Trace(err)
+			if !resp.Result {
+				return errors.New(resp.Msg)
 			}
-			fmt.Println(ciphertext)
-			return nil
-		},
-	}
-}
-
-func newDecryptCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "decrypt <cipher-text>",
-		Short: "Decrypts cipher text to plain text",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return cmd.Help()
-			}
-			if err := common.CheckSecretInitialized(); err != nil {
-				return err
-			}
-			plaintext, err := utils.Decrypt(args[0])
-			if err != nil {
-				return errors.Trace(err)
-			}
-			fmt.Println(plaintext)
+			fmt.Println(resp.Ciphertext)
 			return nil
 		},
 	}

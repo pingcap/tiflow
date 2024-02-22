@@ -457,17 +457,17 @@ func TestEncodeIntegerTypes(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 
-			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 
 			for _, expected := range event.Columns {
-				decoded, ok := decodedColumns[expected.Name]
+				colName := event.TableInfo.ForceGetColumnName(expected.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
 				require.EqualValues(t, expected.Value, decoded.Value)
-				require.Equal(t, expected.Charset, decoded.Charset)
-				require.Equal(t, expected.Collation, decoded.Collation)
 			}
 		}
 	}
@@ -536,17 +536,16 @@ func TestEncoderOtherTypes(t *testing.T) {
 		decodedRow, err := dec.NextRowChangedEvent()
 		require.NoError(t, err)
 
-		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+		decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 		for _, column := range decodedRow.Columns {
-			decodedColumns[column.Name] = column
+			colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+			decodedColumns[colName] = column
 		}
-
 		for _, expected := range row.Columns {
-			decoded, ok := decodedColumns[expected.Name]
+			colName := row.TableInfo.ForceGetColumnName(expected.ColumnID)
+			decoded, ok := decodedColumns[colName]
 			require.True(t, ok)
-			require.Equal(t, expected.Value, decoded.Value)
-			require.Equal(t, expected.Charset, decoded.Charset)
-			require.Equal(t, expected.Collation, decoded.Collation)
+			require.EqualValues(t, expected.Value, decoded.Value)
 		}
 	}
 }
@@ -679,7 +678,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 
 			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
-				obtainedDefaultValues[col.Name.O] = entry.GetColumnDefaultValue(col)
+				obtainedDefaultValues[col.Name.O] = model.GetColumnDefaultValue(col)
 				switch col.GetType() {
 				case mysql.TypeFloat, mysql.TypeDouble:
 					require.Equal(t, 0, col.GetDecimal())
@@ -687,7 +686,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				}
 			}
 			for _, col := range ddlEvent.TableInfo.Columns {
-				expected := entry.GetColumnDefaultValue(col)
+				expected := model.GetColumnDefaultValue(col)
 				obtained := obtainedDefaultValues[col.Name.O]
 				require.Equal(t, expected, obtained)
 			}
@@ -715,29 +714,27 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
 				require.Equal(t, decodedRow.PhysicalTableID, event.PhysicalTableID)
 
-				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+				decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {
-					decodedColumns[column.Name] = column
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedColumns[colName] = column
 				}
 				for _, col := range event.Columns {
-					decoded, ok := decodedColumns[col.Name]
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.Equal(t, col.Type, decoded.Type)
-					require.Equal(t, col.Charset, decoded.Charset)
-					require.Equal(t, col.Collation, decoded.Collation)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
 
-				decodedPreviousColumns := make(map[string]*model.Column, len(decodedRow.PreColumns))
+				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
 				for _, column := range decodedRow.PreColumns {
-					decodedPreviousColumns[column.Name] = column
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedPreviousColumns[colName] = column
 				}
 				for _, col := range event.PreColumns {
-					decoded, ok := decodedPreviousColumns[col.Name]
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedPreviousColumns[colName]
 					require.True(t, ok)
-					require.Equal(t, col.Type, decoded.Type)
-					require.Equal(t, col.Charset, decoded.Charset)
-					require.Equal(t, col.Collation, decoded.Collation)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
 			}
@@ -847,28 +844,26 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), updateEvent.TableInfo.GetSchemaName())
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), updateEvent.TableInfo.GetTableName())
 
-			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 			for _, col := range updateEvent.Columns {
-				decoded, ok := decodedColumns[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.Equal(t, col.Type, decoded.Type)
-				require.Equal(t, col.Charset, decoded.Charset)
-				require.Equal(t, col.Collation, decoded.Collation)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 			for _, col := range updateEvent.PreColumns {
-				decoded, ok := decodedColumns[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.Equal(t, col.Type, decoded.Type)
-				require.Equal(t, col.Charset, decoded.Charset)
-				require.Equal(t, col.Collation, decoded.Collation)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 		}
@@ -921,9 +916,11 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				obtainedValues[name] = value
 			}
 			for _, col := range updateEvent.Columns {
-				if col.Flag.IsHandleKey() {
-					require.Contains(t, dec.msg.Data, col.Name)
-					obtained := obtainedValues[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+				if colFlag.IsHandleKey() {
+					require.Contains(t, dec.msg.Data, colName)
+					obtained := obtainedValues[colName]
 					switch v := obtained.(type) {
 					case string:
 						var err error
@@ -932,7 +929,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 					require.EqualValues(t, col.Value, obtained)
 				} else {
-					require.NotContains(t, dec.msg.Data, col.Name)
+					require.NotContains(t, dec.msg.Data, colName)
 				}
 			}
 
@@ -941,9 +938,11 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				obtainedValues[name] = value
 			}
 			for _, col := range updateEvent.PreColumns {
-				if col.Flag.IsHandleKey() {
-					require.Contains(t, dec.msg.Old, col.Name)
-					obtained := obtainedValues[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+				if colFlag.IsHandleKey() {
+					require.Contains(t, dec.msg.Old, colName)
+					obtained := obtainedValues[colName]
 					switch v := obtained.(type) {
 					case string:
 						var err error
@@ -952,7 +951,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 					require.Equal(t, col.Value, obtained)
 				} else {
-					require.NotContains(t, dec.msg.Old, col.Name)
+					require.NotContains(t, dec.msg.Old, colName)
 				}
 			}
 		}

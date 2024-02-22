@@ -95,15 +95,13 @@ func TestRowChangedEventFuncs(t *testing.T) {
 				Table:  "t1",
 			},
 		},
-		PreColumns: []*Column{
+		PreColumns: []*ColumnData{
 			{
-				Name:  "a",
-				Value: 1,
-				Flag:  HandleKeyFlag | PrimaryKeyFlag,
+				ColumnID: 1,
+				Value:    1,
 			}, {
-				Name:  "b",
-				Value: 2,
-				Flag:  0,
+				ColumnID: 2,
+				Value:    2,
 			},
 		},
 	}
@@ -405,14 +403,14 @@ func TestExchangeTablePartition(t *testing.T) {
 func TestSortRowChangedEvent(t *testing.T) {
 	events := []*RowChangedEvent{
 		{
-			PreColumns: []*Column{{}},
-			Columns:    []*Column{{}},
+			PreColumns: []*ColumnData{{}},
+			Columns:    []*ColumnData{{}},
 		},
 		{
-			Columns: []*Column{{}},
+			Columns: []*ColumnData{{}},
 		},
 		{
-			PreColumns: []*Column{{}},
+			PreColumns: []*ColumnData{{}},
 		},
 	}
 	assert.True(t, events[0].IsUpdate())
@@ -450,16 +448,137 @@ func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
 func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	t.Parallel()
 
-	// Update handle key.
+	// Update primary key.
+	tableInfoWithPrimaryKey := BuildTableInfo("test", "t", []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: HandleKeyFlag | PrimaryKeyFlag,
+		},
+	}, [][]int{{1}})
+	events := []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithPrimaryKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Flag:  BinaryFlag,
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Flag:  HandleKeyFlag | PrimaryKeyFlag,
+					Value: "col2-value-updated",
+				},
+			}, tableInfoWithPrimaryKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+		},
+	}
+	result, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update unique key.
+	tableInfoWithUniqueKey := BuildTableInfo("test", "t", []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: UniqueKeyFlag | NullableFlag,
+		},
+	}, [][]int{{1}})
+	events = []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithUniqueKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value-updated",
+				},
+			}, tableInfoWithUniqueKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithUniqueKey),
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update non-handle key.
+	events = []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithPrimaryKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(result))
+}
+
+func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	columns := []*Column{
 		{
 			Name:  "col1",
 			Flag:  BinaryFlag,
-			Value: "col1-value-updated",
+			Value: "col1-value",
 		},
 		{
 			Name:  "col2",
-			Flag:  HandleKeyFlag,
+			Flag:  HandleKeyFlag | UniqueKeyFlag | PrimaryKeyFlag,
 			Value: "col2-value-updated",
 		},
 	}
@@ -471,131 +590,16 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 		},
 		{
 			Name:  "col2",
-			Flag:  HandleKeyFlag,
+			Flag:  HandleKeyFlag | UniqueKeyFlag | PrimaryKeyFlag,
 			Value: "col2-value",
 		},
 	}
-
-	events := []*RowChangedEvent{
-		{
-			CommitTs:   1,
-			Columns:    columns,
-			PreColumns: preColumns,
-		},
+	tableInfo := BuildTableInfo("test", "t", columns, [][]int{{1}})
+	ukUpdatedEvent := &RowChangedEvent{
+		TableInfo:  tableInfo,
+		PreColumns: Columns2ColumnDatas(preColumns, tableInfo),
+		Columns:    Columns2ColumnDatas(columns, tableInfo),
 	}
-	result, err := trySplitAndSortUpdateEvent(events)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(result))
-	require.True(t, result[0].IsDelete())
-	require.True(t, result[1].IsInsert())
-
-	// Update unique key.
-	columns = []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value-updated",
-		},
-		{
-			Name:  "col2",
-			Flag:  UniqueKeyFlag,
-			Value: "col2-value-updated",
-		},
-	}
-	preColumns = []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value",
-		},
-		{
-			Name:  "col2",
-			Flag:  UniqueKeyFlag,
-			Value: "col2-value",
-		},
-	}
-
-	events = []*RowChangedEvent{
-		{
-			CommitTs:   1,
-			Columns:    columns,
-			PreColumns: preColumns,
-		},
-	}
-	result, err = trySplitAndSortUpdateEvent(events)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(result))
-	require.True(t, result[0].IsDelete())
-	require.True(t, result[0].IsDelete())
-	require.True(t, result[1].IsInsert())
-
-	// Update non-handle key.
-	columns = []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value-updated",
-		},
-		{
-			Name:  "col2",
-			Flag:  HandleKeyFlag,
-			Value: "col2-value",
-		},
-	}
-	preColumns = []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value",
-		},
-		{
-			Name:  "col2",
-			Flag:  HandleKeyFlag,
-			Value: "col2-value",
-		},
-	}
-
-	events = []*RowChangedEvent{
-		{
-			CommitTs:   1,
-			Columns:    columns,
-			PreColumns: preColumns,
-		},
-	}
-	result, err = trySplitAndSortUpdateEvent(events)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(result))
-}
-
-var ukUpdatedEvent = &RowChangedEvent{
-	PreColumns: []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value",
-		},
-		{
-			Name:  "col2",
-			Flag:  HandleKeyFlag | UniqueKeyFlag,
-			Value: "col2-value",
-		},
-	},
-
-	Columns: []*Column{
-		{
-			Name:  "col1",
-			Flag:  BinaryFlag,
-			Value: "col1-value",
-		},
-		{
-			Name:  "col2",
-			Flag:  HandleKeyFlag | UniqueKeyFlag,
-			Value: "col2-value-updated",
-		},
-	},
-}
-
-func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	txn := &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
@@ -613,25 +617,32 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 }
 
 func TestToRedoLog(t *testing.T) {
+	cols := []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: HandleKeyFlag | UniqueKeyFlag,
+		},
+	}
+	tableInfo := BuildTableInfo("test", "t", cols, [][]int{{1}})
 	event := &RowChangedEvent{
 		StartTs:         100,
 		CommitTs:        1000,
 		PhysicalTableID: 1,
-		TableInfo: &TableInfo{
-			TableName: TableName{Schema: "test", Table: "t"},
-		},
-		Columns: []*Column{
+		TableInfo:       tableInfo,
+		Columns: Columns2ColumnDatas([]*Column{
 			{
 				Name:  "col1",
-				Flag:  BinaryFlag,
 				Value: "col1-value",
 			},
 			{
 				Name:  "col2",
-				Flag:  HandleKeyFlag | UniqueKeyFlag,
 				Value: "col2-value-updated",
 			},
-		},
+		}, tableInfo),
 	}
 	eventInRedoLog := event.ToRedoLog()
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
@@ -639,5 +650,5 @@ func TestToRedoLog(t *testing.T) {
 	require.Equal(t, event.PhysicalTableID, eventInRedoLog.RedoRow.Row.Table.TableID)
 	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
 	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
-	require.Equal(t, event.Columns, eventInRedoLog.RedoRow.Row.Columns)
+	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, tableInfo))
 }
