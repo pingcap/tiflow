@@ -23,9 +23,9 @@ import (
 
 // progress is the fetch progress of a table.
 type progress struct {
+	id                uint64
 	span              tablepb.Span
 	nextLowerBoundPos sorter.Position
-	version           uint64
 }
 
 // Assert progressHeap implements heap.Interface

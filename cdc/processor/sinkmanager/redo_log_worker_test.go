@@ -110,7 +110,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -159,7 +159,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -206,7 +206,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -251,7 +251,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -299,7 +299,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithoutMemory() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 

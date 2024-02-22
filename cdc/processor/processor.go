@@ -215,7 +215,7 @@ func (p *processor) AddTableSpan(
 	}
 
 	p.sinkManager.r.AddTable(
-		span, startTs, p.latestInfo.TargetTs)
+		span, startTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}

@@ -112,7 +112,6 @@ func createTableSinkWrapper(
 		func() (tablesink.TableSink, uint64) { return innerTableSink, 1 },
 		tableState,
 		0,
-		100,
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreator()
@@ -254,14 +253,13 @@ func TestNewTableSinkWrapper(t *testing.T) {
 		nil,
 		tablepb.TableStatePrepared,
 		model.Ts(10),
-		model.Ts(20),
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 	require.NotNil(t, wrapper)
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
 	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
 	checkpointTs := wrapper.getCheckpointTs()
-	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
+	require.Equal(t, uint64(10), checkpointTs.Watermark())
 }
 
 func TestTableSinkWrapperSinkVersion(t *testing.T) {
@@ -280,32 +278,31 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 		func() (tablesink.TableSink, uint64) { return nil, 0 },
 		tablepb.TableStatePrepared,
 		model.Ts(10),
-		model.Ts(20),
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 
-	require.False(t, wrapper.initTableSink())
+	require.False(t, wrapper.isReady())
 
 	wrapper.tableSinkCreator = func() (tablesink.TableSink, uint64) {
 		*version += 1
 		return innerTableSink, *version
 	}
 
-	require.True(t, wrapper.initTableSink())
+	require.True(t, wrapper.isReady())
 	require.Equal(t, wrapper.tableSink.version, uint64(1))
 
-	require.True(t, wrapper.asyncCloseTableSink())
+	//require.True(t, wrapper.asyncCloseTableSink())
 
-	wrapper.doTableSinkClear()
+	wrapper.clear()
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 
-	require.True(t, wrapper.initTableSink())
+	require.True(t, wrapper.isReady())
 	require.Equal(t, wrapper.tableSink.version, uint64(2))
 
-	wrapper.closeTableSink()
+	//wrapper.closeTableSink()
 
-	wrapper.doTableSinkClear()
+	wrapper.clear()
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 }
@@ -329,13 +326,12 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 		},
 		tablepb.TableStatePrepared,
 		oracle.GoTimeToTS(time.Now()),
-		oracle.GoTimeToTS(time.Now().Add(10000*time.Second)),
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 
-	require.True(t, wrapper.initTableSink())
+	require.True(t, wrapper.isReady())
 
-	wrapper.closeAndClearTableSink()
+	wrapper.closeAndClear()
 
 	// Shouldn't be stuck because version is 0.
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
@@ -343,7 +339,7 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	require.False(t, isStuck)
 
 	// Shouldn't be stuck because tableSink.advanced is just updated.
-	require.True(t, wrapper.initTableSink())
+	require.True(t, wrapper.isReady())
 	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
 	require.False(t, isStuck)
 

@@ -194,7 +194,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredE
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -245,7 +245,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -295,7 +295,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -348,7 +348,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenR
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -403,7 +403,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -456,7 +456,7 @@ func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMa
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -505,7 +505,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -537,7 +537,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
 	checkpointTs := wrapper.getCheckpointTs()
-	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
+	require.Equal(suite.T(), uint64(4), checkpointTs.Watermark())
 }
 
 // Test Scenario:
@@ -558,7 +558,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -583,7 +583,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 	}
 	require.Eventually(suite.T(), func() bool {
 		checkpointTs := wrapper.getCheckpointTs()
-		return checkpointTs.ResolvedMark() == 4
+		return checkpointTs.Watermark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()
@@ -608,7 +608,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -641,7 +641,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		checkpointTs := wrapper.getCheckpointTs()
-		return checkpointTs.ResolvedMark() == 2
+		return checkpointTs.Watermark() == 2
 	}, 5*time.Second, 10*time.Millisecond)
 
 	events = []*model.PolymorphicEvent{
@@ -687,7 +687,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
+		err := w.run(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 

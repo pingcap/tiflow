@@ -85,7 +85,7 @@ func newSinkWorker(
 	}
 }
 
-func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
+func (w *sinkWorker) run(ctx context.Context, taskChan <-chan *sinkTask) error {
 	failpoint.Inject("SinkWorkerTaskHandlePause", func() { <-ctx.Done() })
 	for {
 		select {
@@ -117,7 +117,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		task.getUpperBound(task.tableSink.getUpperBoundTs()))
 	advancer.lastPos = lowerBound.Prev()
 
-	allEventSize := uint64(0)
 	allEventCount := 0
 
 	callbackIsPerformed := false
@@ -205,7 +204,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
 			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
-			allEventSize += size
 		}
 
 		if err := advancer.tryAdvanceAndAcquireMem(false, pos.Valid()); err != nil {

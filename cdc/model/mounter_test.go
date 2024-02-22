@@ -50,7 +50,7 @@ func TestResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	invalidResolvedTs := ResolvedTs{Mode: -1, Ts: 1}
-	require.Equal(t, uint64(0), invalidResolvedTs.ResolvedMark())
+	require.Equal(t, uint64(0), invalidResolvedTs.Watermark())
 
 	ts := rand.Uint64()%10 + 1
 	batchID := rand.Uint64()%10 + 1

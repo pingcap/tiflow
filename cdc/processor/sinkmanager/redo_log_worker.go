@@ -48,7 +48,7 @@ func newRedoWorker(
 	}
 }
 
-func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask) error {
+func (w *redoWorker) run(ctx context.Context, taskChan <-chan *redoTask) error {
 	for {
 		select {
 		case <-ctx.Done():

@@ -16,7 +16,6 @@ package sinkmanager
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -128,7 +127,7 @@ func TestAddTable(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
@@ -156,7 +155,7 @@ func TestRemoveTable(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
@@ -208,7 +207,7 @@ func testGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
@@ -245,7 +244,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
@@ -274,7 +273,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	addTableAndAddEventsToSortEngine(t, e, span)
 
 	manager.UpdateBarrierTs(4, nil)
@@ -302,7 +301,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	}()
 
 	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
@@ -368,7 +367,7 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 
 	source.AddTable(span, "test", 100)
-	manager.AddTable(span, 100, math.MaxUint64)
+	manager.AddTable(span, 100)
 	manager.StartTable(span, 100)
 	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
 	manager.UpdateReceivedSorterResolvedTs(span, 101)
@@ -415,7 +414,7 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	}()
 
 	span := tablepb.Span{TableID: 1}
-	manager.AddTable(span, 1, 100)
+	manager.AddTable(span, 1)
 	require.Nil(t, manager.StartTable(span, 2))
 	table, exists := manager.tableSinks.Load(span)
 	require.True(t, exists)
