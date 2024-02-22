@@ -14,6 +14,7 @@
 package syncer
 
 import (
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/planner/core"
@@ -21,6 +22,15 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+=======
+	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
+>>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -201,7 +211,7 @@ func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableIn
 	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, ti)
 	if err != nil {
 		// if expression contains an unknown column, we return an expression that skips nothing
-		if core.ErrUnknownColumn.Equal(err) {
+		if plannererrors.ErrUnknownColumn.Equal(err) {
 			logger.Warn("meet unknown column when generating expression, return a FALSE expression instead",
 				zap.String("expression", expr),
 				zap.Error(err))

@@ -999,6 +999,333 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
+=======
+func TestE2ERowLevelChecksum(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	tk := helper.Tk()
+	// upstream TiDB enable checksum functionality
+	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	// changefeed enable checksum functionality
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
+		ver.Ver, false, changefeed, util.RoleTester, filter)
+	require.NoError(t, err)
+	require.NotNil(t, schemaStorage)
+
+	createTableSQL := `create table t (
+   id          int primary key auto_increment,
+
+   c_tinyint   tinyint   null,
+   c_smallint  smallint  null,
+   c_mediumint mediumint null,
+   c_int       int       null,
+   c_bigint    bigint    null,
+
+   c_unsigned_tinyint   tinyint   unsigned null,
+   c_unsigned_smallint  smallint  unsigned null,
+   c_unsigned_mediumint mediumint unsigned null,
+   c_unsigned_int       int       unsigned null,
+   c_unsigned_bigint    bigint    unsigned null,
+
+   c_float   float   null,
+   c_double  double  null,
+   c_decimal decimal null,
+   c_decimal_2 decimal(10, 4) null,
+
+   c_unsigned_float     float unsigned   null,
+   c_unsigned_double    double unsigned  null,
+   c_unsigned_decimal   decimal unsigned null,
+   c_unsigned_decimal_2 decimal(10, 4) unsigned null,
+
+   c_date      date      null,
+   c_datetime  datetime  null,
+   c_timestamp timestamp null,
+   c_time      time      null,
+   c_year      year      null,
+
+   c_tinytext   tinytext      null,
+   c_text       text          null,
+   c_mediumtext mediumtext    null,
+   c_longtext   longtext      null,
+
+   c_tinyblob   tinyblob      null,
+   c_blob       blob          null,
+   c_mediumblob mediumblob    null,
+   c_longblob   longblob      null,
+
+   c_char       char(16)      null,
+   c_varchar    varchar(16)   null,
+   c_binary     binary(16)    null,
+   c_varbinary  varbinary(16) null,
+
+   c_enum enum ('a','b','c') null,
+   c_set  set ('a','b','c')  null,
+   c_bit  bit(64)            null,
+   c_json json               null,
+
+-- gbk dmls
+   name varchar(128) CHARACTER SET gbk,
+   country char(32) CHARACTER SET gbk,
+   city varchar(64),
+   description text CHARACTER SET gbk,
+   image tinyblob
+);`
+	job := helper.DDL2Job(createTableSQL)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+
+	insertDataSQL := `insert into t values (
+     2,
+     1, 2, 3, 4, 5,
+     1, 2, 3, 4, 5,
+     2020.0202, 2020.0303, 2020.0404, 2021.1208,
+     3.1415, 2.7182, 8000, 179394.233,
+     '2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020',
+     '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
+     x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
+     '89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
+     'b', 'b,c', b'1000001', '{
+"key1": "value1",
+"key2": "value2",
+"key3": "123"
+}',
+     '测试', "中国", "上海", "你好,世界", 0xC4E3BAC3CAC0BDE7
+);`
+	tk.MustExec(insertDataSQL)
+
+	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV := &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.NotNil(t, row.Checksum)
+
+	expected, ok := mounter.decoder.GetChecksum()
+	require.True(t, ok)
+	require.Equal(t, expected, row.Checksum.Current)
+	require.False(t, row.Checksum.Corrupted)
+
+	// avro encoder enable checksum functionality.
+	codecConfig := codecCommon.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.EnableRowChecksum = true
+	codecConfig.AvroDecimalHandlingMode = "string"
+	codecConfig.AvroBigintUnsignedHandlingMode = "string"
+
+	avroEncoder, err := avro.SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+	defer avro.TeardownEncoderAndSchemaRegistry4Testing()
+	require.NoError(t, err)
+
+	topic := "test.t"
+
+	err = avroEncoder.AppendRowChangedEvent(ctx, topic, row, func() {})
+	require.NoError(t, err)
+	msg := avroEncoder.Build()
+	require.Len(t, msg, 1)
+
+	schemaM, err := avro.NewConfluentSchemaManager(
+		ctx, "http://127.0.0.1:8081", nil)
+	require.NoError(t, err)
+
+	// decoder enable checksum functionality.
+	decoder := avro.NewDecoder(codecConfig, schemaM, topic, time.Local)
+	err = decoder.AddKeyValue(msg[0].Key, msg[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	row, err = decoder.NextRowChangedEvent()
+	// no error, checksum verification passed.
+	require.NoError(t, err)
+}
+
+func TestVerifyChecksumTime(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	helper.Tk().MustExec("set global time_zone = '-5:00'")
+	_ = helper.DDL2Event(`CREATE table TBL2 (a int primary key, b TIMESTAMP)`)
+	event := helper.DML2Event(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`, "test", "TBL2")
+	require.NotNil(t, event)
+
+	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
+	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 1)", "test", "t")
+	require.NotNil(t, event)
+}
+
+func TestDecodeRowEnableChecksum(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	tk := helper.Tk()
+
+	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
+		ver.Ver, false, changefeed, util.RoleTester, filter)
+	require.NoError(t, err)
+	require.NotNil(t, schemaStorage)
+
+	createTableDDL := "create table t (id int primary key, a int)"
+	job := helper.DDL2Job(createTableDDL)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
+
+	ctx := context.Background()
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+
+	// row without checksum
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
+	tk.MustExec("insert into t values (1, 10)")
+
+	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV := &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+
+	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	// the upstream tidb does not enable checksum, so the checksum is nil
+	require.Nil(t, row.Checksum)
+
+	// 	row with one checksum
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+	tk.MustExec("insert into t values (2, 20)")
+
+	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV = &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.NotNil(t, row.Checksum)
+
+	expected, ok := mounter.decoder.GetChecksum()
+	require.True(t, ok)
+	require.Equal(t, expected, row.Checksum.Current)
+	require.False(t, row.Checksum.Corrupted)
+
+	// row with 2 checksum
+	tk.MustExec("insert into t values (3, 30)")
+	job = helper.DDL2Job("alter table t change column a a varchar(10)")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV = &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.NotNil(t, row.Checksum)
+
+	first, ok := mounter.decoder.GetChecksum()
+	require.True(t, ok)
+
+	extra, ok := mounter.decoder.GetExtraChecksum()
+	require.True(t, ok)
+
+	if row.Checksum.Current != first {
+		require.Equal(t, extra, row.Checksum.Current)
+	} else {
+		require.Equal(t, first, row.Checksum.Current)
+	}
+	require.False(t, row.Checksum.Corrupted)
+
+	// hack the table info to make the checksum corrupted
+	tableInfo.Columns[0].FieldType = *types.NewFieldType(mysql.TypeVarchar)
+
+	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row.Checksum)
+	require.True(t, row.Checksum.Corrupted)
+
+	mounter.integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+	_, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.Error(t, err)
+	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
+
+	job = helper.DDL2Job("drop table t")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+}
+
+>>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()

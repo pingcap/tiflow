@@ -197,7 +197,12 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		_ = variables.SetSystemVar(k, v)
 		if strings.EqualFold(k, "time_zone") {
 			loc, _ := ParseTimeZone(v)
+<<<<<<< HEAD
 			variables.StmtCtx.TimeZone = loc
+=======
+			variables.StmtCtx.SetTimeZone(loc)
+			variables.TimeZone = loc
+>>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 		}
 	}
 
