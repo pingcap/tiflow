@@ -373,7 +373,51 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 2, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `idx_a` ON `TBL1`")
+			renameIndexDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` RENAME INDEX `idx_a` TO `new_idx_a`")
+			m, err = enc.EncodeDDLEvent(renameIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			hasNewIndex := false
+			noOldIndex := true
+			for _, index := range event.TableInfo.Indices {
+				if index.Name.O == "new_idx_a" {
+					hasNewIndex = true
+				}
+				if index.Name.O == "idx_a" {
+					noOldIndex = false
+				}
+			}
+			require.True(t, hasNewIndex)
+			require.True(t, noOldIndex)
+
+			indexVisibilityDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ALTER INDEX `new_idx_a` INVISIBLE")
+			m, err = enc.EncodeDDLEvent(indexVisibilityDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `new_idx_a` ON `TBL1`")
 			m, err = enc.EncodeDDLEvent(dropIndexDDLEvent)
 			require.NoError(t, err)
 
@@ -405,6 +449,38 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
+			multiSchemaChangeDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ADD COLUMN `new_col` INT, ADD INDEX `idx_new_col` (`a`)")
+			m, err = enc.EncodeDDLEvent(multiSchemaChangeDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 5, len(event.TableInfo.Columns))
+
+			multiSchemaChangeDropDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 DROP COLUMN `new_col`, DROP INDEX `idx_new_col`")
+			m, err = enc.EncodeDDLEvent(multiSchemaChangeDropDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
 			renameTableDDLEvent := helper.DDL2Event("RENAME TABLE TBL1 TO TBL2")
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
 			require.NoError(t, err)
@@ -424,6 +500,118 @@ func TestEncodeDDLSequence(t *testing.T) {
 			helper.Tk().MustExec("set @@tidb_allow_remove_auto_inc = 1")
 			renameColumnDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHANGE COLUMN `id` `id2` INT")
 			m, err = enc.EncodeDDLEvent(renameColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			partitionTableDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
+			m, err = enc.EncodeDDLEvent(partitionTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			addPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))")
+			m, err = enc.EncodeDDLEvent(addPartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 DROP PARTITION p2")
+			m, err = enc.EncodeDDLEvent(dropPartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			truncatePartitionDDLevent := helper.DDL2Event("ALTER TABLE TBL2 TRUNCATE PARTITION p1")
+			m, err = enc.EncodeDDLEvent(truncatePartitionDDLevent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			reorganizePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
+			m, err = enc.EncodeDDLEvent(reorganizePartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			removePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REMOVE PARTITIONING")
+			m, err = enc.EncodeDDLEvent(removePartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			alterCharsetCollateDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin")
+			m, err = enc.EncodeDDLEvent(alterCharsetCollateDDLEvent)
 			require.NoError(t, err)
 
 			err = dec.AddKeyValue(m.Key, m.Value)
