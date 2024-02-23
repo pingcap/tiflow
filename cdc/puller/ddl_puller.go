@@ -66,10 +66,6 @@ type DDLJobPuller interface {
 type ddlJobPullerImpl struct {
 	changefeedID model.ChangeFeedID
 
-	multiplexing bool
-	puller       struct {
-		Puller
-	}
 	multiplexingPuller struct {
 		*MultiplexingPuller
 		sortedDDLCh <-chan *model.RawKVEntry
@@ -90,10 +86,7 @@ type ddlJobPullerImpl struct {
 
 // Run starts the DDLJobPuller.
 func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
-	if p.multiplexing {
-		return p.runMultiplexing(ctx)
-	}
-	return p.run(ctx)
+	return p.runMultiplexing(ctx)
 }
 
 func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
@@ -147,26 +140,6 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	case p.outputCh <- jobEntry:
 	}
 	return nil
-}
-
-func (p *ddlJobPullerImpl) run(ctx context.Context) error {
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error { return errors.Trace(p.puller.Run(ctx)) })
-	eg.Go(func() error {
-		rawDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.puller.Output())
-		for {
-			var ddlRawKV *model.RawKVEntry
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ddlRawKV = <-rawDDLCh:
-			}
-			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	})
-	return eg.Wait()
 }
 
 func (p *ddlJobPullerImpl) runMultiplexing(ctx context.Context) error {
@@ -570,43 +543,35 @@ func NewDDLJobPuller(
 
 	jobPuller := &ddlJobPullerImpl{
 		changefeedID:  changefeed,
-		multiplexing:  cfg.KVClient.EnableMultiplexing,
 		schemaStorage: schemaStorage,
 		kvStorage:     kvStorage,
 		filter:        filter,
 		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 	}
-	if jobPuller.multiplexing {
-		mp := &jobPuller.multiplexingPuller
 
-		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
-		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
-		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	mp := &jobPuller.multiplexingPuller
 
-		client := kv.NewSharedClient(
-			changefeed, cfg, ddlPullerFilterLoop,
-			pdCli, grpcPool, regionCache, pdClock,
-			txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
-		)
-		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case rawDDLCh <- raw:
-				return nil
-			}
+	rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
+	mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
+	grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+
+	client := kv.NewSharedClient(
+		changefeed, cfg, ddlPullerFilterLoop,
+		pdCli, grpcPool, regionCache, pdClock,
+		txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
+	)
+	consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case rawDDLCh <- raw:
+			return nil
 		}
-		slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
-		mp.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume, slots, hasher, 1)
-
-		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName)
-	} else {
-		jobPuller.puller.Puller = New(
-			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,
-			checkpointTs, spans, cfg, changefeed, -1, memorysorter.DDLPullerTableName,
-			ddlPullerFilterLoop, false,
-		)
 	}
+	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
+	mp.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume, slots, hasher, 1)
+
+	mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName)
 
 	return jobPuller
 }

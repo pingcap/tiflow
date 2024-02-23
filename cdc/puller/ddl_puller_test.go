@@ -113,7 +113,7 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 
 func newMockDDLJobPuller(
 	t *testing.T,
-	puller Puller,
+	puller *MultiplexingPuller,
 	needSchemaStorage bool,
 ) (DDLJobPuller, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
@@ -121,8 +121,7 @@ func newMockDDLJobPuller(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
 	}
-	res.multiplexing = false
-	res.puller.Puller = puller
+	res.multiplexingPuller.MultiplexingPuller = puller
 
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {
