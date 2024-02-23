@@ -102,7 +102,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 	return res.StoreToDefaultPath()
 }
 
-// newConfigureCredentials creates the `cli unsafe show-metadata` command.
+// newConfigureCredentials creates the `cli configure-credentials` command
 func newConfigureCredentials() *cobra.Command {
 	o := &configureCredentialsOptions{}
 
