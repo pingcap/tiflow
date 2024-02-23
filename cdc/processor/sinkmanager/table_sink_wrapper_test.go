@@ -291,17 +291,14 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 	require.True(t, wrapper.isReady())
 	require.Equal(t, wrapper.tableSink.version, uint64(1))
 
-	//require.True(t, wrapper.asyncCloseTableSink())
-
-	wrapper.clear()
+	require.True(t, wrapper.asyncClose())
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 
 	require.True(t, wrapper.isReady())
 	require.Equal(t, wrapper.tableSink.version, uint64(2))
 
-	//wrapper.closeTableSink()
-
+	wrapper.Close()
 	wrapper.clear()
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))

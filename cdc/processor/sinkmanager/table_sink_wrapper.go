@@ -85,8 +85,10 @@ type tableSinkWrapper struct {
 	// rangeEventCounts is for clean the table sorter.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
 	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
-	rangeEventCounts   []rangeEventCount
-	rangeEventCountsMu sync.Mutex
+	rangeEventCounts struct {
+		sync.Mutex
+		c []rangeEventCount
+	}
 }
 
 type rangeEventCount struct {
@@ -333,7 +335,6 @@ func (t *tableSinkWrapper) isReady() bool {
 }
 
 func (t *tableSinkWrapper) asyncClose() bool {
-
 	t.tableSink.RLock()
 	if t.tableSink.s == nil {
 		return true
@@ -349,16 +350,16 @@ func (t *tableSinkWrapper) asyncClose() bool {
 }
 
 // closeAndClear will close the table sink synchronously and clear the table sink.
-// It should not be used in the sink manager's main loop.
+// It is only when we need to restart sink factory in sink manager.
 // Because it uses a write lock, which may cause the closing to be blocked a long time.
 func (t *tableSinkWrapper) closeAndClear() {
-	t.close()
+	t.Close()
 	t.clear()
 }
 
-// close will close the table sink synchronously.
+// Close will Close the table sink synchronously.
 // It just use a read lock to avoid blocking the main loop.
-func (t *tableSinkWrapper) close() {
+func (t *tableSinkWrapper) Close() {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
 	if t.tableSink.s == nil {
@@ -416,53 +417,53 @@ func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
 }
 
 func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
-	t.rangeEventCountsMu.Lock()
-	defer t.rangeEventCountsMu.Unlock()
+	t.rangeEventCounts.Lock()
+	defer t.rangeEventCounts.Unlock()
 
-	countsLen := len(t.rangeEventCounts)
+	countsLen := len(t.rangeEventCounts.c)
 	if countsLen == 0 {
-		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		t.rangeEventCounts.c = append(t.rangeEventCounts.c, eventCount)
 		return
 	}
-	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+	if t.rangeEventCounts.c[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
 		// If two rangeEventCounts are close enough, we can merge them into one record
 		// to save memory usage. When merging B into A, A.lastPos will be updated but
 		// A.firstPos will be kept so that we can determine whether to continue to merge
 		// more events or not based on timeDiff(C.lastPos, A.firstPos).
-		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts.c[countsLen-1].firstPos.CommitTs)
 		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
 		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
-			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+			t.rangeEventCounts.c = append(t.rangeEventCounts.c, eventCount)
 		} else {
-			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
-			t.rangeEventCounts[countsLen-1].events += eventCount.events
+			t.rangeEventCounts.c[countsLen-1].lastPos = eventCount.lastPos
+			t.rangeEventCounts.c[countsLen-1].events += eventCount.events
 		}
 	}
 }
 
 func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound sorter.Position, minEvents int) bool {
-	t.rangeEventCountsMu.Lock()
-	defer t.rangeEventCountsMu.Unlock()
+	t.rangeEventCounts.Lock()
+	defer t.rangeEventCounts.Unlock()
 
-	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
-		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
+	idx := sort.Search(len(t.rangeEventCounts.c), func(i int) bool {
+		return t.rangeEventCounts.c[i].lastPos.Compare(upperBound) > 0
 	})
-	if len(t.rangeEventCounts) == 0 || idx == 0 {
+	if len(t.rangeEventCounts.c) == 0 || idx == 0 {
 		return false
 	}
 
 	count := 0
-	for _, events := range t.rangeEventCounts[0:idx] {
+	for _, events := range t.rangeEventCounts.c[0:idx] {
 		count += events.events
 	}
 	shouldClean := count >= minEvents
 
 	if !shouldClean {
 		// To reduce sorter.CleanByTable calls.
-		t.rangeEventCounts[idx-1].events = count
-		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
+		t.rangeEventCounts.c[idx-1].events = count
+		t.rangeEventCounts.c = t.rangeEventCounts.c[idx-1:]
 	} else {
-		t.rangeEventCounts = t.rangeEventCounts[idx:]
+		t.rangeEventCounts.c = t.rangeEventCounts.c[idx:]
 	}
 	return shouldClean
 }

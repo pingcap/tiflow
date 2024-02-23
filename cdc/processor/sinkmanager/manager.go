@@ -273,7 +273,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID))
 			m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
-				value.(*tableSinkWrapper).close()
+				value.(*tableSinkWrapper).Close()
 				m.sinkMemQuota.ClearTable(span)
 				return true
 			})
