@@ -28,7 +28,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 	cmd.Println("2) TiDB User Credentials")
 	cmd.Print("Select Credential Type [default 1]:")
 
-	option, err := readInput(cmd)
+	option, err := readInput()
 	if err != nil {
 		cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 		return fmt.Errorf("invalid input")
@@ -46,7 +46,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 	switch option {
 	case "1":
 		cmd.Printf("CA Certificate path [%s]:", res.CaPath)
-		caPath, err := readInput(cmd)
+		caPath, err := readInput()
 		if err != nil {
 			cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 			return fmt.Errorf("invalid input")
@@ -56,7 +56,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 		}
 
 		cmd.Printf("Client Certificate path [%s]:", res.CertPath)
-		certPath, err := readInput(cmd)
+		certPath, err := readInput()
 		if err != nil {
 			cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 			return fmt.Errorf("invalid input")
@@ -66,7 +66,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 		}
 
 		cmd.Printf("Client Private Key path [%s]:", res.KeyPath)
-		keyPath, err := readInput(cmd)
+		keyPath, err := readInput()
 		if err != nil {
 			cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 			return fmt.Errorf("invalid input")
@@ -76,7 +76,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 		}
 	case "2":
 		cmd.Printf("TiCDC User name [%s]:", res.User)
-		user, err := readInput(cmd)
+		user, err := readInput()
 		if err != nil {
 			cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 			return fmt.Errorf("invalid input")
@@ -86,7 +86,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 		}
 
 		cmd.Printf("TiCDC Password  [%s]:", res.Password)
-		password, err := readInput(cmd)
+		password, err := readInput()
 		if err != nil {
 			cmd.Printf("Received invalid input: %s, abort the command.\n", err.Error())
 			return fmt.Errorf("invalid input")
@@ -103,7 +103,7 @@ func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 }
 
 // newConfigureCredentials creates the `cli unsafe show-metadata` command.
-func newConfigureCredentials(f factory.Factory) *cobra.Command {
+func newConfigureCredentials() *cobra.Command {
 	o := &configureCredentialsOptions{}
 
 	command := &cobra.Command{

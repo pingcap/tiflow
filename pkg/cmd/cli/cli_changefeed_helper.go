@@ -31,7 +31,7 @@ const (
 	tsGapWarning = 86400 * 1000
 )
 
-func readInput(cmd *cobra.Command) (string, error) {
+func readInput() (string, error) {
 	reader := bufio.NewReader(os.Stdin)
 	msg, err := reader.ReadString('\n')
 	if err != nil {

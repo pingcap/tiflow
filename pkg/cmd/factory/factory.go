@@ -76,6 +76,7 @@ type ClientAuth struct {
 	KeyPath  string `toml:"key_path,omitempty"`
 }
 
+// StoreToDefaultPath stores the client authentication to default path.
 func (c *ClientAuth) StoreToDefaultPath() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -109,6 +110,7 @@ func (c *ClientAuth) StoreToDefaultPath() error {
 	return nil
 }
 
+// ReadFromDefaultPath reads the client authentication from default path.
 func ReadFromDefaultPath() (*ClientAuth, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
