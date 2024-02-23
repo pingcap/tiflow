@@ -433,8 +433,11 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 func (s *EventSorter) handleEvents(
 	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
 ) {
-	batchCh := make(chan *DBBatchEvent, 1000)
+	// We set a relatively small channel value to avoid possible OOM caused by too much information.
+	// The number of channels will not affect the performance of commit consumption currently.
+	batchCh := make(chan *DBBatchEvent, 8)
 	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
+	s.wg.Add(1)
 
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
