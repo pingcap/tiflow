@@ -185,7 +185,7 @@ func newTiColumnInfo(
 		col.AddFlag(mysql.BinaryFlag)
 	}
 
-	if column.Nullable {
+	if !column.Nullable {
 		col.AddFlag(mysql.NotNullFlag)
 	}
 
