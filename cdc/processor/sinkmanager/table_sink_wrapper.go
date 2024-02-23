@@ -295,7 +295,7 @@ func (t *tableSinkWrapper) markAsClosing() {
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
 				zap.Stringer("span", &t.span))
-			break
+			return
 		}
 	}
 }
@@ -373,19 +373,20 @@ func (t *tableSinkWrapper) Close() {
 func (t *tableSinkWrapper) clear() {
 	t.tableSink.Lock()
 	defer t.tableSink.Unlock()
+	t.tableSink.state.Lock()
+	defer t.tableSink.state.Unlock()
+
 	if t.tableSink.s == nil {
 		return
 	}
 
 	checkpointTs := t.tableSink.s.GetCheckpointTs()
-	t.tableSink.state.Lock()
 	if t.tableSink.state.checkpointTs.Less(checkpointTs) {
 		t.tableSink.state.checkpointTs = checkpointTs
 	}
 	t.tableSink.state.resolvedTs = checkpointTs
 	t.tableSink.state.lastSyncedTs = t.tableSink.s.GetLastSyncedTs()
 	t.tableSink.state.advanced = time.Now()
-	t.tableSink.state.Unlock()
 
 	// clear the table sink
 	t.tableSink.s = nil
