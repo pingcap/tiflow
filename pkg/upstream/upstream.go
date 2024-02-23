@@ -415,13 +415,10 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: use client tls config for tidb connection if mutual tls is enabled.
-	if up.SecurityConfig != nil {
-		dsn.TLS, err = up.SecurityConfig.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
+	// Note: we use "preferred" here to make sure the connection is encrypted if possible. It is the same as the deafult
+	// behavior of mysql client, refer to: https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html.
+	dsn.TLSConfig = "preferred"
+
 	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
 	if err != nil {
 		return errors.Trace(err)
