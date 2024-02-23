@@ -22,11 +22,9 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/etcd"
-	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -194,33 +192,4 @@ func TestVerify(t *testing.T) {
 	}
 	err = up.VerifyTiDBUser(ctx, "test", "")
 	require.ErrorContains(t, err, "connection refused")
-}
-
-func TestMysql(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancle := context.WithCancel(context.Background())
-	defer cancle()
-
-	// SHOW STATUS LIKE "%Ssl%"
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/", "ticdc1", "123456", "10.2.6.240:4000")
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	require.NoError(t, err)
-
-	dsn.TLSConfig = "preferred"
-
-	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
-	require.NoError(t, err)
-
-	defer db.Close()
-	r, err := db.Query("SHOW STATUS LIKE '%Ssl%'")
-	require.NoError(t, err)
-	// print the result
-	for r.Next() {
-		var name string
-		var value string
-		err = r.Scan(&name, &value)
-		require.NoError(t, err)
-		fmt.Println(name, value)
-	}
 }

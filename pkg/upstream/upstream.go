@@ -424,6 +424,20 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 		return errors.Trace(err)
 	}
 	defer db.Close()
-	// TODO: check authentication here if needed
-	return db.Ping()
+
+	res, err := db.Query("SHOW STATUS LIKE '%Ssl_cipher'")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var name, value string
+	err = res.Scan(&name, &value)
+	if err != nil {
+		log.Warn("failed to get ssl cipher", zap.Error(err),
+			zap.String("username", dsn.User), zap.Uint64("upstreamID", up.ID))
+	}
+	log.Info("verify tidb user successfully", zap.String("username", dsn.User),
+		zap.String("sslCipherName", name), zap.String("sslCipherValue", value),
+		zap.Uint64("upstreamID", up.ID))
+	return nil
 }
