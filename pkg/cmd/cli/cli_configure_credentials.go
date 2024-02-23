@@ -21,8 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type configureCredentialsOptions struct {
-}
+type configureCredentialsOptions struct{}
 
 func (o *configureCredentialsOptions) run(cmd *cobra.Command) error {
 	cmd.Println("1) TLS Client Certificate")
