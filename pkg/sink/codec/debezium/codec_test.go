@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -36,21 +34,18 @@ func TestEncodeInsert(t *testing.T) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "tiny",
+		Type: mysql.TypeTiny,
+		Flag: model.NullableFlag,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "tiny",
-			Value: int64(1), Type: mysql.TypeTiny,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
-		}},
+			Value: int64(1),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -202,25 +197,22 @@ func TestEncodeUpdate(t *testing.T) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "tiny",
+		Type: mysql.TypeTiny,
+		Flag: model.NullableFlag,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "tiny",
-			Value: int64(1), Type: mysql.TypeTiny,
-		}},
-		PreColumns: []*model.Column{{
+			Value: int64(1),
+		}}, tableInfo),
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "tiny",
-			Value: int64(2), Type: mysql.TypeTiny,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
-		}},
+			Value: int64(2),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -374,21 +366,18 @@ func TestEncodeDelete(t *testing.T) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "tiny",
+		Type: mysql.TypeTiny,
+		Flag: model.NullableFlag,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		PreColumns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "tiny",
-			Value: int64(2), Type: mysql.TypeTiny,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
-		}},
+			Value: int64(2),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -540,21 +529,17 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "tiny",
+		Type: mysql.TypeTiny,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "tiny",
-			Value: int64(10), Type: mysql.TypeTiny,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
-		}},
+			Value: int64(10),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -574,21 +559,17 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "str",
+		Type: mysql.TypeVarchar,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "str",
-			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeVarchar),
-		}},
+			Value: []byte(randstr.String(1024)),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -608,21 +589,18 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 	}
 	codec.config.DebeziumDisableSchema = true
 
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "bin",
+		Type: mysql.TypeVarchar,
+		Flag: model.BinaryFlag,
+	}}, nil)
 	e := &model.RowChangedEvent{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test", Table: "table1"},
-		},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "bin",
-			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar, Flag: model.BinaryFlag,
-		}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeVarchar),
-		}},
+			Value: []byte(randstr.String(1024)),
+		}}, tableInfo),
 	}
 
 	buf := bytes.NewBuffer(nil)

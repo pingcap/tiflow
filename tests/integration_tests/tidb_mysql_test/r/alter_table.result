@@ -1,12 +1,3 @@
-drop table if exists warehouse;
-create table warehouse (
-id int PRIMARY KEY,
-w_idtiny tinyint not null,
-w_idmedium mediumint not null);
-ALTER TABLE warehouse ADD UNIQUE id_idx (w_idtiny);
-ALTER TABLE warehouse DROP INDEX id_idx;
-ALTER TABLE warehouse DROP PRIMARY KEY;
-ALTER TABLE warehouse DROP COLUMN w_idmedium;
 drop table if exists t;
 create table t (c1 int);
 alter table t add column c2 int;

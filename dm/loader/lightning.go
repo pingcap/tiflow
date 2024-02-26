@@ -371,7 +371,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
-		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove
+		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgReplace
 		cfg.App.TaskInfoSchemaName = GetTaskInfoSchemaName(subtaskCfg.MetaSchema, subtaskCfg.Name)
 	case config.OnDuplicateNone:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone

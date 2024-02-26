@@ -233,6 +233,8 @@ type CSVConfig struct {
 	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
 	// output old value
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
+	// output handle key
+	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
@@ -520,8 +522,8 @@ func (o *OAuth2) validate() (err error) {
 
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
-	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
-	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-private-key-path,omitempty"`
+	TLSKeyFilePath        *string `toml:"tls-key-file-path" json:"tls-key-file-path,omitempty"`
+	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-certificate-file,omitempty"`
 	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
 
 	// PulsarProducerCacheSize is the size of the cache of pulsar producers
@@ -601,11 +603,7 @@ func (c *PulsarConfig) validate() (err error) {
 		if err = c.OAuth2.validate(); err != nil {
 			return err
 		}
-		if c.TLSTrustCertsFilePath == nil {
-			return fmt.Errorf("oauth2 is not empty but tls-trust-certs-file-path is empty")
-		}
 	}
-
 	return nil
 }
 

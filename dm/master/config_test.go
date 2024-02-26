@@ -14,17 +14,22 @@
 package master
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"testing"
 
 	capturer "github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
@@ -293,4 +298,42 @@ func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
 	c.Assert(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.OpenAPI, check.Equals, true)
+}
+
+func TestAdjustSecretKeyPath(t *testing.T) {
+	cfg := &Config{}
+	require.NoError(t, cfg.adjustSecretKeyPath())
+
+	// non exist file
+	dir := t.TempDir()
+	cfg.SecretKeyPath = filepath.Join(dir, "non-exist")
+	err := cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "no such file")
+	require.Nil(t, cfg.SecretKey)
+
+	// not hex string
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret"), []byte("secret"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret")
+	err = cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "encoding/hex: invalid byte")
+	require.Nil(t, cfg.SecretKey)
+
+	// not enough length
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-2"), []byte("2334"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret-2")
+	err = cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "hex AES-256 key of length 64")
+	require.Nil(t, cfg.SecretKey)
+
+	// works
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-3"), []byte(" \t"+hex.EncodeToString(key)+"\r\n   \n"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret-3")
+	require.NoError(t, cfg.adjustSecretKeyPath())
+	require.Equal(t, key, cfg.SecretKey)
 }

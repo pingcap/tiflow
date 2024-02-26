@@ -123,25 +123,22 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128,
-    "max-memory-percentage": 0,
-    "max-memory-consumption": 0,
-    "num-workerpool-goroutine": 0,
-    "num-concurrent-worker": 0,
-    "chunk-size-limit": 0
+    "cache-size-in-mb": 128
   },
   "security": {
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
     "cert-allowed-cn": null,
-    "mtls": false
+    "mtls": false,
+    "client-user-required": false,
+    "client-allowed-user": null
   },
-  "per-table-memory-quota": 0,
   "kv-client": {
     "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
+    "advance-interval-in-ms": 300,
     "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
@@ -176,7 +173,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-kv-connect-backoff": false,
     "cdc-v2": {
       "enable": false,
       "meta-store": {
@@ -193,7 +189,6 @@ const (
     }
   },
   "cluster-id": "default",
-  "max-memory-percentage": 0,
   "gc-tuner-memory-threshold": 0
 }`
 
@@ -238,7 +233,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true,
       "binary-encoding-method":"base64",
-      "output-old-value": false
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "date-separator": "month",
     "enable-partition-separator": true,
@@ -404,7 +400,9 @@ const (
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true,
-      "binary-encoding-method":"base64"
+      "binary-encoding-method":"base64",
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",

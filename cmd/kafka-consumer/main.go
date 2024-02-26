@@ -675,7 +675,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				var partitionID int64
-				if row.TableInfo.TableName.IsPartition {
+				if row.TableInfo.IsPartitionTable() {
 					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.

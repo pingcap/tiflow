@@ -338,12 +338,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetColumns())
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetPreColumns())
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -1014,7 +1014,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-		val = GetColumnDefaultValue(&tc.ColInfo)
+		val = model.GetColumnDefaultValue(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
@@ -1190,6 +1190,27 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	row, err = decoder.NextRowChangedEvent()
 	// no error, checksum verification passed.
 	require.NoError(t, err)
+}
+
+func TestVerifyChecksumTime(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	helper.Tk().MustExec("set global time_zone = '-5:00'")
+	_ = helper.DDL2Event(`CREATE table TBL2 (a int primary key, b TIMESTAMP)`)
+	event := helper.DML2Event(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`, "test", "TBL2")
+	require.NotNil(t, event)
+
+	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
+	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 1)", "test", "t")
+	require.NotNil(t, event)
 }
 
 func TestDecodeRowEnableChecksum(t *testing.T) {
@@ -1641,8 +1662,13 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
 		require.NoError(t, err)
+		e := model.RowChangedEvent{
+			TableInfo: cdcTableInfo,
+			Columns:   colDatas,
+		}
+		cols := e.GetColumns()
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)

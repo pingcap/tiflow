@@ -244,7 +244,7 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL:    pulsarURL,
-		Logger: tpulsar.NewPulsarLogger(),
+		Logger: tpulsar.NewPulsarLogger(log.L()),
 	})
 	if err != nil {
 		log.Fatal("can't create pulsar client: %v", zap.Error(err))
@@ -463,7 +463,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				continue
 			}
 			var partitionID int64
-			if row.TableInfo.TableName.IsPartition {
+			if row.TableInfo.IsPartitionTable() {
 				partitionID = row.PhysicalTableID
 			}
 			// use schema, table and tableID to identify a table
