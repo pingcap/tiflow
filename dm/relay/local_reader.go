@@ -26,6 +26,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -67,6 +68,10 @@ type BinlogReader struct {
 
 	usingGTID          bool
 	prevGset, currGset mysql.GTIDSet
+
+	// instead of GTIDSet.Clone, use this to speed up calculate prevGset
+	prevMySQLGTIDEvent *replication.GTIDEvent
+
 	// ch with size = 1, we only need to be notified whether binlog file of relay changed, not how many times
 	notifyCh chan interface{}
 	relay    Process
@@ -272,6 +277,7 @@ func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, err
 	}
 	r.tctx.L().Info("get pos by gtid", zap.Stringer("GTID Set", gset), zap.Stringer("Position", pos))
 
+	r.prevMySQLGTIDEvent = nil
 	r.prevGset = gset
 	r.currGset = nil
 
@@ -553,27 +559,46 @@ func (r *BinlogReader) parseFile(
 				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
-			gtidStr, err2 := event.GetGTIDStr(e)
-			if err2 != nil {
-				return errors.Trace(err2)
+			if r.currGset == nil {
+				r.currGset = r.prevGset.Clone()
 			}
-			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
-			if err != nil {
-				return errors.Trace(err)
+			u, _ := uuid.FromBytes(ev.SID)
+			r.currGset.(*mysql.MysqlGTIDSet).AddGTID(u, ev.GNO)
+			if r.prevMySQLGTIDEvent != nil {
+				u, _ = uuid.FromBytes(r.prevMySQLGTIDEvent.SID)
+				r.prevGset.(*mysql.MysqlGTIDSet).AddGTID(u, r.prevMySQLGTIDEvent.GNO)
 			}
+			r.prevMySQLGTIDEvent = ev
+			state.skipGTID = r.currGset.Equal(r.prevGset)
 			state.latestPos = int64(e.Header.LogPos)
 		case *replication.MariadbGTIDEvent:
 			if r.prevGset == nil {
 				state.latestPos = int64(e.Header.LogPos)
 				break
 			}
-			gtidStr, err2 := event.GetGTIDStr(e)
+			if r.currGset == nil {
+				r.currGset = r.prevGset.Clone()
+			}
+			gset, err2 := mysql.ParseMariadbGTIDSet(ev.GTID.String())
 			if err2 != nil {
 				return errors.Trace(err2)
 			}
-			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
-			if err != nil {
-				return errors.Trace(err)
+			// Special treatment for Maridb
+			// MaridbGTIDSet.Update(gtid) will replace gset with given gtid
+			// ref https://github.com/go-mysql-org/go-mysql/blob/0c5789dd0bd378b4b84f99b320a2d35a80d8858f/mysql/mariadb_gtid.go#L96
+			if r.currGset.Contain(gset) {
+				state.skipGTID = true
+			} else {
+				prev := r.currGset.Clone()
+				if err2 = r.currGset.(*mysql.MariadbGTIDSet).AddSet(&ev.GTID); err2 != nil {
+					return errors.Trace(err2)
+				}
+				if !r.currGset.Equal(prev) {
+					r.prevGset = prev
+					state.skipGTID = false
+				} else {
+					state.skipGTID = true
+				}
 			}
 			state.latestPos = int64(e.Header.LogPos)
 		case *replication.XIDEvent:
@@ -800,35 +825,6 @@ func (r *BinlogReader) getCurrentGtidSet() mysql.GTIDSet {
 		return nil
 	}
 	return r.currGset.Clone()
-}
-
-// advanceCurrentGtidSet advance gtid set and return whether currGset not updated.
-func (r *BinlogReader) advanceCurrentGtidSet(gtid string) (bool, error) {
-	if r.currGset == nil {
-		r.currGset = r.prevGset.Clone()
-	}
-	// Special treatment for Maridb
-	// MaridbGTIDSet.Update(gtid) will replace gset with given gtid
-	// ref https://github.com/go-mysql-org/go-mysql/blob/0c5789dd0bd378b4b84f99b320a2d35a80d8858f/mysql/mariadb_gtid.go#L96
-	if r.cfg.Flavor == mysql.MariaDBFlavor {
-		gset, err := mysql.ParseMariadbGTIDSet(gtid)
-		if err != nil {
-			return false, err
-		}
-		if r.currGset.Contain(gset) {
-			return true, nil
-		}
-	}
-	prev := r.currGset.Clone()
-	err := r.currGset.Update(gtid)
-	if err == nil {
-		if !r.currGset.Equal(prev) {
-			r.prevGset = prev
-			return false, nil
-		}
-		return true, nil
-	}
-	return false, err
 }
 
 func (r *BinlogReader) Notified() chan interface{} {
