@@ -23,28 +23,28 @@ type Dispatcher interface {
 	Substitute(schema, table string) string
 }
 
-// StaticTopicDispatcher is a topic dispatcher which dispatches rows and ddls to the default topic.
+// StaticTopicDispatcher is a topic dispatcher which dispatches rows and DDL to the specific topic.
 type StaticTopicDispatcher struct {
-	defaultTopic string
+	topic string
 }
 
 // NewStaticTopicDispatcher returns a StaticTopicDispatcher.
 func NewStaticTopicDispatcher(defaultTopic string) *StaticTopicDispatcher {
 	return &StaticTopicDispatcher{
-		defaultTopic: defaultTopic,
+		topic: defaultTopic,
 	}
 }
 
 // Substitute converts schema/table name in a topic expression to kafka topic name.
 func (s *StaticTopicDispatcher) Substitute(schema, table string) string {
-	return s.defaultTopic
+	return s.topic
 }
 
 func (s *StaticTopicDispatcher) String() string {
-	return s.defaultTopic
+	return s.topic
 }
 
-// DynamicTopicDispatcher is a topic dispatcher which dispatches rows and ddls
+// DynamicTopicDispatcher is a topic dispatcher which dispatches rows and DDLs
 // dynamically to the target topics.
 type DynamicTopicDispatcher struct {
 	expression Expression

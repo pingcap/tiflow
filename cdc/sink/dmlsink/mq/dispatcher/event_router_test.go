@@ -24,51 +24,100 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEventRouter(t *testing.T) {
-	t.Parallel()
-
-	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test")
-	require.Nil(t, err)
-	require.Equal(t, "test", d.GetDefaultTopic())
-	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	d, err = NewEventRouter(&config.ReplicaConfig{
+func newReplicaConfig4DispatcherTest() *config.ReplicaConfig {
+	return &config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
+				// rule-0
 				{
 					Matcher:       []string{"test_default1.*"},
 					PartitionRule: "default",
 				},
+				// rule-1
 				{
 					Matcher:       []string{"test_default2.*"},
 					PartitionRule: "unknown-dispatcher",
 				},
+				// rule-2
 				{
 					Matcher:       []string{"test_table.*"},
 					PartitionRule: "table",
 					TopicRule:     "hello_{schema}_world",
 				},
+				// rule-3
 				{
 					Matcher:       []string{"test_index_value.*"},
 					PartitionRule: "index-value",
 					TopicRule:     "{schema}_world",
 				},
+				// rule-4
 				{
 					Matcher:       []string{"test.*"},
 					PartitionRule: "rowid",
 					TopicRule:     "hello_{schema}",
 				},
+				// rule-5
 				{
 					Matcher:       []string{"*.*", "!*.test"},
 					PartitionRule: "ts",
 					TopicRule:     "{schema}_{table}",
 				},
+				// rule-6: hard code the topic
+				{
+					Matcher:       []string{"hard_code_schema.*"},
+					PartitionRule: "default",
+					TopicRule:     "hard_code_topic",
+				},
 			},
 		},
-	}, "")
-	require.Nil(t, err)
+	}
+}
+
+func TestEventRouter(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	d, err := NewEventRouter(replicaConfig, "test", config.ProtocolCanalJSON)
+	require.NoError(t, err)
+	require.Equal(t, "test", d.GetDefaultTopic())
+
+	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
+	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
+
+	actual := topicDispatcher.Substitute("test", "test")
+	require.Equal(t, d.defaultTopic, actual)
+
+	replicaConfig = newReplicaConfig4DispatcherTest()
+	d, err = NewEventRouter(replicaConfig, "", config.ProtocolCanalJSON)
+	require.NoError(t, err)
+
+	// no matched, use the default
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "test")
+	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
+
+	// match rule-0
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default1", "test")
+	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
+
+	// match rule-1
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default2", "test")
+	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
+
+	// match rule-2
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_table", "test")
+	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.TableDispatcher{}, partitionDispatcher)
+
+	// match rule-4
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_index_value", "test")
+	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
+
+	// match rule-4
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test", "table1")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
@@ -77,25 +126,10 @@ func TestEventRouter(t *testing.T) {
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.TsDispatcher{}, partitionDispatcher)
 
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "test")
+	// match rule-6
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("hard_code_schema", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default1", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default2", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_table", "test")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.TableDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_index_value", "test")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
 }
 
 func TestGetActiveTopics(t *testing.T) {
@@ -134,7 +168,7 @@ func TestGetActiveTopics(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 	names := []model.TableName{
 		{Schema: "test_default1", Table: "table"},
@@ -184,7 +218,7 @@ func TestGetTopicForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	topicName := d.GetTopicForRowChange(&model.RowChangedEvent{
@@ -245,7 +279,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	p := d.GetPartitionForRowChange(&model.RowChangedEvent{
@@ -313,7 +347,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	tests := []struct {
@@ -374,7 +408,7 @@ func TestGetTopicForDDL(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	tests := []struct {
