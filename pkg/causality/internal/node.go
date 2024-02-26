@@ -27,6 +27,7 @@ type (
 
 const (
 	unassigned    = workerID(-2)
+	assignedToAny = workerID(-1)
 	invalidNodeID = int64(-1)
 )
 
