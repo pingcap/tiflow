@@ -708,6 +708,7 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	c.cleanupMetrics()
 	if c.isReleased {
 		return
 	}
@@ -745,7 +746,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		_ = c.downstreamObserver.Close()
 	}
 
-	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
 	c.initialized = false
