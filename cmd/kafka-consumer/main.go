@@ -112,11 +112,6 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		o.version = s
 	}
 
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		o.groupID = s
-	}
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -215,7 +210,7 @@ func main() {
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-
+	flag.StringVar(&consumerOption.groupID, "consumer-group-id", "", "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
@@ -229,7 +224,6 @@ func main() {
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
 	},
-		logutil.WithInitGRPCLogger(),
 		logutil.WithInitSaramaLogger(),
 	)
 	if err != nil {
@@ -283,7 +277,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := http.ListenAndServe(":6060", nil); err != nil {
+			if err = http.ListenAndServe(":6060", nil); err != nil {
 				log.Panic("Error starting pprof", zap.Error(err))
 			}
 		}()
@@ -307,7 +301,9 @@ func main() {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err := consumer.Run(ctx); err != nil {
 			if err != context.Canceled {
 				log.Panic("Error running consumer", zap.Error(err))
