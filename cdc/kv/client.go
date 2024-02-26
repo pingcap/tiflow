@@ -271,15 +271,11 @@ func (c *CDCClient) newStream(
 		log.Debug("created stream to store",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-<<<<<<< HEAD
-			zap.String("addr", addr))
-=======
 			zap.Int64("tableID", c.tableID),
 			zap.String("tableName", c.tableName),
 			zap.String("store", addr),
 			zap.Uint64("storeID", storeID),
 			zap.Uint64("streamID", stream.id))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 		return nil
 	}
 	if c.config.Debug.EnableKVConnectBackOff {
@@ -419,12 +415,9 @@ func newEventFeedSession(
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
-<<<<<<< HEAD
-	id := allocID()
-	idStr := strconv.FormatUint(id, 10)
-=======
 	id := allocateRequestID()
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
+	idStr := strconv.FormatUint(id, 10)
+
 	rangeLock := regionlock.NewRegionRangeLock(
 		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
@@ -435,7 +428,6 @@ func newEventFeedSession(
 		tableID:    client.tableID,
 		tableName:  client.tableName,
 
-<<<<<<< HEAD
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
@@ -444,21 +436,6 @@ func newEventFeedSession(
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
-		streams:           make(map[string]*eventFeedStream),
-		streamsCanceller:  make(map[string]context.CancelFunc),
-=======
-		totalSpan:          totalSpan,
-		eventCh:            eventCh,
-		rangeLock:          rangeLock,
-		lockResolver:       lockResolver,
-		enableTableMonitor: enableTableMonitor,
-		regionChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "region"),
-		errChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "err"),
-		rangeChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "range"),
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 		resolvedTsPool: sync.Pool{
 			New: func() any {
 				return &regionStatefulEvent{
@@ -733,12 +710,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", requestID),
 				zap.Uint64("storeID", storeID),
-<<<<<<< HEAD
-				zap.String("addr", storeAddr))
-=======
 				zap.String("store", storeAddr),
 				zap.Uint64("streamID", stream.id))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 
 			g.Go(func() error {
 				return s.receiveFromStream(ctx, stream, pendingRegions)
@@ -758,12 +731,8 @@ func (s *eventFeedSession) requestRegionToStore(
 
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.setByRequestID(requestID, state)
-<<<<<<< HEAD
 
 		log.Info("start new request",
-=======
-		s.client.logRegionDetails("start new request",
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
@@ -782,11 +751,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.String("tableName", s.tableName),
 				zap.String("addr", storeAddr),
 				zap.Uint64("storeID", storeID),
-<<<<<<< HEAD
-=======
 				zap.String("store", storeAddr),
 				zap.Uint64("streamID", stream.id),
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", requestID),
 				zap.Error(err))
@@ -796,11 +762,7 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
-<<<<<<< HEAD
-					zap.String("addr", storeAddr),
-=======
 					zap.Uint64("streamID", stream.id),
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 					zap.Uint64("storeID", storeID),
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", requestID),
@@ -821,17 +783,13 @@ func (s *eventFeedSession) requestRegionToStore(
 			if !ok {
 				continue
 			}
-<<<<<<< HEAD
-
-=======
-			s.client.logRegionDetails("region send to store failed",
+			log.Debug("region send to store failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
 				zap.Any("regionId", sri.verID.GetID()),
 				zap.Stringer("span", &sri.span))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
 			s.onRegionFail(ctx, errInfo)
 		}
@@ -1086,15 +1044,11 @@ func (s *eventFeedSession) receiveFromStream(
 		log.Info("stream to store closed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-<<<<<<< HEAD
-			zap.String("addr", addr), zap.Uint64("storeID", storeID))
-=======
 			zap.Int64("tableID", s.tableID),
 			zap.String("tableName", s.tableName),
 			zap.String("store", stream.addr),
 			zap.Uint64("storeID", stream.storeID),
 			zap.Uint64("streamID", stream.id))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 
 		failpoint.Inject("kvClientStreamCloseDelay", nil)
 
@@ -1107,13 +1061,6 @@ func (s *eventFeedSession) receiveFromStream(
 
 	metricSendEventBatchResolvedSize := batchResolvedEventSize.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
-<<<<<<< HEAD
-=======
-	metricReceiveBusyRatio := workerBusyRatio.WithLabelValues(
-		s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), stream.addr, "event-receiver")
-	metricProcessBusyRatio := workerBusyRatio.WithLabelValues(
-		s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), stream.addr, "event-processor")
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
@@ -1139,12 +1086,6 @@ func (s *eventFeedSession) receiveFromStream(
 	eg.Go(func() error {
 		err := handleExit(worker.run())
 		if err != nil {
-<<<<<<< HEAD
-			log.Error("region worker exited with error", zap.Error(err),
-				zap.Any("changefeed", s.changefeed),
-				zap.Any("addr", addr),
-				zap.Any("storeID", storeID))
-=======
 			log.Error("region worker exited with error",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -1154,7 +1095,6 @@ func (s *eventFeedSession) receiveFromStream(
 				zap.Uint64("storeID", stream.storeID),
 				zap.Uint64("streamID", stream.id),
 				zap.Error(err))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 		}
 		return err
 	})
@@ -1162,12 +1102,7 @@ func (s *eventFeedSession) receiveFromStream(
 	receiveEvents := func() error {
 		maxCommitTs := model.Ts(0)
 		for {
-<<<<<<< HEAD
-			cevent, err := stream.Recv()
-=======
-			startToReceive := time.Now()
 			cevent, err := stream.client.Recv()
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 
 			failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 				if op.(string) == "error" {
@@ -1188,35 +1123,22 @@ func (s *eventFeedSession) receiveFromStream(
 						"receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
-<<<<<<< HEAD
-						zap.String("addr", addr),
-						zap.Uint64("storeID", storeID),
-					)
-=======
 						zap.Int64("tableID", s.tableID),
 						zap.String("tableName", s.tableName),
 						zap.String("store", stream.addr),
 						zap.Uint64("storeID", stream.storeID),
 						zap.Uint64("streamID", stream.id))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 				} else {
 					log.Warn(
 						"failed to receive from stream",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
-<<<<<<< HEAD
-						zap.String("addr", addr),
-						zap.Uint64("storeID", storeID),
-						zap.Error(err),
-					)
-=======
 						zap.Int64("tableID", s.tableID),
 						zap.String("tableName", s.tableName),
 						zap.String("store", stream.addr),
 						zap.Uint64("storeID", stream.storeID),
 						zap.Uint64("streamID", stream.id),
 						zap.Error(err))
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 					// Note that pd need at lease 10s+ to tag a kv node as disconnect if kv node down
 					// tikv raft need wait (raft-base-tick-interval * raft-election-timeout-ticks) 10s to start a new
 					// election
@@ -1261,7 +1183,7 @@ func (s *eventFeedSession) receiveFromStream(
 					}
 				}
 			}
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, stream.addr)
 			if err != nil {
 				return err
 			}

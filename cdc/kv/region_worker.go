@@ -147,21 +147,6 @@ func newRegionWorker(
 	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
-<<<<<<< HEAD
-		parentCtx:     ctx,
-		session:       s,
-		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
-		storeAddr:     addr,
-		concurrency:   s.client.config.KVClient.WorkerConcurrent,
-		metrics:       newRegionWorkerMetrics(changefeedID),
-		inputPending:  0,
-
-=======
 		parentCtx:      ctx,
 		session:        s,
 		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
@@ -172,9 +157,8 @@ func newRegionWorker(
 		rtsManager:     newRegionTsManager(),
 		rtsUpdateCh:    make(chan *rtsUpdateEvent, 1024),
 		concurrency:    int(s.client.config.KVClient.WorkerConcurrent),
-		metrics:        newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		metrics:        newRegionWorkerMetrics(s.changefeed),
 		inputPending:   0,
->>>>>>> 98adc64c8d (kv (ticdc): fix kvClient reconnection downhill loop (#10559))
 		pendingRegions: pendingRegions,
 	}
 }
