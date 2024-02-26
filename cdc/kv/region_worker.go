@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"reflect"
 	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -156,7 +155,7 @@ func newRegionWorker(
 		rtsManager:         newRegionTsManager(),
 		rtsUpdateCh:        make(chan *rtsUpdateEvent, 1024),
 		concurrency:        int(s.client.config.KVClient.WorkerConcurrent),
-		metrics:            newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		metrics:            newRegionWorkerMetrics(s.changefeed),
 		inputPendingEvents: 0,
 	}
 }

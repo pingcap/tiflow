@@ -420,23 +420,20 @@ func newEventFeedSession(
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := allocateRequestID()
-	idStr := strconv.FormatUint(id, 10)
-
 	rangeLock := regionlock.NewRegionRangeLock(
 		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
-		client:             client,
-		startTs:            startTs,
-		changefeed:         client.changefeed,
-		tableID:            client.tableID,
-		tableName:          client.tableName,
-		storeStreamsCache:  make(map[string]*eventFeedStream),
-		totalSpan:          totalSpan,
-		eventCh:            eventCh,
-		rangeLock:          rangeLock,
-		lockResolver:       lockResolver,
-		enableTableMonitor: enableTableMonitor,
+		client:            client,
+		startTs:           startTs,
+		changefeed:        client.changefeed,
+		tableID:           client.tableID,
+		tableName:         client.tableName,
+		storeStreamsCache: make(map[string]*eventFeedStream),
+		totalSpan:         totalSpan,
+		eventCh:           eventCh,
+		rangeLock:         rangeLock,
+		lockResolver:      lockResolver,
 		regionChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
 			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "region"),
 		errChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
@@ -1158,7 +1155,7 @@ func (s *eventFeedSession) receiveFromStream(
 				}
 			}
 
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, stream.regions)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, stream.regions, stream.addr)
 			if err != nil {
 				return err
 			}
