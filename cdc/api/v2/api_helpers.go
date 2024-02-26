@@ -228,7 +228,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg, nil); err != nil {
 		return nil, err
 	}
 
@@ -352,7 +352,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

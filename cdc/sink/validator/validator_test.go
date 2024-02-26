@@ -99,26 +99,26 @@ func TestValidateSink(t *testing.T) {
 
 	// test sink uri error
 	sinkURI := "mysql://root:111@127.0.0.1:3306/"
-	err := Validate(ctx, sinkURI, replicateConfig)
+	err := Validate(ctx, sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "fail to open MySQL connection")
 
 	// test sink uri right
 	sinkURI = "blackhole://"
-	err = Validate(ctx, sinkURI, replicateConfig)
+	err = Validate(ctx, sinkURI, replicateConfig, nil)
 	require.Nil(t, err)
 
 	// test bdr mode error
 	replicateConfig.BDRMode = true
 	sinkURI = "blackhole://"
-	err = Validate(ctx, sinkURI, replicateConfig)
+	err = Validate(ctx, sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
 
 	// test sink-scheme/syncpoint error
 	replicateConfig.EnableSyncPoint = true
 	sinkURI = "kafka://"
-	err = Validate(ctx, sinkURI, replicateConfig)
+	err = Validate(ctx, sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(
 		t, err.Error(),
