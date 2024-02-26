@@ -394,7 +394,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 		return errors.New("job id is too long, max length is 38")
 	}
 
-	if err := master.AdjustTargetDB(ctx, cfg.TargetDB); err != nil {
+	if err := master.AdjustTargetDBSessionCfg(ctx, cfg.TargetDB); err != nil {
 		return errors.Trace(err)
 	}
 

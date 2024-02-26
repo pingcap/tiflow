@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -338,7 +337,7 @@ func GetTaskNameFromArgOrFile(arg string) string {
 		return arg
 	}
 	cfg := config.NewTaskConfig()
-	if err := cfg.Decode(string(content)); err != nil {
+	if err := cfg.FromYaml(string(content)); err != nil {
 		return arg
 	}
 	return cfg.Name
@@ -349,12 +348,4 @@ func PrintCmdUsage(cmd *cobra.Command) {
 	if err := cmd.Usage(); err != nil {
 		fmt.Println("can't output command's usage:", err)
 	}
-}
-
-// CheckSecretInitialized checks whether the secret is initialized.
-func CheckSecretInitialized() error {
-	if !encrypt.IsInitialized() {
-		return errors.New("cipher is not initialized, please run with `--secret-key-path` flags")
-	}
-	return nil
 }

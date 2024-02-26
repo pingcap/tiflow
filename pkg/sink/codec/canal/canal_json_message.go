@@ -157,39 +157,49 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
-	result.TableInfo = &model.TableInfo{
-		TableName: model.TableName{
-			Schema: *msg.getSchema(),
-			Table:  *msg.getTable(),
-		},
-	}
-
 	mysqlType := msg.getMySQLType()
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-		// canal-json encoder does not encode `Flag` information into the result,
-		// we have to set the `Flag` to make it can be handled by MySQL Sink.
-		// see https://github.com/pingcap/tiflow/blob/7bfce98/cdc/sink/mysql.go#L869-L888
-		result.WithHandlePrimaryFlag(msg.pkNameSet())
+		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
+		result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
+		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
 		return result, err
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
-	result.Columns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
+	cols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
+	result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
+	result.Columns = model.Columns2ColumnDatas(cols, result.TableInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		if len(preCols) < len(cols) {
+			newPreCols := make([]*model.Column, 0, len(preCols))
+			j := 0
+			// Columns are ordered by name
+			for _, col := range cols {
+				if j < len(preCols) && col.Name == preCols[j].Name {
+					newPreCols = append(newPreCols, preCols[j])
+					j += 1
+				} else {
+					newPreCols = append(newPreCols, col)
+				}
+			}
+			preCols = newPreCols
+		}
+		if len(preCols) != len(cols) {
+			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", cols))
+		}
+		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
 		if err != nil {
 			return nil, err
 		}
 	}
-	result.WithHandlePrimaryFlag(msg.pkNameSet())
 
 	return result, nil
 }

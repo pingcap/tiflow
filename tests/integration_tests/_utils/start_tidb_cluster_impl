@@ -190,7 +190,6 @@ if [[ "$tidb_config" != "" ]]; then
 else
 	cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
-alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
 EOF
 fi
