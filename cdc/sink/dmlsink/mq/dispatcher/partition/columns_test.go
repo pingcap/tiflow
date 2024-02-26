@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -25,48 +27,22 @@ import (
 func TestColumnsDispatcher(t *testing.T) {
 	t.Parallel()
 
+	tidbTableInfo := &timodel.TableInfo{
+		ID:   100,
+		Name: timodel.NewCIStr("t1"),
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: timodel.NewCIStr("col2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: timodel.NewCIStr("col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 3, Name: timodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
+		},
+	}
+	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
 	event := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t1",
-		},
-		TableInfo: &model.TableInfo{
-			TableInfo: &timodel.TableInfo{
-				Columns: []*timodel.ColumnInfo{
-					{
-						Name: timodel.CIStr{
-							O: "col2",
-						},
-						Offset: 1,
-					},
-					{
-						Name: timodel.CIStr{
-							O: "col1",
-						},
-						Offset: 0,
-					},
-					{
-						Name: timodel.CIStr{
-							O: "col3",
-						},
-						Offset: 2,
-					},
-				},
-			},
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "col1",
-				Value: 11,
-			},
-			{
-				Name:  "col2",
-				Value: 22,
-			},
-			{
-				Name:  "col3",
-				Value: 33,
-			},
+		TableInfo: tableInfo,
+		Columns: []*model.ColumnData{
+			{ColumnID: 1, Value: 11},
+			{ColumnID: 2, Value: 22},
+			{ColumnID: 3, Value: 33},
 		},
 	}
 

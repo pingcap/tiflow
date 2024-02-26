@@ -211,6 +211,11 @@ error = '''
 craft codec invalid data
 '''
 
+["CDC:ErrCredentialNotFound"]
+error = '''
+credential not found: %s
+'''
+
 ["CDC:ErrDDLSchemaNotFound"]
 error = '''
 cannot find mysql.tidb_ddl_job schema
@@ -359,6 +364,11 @@ illegal parameter for sorter: %s
 ["CDC:ErrIncompatibleSinkConfig"]
 error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
+["CDC:ErrInternalCheckFailed"]
+error = '''
+internal check failed, %s
 '''
 
 ["CDC:ErrInternalServerError"]
@@ -753,7 +763,7 @@ invalid pulsar client ID '%s'
 
 ["CDC:ErrPulsarInvalidConfig"]
 error = '''
-pulsar config invalid
+pulsar config invalid %s
 '''
 
 ["CDC:ErrPulsarInvalidPartitionNum"]
@@ -999,6 +1009,11 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnauthorized"]
+error = '''
+user %s unauthorized, error: %s
 '''
 
 ["CDC:ErrUnexpected"]

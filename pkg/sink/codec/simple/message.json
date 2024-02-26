@@ -23,23 +23,38 @@
       },
       {
         "name": "decimal",
-        "type": "int",
-        "default": 0
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
       },
       {
         "name": "elements",
-        "type": {
-          "type": "array",
-          "items": "string"
-        }
+        "type": [
+          "null",
+          {
+            "type": "array",
+            "items": "string"
+          }
+        ],
+        "default": null
       },
       {
         "name": "unsigned",
-        "type": "boolean"
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
       },
       {
         "name": "zerofill",
-        "type": "boolean"
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
       }
     ]
   },
@@ -63,12 +78,13 @@
       },
       {
         "name": "default",
-        "type": ["null", "string"]
-
+        "type": [
+          "null",
+          "string"
+        ]
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "IndexSchema",
@@ -100,7 +116,6 @@
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "TableSchema",
@@ -108,12 +123,16 @@
     "docs": "table schema information",
     "fields": [
       {
-        "name": "schema",
+        "name": "database",
         "type": "string"
       },
       {
         "name": "table",
         "type": "string"
+      },
+      {
+        "name": "tableID",
+        "type": "long"
       },
       {
         "name": "version",
@@ -135,7 +154,6 @@
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "Checksum",
@@ -171,10 +189,6 @@
         "type": "int"
       },
       {
-        "name": "type",
-        "type": "string"
-      },
-      {
         "name": "commitTs",
         "type": "long"
       },
@@ -193,10 +207,6 @@
       {
         "name": "version",
         "type": "int"
-      },
-      {
-        "name": "type",
-        "type": "string"
       },
       {
         "name": "buildTs",
@@ -220,7 +230,20 @@
       },
       {
         "name": "type",
-        "type": "string"
+        "type": {
+          "type": "enum",
+          "name": "DDLType",
+          "symbols": [
+            "CREATE",
+            "ALTER",
+            "ERASE",
+            "RENAME",
+            "TRUNCATE",
+            "CINDEX",
+            "DINDEX",
+            "QUERY"
+          ]
+        }
       },
       {
         "name": "sql",
@@ -236,13 +259,47 @@
       },
       {
         "name": "tableSchema",
-        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
         "default": null
       },
       {
         "name": "preTableSchema",
-        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
         "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Timestamp",
+    "type": "record",
+    "docs": "the timestamp value format",
+    "fields": [
+      {
+        "name": "location",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "string"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "UnsignedBigint",
+    "type": "record",
+    "docs": "unsigned bigint value format",
+    "fields": [
+      {
+        "name": "value",
+        "type": "long"
       }
     ]
   },
@@ -257,12 +314,16 @@
         "type": "int"
       },
       {
-        "name": "schema",
+        "name": "database",
         "type": "string"
       },
       {
         "name": "table",
         "type": "string"
+      },
+      {
+        "name": "tableID",
+        "type": "long"
       },
       {
         "name": "type",
@@ -290,36 +351,99 @@
       },
       {
         "name": "claimCheckLocation",
-        "type": "string",
-        "default": ""
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
       },
       {
         "name": "handleKeyOnly",
-        "type": "boolean",
-        "default": false
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
       },
       {
         "name": "checksum",
-        "type": ["null", "com.pingcap.simple.avro.Checksum"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.Checksum"
+        ],
         "default": null
       },
       {
         "name": "data",
-        "type": ["null", {
-          "type": "map",
-          "values": ["null", "int", "long", "float", "double", "string", "boolean", "bytes"],
-          "default": null
-        }],
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "long",
+              "float",
+              "double",
+              "string",
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
+            ],
+            "default": null
+          }
+        ],
         "default": null
       },
       {
         "name": "old",
-        "type": ["null", {
-          "type": "map",
-          "values": ["null", "int", "long", "float", "double", "string", "boolean", "bytes"],
-          "default": null
-        }],
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "long",
+              "float",
+              "double",
+              "string",
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
+            ],
+            "default": null
+          }
+        ],
         "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Message",
+    "docs": "the wrapper for all kind of messages",
+    "type": "record",
+    "fields": [
+      {
+        "name": "type",
+        "type": {
+          "type": "enum",
+          "name": "MessageType",
+          "symbols": [
+            "WATERMARK",
+            "BOOTSTRAP",
+            "DDL",
+            "DML"
+          ]
+        }
+      },
+      {
+        "name": "payload",
+        "type": [
+          "com.pingcap.simple.avro.Watermark",
+          "com.pingcap.simple.avro.Bootstrap",
+          "com.pingcap.simple.avro.DDL",
+          "com.pingcap.simple.avro.DML"
+        ]
       }
     ]
   }

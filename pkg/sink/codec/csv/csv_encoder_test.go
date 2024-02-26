@@ -17,51 +17,40 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCSVBatchCodec(t *testing.T) {
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "tiny",
+		Type: mysql.TypeTiny,
+	}}, nil)
 	testCases := []*model.SingleTableTxn{
 		{
-			Table: &model.TableName{Schema: "test", Table: "table1"},
 			Rows: []*model.RowChangedEvent{
 				{
-					CommitTs: 1,
-					Table:    &model.TableName{Schema: "test", Table: "table1"},
-					Columns: []*model.Column{{
+					CommitTs:  1,
+					TableInfo: tableInfo,
+					Columns: model.Columns2ColumnDatas([]*model.Column{{
 						Name:  "tiny",
-						Value: int64(1), Type: mysql.TypeTiny,
-					}},
-					ColInfos: []rowcodec.ColInfo{{
-						ID:            1,
-						IsPKHandle:    false,
-						VirtualGenCol: false,
-						Ft:            types.NewFieldType(mysql.TypeTiny),
-					}},
+						Value: int64(1),
+					}}, tableInfo),
 				},
 				{
-					CommitTs: 2,
-					Table:    &model.TableName{Schema: "test", Table: "table1"},
-					Columns: []*model.Column{{
+					CommitTs:  2,
+					TableInfo: tableInfo,
+					Columns: model.Columns2ColumnDatas([]*model.Column{{
 						Name:  "tiny",
-						Value: int64(2), Type: mysql.TypeTiny,
-					}},
-					ColInfos: []rowcodec.ColInfo{{
-						ID:            1,
-						IsPKHandle:    false,
-						VirtualGenCol: false,
-						Ft:            types.NewFieldType(mysql.TypeTiny),
-					}},
+						Value: int64(2),
+					}}, tableInfo),
 				},
 			},
 		},
 		{
-			Table: &model.TableName{Schema: "test", Table: "table1"},
-			Rows:  nil,
+			TableInfo: tableInfo,
+			Rows:      nil,
 		},
 	}
 
@@ -96,21 +85,20 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.NotNil(t, encoder)
 
 	count := 0
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name:  "tiny",
+		Value: int64(1), Type: mysql.TypeTiny,
+	}}, nil)
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "test", Table: "table1"},
-		Columns:  []*model.Column{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
-		ColInfos: []rowcodec.ColInfo{{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
-		}},
+		CommitTs:  1,
+		TableInfo: tableInfo,
+
+		Columns: model.Columns2ColumnDatas([]*model.Column{{Name: "tiny", Value: int64(1)}}, tableInfo),
 	}
 
 	txn := &model.SingleTableTxn{
-		Table: row.Table,
-		Rows:  []*model.RowChangedEvent{row},
+		TableInfo: tableInfo,
+		Rows:      []*model.RowChangedEvent{row},
 	}
 	callback := func() {
 		count += 1

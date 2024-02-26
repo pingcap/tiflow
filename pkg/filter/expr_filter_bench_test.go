@@ -129,13 +129,11 @@ func BenchmarkSkipDML(b *testing.B) {
 		require.Nil(t, err)
 		preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
 		require.Nil(t, err)
+		tableInfo := model.BuildTableInfo(c.schema, c.table, c.columns, nil)
 		row := &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: c.schema,
-				Table:  c.table,
-			},
-			Columns:    c.columns,
-			PreColumns: c.preColumns,
+			TableInfo:  tableInfo,
+			Columns:    model.Columns2ColumnDatas(c.columns, tableInfo),
+			PreColumns: model.Columns2ColumnDatas(c.preColumns, tableInfo),
 		}
 		rawRow := model.RowChangedDatums{
 			RowDatums:    rowDatums,

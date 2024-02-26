@@ -15,7 +15,6 @@ package pulsar
 
 import (
 	"github.com/apache/pulsar-client-go/pulsar/log"
-	plog "github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
@@ -25,36 +24,27 @@ type Logger struct {
 }
 
 // SubLogger sub
-func (p *Logger) SubLogger(fields log.Fields) log.Logger {
-	subLogger := p.zapLogger
-	for k, v := range fields {
-		subLogger = subLogger.With(zap.Any(k, v))
+func (p *Logger) SubLogger(pulsarFields log.Fields) log.Logger {
+	zapFields := make([]zap.Field, 0, len(pulsarFields))
+	for k, v := range pulsarFields {
+		zapFields = append(zapFields, zap.Any(k, v))
 	}
-	return &Logger{subLogger}
+	return &Logger{p.zapLogger.With(zapFields...)}
 }
 
 // WithFields with fields
 func (p *Logger) WithFields(fields log.Fields) log.Entry {
-	return &LoggerEntry{
-		fields: fields,
-		logger: p.zapLogger,
-	}
+	return p.SubLogger(fields)
 }
 
 // WithField with field
 func (p *Logger) WithField(name string, value interface{}) log.Entry {
-	return &LoggerEntry{
-		fields: log.Fields{name: value},
-		logger: p.zapLogger,
-	}
+	return &Logger{p.zapLogger.With(zap.Any(name, value))}
 }
 
 // WithError error
 func (p *Logger) WithError(err error) log.Entry {
-	return &LoggerEntry{
-		fields: log.Fields{"error": err},
-		logger: p.zapLogger,
-	}
+	return &Logger{p.zapLogger.With(zap.Error(err))}
 }
 
 // Debug debug
@@ -98,66 +88,8 @@ func (p *Logger) Errorf(format string, args ...interface{}) {
 }
 
 // NewPulsarLogger new pulsar logger
-func NewPulsarLogger() *Logger {
+func NewPulsarLogger(base *zap.Logger) *Logger {
 	return &Logger{
-		zapLogger: plog.L(),
+		zapLogger: base.WithOptions(zap.AddCallerSkip(1)),
 	}
-}
-
-// LoggerEntry pulsar logger entry
-type LoggerEntry struct {
-	fields log.Fields
-	logger *zap.Logger
-}
-
-// WithFields with fields
-func (p *LoggerEntry) WithFields(fields log.Fields) log.Entry {
-	p.fields = fields
-	return p
-}
-
-// WithField with field
-func (p *LoggerEntry) WithField(name string, value interface{}) log.Entry {
-	p.fields[name] = value
-	return p
-}
-
-// Debug debug
-func (p *LoggerEntry) Debug(args ...interface{}) {
-	p.logger.Sugar().Debug(args...)
-}
-
-// Info info
-func (p *LoggerEntry) Info(args ...interface{}) {
-	p.logger.Sugar().Info(args...)
-}
-
-// Warn warn
-func (p *LoggerEntry) Warn(args ...interface{}) {
-	p.logger.Sugar().Warn(args...)
-}
-
-// Error error
-func (p *LoggerEntry) Error(args ...interface{}) {
-	p.logger.Sugar().Error(args...)
-}
-
-// Debugf debugf
-func (p *LoggerEntry) Debugf(format string, args ...interface{}) {
-	p.logger.Sugar().Debugf(format, args...)
-}
-
-// Infof infof
-func (p *LoggerEntry) Infof(format string, args ...interface{}) {
-	p.logger.Sugar().Infof(format, args...)
-}
-
-// Warnf warnf
-func (p *LoggerEntry) Warnf(format string, args ...interface{}) {
-	p.logger.Sugar().Warnf(format, args...)
-}
-
-// Errorf errorf
-func (p *LoggerEntry) Errorf(format string, args ...interface{}) {
-	p.logger.Sugar().Errorf(format, args...)
 }

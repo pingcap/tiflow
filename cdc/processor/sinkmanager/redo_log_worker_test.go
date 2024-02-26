@@ -39,10 +39,10 @@ type redoLogWorkerSuite struct {
 }
 
 func (suite *redoLogWorkerSuite) SetupSuite() {
-	requestMemSize = testEventSize
+	requestMemSize = uint64(testEventSize)
 	// For one batch size.
 	// Advance table sink per 2 events.
-	maxUpdateIntervalSize = testEventSize * 2
+	maxUpdateIntervalSize = uint64(testEventSize * 2)
 	suite.testChangefeedID = model.DefaultChangeFeedID("1")
 	suite.testSpan = spanz.TableIDToComparableSpan(1)
 }
@@ -69,13 +69,12 @@ func (suite *redoLogWorkerSuite) createWorker(
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
-	quota.ForceAcquire(testEventSize)
+	quota.ForceAcquire(uint64(testEventSize))
 	quota.AddTable(suite.testSpan)
 	redoDMLManager := newMockRedoDMLManager()
-	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache), sortEngine, redoDMLManager
+		redoDMLManager), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(
@@ -137,7 +136,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished() {
@@ -187,7 +185,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
@@ -235,7 +232,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	w.memQuota.Close()
 	cancel()
 	wg.Wait()
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
 }
 

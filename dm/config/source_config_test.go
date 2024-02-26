@@ -15,6 +15,7 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -27,13 +28,17 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func TestConfigFunctions(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 	require.Equal(t, uint32(101), cfg.ServerID)
@@ -60,36 +65,27 @@ func TestConfigFunctions(t *testing.T) {
 	require.Contains(t, originCfgYamlStr, `server-id: 101`)
 
 	// test update config file and reload
-	require.NoError(t, cfg.Parse(tomlStr))
+	require.NoError(t, cfg.FromToml(tomlStr))
 	require.Equal(t, uint32(100), cfg.ServerID)
-	cfg1, err := ParseYaml(yamlStr)
+	cfg1, err := SourceCfgFromYaml(yamlStr)
 	require.NoError(t, err)
 	require.Equal(t, uint32(100), cfg1.ServerID)
 	cfg.Filters = []*bf.BinlogEventRule{}
 	cfg.Tracer = map[string]interface{}{}
 
 	var cfg2 SourceConfig
-	require.NoError(t, cfg2.Parse(originCfgStr))
+	require.NoError(t, cfg2.FromToml(originCfgStr))
 	require.Equal(t, uint32(101), cfg2.ServerID)
 
-	cfg3, err := ParseYaml(originCfgYamlStr)
+	cfg3, err := SourceCfgFromYaml(originCfgYamlStr)
 	require.NoError(t, err)
 	require.Equal(t, uint32(101), cfg3.ServerID)
 
-	// test decrypt password
-	clone1.From.Password = "1234"
-	// fix empty map after marshal/unmarshal becomes nil
-	clone1.From.Session = cfg.From.Session
-	clone1.Tracer = map[string]interface{}{}
-	clone1.Filters = []*bf.BinlogEventRule{}
-	clone2 := cfg.DecryptPassword()
-	require.Equal(t, clone1, clone2)
-
 	cfg.From.Password = "xxx"
-	cfg.DecryptPassword()
+	cfg.GetDecryptedClone()
 
 	cfg.From.Password = ""
-	clone3 := cfg.DecryptPassword()
+	clone3 := cfg.GetDecryptedClone()
 	require.Equal(t, cfg, clone3)
 
 	// test toml and parse again
@@ -103,14 +99,14 @@ func TestConfigFunctions(t *testing.T) {
 	require.Contains(t, clone4toml, `backoff-max = "5m`)
 
 	var clone5 SourceConfig
-	require.NoError(t, clone5.Parse(clone4toml))
+	require.NoError(t, clone5.FromToml(clone4toml))
 	require.Equal(t, *clone4, clone5)
 	clone4yaml, err := clone4.Yaml()
 	require.NoError(t, err)
 	require.Contains(t, clone4yaml, `backoff-rollback: 5m`)
 	require.Contains(t, clone4yaml, `backoff-max: 5m`)
 
-	clone6, err := ParseYaml(clone4yaml)
+	clone6, err := SourceCfgFromYaml(clone4yaml)
 	require.NoError(t, err)
 	clone6.From.Session = nil
 	require.Equal(t, clone4, clone6)
@@ -129,20 +125,33 @@ aaa: xxx
 }
 
 func TestConfigVerify(t *testing.T) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	encryptedPass, err := utils.Encrypt("this is password")
+	require.NoError(t, err)
+
 	newConfig := func() *SourceConfig {
-		cfg, err := ParseYaml(SampleSourceConfig)
+		cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 		require.NoError(t, err)
 		cfg.RelayDir = "./xx"
 		return cfg
 	}
 	testCases := []struct {
-		genFunc     func() *SourceConfig
-		errorFormat string
+		genFunc        func() *SourceConfig
+		expectPassword string
+		errorFormat    string
 	}{
 		{
 			func() *SourceConfig {
 				return newConfig()
 			},
+			"123456",
 			"",
 		},
 		{
@@ -151,6 +160,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.SourceID = ""
 				return cfg
 			},
+			"123456",
 			".*dm-worker should bind a non-empty source ID which represents a MySQL/MariaDB instance or a replica group.*",
 		},
 		{
@@ -159,6 +169,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.SourceID = "source-id-length-more-than-thirty-two"
 				return cfg
 			},
+			"123456",
 			fmt.Sprintf(".*the length of source ID .* is more than max allowed value %d.*", MaxSourceIDLength),
 		},
 		{
@@ -168,6 +179,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinLogName = "mysql-binlog"
 				return cfg
 			},
+			"123456",
 			".*not valid.*",
 		},
 		{
@@ -177,6 +189,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinLogName = "mysql-binlog"
 				return cfg
 			},
+			"123456",
 			".*not valid.*",
 		},
 		{
@@ -186,6 +199,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.RelayBinlogGTID = "9afe121c-40c2-11e9-9ec7-0242ac110002:1-rtc"
 				return cfg
 			},
+			"123456",
 			".*relay-binlog-gtid 9afe121c-40c2-11e9-9ec7-0242ac110002:1-rtc:.*",
 		},
 		{
@@ -194,6 +208,7 @@ func TestConfigVerify(t *testing.T) {
 				cfg.From.Password = "not-encrypt"
 				return cfg
 			},
+			"not-encrypt",
 			"",
 		},
 		{
@@ -203,40 +218,58 @@ func TestConfigVerify(t *testing.T) {
 				return cfg
 			},
 			"",
-		},
-		{
-			func() *SourceConfig {
-				cfg := newConfig()
-				cfg.From.Password = "123456" // plaintext password
-				return cfg
-			},
 			"",
 		},
 		{
 			func() *SourceConfig {
 				cfg := newConfig()
-				cfg.From.Password = "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=" // encrypt password (123456)
+				cfg.From.Password = "aaaaaa" // plaintext password
 				return cfg
 			},
+			"aaaaaa",
+			"",
+		},
+		{
+			func() *SourceConfig {
+				cfg := newConfig()
+				cfg.From.Password = encryptedPass
+				return cfg
+			},
+			"this is password",
 			"",
 		},
 	}
 
-	for _, tc := range testCases {
-		cfg := tc.genFunc()
-		err := cfg.Verify()
-		if tc.errorFormat != "" {
-			require.Error(t, err)
-			lines := strings.Split(err.Error(), "\n")
-			require.Regexp(t, tc.errorFormat, lines[0])
-		} else {
-			require.NoError(t, err)
+	runCasesFn := func() {
+		for _, tc := range testCases {
+			cfg := tc.genFunc()
+			oldPass := cfg.From.Password
+			err := cfg.Verify()
+			if tc.errorFormat != "" {
+				require.Error(t, err)
+				lines := strings.Split(err.Error(), "\n")
+				require.Regexp(t, tc.errorFormat, lines[0])
+			} else {
+				require.NoError(t, err)
+			}
+			newCfg := cfg.GetDecryptedClone()
+			if encrypt.IsInitialized() {
+				require.Equal(t, tc.expectPassword, newCfg.From.Password)
+			} else {
+				require.Equal(t, oldPass, newCfg.From.Password)
+			}
 		}
 	}
+
+	require.True(t, encrypt.IsInitialized())
+	runCasesFn()
+	encrypt.InitCipher(nil)
+	require.False(t, encrypt.IsInitialized())
+	runCasesFn()
 }
 
 func TestSourceConfigForDowngrade(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 
 	// make sure all new field were added
@@ -273,7 +306,7 @@ func subtestFlavor(t *testing.T, cfg *SourceConfig, sqlInfo, expectedFlavor, exp
 }
 
 func TestAdjustFlavor(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
@@ -296,7 +329,7 @@ func TestAdjustServerID(t *testing.T) {
 	}()
 	getAllServerIDFunc = getMockServerIDs
 
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
@@ -315,7 +348,7 @@ func TestAdjustServerIDFallback(t *testing.T) {
 		WillReturnError(errors.New("mysql error 1227: Access denied; you need (at least one of) the REPLICATION SLAVE privilege(s) for this operation"))
 	mock.ExpectClose()
 
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.ServerID = 0
 
@@ -332,7 +365,7 @@ func getMockServerIDs(ctx *tcontext.Context, db *conn.BaseDB) (map[uint32]struct
 }
 
 func TestAdjustCaseSensitive(t *testing.T) {
-	cfg, err := ParseYaml(SampleSourceConfig)
+	cfg, err := SourceCfgFromYaml(SampleSourceConfig)
 	require.NoError(t, err)
 
 	db, mock, err := sqlmock.New()
@@ -355,4 +388,36 @@ func TestEmbedSampleFile(t *testing.T) {
 	data, err := os.ReadFile("./source.yaml")
 	require.NoError(t, err)
 	require.Equal(t, SampleSourceConfig, string(data))
+}
+
+func TestSourceYamlForDowngrade(t *testing.T) {
+	originCfg := SourceConfig{
+		SourceID: "mysql-3306",
+		From: dbconfig.DBConfig{
+			Password: "123456",
+		},
+	}
+	// when secret key is empty, the password should be kept
+	content, err := originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg := &SourceConfig{}
+	require.NoError(t, yaml.UnmarshalStrict([]byte(content), newCfg))
+	require.Equal(t, originCfg.From.Password, newCfg.From.Password)
+
+	// when secret key is not empty, the password should be encrypted
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	encrypt.InitCipher(key)
+	content, err = originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg = &SourceConfig{}
+	require.NoError(t, yaml.UnmarshalStrict([]byte(content), newCfg))
+	require.NotEqual(t, originCfg.From.Password, newCfg.From.Password)
+	decryptedPass, err := utils.Decrypt(newCfg.From.Password)
+	require.NoError(t, err)
+	require.Equal(t, originCfg.From.Password, decryptedPass)
 }

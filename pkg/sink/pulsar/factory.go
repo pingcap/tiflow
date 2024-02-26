@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -38,24 +39,43 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		OperationTimeout:  config.OperationTimeout.Duration(),
 		// add pulsar default metrics
 		MetricsRegisterer: mq.GetMetricRegistry(),
-		Logger:            NewPulsarLogger(),
+		Logger:            NewPulsarLogger(log.L()),
 	}
-	var err error
 
-	option.Authentication, err = setupAuthentication(config)
+	var err error
+	// ismTLSAuthentication is true if it is mTLS authentication
+	var ismTLSAuthentication bool
+	ismTLSAuthentication, option.Authentication, err = setupAuthentication(config)
 	if err != nil {
 		log.Error("setup pulsar authentication fail", zap.Error(err))
 		return nil, err
 	}
+	// When mTLS authentication is enabled, trust certs file path is required.
+	if ismTLSAuthentication {
+		if sinkConfig.PulsarConfig != nil && sinkConfig.PulsarConfig.TLSTrustCertsFilePath != nil {
+			option.TLSTrustCertsFilePath = *sinkConfig.PulsarConfig.TLSTrustCertsFilePath
+		} else {
+			return nil, cerror.ErrPulsarInvalidConfig.
+				GenWithStackByArgs("pulsar tls trust certs file path is not set when mTLS authentication is enabled")
+		}
+	}
 
-	// pulsar TLS config
+	// Check and set pulsar TLS config
 	if sinkConfig.PulsarConfig != nil {
 		sinkPulsar := sinkConfig.PulsarConfig
-		if sinkPulsar.TLSCertificateFile != nil && sinkPulsar.TLSKeyFilePath != nil &&
-			sinkPulsar.TLSTrustCertsFilePath != nil {
+		// Note(dongmen): If pulsar cluster set `tlsRequireTrustedClientCertOnConnect=false`,
+		// provide the TLS trust certificate file is enough.
+		if sinkPulsar.TLSTrustCertsFilePath != nil {
+			option.TLSTrustCertsFilePath = *sinkPulsar.TLSTrustCertsFilePath
+			log.Info("pulsar tls trust certificate file is set, tls encryption enable")
+		}
+		// Note(dongmen): If pulsar cluster set `tlsRequireTrustedClientCertOnConnect=true`,
+		// then the client must set the TLS certificate and key.
+		// Otherwise, a error like "remote error: tls: certificate required" will be returned.
+		if sinkPulsar.TLSCertificateFile != nil && sinkPulsar.TLSKeyFilePath != nil {
 			option.TLSCertificateFile = *sinkPulsar.TLSCertificateFile
 			option.TLSKeyFilePath = *sinkPulsar.TLSKeyFilePath
-			option.TLSTrustCertsFilePath = *sinkPulsar.TLSTrustCertsFilePath
+			log.Info("pulsar tls certificate file and tls key file path is set, tls ")
 		}
 	}
 
@@ -68,15 +88,21 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 }
 
 // setupAuthentication sets up authentication for pulsar client
-func setupAuthentication(config *config.PulsarConfig) (pulsar.Authentication, error) {
+// returns true if authentication is tls authentication , and the authentication object
+func setupAuthentication(config *config.PulsarConfig) (bool, pulsar.Authentication, error) {
 	if config.AuthenticationToken != nil {
-		return pulsar.NewAuthenticationToken(*config.AuthenticationToken), nil
+		log.Info("pulsar token authentication is set, use toke authentication")
+		return false, pulsar.NewAuthenticationToken(*config.AuthenticationToken), nil
 	}
 	if config.TokenFromFile != nil {
-		return pulsar.NewAuthenticationTokenFromFile(*config.TokenFromFile), nil
+		log.Info("pulsar token from file authentication is set, use toke authentication")
+		res := pulsar.NewAuthenticationTokenFromFile(*config.TokenFromFile)
+		return false, res, nil
 	}
 	if config.BasicUserName != nil && config.BasicPassword != nil {
-		return pulsar.NewAuthenticationBasic(*config.BasicUserName, *config.BasicPassword)
+		log.Info("pulsar basic authentication is set, use basic authentication")
+		res, err := pulsar.NewAuthenticationBasic(*config.BasicUserName, *config.BasicPassword)
+		return false, res, err
 	}
 	if config.OAuth2 != nil {
 		oauth2 := map[string]string{
@@ -87,13 +113,15 @@ func setupAuthentication(config *config.PulsarConfig) (pulsar.Authentication, er
 			auth.ConfigParamClientID:  config.OAuth2.OAuth2ClientID,
 			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
 		}
-		return pulsar.NewAuthenticationOAuth2(oauth2), nil
+		log.Info("pulsar oauth2 authentication is set, use oauth2 authentication")
+		return false, pulsar.NewAuthenticationOAuth2(oauth2), nil
 	}
 	if config.AuthTLSCertificatePath != nil && config.AuthTLSPrivateKeyPath != nil {
-		return pulsar.NewAuthenticationTLS(*config.AuthTLSCertificatePath, *config.AuthTLSPrivateKeyPath), nil
+		log.Info("pulsar mTLS authentication is set, use mTLS authentication")
+		return true, pulsar.NewAuthenticationTLS(*config.AuthTLSCertificatePath, *config.AuthTLSPrivateKeyPath), nil
 	}
 	log.Info("No authentication configured for pulsar client")
-	return nil, nil
+	return false, nil, nil
 }
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go

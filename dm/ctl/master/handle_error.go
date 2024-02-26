@@ -25,6 +25,7 @@ import (
 )
 
 // NewHandleErrorCmd creates a HandleError command.
+// deprecated, replaced by binlog command.
 func NewHandleErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "handle-error <task-name | task-file> [-s source ...] [-b binlog-pos] <skip/replace/revert> [replace-sql1;replace-sql2;]",

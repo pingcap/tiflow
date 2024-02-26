@@ -86,6 +86,9 @@ const (
 	DefaultSendBootstrapIntervalInSec = int64(120)
 	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
 	DefaultSendBootstrapInMsgCount = int32(10000)
+	// DefaultSendBootstrapToAllPartition is the default value of
+	// whether to send bootstrap message to all partitions.
+	DefaultSendBootstrapToAllPartition = true
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -176,8 +179,12 @@ type SinkConfig struct {
 	// bootstrap sending function will be disabled.
 	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
 	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
-	// SendBootstrapInMsgCount is the number of messages to send bootstrap message.
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
 	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
 
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
@@ -226,6 +233,8 @@ type CSVConfig struct {
 	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
 	// output old value
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
+	// output handle key
+	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
@@ -513,8 +522,8 @@ func (o *OAuth2) validate() (err error) {
 
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
-	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
-	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-private-key-path,omitempty"`
+	TLSKeyFilePath        *string `toml:"tls-key-file-path" json:"tls-key-file-path,omitempty"`
+	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-certificate-file,omitempty"`
 	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
 
 	// PulsarProducerCacheSize is the size of the cache of pulsar producers
@@ -594,11 +603,7 @@ func (c *PulsarConfig) validate() (err error) {
 		if err = c.OAuth2.validate(); err != nil {
 			return err
 		}
-		if c.TLSTrustCertsFilePath == nil {
-			return fmt.Errorf("oauth2 is not empty but tls-trust-certs-file-path is empty")
-		}
 	}
-
 	return nil
 }
 

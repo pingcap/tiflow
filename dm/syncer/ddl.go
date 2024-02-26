@@ -1173,7 +1173,7 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					}
 				}
 			case ast.AlterTableReorganizePartition:
-				return bf.ReorganizePartion
+				return bf.ReorganizePartition
 			case ast.AlterTableRebuildPartition:
 				return bf.RebuildPartition
 			case ast.AlterTableCoalescePartitions:

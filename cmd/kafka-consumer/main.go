@@ -494,7 +494,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		zap.Int("quota", memoryQuotaPerPartition))
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
@@ -685,12 +685,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				var partitionID int64
-				if row.Table.IsPartition {
-					partitionID = row.Table.TableID
+				if row.TableInfo.IsPartitionTable() {
+					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				row.Table.TableID = tableID
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+				row.TableInfo.TableName.TableID = tableID
 
 				group, ok := eventGroups[tableID]
 				if !ok {
@@ -752,8 +752,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")

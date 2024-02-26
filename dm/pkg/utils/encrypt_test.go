@@ -14,14 +14,24 @@
 package utils
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEncrypt(t *testing.T) {
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	require.NoError(t, err)
+	encrypt.InitCipher(key)
+
 	plaintext := "abc@123"
 	ciphertext, err := Encrypt(plaintext)
 	require.NoError(t, err)
@@ -43,4 +53,15 @@ func TestEncrypt(t *testing.T) {
 	require.Equal(t, "", plaintext2)
 
 	require.Equal(t, "invalid-plaintext", DecryptOrPlaintext("invalid-plaintext"))
+
+	encrypt.InitCipher(nil)
+	_, err = Encrypt(plaintext)
+	require.ErrorContains(t, err, "not initialized")
+
+	base64Str := base64.StdEncoding.EncodeToString([]byte("plaintext"))
+	plaintext2, err = Decrypt(base64Str)
+	require.Regexp(t, ".*can not decrypt password.*", err)
+	require.ErrorContains(t, err, "not initialized")
+	require.Equal(t, "", plaintext2)
+	require.Equal(t, base64Str, DecryptOrPlaintext(base64Str))
 }

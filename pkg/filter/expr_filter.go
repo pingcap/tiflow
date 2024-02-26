@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -239,7 +239,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 	if err != nil {
 		// If an expression contains an unknown column,
 		// we return an error and stop the changefeed.
-		if core.ErrUnknownColumn.Equal(err) {
+		if plannererrors.ErrUnknownColumn.Equal(err) {
 			log.Error("meet unknown column when generating expression",
 				zap.String("expression", expr),
 				zap.Error(err))
@@ -344,7 +344,7 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 }
 
 func getColumnFromError(err error) string {
-	if !core.ErrUnknownColumn.Equal(err) {
+	if !plannererrors.ErrUnknownColumn.Equal(err) {
 		return err.Error()
 	}
 	column := strings.TrimSpace(strings.TrimPrefix(err.Error(),
@@ -419,11 +419,14 @@ func (f *dmlExprFilter) shouldSkipDML(
 	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {
+	if len(f.rules) == 0 {
+		return false, nil
+	}
 	// for defense purpose, normally the row and ti should not be nil.
 	if ti == nil || row == nil || rawRow.IsEmpty() {
 		return false, nil
 	}
-	rules := f.getRules(row.Table.Schema, row.Table.Table)
+	rules := f.getRules(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName())
 	for _, rule := range rules {
 		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {

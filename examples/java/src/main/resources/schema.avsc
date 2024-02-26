@@ -1,0 +1,417 @@
+[
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "DataType",
+    "type": "record",
+    "docs": "each column's mysql type information",
+    "fields": [
+      {
+        "name": "mysqlType",
+        "type": "string"
+      },
+      {
+        "name": "charset",
+        "type": "string"
+      },
+      {
+        "name": "collate",
+        "type": "string"
+      },
+      {
+        "name": "length",
+        "type": "long"
+      },
+      {
+        "name": "decimal",
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
+      },
+      {
+        "name": "elements",
+        "type": [
+          "null",
+          {
+            "type": "array",
+            "items": "string"
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "unsigned",
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
+      },
+      {
+        "name": "zerofill",
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "ColumnSchema",
+    "type": "record",
+    "docs": "each column's schema information",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "dataType",
+        "type": "com.pingcap.simple.avro.DataType"
+      },
+      {
+        "name": "nullable",
+        "type": "boolean"
+      },
+      {
+        "name": "default",
+        "type": [
+          "null",
+          "string"
+        ]
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "IndexSchema",
+    "type": "record",
+    "docs": "each index's schema information",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "unique",
+        "type": "boolean"
+      },
+      {
+        "name": "primary",
+        "type": "boolean"
+      },
+      {
+        "name": "nullable",
+        "type": "boolean"
+      },
+      {
+        "name": "columns",
+        "type": {
+          "type": "array",
+          "items": "string"
+        }
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "TableSchema",
+    "type": "record",
+    "docs": "table schema information",
+    "fields": [
+      {
+        "name": "database",
+        "type": "string"
+      },
+      {
+        "name": "table",
+        "type": "string"
+      },
+      {
+        "name": "tableID",
+        "type": "long"
+      },
+      {
+        "name": "version",
+        "type": "long"
+      },
+      {
+        "name": "columns",
+        "type": {
+          "type": "array",
+          "items": "com.pingcap.simple.avro.ColumnSchema"
+        }
+      },
+      {
+        "name": "indexes",
+        "type": {
+          "type": "array",
+          "items": "com.pingcap.simple.avro.IndexSchema"
+        }
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Checksum",
+    "type": "record",
+    "docs": "event's e2e checksum information",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "corrupted",
+        "type": "boolean"
+      },
+      {
+        "name": "current",
+        "type": "long"
+      },
+      {
+        "name": "previous",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Watermark",
+    "type": "record",
+    "docs": "the message format of the watermark event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "string"
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Bootstrap",
+    "type": "record",
+    "docs": "the message format of the bootstrap event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "string"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "tableSchema",
+        "type": "com.pingcap.simple.avro.TableSchema"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "DDL",
+    "type": "record",
+    "docs": "the message format of the DDL event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": {
+          "type": "enum",
+          "name": "DDLType",
+          "symbols": [
+            "CREATE",
+            "ALTER",
+            "ERASE",
+            "RENAME",
+            "TRUNCATE",
+            "CINDEX",
+            "DINDEX",
+            "QUERY"
+          ]
+        }
+      },
+      {
+        "name": "sql",
+        "type": "string"
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "tableSchema",
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
+        "default": null
+      },
+      {
+        "name": "preTableSchema",
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
+        "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "DML",
+    "type": "record",
+    "docs": "the message format of the DML event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "database",
+        "type": "string"
+      },
+      {
+        "name": "table",
+        "type": "string"
+      },
+      {
+        "name": "tableID",
+        "type": "long"
+      },
+      {
+        "name": "type",
+        "type": {
+          "type": "enum",
+          "name": "DMLType",
+          "symbols": [
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ]
+        }
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "schemaVersion",
+        "type": "long"
+      },
+      {
+        "name": "claimCheckLocation",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "handleKeyOnly",
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
+      },
+      {
+        "name": "checksum",
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.Checksum"
+        ],
+        "default": null
+      },
+      {
+        "name": "data",
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "int",
+              "long",
+              "float",
+              "double",
+              "string",
+              "boolean",
+              "bytes"
+            ],
+            "default": null
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "old",
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "int",
+              "long",
+              "float",
+              "double",
+              "string",
+              "boolean",
+              "bytes"
+            ],
+            "default": null
+          }
+        ],
+        "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Message",
+    "docs": "the wrapper for all kind of messages",
+    "type": "record",
+    "fields": [
+      {
+        "name": "payload",
+        "type": [
+          "com.pingcap.simple.avro.Watermark",
+          "com.pingcap.simple.avro.Bootstrap",
+          "com.pingcap.simple.avro.DDL",
+          "com.pingcap.simple.avro.DML"
+        ]
+      }
+    ]
+  }
+]

@@ -246,7 +246,7 @@ var (
 		errors.RFCCodeText("CDC:ErrPulsarInvalidVersion"),
 	)
 	ErrPulsarInvalidConfig = errors.Normalize(
-		"pulsar config invalid",
+		"pulsar config invalid %s",
 		errors.RFCCodeText("CDC:ErrPulsarInvalidConfig"),
 	)
 	ErrPulsarCreateTopic = errors.Normalize(
@@ -933,6 +933,10 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInternalCheckFailed = errors.Normalize(
+		"internal check failed, %s",
+		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
 		"handle ddl failed, query: %s, startTs: %d. "+
@@ -977,5 +981,15 @@ var (
 	ErrUnexpected = errors.Normalize(
 		"cdc met unexpected error: %s",
 		errors.RFCCodeText("CDC:ErrUnexpected"),
+	)
+
+	// credential related errors
+	ErrCredentialNotFound = errors.Normalize(
+		"credential not found: %s",
+		errors.RFCCodeText("CDC:ErrCredentialNotFound"),
+	)
+	ErrUnauthorized = errors.Normalize(
+		"user %s unauthorized, error: %s",
+		errors.RFCCodeText("CDC:ErrUnauthorized"),
 	)
 )

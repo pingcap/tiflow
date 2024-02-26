@@ -34,7 +34,6 @@ insert into t2 values (0,"error");
 replace into t2 values (0,"last updated");
 replace into t2 values (126,"first updated");
 replace into t2 values (63,default);
-# Since ticdc open `alter-primary-key`, select result will be different
 select * from t2;
 #drop table t1;
 SET sql_mode = default;

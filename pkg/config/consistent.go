@@ -24,18 +24,44 @@ import (
 )
 
 // ConsistentConfig represents replication consistency config for a changefeed.
+// It is used by redo log functionality.
 type ConsistentConfig struct {
-	Level                 string `toml:"level" json:"level"`
-	MaxLogSize            int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs     int64  `toml:"flush-interval" json:"flush-interval"`
-	MetaFlushIntervalInMs int64  `toml:"meta-flush-interval" json:"meta-flush-interval"`
-	EncodingWorkerNum     int    `toml:"encoding-worker-num" json:"encoding-worker-num"`
-	FlushWorkerNum        int    `toml:"flush-worker-num" json:"flush-worker-num"`
-	Storage               string `toml:"storage" json:"storage"`
-	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
-	Compression           string `toml:"compression" json:"compression"`
-	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
-
+	// Level is the consistency level, it can be `none` or `eventual`.
+	// `eventual` means enable redo log.
+	// Default is `none`.
+	Level string `toml:"level" json:"level"`
+	// MaxLogSize is the max size(MiB) of a log file written by redo log.
+	// Default is 64MiB.
+	MaxLogSize int64 `toml:"max-log-size" json:"max-log-size"`
+	// FlushIntervalInMs is the flush interval(ms) of redo log to flush log to storage.
+	// Default is 2000ms.
+	FlushIntervalInMs int64 `toml:"flush-interval" json:"flush-interval"`
+	// MetaFlushIntervalInMs is the flush interval(ms) of redo log to
+	// flush meta(resolvedTs and checkpointTs) to storage.
+	// Default is 200ms.
+	MetaFlushIntervalInMs int64 `toml:"meta-flush-interval" json:"meta-flush-interval"`
+	// EncodingWorkerNum is the number of workers to encode `RowChangeEvent`` to redo log.
+	// Default is 16.
+	EncodingWorkerNum int `toml:"encoding-worker-num" json:"encoding-worker-num"`
+	// FlushWorkerNum is the number of workers to flush redo log to storage.
+	// Default is 8.
+	FlushWorkerNum int `toml:"flush-worker-num" json:"flush-worker-num"`
+	// Storage is the storage path(uri) to store redo log.
+	Storage string `toml:"storage" json:"storage"`
+	// UseFileBackend is a flag to enable file backend for redo log.
+	// file backend means before flush redo log to storage, it will be written to local file.
+	// Default is false.
+	UseFileBackend bool `toml:"use-file-backend" json:"use-file-backend"`
+	// Compression is the compression algorithm used for redo log.
+	// Default is "", it means no compression, equals to `none`.
+	// Supported compression algorithms are `none` and `lz4`.
+	Compression string `toml:"compression" json:"compression"`
+	// FlushConcurrency is the concurrency of flushing a single log file.
+	// Default is 1. It means a single log file will be flushed by only one worker.
+	// The singe file concurrent flushing feature supports only `s3` storage.
+	FlushConcurrency int `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+	// MemoryUsage represents the percentage of ReplicaConfig.MemoryQuota
+	// that can be utilized by the redo log module.
 	MemoryUsage *ConsistentMemoryUsage `toml:"memory-usage" json:"memory-usage"`
 }
 
@@ -43,9 +69,6 @@ type ConsistentConfig struct {
 type ConsistentMemoryUsage struct {
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 will be used for redo events.
 	MemoryQuotaPercentage uint64 `toml:"memory-quota-percentage" json:"memory-quota-percentage"`
-	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 * EventCachePercentage / 100
-	// will be used for redo cache.
-	EventCachePercentage uint64 `toml:"event-cache-percentage" json:"event-cache-percentage"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

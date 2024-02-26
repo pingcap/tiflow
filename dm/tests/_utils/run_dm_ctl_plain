@@ -1,0 +1,24 @@
+#!/bin/bash
+# tools to run dmctl from command line
+# parameter 1: work directory
+# parameter 2: master-addr port
+# parameter 3: command
+# parameter 4...: check output content and count
+
+workdir=$1
+master_addr=$2
+cmd=$3
+
+shift 3
+
+PWD=$(pwd)
+binary=$PWD/bin/dmctl.test
+ts=$(date +"%s")
+pid=$$
+echo "dmctl test cmd: \"$cmd\""
+$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL $cmd --master-addr=$master_addr >$TEST_DIR/$TEST_NAME/dmctl-plain.log
+
+# gocovmerge doesn't support merge profiles with different modes, however atomic
+# mode and count mode have the same profile format, so we need to unify cover
+# mode before running gocovmerge. As coverage file is not generated synchronously,
+# we will patch covermode before `make coverage`

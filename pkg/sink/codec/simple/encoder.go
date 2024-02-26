@@ -39,7 +39,7 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	value, err := e.marshaller.MarshalRowChangedEvent(event, e.config, false, "")
+	value, err := e.marshaller.MarshalRowChangedEvent(event, false, "")
 	if err != nil {
 		return err
 	}
@@ -53,8 +53,8 @@ func (e *encoder) AppendRowChangedEvent(
 	result := &common.Message{
 		Value:    value,
 		Ts:       event.CommitTs,
-		Schema:   &event.Table.Schema,
-		Table:    &event.Table.Table,
+		Schema:   event.TableInfo.GetSchemaNamePtr(),
+		Table:    event.TableInfo.GetTableNamePtr(),
 		Type:     model.MessageTypeRow,
 		Protocol: config.ProtocolSimple,
 		Callback: callback,
@@ -70,7 +70,7 @@ func (e *encoder) AppendRowChangedEvent(
 		log.Error("Single message is too large for simple",
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("length", result.Length()),
-			zap.Any("table", event.Table))
+			zap.Any("table", event.TableInfo.TableName))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
@@ -83,7 +83,7 @@ func (e *encoder) AppendRowChangedEvent(
 		}
 	}
 
-	value, err = e.marshaller.MarshalRowChangedEvent(event, e.config, true, claimCheckLocation)
+	value, err = e.marshaller.MarshalRowChangedEvent(event, true, claimCheckLocation)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (e *encoder) AppendRowChangedEvent(
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("originLength", result.Length()),
 			zap.Int("length", result.Length()),
-			zap.Any("table", event.Table))
+			zap.Any("table", event.TableInfo.TableName))
 		e.messages = append(e.messages, result)
 		return nil
 	}
@@ -107,7 +107,7 @@ func (e *encoder) AppendRowChangedEvent(
 	log.Error("Single message is still too large for simple after only encode handle key columns",
 		zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 		zap.Int("length", result.Length()),
-		zap.Any("table", event.Table))
+		zap.Any("table", event.TableInfo.TableName))
 	return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 }
 
@@ -180,7 +180,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	marshaller, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -188,7 +188,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
-		marshaller: marshaller,
+		marshaller: m,
 	}, nil
 }
 
