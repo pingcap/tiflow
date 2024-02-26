@@ -14,8 +14,6 @@
 package filter
 
 import (
-	"context"
-
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
@@ -124,7 +122,7 @@ type filter struct {
 }
 
 // NewFilter creates a filter.
-func NewFilter(ctx context.Context, cfg *config.ReplicaConfig, tz string) (Filter, error) {
+func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
 		return nil, err
@@ -134,7 +132,7 @@ func NewFilter(ctx context.Context, cfg *config.ReplicaConfig, tz string) (Filte
 		f = tfilter.CaseInsensitive(f)
 	}
 
-	dmlExprFilter, err := newExprFilter(tz, cfg.Filter, cfg.SQLMode)
+	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
 	if err != nil {
 		return nil, err
 	}

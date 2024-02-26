@@ -713,7 +713,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	f, err := filter.NewFilter(ctx, p.latestInfo.Config, "")
+	f, err := filter.NewFilter(p.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}

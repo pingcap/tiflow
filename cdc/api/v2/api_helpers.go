@@ -213,14 +213,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, err
 	}
 
-	tlsCfg, err := credential.ToTLSConfig()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	etcdClient := getEtcdClient(cfg.PDAddrs, tlsCfg)
-	sqlMode := getSQLModeFromTiDB(ctx, pdClient)
-
 	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
 		return nil, errors.Cause(err)

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 
+	infoschema "github.com/pingcap/tidb/pkg/infoschema/context"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
@@ -176,7 +177,7 @@ func (se *session) Value(key fmt.Stringer) interface{} {
 }
 
 // GetInfoSchema implements the sessionctx.Context interface.
-func (se *session) GetInfoSchema() sessionctx.InfoschemaMetaVersion {
+func (se *session) GetInfoSchema() infoschema.InfoSchemaMetaVersion {
 	return nil
 }
 
