@@ -322,7 +322,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -441,7 +441,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -636,7 +636,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			if c.updateDDl != "" {
@@ -758,7 +758,7 @@ func TestVerify(t *testing.T) {
 			ti := helper.execDDL(ddl)
 			tableInfos = append(tableInfos, ti)
 		}
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		err = f.verify(tableInfos)
 		require.True(t, errors.ErrorEqual(tc.err, err), "case: %+v", tc, err)
