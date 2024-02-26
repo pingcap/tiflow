@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -392,8 +391,6 @@ type eventFeedSession struct {
 
 	rangeLock *regionlock.RegionRangeLock
 
-	// To identify metrics of different eventFeedSession
-	id                string
 	regionChSizeGauge prometheus.Gauge
 	errChSizeGauge    prometheus.Gauge
 	rangeChSizeGauge  prometheus.Gauge
@@ -434,12 +431,9 @@ func newEventFeedSession(
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
-		regionChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "region"),
-		errChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "err"),
-		rangeChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
-			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "range"),
+		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
+		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
+		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
 		resolvedTsPool: sync.Pool{
 			New: func() any {
 				return &regionStatefulEvent{
