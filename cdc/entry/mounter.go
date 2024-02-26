@@ -404,9 +404,35 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
+func (m *mounter) calculateChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+) (uint32, error) {
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		column := rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      &rawColumns[idx],
+		}
+		columns = append(columns, column)
+	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
+
+	calculator := rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}
+
+	checksum, err := calculator.Checksum(m.tz)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checksum, nil
+}
+
 // return error if cannot get the expected checksum from the decoder
 // return false if the checksum is not matched
-// return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, int, bool, error) {
@@ -432,24 +458,9 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
-	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
-		columns = append(columns, rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
-		})
-	}
-	sort.Slice(columns, func(i, j int) bool {
-		return columns[i].ID < columns[j].ID
-	})
-	calculator := rowcodec.RowData{
-		Cols: columns,
-		Data: make([]byte, 0),
-	}
-
-	checksum, err := calculator.Checksum()
+	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Error(err))
+		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, version, false, errors.Trace(err)
 	}
 
@@ -463,11 +474,8 @@ func (m *mounter) verifyChecksum(
 	extra, ok := decoder.GetExtraChecksum()
 	if !ok {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
-		return checksum, version,
-			false, errors.New("cannot found the extra checksum from the event")
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
+		return checksum, version, false, nil
 	}
 
 	if checksum == extra {
