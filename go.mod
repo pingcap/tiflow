@@ -64,19 +64,11 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20231011074246-fa00d2b03372
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20231207141451-a53a963a4a50
-	github.com/pingcap/tidb-tools v7.0.0+incompatible
+	github.com/pingcap/tidb-tools v7.0.1-0.20240226082442-627e9c95dcef+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20231207141451-a53a963a4a50
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/client_model v0.3.0
-=======
-	github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73
-	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73
-	github.com/prometheus/client_golang v1.17.0
-	github.com/prometheus/client_model v0.5.0
->>>>>>> fdef38b920 (binlog-filter: log error instead of return it (#10380))
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron v1.2.0
