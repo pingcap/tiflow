@@ -112,11 +112,6 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		o.version = s
 	}
 
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		o.groupID = s
-	}
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -215,7 +210,7 @@ func main() {
 	flag.StringVar(&o.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&o.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&o.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-
+	flag.StringVar(&o.groupID, "consumer-group-id", "", "consumer group id")
 	flag.StringVar(&o.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&o.logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&o.timezone, "tz", "System", "Specify time zone of Kafka consumer")
