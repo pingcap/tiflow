@@ -99,6 +99,13 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 	return args.Get(0).([]*model.CaptureInfo), args.Error(1)
 }
 
+func (p *mockStatusProvider) GetChangeFeedSyncedStatus(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedSyncedStatusForAPI, error) {
+	args := p.Called(ctx)
+	return args.Get(0).(*model.ChangeFeedSyncedStatusForAPI), args.Error(1)
+}
+
 func (p *mockStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(bool), args.Error(1)

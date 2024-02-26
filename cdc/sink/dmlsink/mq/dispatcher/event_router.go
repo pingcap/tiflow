@@ -78,7 +78,7 @@ type EventRouter struct {
 }
 
 // NewEventRouter creates a new EventRouter.
-func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRouter, error) {
+func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string, protocol config.Protocol) (*EventRouter, error) {
 	// If an event does not match any dispatching rules in the config file,
 	// it will be dispatched by the default partition dispatcher and
 	// static topic dispatcher because it matches *.* rule.
@@ -103,7 +103,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 		}
 
 		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
-		t, err := getTopicDispatcher(ruleConfig, defaultTopic, cfg.Sink.Protocol)
+		t, err := getTopicDispatcher(ruleConfig.TopicRule, defaultTopic, protocol)
 		if err != nil {
 			return nil, err
 		}
@@ -251,32 +251,31 @@ func getPartitionDispatcher(
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	ruleConfig *config.DispatchRule, defaultTopic string, protocol string,
+	rule string, defaultTopic string, protocol config.Protocol,
 ) (topic.Dispatcher, error) {
-	if ruleConfig.TopicRule == "" {
+	if rule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
 	}
 
+	if topic.IsHardCode(rule) {
+		return topic.NewStaticTopicDispatcher(rule), nil
+	}
+
 	// check if this rule is a valid topic expression
-	topicExpr := topic.Expression(ruleConfig.TopicRule)
-
-	if protocol != "" {
-		p, err := config.ParseSinkProtocolFromString(protocol)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-
-		if p == config.ProtocolAvro {
-			err := topicExpr.ValidateForAvro()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			err := topicExpr.Validate()
-			if err != nil {
-				return nil, err
-			}
-		}
+	topicExpr := topic.Expression(rule)
+	err := validateTopicExpression(topicExpr, protocol)
+	if err != nil {
+		return nil, err
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
+}
+
+func validateTopicExpression(expr topic.Expression, protocol config.Protocol) error {
+	switch protocol {
+	case config.ProtocolAvro:
+		return expr.ValidateForAvro()
+	default:
+	}
+
+	return expr.Validate()
 }
