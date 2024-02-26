@@ -387,6 +387,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 	for {
 		select {
 		case <-s.closed:
+			s.wg.Done()
 			return
 		case batchEvent := <-batchCh:
 			// do batch commit
@@ -436,8 +437,8 @@ func (s *EventSorter) handleEvents(
 	// We set a relatively small channel value to avoid possible OOM caused by too much information.
 	// The number of channels will not affect the performance of commit consumption currently.
 	batchCh := make(chan *DBBatchEvent, 8)
-	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
 	s.wg.Add(1)
+	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
 
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
