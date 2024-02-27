@@ -16,7 +16,6 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -186,7 +185,7 @@ func newTiColumnInfo(
 		col.AddFlag(mysql.BinaryFlag)
 	}
 
-	if column.Nullable {
+	if !column.Nullable {
 		col.AddFlag(mysql.NotNullFlag)
 	}
 
@@ -584,8 +583,8 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	return msg, nil
 }
 
-func newDMLMessage(
-	event *model.RowChangedEvent, config *common.Config,
+func (a *jsonMarshaller) newDMLMessage(
+	event *model.RowChangedEvent,
 	onlyHandleKey bool, claimCheckFileName string,
 ) (*message, error) {
 	m := &message{
@@ -602,23 +601,23 @@ func newDMLMessage(
 	var err error
 	if event.IsInsert() {
 		m.Type = DMLTypeInsert
-		m.Data, err = formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
 		m.Type = DMLTypeDelete
-		m.Old, err = formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
 		m.Type = DMLTypeUpdate
-		m.Data, err = formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -626,7 +625,7 @@ func newDMLMessage(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	if config.EnableRowChecksum && event.Checksum != nil {
+	if a.config.EnableRowChecksum && event.Checksum != nil {
 		m.Checksum = &checksum{
 			Version:   event.Checksum.Version,
 			Corrupted: event.Checksum.Corrupted,
@@ -638,7 +637,7 @@ func newDMLMessage(
 	return m, nil
 }
 
-func formatColumns(
+func (a *jsonMarshaller) formatColumns(
 	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
@@ -651,7 +650,7 @@ func formatColumns(
 		if onlyHandleKey && !flag.IsHandleKey() {
 			continue
 		}
-		value, err := encodeValue(col.Value, colInfos[i].Ft)
+		value, err := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
 		if err != nil {
 			return nil, err
 		}
@@ -660,7 +659,7 @@ func formatColumns(
 	return result, nil
 }
 
-func encodeValue4Avro(
+func (a *avroMarshaller) encodeValue4Avro(
 	value interface{}, ft *types.FieldType,
 ) (interface{}, string, error) {
 	if value == nil {
@@ -691,13 +690,31 @@ func encodeValue4Avro(
 			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
 		value = setValue.Name
+	case mysql.TypeTimestamp:
+		v, ok := value.(string)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the timestamp value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+		return map[string]interface{}{
+			"location": a.config.TimeZone.String(),
+			"value":    v,
+		}, "com.pingcap.simple.avro.Timestamp", nil
+	case mysql.TypeLonglong:
+		if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			v, ok := value.(uint64)
+			if !ok {
+				return nil, "", cerror.ErrEncodeFailed.
+					GenWithStack("unexpected type for the unsigned bigint value: %+v, tp: %+v", value, reflect.TypeOf(value))
+			}
+			return map[string]interface{}{
+				"value": int64(v),
+			}, "com.pingcap.simple.avro.UnsignedBigint", nil
+		}
 	}
 
 	switch v := value.(type) {
 	case uint64:
-		if v > math.MaxInt64 {
-			return strconv.FormatUint(v, 10), "string", nil
-		}
 		return int64(v), "long", nil
 	case int64:
 		return v, "long", nil
@@ -719,7 +736,16 @@ func encodeValue4Avro(
 	return value, "", nil
 }
 
-func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
+type timestamp struct {
+	// location specifies the location of the `timestamp` typed value,
+	// so that the consumer can convert it to any other timezone location.
+	Location string `json:"location"`
+	Value    string `json:"value"`
+}
+
+func encodeValue(
+	value interface{}, ft *types.FieldType, location string,
+) (interface{}, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -763,6 +789,11 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			value = bitValue
 		default:
 		}
+	case mysql.TypeTimestamp:
+		return timestamp{
+			Location: location,
+			Value:    value.(string),
+		}, nil
 	default:
 	}
 
@@ -860,6 +891,8 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 					return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 				}
 			}
+		case map[string]interface{}:
+			value = uint64(v["value"].(int64))
 		default:
 			value = v
 		}
@@ -907,6 +940,9 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case uint64:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
+	case mysql.TypeTimestamp:
+		v := value.(map[string]interface{})
+		value = v["value"].(string)
 	default:
 	}
 
