@@ -459,14 +459,7 @@ func (m *mounter) verifyChecksum(
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
-	if !ok {
-		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first))
-		return checksum, version, false, nil
-	}
-
-	if checksum == extra {
+	if ok && checksum == extra {
 		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
 			"execution phase",
 			zap.Uint32("checksum", checksum),
@@ -474,10 +467,13 @@ func (m *mounter) verifyChecksum(
 		return checksum, version, true, nil
 	}
 
-	log.Error("checksum mismatch",
-		zap.Uint32("checksum", checksum),
-		zap.Uint32("first", first),
-		zap.Uint32("extra", extra))
+	if isPreRow {
+		log.Warn("old value checksum mismatch, " +
+			"this may happen if Add / Drop Column DDL executed after the old value was inserted")
+		return checksum, version, true, nil
+	}
+
+	log.Error("checksum mismatch", zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
 	return checksum, version, false, nil
 }
 
