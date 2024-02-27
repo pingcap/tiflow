@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/master"
+	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -55,6 +56,7 @@ func main() {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
+	encrypt.InitCipher(cfg.SecretKey)
 
 	utils.LogHTTPProxies(true)
 

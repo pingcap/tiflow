@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -141,13 +140,14 @@ func (p *processor) AddTableSpan(
 
 	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
-		log.Panic("table start ts must not be 0",
+		log.Error("table start ts must not be 0",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
+		return false, cerror.ErrUnexpected.FastGenByArgs("table start ts must not be 0")
 	}
 
 	state, alreadyExist := p.sinkManager.r.GetTableState(span)
@@ -366,6 +366,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: sinkStats.CheckpointTs,
 			ResolvedTs:   sinkStats.ResolvedTs,
+			LastSyncedTs: sinkStats.LastSyncedTs,
 		},
 		State: state,
 		Stats: stats,
@@ -493,10 +494,11 @@ func (p *processor) Tick(
 		return err, nil
 	}
 	if p.upstream.IsClosed() {
-		log.Panic("upstream is closed",
+		log.Error("upstream is closed",
 			zap.Uint64("upstreamID", p.upstream.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
+		return cerror.ErrUnexpected.FastGenByArgs("upstream is closed"), nil
 	}
 	// skip this tick
 	if !p.upstream.IsNormal() {
@@ -624,7 +626,8 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(p.latestInfo.Config.BDRMode))
+		sortEngine, util.GetOrZero(p.latestInfo.Config.BDRMode),
+		util.GetOrZero(p.latestInfo.Config.EnableTableMonitor))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
@@ -710,29 +713,21 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, ddlStartTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	f, err := filter.NewFilter(p.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	serverCfg := config.GetGlobalServerConfig()
-	ddlPuller, err := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs,
-		serverCfg, p.changefeedID, schemaStorage,
-		f, false, /* isOwner */
+	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
+	ddlPuller := puller.NewDDLJobPuller(
+		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
 	)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
 	return nil
 }
@@ -1012,10 +1007,6 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 			failpoint.Inject("processorDDLResolved", nil)
 			if jobEntry.OpType == model.OpTypeResolved {
 				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
-			}
-			err := jobEntry.Err
-			if err != nil {
-				return errors.Trace(err)
 			}
 		}
 	})

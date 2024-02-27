@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/cdcpb"
-	"github.com/pingcap/tidb/store/mockstore/mockcopr"
+	"github.com/pingcap/tidb/pkg/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -129,9 +129,18 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	cluster.AddStore(3, invalidStore)
 	cluster.Bootstrap(11, []uint64{1, 2, 3}, []uint64{4, 5, 6}, 6)
 
-	client := NewSharedClient(model.ChangeFeedID{ID: "test"},
-		&config.ServerConfig{KVClient: &config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1}},
-		false, pdClient, grpcPool, regionCache, pdClock, lockResolver)
+	client := NewSharedClient(
+		model.ChangeFeedID{ID: "test"},
+		&config.ServerConfig{
+			KVClient: &config.KVClientConfig{
+				WorkerConcurrent:     1,
+				GrpcStreamConcurrent: 1,
+				AdvanceIntervalInMs:  10,
+			},
+			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
+		},
+		false, pdClient, grpcPool, regionCache, pdClock, lockResolver,
+	)
 
 	defer func() {
 		cancel()

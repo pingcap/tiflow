@@ -35,17 +35,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// OpVarAdminJob is the key of admin job in HTTP API
-	OpVarAdminJob = "admin-job"
-	// OpVarChangefeedID is the key of changefeed ID in HTTP API
-	OpVarChangefeedID = "cf-id"
-	// OpVarTargetCaptureID is the key of to-capture ID in HTTP API
-	OpVarTargetCaptureID = "target-cp-id"
-	// OpVarTableID is the key of table ID in HTTP API
-	OpVarTableID = "table-id"
-)
-
 type commonResp struct {
 	Status  bool   `json:"status"`
 	Message string `json:"message"`
@@ -130,7 +119,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	typeStr := req.Form.Get(OpVarAdminJob)
+	typeStr := req.Form.Get(api.OpVarAdminJob)
 	typ, err := strconv.ParseInt(typeStr, 10, 64)
 	if err != nil {
 		api.WriteError(w, http.StatusBadRequest,
@@ -138,7 +127,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	job := model.AdminJob{
-		CfID: model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID)),
+		CfID: model.DefaultChangeFeedID(req.Form.Get(api.OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
 	}
 
@@ -158,7 +147,7 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(api.OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
@@ -182,19 +171,19 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
-	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(api.OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
-	to := req.Form.Get(OpVarTargetCaptureID)
+	to := req.Form.Get(api.OpVarTargetCaptureID)
 	if err := model.ValidateChangefeedID(to); err != nil {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid target capture id: %s", to))
 		return
 	}
-	tableIDStr := req.Form.Get(OpVarTableID)
+	tableIDStr := req.Form.Get(api.OpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
 		api.WriteError(w, http.StatusBadRequest,
@@ -219,7 +208,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(api.OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))

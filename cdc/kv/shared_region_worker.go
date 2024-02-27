@@ -39,6 +39,7 @@ type eventItem struct {
 	state *regionFeedState
 }
 
+// NOTE: all regions must come from the same requestedTable, and regions will never be empty.
 type resolvedTsBatch struct {
 	ts      uint64
 	regions []*regionFeedState
@@ -74,7 +75,7 @@ func newSharedRegionWorker(c *SharedClient) *sharedRegionWorker {
 		client:        c,
 		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
 		statesManager: newRegionStateManager(-1),
-		metrics:       newRegionWorkerMetrics(c.changefeed),
+		metrics:       newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
 	}
 }
 
@@ -105,7 +106,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 	stepsToRemoved := state.markRemoved()
 	err := state.takeError()
 	if err != nil {
-		log.Info("region worker get a region error",
+		w.client.logRegionDetails("region worker get a region error",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Uint64("streamID", stream.streamID),
@@ -163,15 +164,25 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			return false
 		}
 	}
+	tableID := state.sri.requestedTable.span.TableID
 	log.Debug("region worker get an Event",
 		zap.String("namespace", w.changefeed.Namespace),
 		zap.String("changefeed", w.changefeed.ID),
 		zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
+		zap.Int64("tableID", tableID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
-	return handleEventEntry(x, startTs, state, w.metrics, emit)
+	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
+	if w.client.config.KVClient.AdvanceIntervalInMs > 0 {
+		w.advanceTableSpan(ctx, batch)
+	} else {
+		w.forwardResolvedTsToPullerFrontier(ctx, batch)
+	}
+}
+
+func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Context, batch resolvedTsBatch) {
 	resolvedSpans := make(map[SubscriptionID]*struct {
 		spans          []model.RegionComparableSpan
 		requestedTable *requestedTable
@@ -224,6 +235,48 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 			select {
 			case spansAndChan.requestedTable.eventCh <- x:
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
+			case <-ctx.Done():
+			}
+		}
+	}
+}
+
+func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolvedTsBatch) {
+	for _, state := range batch.regions {
+		if state.isStale() || !state.isInitialized() {
+			continue
+		}
+
+		regionID := state.getRegionID()
+		lastResolvedTs := state.getLastResolvedTs()
+		if batch.ts < lastResolvedTs {
+			log.Debug("The resolvedTs is fallen back in kvclient",
+				zap.String("namespace", w.changefeed.Namespace),
+				zap.String("changefeed", w.changefeed.ID),
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("resolvedTs", batch.ts),
+				zap.Uint64("lastResolvedTs", lastResolvedTs))
+			continue
+		}
+		state.updateResolvedTs(batch.ts)
+	}
+
+	rt := batch.regions[0].sri.requestedTable
+	now := time.Now().UnixMilli()
+	lastAdvance := rt.lastAdvanceTime.Load()
+	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && rt.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
+		ts := rt.rangeLock.CalculateMinResolvedTs()
+		if ts > rt.startTs {
+			revent := model.RegionFeedEvent{
+				Resolved: &model.ResolvedSpans{
+					Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
+					ResolvedTs: ts,
+				},
+			}
+			x := rt.associateSubscriptionID(revent)
+			select {
+			case rt.eventCh <- x:
+				w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
 			case <-ctx.Done():
 			}
 		}

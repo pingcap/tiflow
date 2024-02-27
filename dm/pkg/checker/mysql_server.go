@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 )
 
@@ -35,14 +35,14 @@ func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 }
 
 // SupportedVersion defines the MySQL/MariaDB version that DM/syncer supports
-// * 5.6.0 <= MySQL Version < 8.0.0.
+// * 5.6.0 <= MySQL Version < 8.1.0.
 var SupportedVersion = map[string]struct {
 	Min MySQLVersion
 	Max MySQLVersion
 }{
 	"mysql": {
 		MySQLVersion{5, 6, 0},
-		MySQLVersion{8, 0, 0},
+		MySQLVersion{8, 1, 0},
 	},
 }
 

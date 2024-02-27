@@ -73,11 +73,11 @@ func createMockETCD(dir string, host string) (*embed.Etcd, error) {
 	cfg := embed.NewConfig()
 	cfg.Dir = dir
 	lcurl, _ := url.Parse(host)
-	cfg.LCUrls = []url.URL{*lcurl}
-	cfg.ACUrls = []url.URL{*lcurl}
+	cfg.ListenClientUrls = []url.URL{*lcurl}
+	cfg.AdvertiseClientUrls = []url.URL{*lcurl}
 	lpurl, _ := url.Parse(tempurl.Alloc())
-	cfg.LPUrls = []url.URL{*lpurl}
-	cfg.APUrls = []url.URL{*lpurl}
+	cfg.ListenPeerUrls = []url.URL{*lpurl}
+	cfg.AdvertisePeerUrls = []url.URL{*lpurl}
 	cfg.InitialCluster = "default=" + lpurl.String()
 	cfg.Logger = "zap"
 	metricsURL, _ := url.Parse(tempurl.Alloc())
@@ -726,7 +726,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg
@@ -769,7 +769,7 @@ func (t *testServer) TestServerDataRace(c *C) {
 func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
 	t.Helper()
 
-	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t, err)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg

@@ -21,11 +21,12 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -85,6 +86,11 @@ func NewDDLSink(
 	}
 
 	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -199,6 +205,18 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 			}
 			return err
 		}
+	}
+
+	// we try to set cdc write source for the ddl
+	if err = pmysql.SetWriteSource(pctx, m.cfg, tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Error("Failed to rollback",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID), zap.Error(err))
+			}
+		}
+		return err
 	}
 
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {

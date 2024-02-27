@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
@@ -70,6 +71,7 @@ func New(
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
+	pdClock pdutil.Clock,
 ) (*SinkFactory, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -100,7 +102,7 @@ func New(
 		s.txnSink = mqs
 		s.category = CategoryMQ
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
-		storageSink, err := cloudstorage.NewDMLSink(ctx, changefeedID, sinkURI, cfg, errCh)
+		storageSink, err := cloudstorage.NewDMLSink(ctx, changefeedID, pdClock, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +112,7 @@ func New(
 		bs := blackhole.NewDMLSink()
 		s.rowSink = bs
 		s.category = CategoryBlackhole
-	case sink.PulsarScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
 		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			manager.NewPulsarTopicManager,
 			pulsarConfig.NewCreatorFactory, dmlproducer.NewPulsarDMLProducer)

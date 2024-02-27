@@ -23,7 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -92,7 +92,7 @@ type APIV2Helpers interface {
 		pdClient pd.Client,
 		gcServiceID string,
 		changefeedID model.ChangeFeedID,
-		checkpointTs uint64,
+		overrideCheckpointTs uint64,
 	) error
 
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
@@ -169,19 +169,21 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cfg.ID)
 	}
 
+	ts, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
 	// verify start ts
 	if cfg.StartTs == 0 {
-		ts, logical, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs(
-				"fail to get ts from pd client")
-		}
-		cfg.StartTs = oracle.ComposeTS(ts, logical)
+		cfg.StartTs = currentTSO
+	} else if cfg.StartTs > currentTSO {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid start-ts %v, larger than current tso %v", cfg.StartTs, currentTSO)
 	}
-
 	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
 	const ensureTTL = 60 * 60
-	if err := gc.EnsureChangefeedStartTsSafety(
+	if err = gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
@@ -233,9 +235,10 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := validator.Validate(ctx,
+	if err = validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
-		cfg.SinkURI, replicaCfg); err != nil {
+		cfg.SinkURI, replicaCfg, nil,
+	); err != nil {
 		return nil, err
 	}
 
@@ -361,7 +364,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
-			newInfo.SinkURI, newInfo.Config); err != nil {
+			newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
@@ -395,24 +398,38 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
+// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
+// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
+// or it is the checkpointTs of the changefeed before it is paused.
+// we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
-	checkpointTs uint64,
+	overrideCheckpointTs uint64,
 ) error {
-	if checkpointTs == 0 {
+	if overrideCheckpointTs == 0 {
 		return nil
+	}
+
+	ts, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
+	if overrideCheckpointTs > currentTSO {
+		return cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid checkpoint-ts %v, larger than current tso %v", overrideCheckpointTs, currentTSO)
 	}
 
 	// 1h is enough for resuming a changefeed.
 	gcTTL := int64(60 * 60)
-	err := gc.EnsureChangefeedStartTsSafety(
+	err = gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		gcServiceID,
 		changefeedID,
-		gcTTL, checkpointTs)
+		gcTTL, overrideCheckpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return cerror.ErrPDEtcdAPIError.Wrap(err)

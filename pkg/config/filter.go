@@ -15,13 +15,11 @@ package config
 
 import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
 )
 
 // FilterConfig represents filter config for a changefeed
 type FilterConfig struct {
-	Rules []string `toml:"rules" json:"rules"`
-	*filter.MySQLReplicationRules
+	Rules            []string           `toml:"rules" json:"rules"`
 	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
 	EventFilters     []*EventFilterRule `toml:"event-filters" json:"event-filters"`
 }

@@ -55,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -82,9 +83,8 @@ type consumerOption struct {
 	maxMessageBytes int
 	maxBatchSize    int
 
-	protocol            config.Protocol
-	enableTiDBExtension bool
-	enableRowChecksum   bool
+	protocol    config.Protocol
+	codecConfig *common.Config
 
 	// the replicaConfig of the changefeed which produce data to the kafka topic
 	replicaConfig *config.ReplicaConfig
@@ -158,53 +158,34 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	}
 
 	s = upstreamURI.Query().Get("protocol")
-	if s != "" {
-		protocol, err := config.ParseSinkProtocolFromString(s)
-		if err != nil {
-			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
-		}
-		o.protocol = protocol
+	if s == "" {
+		log.Panic("cannot found the protocol from the sink url")
 	}
-
-	s = upstreamURI.Query().Get("enable-tidb-extension")
-	if s != "" {
-		enableTiDBExtension, err := strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-tidb-extension of upstream-uri")
-		}
-		if enableTiDBExtension {
-			if o.protocol != config.ProtocolCanalJSON && o.protocol != config.ProtocolAvro {
-				log.Panic("enable-tidb-extension only work with canal-json / avro")
-			}
-		}
-		o.enableTiDBExtension = enableTiDBExtension
+	protocol, err := config.ParseSinkProtocolFromString(s)
+	if err != nil {
+		log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 	}
+	o.protocol = protocol
 
-	s = upstreamURI.Query().Get("enable-row-checksum")
-	if s != "" {
-		enableRowChecksum, err := strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-row-checksum of upstream-uri")
-		}
-		if enableRowChecksum {
-			if o.protocol != config.ProtocolAvro {
-				log.Panic("enable-row-checksum only work with avro")
-			}
-		}
-		o.enableRowChecksum = enableRowChecksum
-	}
-
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 	if configFile != "" {
-		replicaConfig := config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
+		err = cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
 			return cerror.Trace(err)
 		}
-		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
+		if _, err = filter.VerifyTableRules(replicaConfig.Filter); err != nil {
 			return cerror.Trace(err)
 		}
-		o.replicaConfig = replicaConfig
+	}
+	o.replicaConfig = replicaConfig
+
+	o.codecConfig = common.NewConfig(protocol)
+	if err = o.codecConfig.Apply(upstreamURI, o.replicaConfig); err != nil {
+		return cerror.Trace(err)
+	}
+	if protocol == config.ProtocolAvro {
+		o.codecConfig.AvroEnableWatermark = true
 	}
 
 	log.Info("consumer option adjusted",
@@ -216,10 +197,7 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		zap.String("groupID", o.groupID),
 		zap.Int("maxMessageBytes", o.maxMessageBytes),
 		zap.Int("maxBatchSize", o.maxBatchSize),
-		zap.Any("protocol", o.protocol),
-		zap.Bool("enableTiDBExtension", o.enableTiDBExtension),
-		zap.Bool("enableRowChecksum", o.enableRowChecksum))
-
+		zap.String("upstreamURI", upstreamURI.String()))
 	return nil
 }
 
@@ -462,8 +440,6 @@ type Consumer struct {
 
 	tz *time.Location
 
-	codecConfig *common.Config
-
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
@@ -489,18 +465,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		tableIDs: make(map[string]int64),
 	}
 
-	c.codecConfig = common.NewConfig(o.protocol)
-	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
-	}
-
-	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
-		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
-	}
-
-	if c.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
 		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
 		if err != nil {
 			return nil, err
@@ -508,13 +473,11 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		c.upstreamTiDB = db
 	}
 
-	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
-		if err != nil {
-			return nil, cerror.Trace(err)
-		}
-		c.eventRouter = eventRouter
+	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
+	if err != nil {
+		return nil, cerror.Trace(err)
 	}
+	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
@@ -531,7 +494,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		zap.Int("quota", memoryQuotaPerPartition))
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
@@ -614,11 +577,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		err     error
 	)
 
-	switch c.codecConfig.Protocol {
+	switch c.option.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		decoder, err = open.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		decoder, err = canal.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 		if err != nil {
 			return err
 		}
@@ -627,9 +590,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		if err != nil {
 			return cerror.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
+		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic, c.tz)
+	case config.ProtocolSimple:
+		decoder, err = simple.NewDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	default:
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.option.protocol))
 	}
 	if err != nil {
 		return cerror.Trace(err)
@@ -720,12 +685,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				var partitionID int64
-				if row.Table.IsPartition {
-					partitionID = row.Table.TableID
+				if row.TableInfo.IsPartitionTable() {
+					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				row.Table.TableID = tableID
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+				row.TableInfo.TableName.TableID = tableID
 
 				group, ok := eventGroups[tableID]
 				if !ok {
@@ -787,8 +752,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")

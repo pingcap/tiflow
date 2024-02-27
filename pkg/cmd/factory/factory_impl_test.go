@@ -32,7 +32,7 @@ import (
 func TestFactoryImplPdClient(t *testing.T) {
 	t.Parallel()
 	c := mock_factory.NewMockClientGetter(gomock.NewController(t))
-	f := factoryImpl{clientGetter: c}
+	f := factoryImpl{ClientGetter: c}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmdcontext.SetDefaultContext(ctx)

@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	mm "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -36,29 +36,22 @@ func TestInsert(t *testing.T) {
 	sql := `create table test.t(
 		id int primary key,
 		name varchar(32),
-		tiny tinyint unsigned,
+		tiny tinyint,
 		comment text,
 		bb blob)`
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "cdc",
-			Table:  "person",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
-			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
-			{Name: "bb", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
-		},
-		ColInfos: colInfos,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{Name: "id", Value: 1},
+			{Name: "name", Value: "Bob"},
+			{Name: "tiny", Value: 255},
+			{Name: "comment", Value: []byte("测试")},
+			{Name: "bb", Value: []byte("测试blob")},
+		}, tableInfo),
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
@@ -69,8 +62,8 @@ func TestInsert(t *testing.T) {
 	header := entry.GetHeader()
 	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
 	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_INSERT, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
@@ -130,24 +123,17 @@ func TestUpdate(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		Columns: []*model.Column{
+		Columns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-		},
-		PreColumns: []*model.Column{
+		}, tableInfo),
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 2},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Nancy"},
-		},
-		ColInfos: colInfos,
+		}, tableInfo),
 	}
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := newCanalEntryBuilder(codecConfig)
@@ -158,8 +144,8 @@ func TestUpdate(t *testing.T) {
 	header := entry.GetHeader()
 	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
 	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_UPDATE, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
@@ -219,19 +205,12 @@ func TestDelete(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
-		PreColumns: []*model.Column{
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		},
-		ColInfos: colInfos,
+		}, tableInfo),
 	}
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := newCanalEntryBuilder(codecConfig)
@@ -239,8 +218,8 @@ func TestDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_DELETE, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)

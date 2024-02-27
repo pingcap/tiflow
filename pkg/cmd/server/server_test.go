@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	ticonfig "github.com/pingcap/tidb/config"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
@@ -164,6 +164,7 @@ func TestParseCfg(t *testing.T) {
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -203,9 +204,12 @@ func TestParseCfg(t *testing.T) {
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -308,6 +312,7 @@ check-balance-interval = "10s"
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -346,9 +351,12 @@ check-balance-interval = "10s"
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -442,6 +450,7 @@ cert-allowed-cn = ["dd","ee"]
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -481,9 +490,12 @@ cert-allowed-cn = ["dd","ee"]
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -542,6 +554,10 @@ unknown3 = 3
 		CDCV2: &config.CDCV2{
 			Enable:          false,
 			MetaStoreConfig: config.MetaStoreConfiguration{},
+		},
+		Puller: &config.PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 		},
 	}, o.serverConfig.Debug)
 }

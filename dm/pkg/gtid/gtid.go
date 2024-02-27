@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -40,7 +39,8 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 	)
 
 	if len(flavor) == 0 && len(gtidStr) == 0 {
-		return nil, errors.Errorf("empty flavor with empty gtid is invalid")
+		// regard as mysql, mariadb always enabled gtid
+		return mysql.ParseGTIDSet(mysql.MySQLFlavor, "")
 	}
 
 	fla := flavor

@@ -27,7 +27,7 @@ import (
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -838,7 +838,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 	// prepare target db config
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustDBErr := AdjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+	if adjustDBErr := AdjustTargetDBSessionCfg(newCtx, toDBCfg); adjustDBErr != nil {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}
@@ -900,7 +900,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 	}
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustDBErr := AdjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+	if adjustDBErr := AdjustTargetDBSessionCfg(newCtx, toDBCfg); adjustDBErr != nil {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}

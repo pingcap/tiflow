@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
@@ -29,7 +30,18 @@ import (
 
 func newSharedClientForTestSharedRegionWorker() *SharedClient {
 	// sharedRegionWorker only requires `SharedClient.onRegionFail`.
-	return NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
+	cfg := &config.ServerConfig{
+		KVClient: &config.KVClientConfig{
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 2,
+			AdvanceIntervalInMs:  10,
+		},
+		Debug: &config.DebugConfig{
+			Puller: &config.PullerConfig{LogRegionDetails: false},
+		},
+	}
+	return NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 }
 
 // For UPDATE SQL, its prewrite event has both value and old value.
@@ -181,14 +193,4 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(10), s1.getLastResolvedTs())
 	require.Equal(t, uint64(11), s2.getLastResolvedTs())
 	require.Equal(t, uint64(8), s3.getLastResolvedTs())
-
-	select {
-	case event := <-eventCh:
-		require.Equal(t, uint64(0), event.RegionID)
-		require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
-		require.Equal(t, 1, len(event.Resolved.Spans))
-		require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
-	case <-time.NewTimer(100 * time.Millisecond).C:
-		require.True(t, false, "must get an event")
-	}
 }
