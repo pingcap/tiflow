@@ -302,6 +302,13 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 ) (string, error) {
 	dir := f.generateDataDirPath(tbl, date)
 	name, err := f.generateDataFileName(ctx, tbl, date)
+	log.Info("generate data file path",
+		zap.String("namespace", f.changefeedID.Namespace),
+		zap.String("changefeedID", f.changefeedID.ID),
+		zap.String("table", tbl.TableNameWithPhysicTableID.String()),
+		zap.String("dir", dir),
+		zap.String("name", name))
+
 	if err != nil {
 		return "", err
 	}

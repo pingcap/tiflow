@@ -259,6 +259,10 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 
 		s.statistics.ObserveRows(txn.Event.Rows...)
+		log.Info("write events to cloud storage",
+			zap.Uint64("seq", seq),
+			zap.Any("table", tbl),
+			zap.Any("event", txn.Event))
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.alive.msgCh.In() <- eventFragment{
 			seqNumber:      seq,
