@@ -164,8 +164,8 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 	}
 
 	input := &avroEncodeInput{
-		columns:  e.Columns,
-		colInfos: e.ColInfos,
+		columns:  e.GetColumns(),
+		colInfos: e.TableInfo.GetColInfosForRowChangedEvent(),
 	}
 	if len(input.columns) == 0 {
 		return nil, nil

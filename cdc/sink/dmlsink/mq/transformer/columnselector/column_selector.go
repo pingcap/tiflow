@@ -66,8 +66,9 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 	retainedColumns := make(map[string]struct{}, len(event.Columns))
 	if len(event.Columns) != 0 {
 		for idx, column := range event.Columns {
-			if s.columnM.MatchColumn(column.Name) {
-				retainedColumns[column.Name] = struct{}{}
+			colName := event.TableInfo.ForceGetColumnName(column.ColumnID)
+			if s.columnM.MatchColumn(colName) {
+				retainedColumns[colName] = struct{}{}
 				continue
 			}
 			event.Columns[idx] = nil
@@ -83,8 +84,9 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 	if len(event.PreColumns) != 0 {
 		clear(retainedColumns)
 		for idx, column := range event.PreColumns {
-			if s.columnM.MatchColumn(column.Name) {
-				retainedColumns[column.Name] = struct{}{}
+			colName := event.TableInfo.ForceGetColumnName(column.ColumnID)
+			if s.columnM.MatchColumn(colName) {
+				retainedColumns[colName] = struct{}{}
 				continue
 			}
 			event.PreColumns[idx] = nil

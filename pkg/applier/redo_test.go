@@ -23,6 +23,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	mysqlParser "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	mysqlDDL "github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql"
@@ -125,55 +126,54 @@ func TestApply(t *testing.T) {
 		mysqlDDL.GetDBConnImpl = getDDLDBConnBak
 	}()
 
+	tableInfo := model.BuildTableInfo("test", "t1", []*model.Column{
+		{
+			Name: "a",
+			Type: mysqlParser.TypeLong,
+			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
+		}, {
+			Name: "b",
+			Type: mysqlParser.TypeString,
+			Flag: 0,
+		},
+	}, [][]int{{0}})
 	dmls := []*model.RowChangedEvent{
 		{
-			StartTs:  1100,
-			CommitTs: 1200,
-			TableInfo: &model.TableInfo{
-				TableName:          model.TableName{Schema: "test", Table: "t1"},
-				IndexColumnsOffset: [][]int{{0}},
-			},
-			Columns: []*model.Column{
+			StartTs:   1100,
+			CommitTs:  1200,
+			TableInfo: tableInfo,
+			Columns: model.Columns2ColumnDatas([]*model.Column{
 				{
 					Name:  "a",
 					Value: 1,
-					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "2",
-					Flag:  0,
 				},
-			},
+			}, tableInfo),
 		},
 		{
-			StartTs:  1200,
-			CommitTs: resolvedTs,
-			TableInfo: &model.TableInfo{
-				TableName:          model.TableName{Schema: "test", Table: "t1"},
-				IndexColumnsOffset: [][]int{{0}},
-			},
-			PreColumns: []*model.Column{
+			StartTs:   1200,
+			CommitTs:  resolvedTs,
+			TableInfo: tableInfo,
+			PreColumns: model.Columns2ColumnDatas([]*model.Column{
 				{
 					Name:  "a",
 					Value: 1,
-					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "2",
-					Flag:  0,
 				},
-			},
-			Columns: []*model.Column{
+			}, tableInfo),
+			Columns: model.Columns2ColumnDatas([]*model.Column{
 				{
 					Name:  "a",
 					Value: 2,
-					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "3",
-					Flag:  0,
 				},
-			},
+			}, tableInfo),
 		},
 	}
 	for _, dml := range dmls {

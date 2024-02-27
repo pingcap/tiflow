@@ -138,7 +138,7 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	}
 	password := os.Getenv("MYSQL_PSWD")
 
-	cfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	cfg1, err := config.SourceCfgFromYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	// fix empty map after marshal/unmarshal becomes nil
 	cfg1.From.Adjust()
@@ -195,7 +195,7 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 	s.cfg.V1SourcesPath = c.MkDir()
 	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)
 
-	cfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	cfg1, err := config.SourceCfgFromYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	cfg2 := cfg1.Clone()
 	cfg2.SourceID = "mysql-replica-02"

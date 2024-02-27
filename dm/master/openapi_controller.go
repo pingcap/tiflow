@@ -370,7 +370,7 @@ func (s *Server) checkTask(ctx context.Context, subtaskCfgList []*config.SubTask
 func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openapi.Task) ([]*config.SubTaskConfig, string, error) {
 	// prepare target db config
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if err := AdjustTargetDB(ctx, toDBCfg); err != nil {
+	if err := AdjustTargetDBSessionCfg(ctx, toDBCfg); err != nil {
 		return nil, "", err
 	}
 	// prepare source db config source name -> source config
@@ -473,7 +473,7 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	}
 
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustErr := AdjustTargetDB(ctx, toDBCfg); adjustErr != nil {
+	if adjustErr := AdjustTargetDBSessionCfg(ctx, toDBCfg); adjustErr != nil {
 		if !ignoreCannotConnectError(adjustErr) {
 			return adjustErr
 		}

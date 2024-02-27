@@ -185,8 +185,41 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.Equal(t, DDLTypeCreate, dec.msg.Type)
 
 			event, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+
+			addColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ADD COLUMN `nn` INT")
+			m, err = enc.EncodeDDLEvent(addColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 5)
+
+			dropColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` DROP COLUMN `nn`")
+			m, err = enc.EncodeDDLEvent(dropColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
@@ -200,6 +233,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 			_, _, err = dec.HasNext()
 			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
@@ -215,13 +249,398 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 			_, _, err = dec.HasNext()
 			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			helper.Tk().MustExec("drop table TBL1")
+			setDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` SET DEFAULT _UTF8MB4'a'")
+
+			m, err = enc.EncodeDDLEvent(setDefaultDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "payload" {
+					require.Equal(t, "a", col.DefaultValue)
+				}
+			}
+
+			dropDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` DROP DEFAULT")
+			m, err = enc.EncodeDDLEvent(dropDefaultDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "payload" {
+					require.Nil(t, col.DefaultValue)
+				}
+			}
+
+			autoIncrementDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` AUTO_INCREMENT = 5")
+			m, err = enc.EncodeDDLEvent(autoIncrementDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			modifyColumnNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NULL")
+			m, err = enc.EncodeDDLEvent(modifyColumnNullDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "a" {
+					require.True(t, !mysql.HasNotNullFlag(col.GetFlag()))
+				}
+			}
+
+			modifyColumnNotNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NOT NULL")
+			m, err = enc.EncodeDDLEvent(modifyColumnNotNullDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			for _, col := range event.TableInfo.Columns {
+				if col.Name.O == "a" {
+					require.True(t, mysql.HasNotNullFlag(col.GetFlag()))
+				}
+			}
+
+			addIndexDDLEvent := helper.DDL2Event("CREATE INDEX `idx_a` ON `TBL1` (`a`)")
+			m, err = enc.EncodeDDLEvent(addIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeCIndex, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			renameIndexDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` RENAME INDEX `idx_a` TO `new_idx_a`")
+			m, err = enc.EncodeDDLEvent(renameIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+			hasNewIndex := false
+			noOldIndex := true
+			for _, index := range event.TableInfo.Indices {
+				if index.Name.O == "new_idx_a" {
+					hasNewIndex = true
+				}
+				if index.Name.O == "idx_a" {
+					noOldIndex = false
+				}
+			}
+			require.True(t, hasNewIndex)
+			require.True(t, noOldIndex)
+
+			indexVisibilityDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ALTER INDEX `new_idx_a` INVISIBLE")
+			m, err = enc.EncodeDDLEvent(indexVisibilityDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `new_idx_a` ON `TBL1`")
+			m, err = enc.EncodeDDLEvent(dropIndexDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeDIndex, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			truncateTableDDLEvent := helper.DDL2Event("TRUNCATE TABLE TBL1")
+			m, err = enc.EncodeDDLEvent(truncateTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeTruncate, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			multiSchemaChangeDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ADD COLUMN `new_col` INT, ADD INDEX `idx_new_col` (`a`)")
+			m, err = enc.EncodeDDLEvent(multiSchemaChangeDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(event.TableInfo.Indices))
+			require.Equal(t, 5, len(event.TableInfo.Columns))
+
+			multiSchemaChangeDropDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 DROP COLUMN `new_col`, DROP INDEX `idx_new_col`")
+			m, err = enc.EncodeDDLEvent(multiSchemaChangeDropDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			renameTableDDLEvent := helper.DDL2Event("RENAME TABLE TBL1 TO TBL2")
+			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeRename, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			helper.Tk().MustExec("set @@tidb_allow_remove_auto_inc = 1")
+			renameColumnDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHANGE COLUMN `id` `id2` INT")
+			m, err = enc.EncodeDDLEvent(renameColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			partitionTableDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
+			m, err = enc.EncodeDDLEvent(partitionTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			addPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))")
+			m, err = enc.EncodeDDLEvent(addPartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 DROP PARTITION p2")
+			m, err = enc.EncodeDDLEvent(dropPartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			truncatePartitionDDLevent := helper.DDL2Event("ALTER TABLE TBL2 TRUNCATE PARTITION p1")
+			m, err = enc.EncodeDDLEvent(truncatePartitionDDLevent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			reorganizePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
+			m, err = enc.EncodeDDLEvent(reorganizePartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			removePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REMOVE PARTITIONING")
+			m, err = enc.EncodeDDLEvent(removePartitionDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			alterCharsetCollateDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin")
+			m, err = enc.EncodeDDLEvent(alterCharsetCollateDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeAlter, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
+
+			dropTableDDLEvent := helper.DDL2Event("DROP TABLE TBL2")
+			m, err = enc.EncodeDDLEvent(dropTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+			require.Equal(t, DDLTypeErase, dec.msg.Type)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 4, len(event.TableInfo.Columns))
 		}
 	}
 }
@@ -385,11 +804,11 @@ func TestEncodeIntegerTypes(t *testing.T) {
 
 	createTableDDL := `create table test.t(
 		id int primary key auto_increment,
-		a tinyint, b tinyint unsigned,
-		c smallint, d smallint unsigned,
-		e mediumint, f mediumint unsigned,
-		g int, h int unsigned,
-		i bigint, j bigint unsigned)`
+ 		a tinyint, b tinyint unsigned,
+ 		c smallint, d smallint unsigned,
+ 		e mediumint, f mediumint unsigned,
+ 		g int, h int unsigned,
+ 		i bigint, j bigint unsigned)`
 	ddlEvent := helper.DDL2Event(createTableDDL)
 
 	sql := `insert into test.t values(
@@ -403,11 +822,11 @@ func TestEncodeIntegerTypes(t *testing.T) {
 
 	sql = `insert into test.t values (
 		2,
-		127, 255,
-		32767, 65535,
-		8388607, 16777215,
-		2147483647, 4294967295,
-		9223372036854775807, 18446744073709551615)`
+ 		127, 255,
+ 		32767, 65535,
+ 		8388607, 16777215,
+ 		2147483647, 4294967295,
+ 		9223372036854775807, 18446744073709551615)`
 	maxValues := helper.DML2Event(sql, "test", "t")
 
 	ctx := context.Background()
@@ -439,8 +858,10 @@ func TestEncodeIntegerTypes(t *testing.T) {
 		_, err = dec.NextDDLEvent()
 		require.NoError(t, err)
 
-		events := []*model.RowChangedEvent{minValues, maxValues}
-		for _, event := range events {
+		for _, event := range []*model.RowChangedEvent{
+			minValues,
+			maxValues,
+		} {
 			err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
 			require.NoError(t, err)
 
@@ -457,17 +878,17 @@ func TestEncodeIntegerTypes(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 
-			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 
 			for _, expected := range event.Columns {
-				decoded, ok := decodedColumns[expected.Name]
+				colName := event.TableInfo.ForceGetColumnName(expected.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
 				require.EqualValues(t, expected.Value, decoded.Value)
-				require.Equal(t, expected.Charset, decoded.Charset)
-				require.Equal(t, expected.Collation, decoded.Collation)
 			}
 		}
 	}
@@ -536,17 +957,16 @@ func TestEncoderOtherTypes(t *testing.T) {
 		decodedRow, err := dec.NextRowChangedEvent()
 		require.NoError(t, err)
 
-		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+		decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 		for _, column := range decodedRow.Columns {
-			decodedColumns[column.Name] = column
+			colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+			decodedColumns[colName] = column
 		}
-
 		for _, expected := range row.Columns {
-			decoded, ok := decodedColumns[expected.Name]
+			colName := row.TableInfo.ForceGetColumnName(expected.ColumnID)
+			decoded, ok := decodedColumns[colName]
 			require.True(t, ok)
-			require.Equal(t, expected.Value, decoded.Value)
-			require.Equal(t, expected.Charset, decoded.Charset)
-			require.Equal(t, expected.Collation, decoded.Collation)
+			require.EqualValues(t, expected.Value, decoded.Value)
 		}
 	}
 }
@@ -679,7 +1099,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 
 			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
-				obtainedDefaultValues[col.Name.O] = entry.GetColumnDefaultValue(col)
+				obtainedDefaultValues[col.Name.O] = model.GetColumnDefaultValue(col)
 				switch col.GetType() {
 				case mysql.TypeFloat, mysql.TypeDouble:
 					require.Equal(t, 0, col.GetDecimal())
@@ -687,7 +1107,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				}
 			}
 			for _, col := range ddlEvent.TableInfo.Columns {
-				expected := entry.GetColumnDefaultValue(col)
+				expected := model.GetColumnDefaultValue(col)
 				obtained := obtainedDefaultValues[col.Name.O]
 				require.Equal(t, expected, obtained)
 			}
@@ -707,6 +1127,14 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.True(t, hasNext)
 				require.Equal(t, model.MessageTypeRow, messageType)
 
+				if event.IsDelete() {
+					require.Equal(t, dec.msg.Type, DMLTypeDelete)
+				} else if event.IsUpdate() {
+					require.Equal(t, dec.msg.Type, DMLTypeUpdate)
+				} else {
+					require.Equal(t, dec.msg.Type, DMLTypeInsert)
+				}
+
 				decodedRow, err := dec.NextRowChangedEvent()
 				require.NoError(t, err)
 
@@ -715,29 +1143,27 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
 				require.Equal(t, decodedRow.PhysicalTableID, event.PhysicalTableID)
 
-				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+				decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {
-					decodedColumns[column.Name] = column
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedColumns[colName] = column
 				}
 				for _, col := range event.Columns {
-					decoded, ok := decodedColumns[col.Name]
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.Equal(t, col.Type, decoded.Type)
-					require.Equal(t, col.Charset, decoded.Charset)
-					require.Equal(t, col.Collation, decoded.Collation)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
 
-				decodedPreviousColumns := make(map[string]*model.Column, len(decodedRow.PreColumns))
+				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
 				for _, column := range decodedRow.PreColumns {
-					decodedPreviousColumns[column.Name] = column
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedPreviousColumns[colName] = column
 				}
 				for _, col := range event.PreColumns {
-					decoded, ok := decodedPreviousColumns[col.Name]
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedPreviousColumns[colName]
 					require.True(t, ok)
-					require.Equal(t, col.Type, decoded.Type)
-					require.Equal(t, col.Charset, decoded.Charset)
-					require.Equal(t, col.Collation, decoded.Collation)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
 			}
@@ -847,28 +1273,26 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), updateEvent.TableInfo.GetSchemaName())
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), updateEvent.TableInfo.GetTableName())
 
-			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 			for _, col := range updateEvent.Columns {
-				decoded, ok := decodedColumns[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.Equal(t, col.Type, decoded.Type)
-				require.Equal(t, col.Charset, decoded.Charset)
-				require.Equal(t, col.Collation, decoded.Collation)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
-				decodedColumns[column.Name] = column
+				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+				decodedColumns[colName] = column
 			}
 			for _, col := range updateEvent.PreColumns {
-				decoded, ok := decodedColumns[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.Equal(t, col.Type, decoded.Type)
-				require.Equal(t, col.Charset, decoded.Charset)
-				require.Equal(t, col.Collation, decoded.Collation)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 		}
@@ -921,9 +1345,11 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				obtainedValues[name] = value
 			}
 			for _, col := range updateEvent.Columns {
-				if col.Flag.IsHandleKey() {
-					require.Contains(t, dec.msg.Data, col.Name)
-					obtained := obtainedValues[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+				if colFlag.IsHandleKey() {
+					require.Contains(t, dec.msg.Data, colName)
+					obtained := obtainedValues[colName]
 					switch v := obtained.(type) {
 					case string:
 						var err error
@@ -932,7 +1358,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 					require.EqualValues(t, col.Value, obtained)
 				} else {
-					require.NotContains(t, dec.msg.Data, col.Name)
+					require.NotContains(t, dec.msg.Data, colName)
 				}
 			}
 
@@ -941,9 +1367,11 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				obtainedValues[name] = value
 			}
 			for _, col := range updateEvent.PreColumns {
-				if col.Flag.IsHandleKey() {
-					require.Contains(t, dec.msg.Old, col.Name)
-					obtained := obtainedValues[col.Name]
+				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+				if colFlag.IsHandleKey() {
+					require.Contains(t, dec.msg.Old, colName)
+					obtained := obtainedValues[colName]
 					switch v := obtained.(type) {
 					case string:
 						var err error
@@ -952,7 +1380,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 					require.Equal(t, col.Value, obtained)
 				} else {
-					require.NotContains(t, dec.msg.Old, col.Name)
+					require.NotContains(t, dec.msg.Old, colName)
 				}
 			}
 		}

@@ -193,5 +193,14 @@ func CheckErr(err error) {
 	if cerror.IsCliUnprintableError(err) {
 		err = nil
 	}
+	if err != nil {
+		if strings.Contains(err.Error(), string(cerror.ErrCredentialNotFound.RFCCode())) {
+			msg := ", please use the following command to create a new one:\n" +
+				"1. specify the credential in the command line with `cdc cli --user <user> --password <password>`.\n" +
+				"2. specify the credential in the environment variables with `export TICDC_USER=<user> TICDC_PASSWORD=<password>`.\n" +
+				"3. `cdc cli configure-credentials` to initialize the default credential config.\n"
+			err = errors.New(err.Error() + msg)
+		}
+	}
 	cobra.CheckErr(err)
 }

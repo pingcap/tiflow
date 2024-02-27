@@ -82,7 +82,7 @@ func TestRequestHeader(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	}))
-	req := NewRequestWithClient(&url.URL{Path: "/test"}, "", nil).WithMethod(HTTPMethodGet)
+	req := newRequestWithClient(&url.URL{Path: "/test"}, "", nil).WithMethod(HTTPMethodGet)
 	req.WithHeader("signature", "test-header2")
 	req.WithHeader("signature", "test-header1")
 	req.c.Client = cli

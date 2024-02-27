@@ -130,7 +130,9 @@ const (
     "cert-path": "",
     "key-path": "",
     "cert-allowed-cn": null,
-    "mtls": false
+    "mtls": false,
+    "client-user-required": false,
+    "client-allowed-user": null
   },
   "kv-client": {
     "enable-multiplexing": true,

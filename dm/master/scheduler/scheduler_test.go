@@ -119,7 +119,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 			}
 		}
 	)
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
@@ -833,7 +833,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 		wg           sync.WaitGroup
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 
@@ -993,7 +993,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		workerAddr4  = "127.0.0.1:18462"
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
@@ -1131,7 +1131,7 @@ func (t *testSchedulerSuite) TestLastBound() {
 		workerName4 = "dm-worker-4"
 	)
 
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1202,7 +1202,7 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 		workerName1 = "dm-worker-1"
 	)
 
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1875,7 +1875,7 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -1938,7 +1938,7 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -2007,7 +2007,7 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 		Source: sourceID1,
 		Worker: workerName1,
 	}
-	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	s.etcdCli = t.etcdTestCli
 	sourceCfg.SourceID = sourceID1
@@ -2058,7 +2058,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 		keepAliveTTL = int64(5)
 		ctx          = context.Background()
 	)
-	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	sourceCfg1, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 
