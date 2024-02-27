@@ -35,7 +35,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
@@ -1001,8 +1000,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 }
 
 func TestVerifyChecksumTime(t *testing.T) {
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
 
@@ -1013,20 +1012,19 @@ func TestVerifyChecksumTime(t *testing.T) {
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
 	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
 
 	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
 	helper.Tk().MustExec("use test")
 
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
 	helper.Tk().MustExec("set global time_zone = '-5:00'")
 
