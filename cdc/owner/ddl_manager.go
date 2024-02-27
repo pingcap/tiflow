@@ -417,6 +417,7 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 	res := make([]*model.DDLEvent, 0, 1)
 	for _, events := range m.pendingDDLs {
+		log.Info("getAllTableNextDDL", zap.Any("events", events))
 		if len(events) > 0 {
 			res = append(res, events[0])
 		}
@@ -428,11 +429,11 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	barrier := schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs)
 	tableBarrierMap := make(map[model.TableID]model.Ts)
+	log.Info("ddlManager.barrier start")
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
 		ddls = append(ddls, m.justSentDDL)
 	}
-	log.Info("ddlManager.barrier start")
 	for _, ddl := range ddls {
 		if ddl.CommitTs < barrier.MinTableBarrierTs {
 			barrier.MinTableBarrierTs = ddl.CommitTs
