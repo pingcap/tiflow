@@ -520,6 +520,11 @@ func (s *EventSorter) cleanTable(
 	db := s.dbs[getDB(span, len(s.dbs))]
 	err := db.DeleteRange(start, end, &pebble.WriteOptions{Sync: false})
 	if err != nil {
+		log.Info("clean stale table range fails",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Error(err))
 		return err
 	}
 
