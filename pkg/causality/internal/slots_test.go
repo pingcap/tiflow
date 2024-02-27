@@ -63,7 +63,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 		freeNodeChan <- newNode()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	// test concurrent add and remove won't panic
