@@ -211,8 +211,7 @@ func main() {
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID
-	, "consumer group id")
+	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID, "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
