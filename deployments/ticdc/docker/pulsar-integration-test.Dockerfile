@@ -10,5 +10,5 @@ RUN yum install -y nc
 RUN mv pulsar /usr/local
 USER jenkins
 COPY --from=jdk_container  /usr/java /usr/java
-ENV PATH="/usr/java/openjdk-17/bin:${PATH}"
+ENV PATH="/usr/java/openjdk-17/bin:/usr/local/pulsar/bin:${PATH}"
 
