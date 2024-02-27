@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -65,6 +66,15 @@ type ConsumerOption struct {
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+
+	oauth2PrivateKey string
+	oauth2IssuerUrl  string
+	privateKey       string
+	oauth2ClientId   string
+	oauth2Audience   string
+
+	mtlsAuthTLSCertificatePath string
+	mtlsAuthTLSPrivateKeyPath  string
 
 	downstreamURI string
 	partitionNum  int
@@ -143,7 +153,12 @@ func main() {
 	cmd.Flags().StringVar(&consumerOption.key, "key", "", "Private key path for pulsar SSL connection")
 	cmd.Flags().StringVar(&consumerOption.logPath, "log-file", "cdc_pulsar_consumer.log", "log file path")
 	cmd.Flags().StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
-
+	cmd.Flags().StringVar(&consumerOption.oauth2PrivateKey, "oauth2-private-key", "", "oauth2 private key path")
+	cmd.Flags().StringVar(&consumerOption.oauth2IssuerUrl, "oauth2-issuer-url", "", "oauth2 issuer url")
+	cmd.Flags().StringVar(&consumerOption.oauth2ClientId, "oauth2-client-id", "", "oauth2 client id")
+	cmd.Flags().StringVar(&consumerOption.oauth2Audience, "oauth2-audience", "", "oauth2 audience")
+	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-certificate-path", "", "mtls certificate path")
+	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-private-key-path", "", "mtls private key path")
 	if err := cmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
@@ -238,14 +253,42 @@ func run(cmd *cobra.Command, args []string) {
 
 // NewPulsarConsumer creates a pulsar consumer
 func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) {
-	pulsarURL := "pulsar" + "://" + option.address[0]
+	var pulsarURL string
+	if len(option.ca) != 0 {
+		pulsarURL = "pulsar+ssl" + "://" + option.address[0]
+	} else {
+		pulsarURL = "pulsar" + "://" + option.address[0]
+	}
 	topicName := option.topic
 	subscriptionName := "pulsar-test-subscription"
 
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
+	clientOption := pulsar.ClientOptions{
 		URL:    pulsarURL,
 		Logger: tpulsar.NewPulsarLogger(log.L()),
-	})
+	}
+	if len(option.ca) != 0 {
+		clientOption.TLSTrustCertsFilePath = option.ca
+		clientOption.TLSCertificateFile = option.cert
+		clientOption.TLSKeyFilePath = option.key
+	}
+
+	var authentication pulsar.Authentication
+	if len(option.oauth2PrivateKey) != 0 {
+		authentication = pulsar.NewAuthenticationOAuth2(map[string]string{
+			auth.ConfigParamIssuerURL: option.oauth2IssuerUrl,
+			auth.ConfigParamAudience:  option.oauth2Audience,
+			auth.ConfigParamKeyFile:   option.oauth2PrivateKey,
+			auth.ConfigParamClientID:  option.oauth2ClientId,
+			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
+		})
+		clientOption.Authentication = authentication
+	}
+	if len(option.mtlsAuthTLSCertificatePath) != 0 {
+		pulsar.NewAuthenticationTLS(option.mtlsAuthTLSCertificatePath, option.mtlsAuthTLSPrivateKeyPath)
+		clientOption.Authentication = authentication
+	}
+
+	client, err := pulsar.NewClient(clientOption)
 	if err != nil {
 		log.Fatal("can't create pulsar client: %v", zap.Error(err))
 	}
