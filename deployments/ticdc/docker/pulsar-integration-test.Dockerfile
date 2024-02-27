@@ -5,7 +5,9 @@ RUN curl https://archive.apache.org/dist/pulsar/pulsar-3.2.0/apache-pulsar-3.2.0
     tar -xvf pulsar.tar.gz && \
     mv apache-pulsar-3.2.0 pulsar && \
     rm pulsar.tar.gz
+USER root
 RUN yum install -y nc
+USER jenkins
 COPY --from=jdk_container  /usr/java /usr/java
 ENV PATH="/usr/java/openjdk-17/bin:${PATH}"
 
