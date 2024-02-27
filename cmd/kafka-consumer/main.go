@@ -776,7 +776,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Warn("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.String("DDL", ddl.Query))
 		return
 	}
 
@@ -785,12 +785,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.ddlWithMaxCommitTs {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs))
 	c.ddlWithMaxCommitTs = ddl
 }
 
@@ -872,7 +872,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if todoDDL.CommitTs < minPartitionResolvedTs {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
+					zap.String("DDL", todoDDL.Query))
 			}
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
