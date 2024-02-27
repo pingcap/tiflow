@@ -22,9 +22,9 @@ pd_port=${2}
 is_tls=${3:-false}
 
 if [ "$is_tls" == "true" ]; then
-    tso=$(run_cdc_cli tso query --pd=https://${pd_host}:${pd_port})
+	tso=$(run_cdc_cli tso query --pd=https://${pd_host}:${pd_port})
 else
-    tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
+	tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
 fi
 
 # make sure get tso only

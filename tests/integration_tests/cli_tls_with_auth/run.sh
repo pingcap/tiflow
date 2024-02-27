@@ -29,7 +29,7 @@ function check_changefeed_count() {
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR  --multiple-upstream-pd true
+	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 	start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
 	cd $WORK_DIR
@@ -117,23 +117,23 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	# changefeed_info=$(curl -s -X GET "https://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
-	# if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
-	# 	echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-	# 	exit 1
-	# fi
-	# if [ "$SINK_TYPE" == "kafka" ]; then
-	# 	if [[ ! $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
-	# 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-	# 		exit 1
-	# 	fi
-	# else
-	# 	# Currently, MySQL changefeed does not support scale out feature.
-	# 	if [[ $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
-	# 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-	# 		exit 1
-	# 	fi
-	# fi
+	changefeed_info=$(curl -s -X GET "https://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem" 2>&1)
+	if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
+		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+		exit 1
+	fi
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		if [[ ! $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
+	else
+		# Currently, MySQL changefeed does not support scale out feature.
+		if [[ $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
+	fi
 
 	# Resume changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
