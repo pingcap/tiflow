@@ -432,7 +432,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	if m.justSentDDL != nil {
 		ddls = append(ddls, m.justSentDDL)
 	}
-
+	log.Info("ddlManager.barrier start")
 	for _, ddl := range ddls {
 		if ddl.CommitTs < barrier.MinTableBarrierTs {
 			barrier.MinTableBarrierTs = ddl.CommitTs
@@ -455,15 +455,21 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 		} else {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
+			log.Info("ddlManager.barrier", zap.Any("ids", ids), zap.Any("ddl", ddl))
 			for _, id := range ids {
 				tableBarrierMap[id] = ddl.CommitTs
 			}
 		}
 	}
+	log.Info("ddlManager.barrier end")
 
 	// calculate tableBarriers
 	var tableBarriers []*schedulepb.TableBarrier
 	for tableID, tableBarrierTs := range tableBarrierMap {
+		log.Info("ddlManager.barrier",
+			zap.Uint64("tableID", uint64(tableID)),
+			zap.Uint64("tableBarrierTs", tableBarrierTs),
+			zap.Uint64("GlobalBarrierTs", barrier.GlobalBarrierTs))
 		if tableBarrierTs > barrier.GlobalBarrierTs {
 			continue
 		}
