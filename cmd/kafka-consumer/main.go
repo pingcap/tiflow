@@ -571,7 +571,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		err     error
 	)
 
-	memo := make(map[int64]struct{})
+	memo := make(map[int64]int)
 
 	switch c.option.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
@@ -729,10 +729,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 
 					// todo: remove this after fix the case
-					if _, ok := memo[tableID]; !ok {
-						log.Info("row event resolved", zap.Int64("tableID", tableID), zap.Int("eventNum", len(events)))
-						memo[tableID] = struct{}{}
-					}
+					count := memo[tableID]
+					count += len(events)
+					memo[tableID] = count
+					log.Info("row event resolved",
+						zap.Int64("tableID", tableID), zap.Int("eventNum", count))
+
 					if _, ok := sink.tableSinksMap.Load(tableID); !ok {
 						sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
 							model.DefaultChangeFeedID("kafka-consumer"),
