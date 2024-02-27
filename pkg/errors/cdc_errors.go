@@ -884,4 +884,9 @@ var (
 			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
 		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
 	)
+
+	ErrMetaOpFailed = errors.Normalize(
+		"unexpected meta operation failure: %s",
+		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
+	)
 )
