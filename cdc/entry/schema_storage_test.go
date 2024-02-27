@@ -694,7 +694,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
+	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)
 	_, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
@@ -731,12 +731,12 @@ func TestExplicitTables(t *testing.T) {
 	meta1 := kv.GetSnapshotMeta(store, ver1.Ver)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */, f)
+	snap1, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 	meta2 := kv.GetSnapshotMeta(store, ver2.Ver)
-	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */, f)
+	snap2, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta2, ver2.Ver, false /* forceReplicate */, f)
 	require.Nil(t, err)
-	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */, f)
+	snap3, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta2, ver2.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 
 	// we don't need to count system tables since TiCDC
@@ -890,7 +890,7 @@ func TestSchemaStorage(t *testing.T) {
 		for _, job := range jobs {
 			ts := job.BinlogInfo.FinishedTS
 			meta := kv.GetSnapshotMeta(store, ts)
-			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false, f)
+			snapFromMeta, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ts, false, f)
 			require.Nil(t, err)
 			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)
@@ -972,7 +972,7 @@ func TestHandleKey(t *testing.T) {
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
+	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)
 	tb1, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
