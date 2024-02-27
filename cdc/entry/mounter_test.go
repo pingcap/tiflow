@@ -1002,8 +1002,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 func TestVerifyChecksumTime(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
@@ -1018,12 +1016,12 @@ func TestVerifyChecksumTime(t *testing.T) {
 	helper.Tk().MustExec("use test")
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
 	helper.Tk().MustExec("set global time_zone = '-5:00'")
@@ -1033,6 +1031,9 @@ func TestVerifyChecksumTime(t *testing.T) {
 	job := helper.DDL2Job(ddl)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
 	helper.Tk().MustExec(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`)
 
