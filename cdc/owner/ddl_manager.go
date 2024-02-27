@@ -596,6 +596,7 @@ func getRelatedPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 			res = append(res, def.ID)
 		}
 	}
+	log.Info("getRelatedPhysicalTableIDs", zap.Any("res", res))
 	return res
 }
 

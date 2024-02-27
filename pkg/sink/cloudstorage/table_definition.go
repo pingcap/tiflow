@@ -303,6 +303,7 @@ func (t *TableDefinition) marshalWithoutQuery() ([]byte, error) {
 		Columns:      sortedColumns,
 		TotalColumns: t.TotalColumns,
 	}
+	log.Info("marshalWithoutQuery", zap.Any("defWithoutQuery", defWithoutQuery))
 
 	data, err := json.MarshalIndent(defWithoutQuery, marshalPrefix, marshalIndent)
 	if err != nil {

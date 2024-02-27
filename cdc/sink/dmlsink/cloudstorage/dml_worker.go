@@ -341,6 +341,8 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 			if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
 				return nil
 			}
+			log.Info("genAndDispatchTask rececived fragments",
+				zap.Uint64("seq", frag.seqNumber))
 			batchedTask.handleSingleTableEvent(frag)
 			// if the file size exceeds the upper limit, emit the flush task containing the table
 			// as soon as possible.
