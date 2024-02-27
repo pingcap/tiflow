@@ -16,12 +16,11 @@
 
 # case 2
 # use test;
-#create table t1(id bigint primary key, a date); 
+#create table t1(id bigint primary key, a date);
 #insert into t1 values(1, '2023-02-08');
 
 # When the downstream is mysql or tidb, we need to check the result in downstream server.
 # Otherwise, we just need to check it works without error.
-
 
 set -xeu
 
@@ -55,10 +54,10 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	sleep 10
 	run_sql "SELECT * from test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-			check_contains "b: 123456" &&
-			check_contains "b: aaaaa" &&
-			check_contains "c: ab\\\\\\\\c" &&
-			check_contains "c: ab\\\\c" 
+		check_contains "b: 123456" &&
+		check_contains "b: aaaaa" &&
+		check_contains "c: ab\\\\\\\\c" &&
+		check_contains "c: ab\\\\c"
 fi
 
 stop_tidb_cluster
@@ -80,7 +79,7 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 	check_table_exists "test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	sleep 10
 	run_sql "SELECT * from test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-			check_contains "a: 2023-02-08" 
+		check_contains "a: 2023-02-08"
 fi
 
 stop_tidb_cluster
