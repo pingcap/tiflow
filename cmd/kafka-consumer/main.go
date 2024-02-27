@@ -430,9 +430,6 @@ type Consumer struct {
 	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
 
-	// initialize to 0 by default
-	globalResolvedTs uint64
-
 	eventRouter *dispatcher.EventRouter
 
 	tz *time.Location
@@ -574,6 +571,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		err     error
 	)
 
+	memo := make(map[int64]struct{})
+
 	switch c.option.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
@@ -666,13 +665,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Any("row", row),
 					)
 				}
-				
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
+				if row.CommitTs <= partitionResolvedTs {
 					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
@@ -715,13 +712,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < globalResolvedTs || ts < partitionResolvedTs {
+				if ts < partitionResolvedTs {
 					log.Warn("partition resolved ts fallback, skip it",
 						zap.Uint64("ts", ts),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
@@ -731,6 +726,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					events := group.Resolve(ts)
 					if len(events) == 0 {
 						continue
+					}
+
+					// todo: remove this after fix the case
+					if _, ok := memo[tableID]; !ok {
+						log.Info("row event resolved", zap.Int64("tableID", tableID), zap.Int("eventNum", len(events)))
+						memo[tableID] = struct{}{}
 					}
 					if _, ok := sink.tableSinksMap.Load(tableID); !ok {
 						sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
@@ -838,6 +839,7 @@ func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 
 // Run the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
+	var globalResolvedTs uint64
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -877,18 +879,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		// update global resolved ts
-		if c.globalResolvedTs > minPartitionResolvedTs {
+		if globalResolvedTs > minPartitionResolvedTs {
 			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+				zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
 		}
 
-		if c.globalResolvedTs < minPartitionResolvedTs {
-			c.globalResolvedTs = minPartitionResolvedTs
+		if globalResolvedTs < minPartitionResolvedTs {
+			globalResolvedTs = minPartitionResolvedTs
 		}
 
-		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+		if err = c.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
@@ -945,6 +947,9 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	}
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
+
+	log.Info("assign table id", zap.String("key", key), zap.Int64("tableID", g.currentTableID))
+
 	return g.currentTableID
 }
 
