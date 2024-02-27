@@ -68,12 +68,9 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 	}
 	defer testDB.Close()
 
-	// Adjust sql_mode for compatibility.
-	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
-	if err != nil {
-		return
-	}
-	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(dsn.Params["sql_mode"])
+	// we use default sql mode for downstream because all dmls generated and ddls in ticdc
+	// are based on default sql mode.
+	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(mysql.DefaultSQLMode)
 	if err != nil {
 		return
 	}
@@ -176,19 +173,6 @@ func generateDSNByConfig(
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
-}
-
-func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
-	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	var sqlMode sql.NullString
-	err := row.Scan(&sqlMode)
-	if err != nil {
-		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
-	}
-	if !sqlMode.Valid {
-		sqlMode.String = ""
-	}
-	return sqlMode.String, err
 }
 
 // check whether the target charset is supported
