@@ -515,15 +515,20 @@ func (s *EventSorter) cleanTable(
 
 	start = encoding.EncodeTsKey(state.uniqueID, uint64(span.TableID), 0)
 	toCleanNext := toClean.Next()
-	end = encoding.EncodeTsKey(
-		state.uniqueID, uint64(span.TableID), toCleanNext.CommitTs, toCleanNext.StartTs)
+	end = encoding.EncodeTsKey(state.uniqueID, uint64(span.TableID), toCleanNext.CommitTs, toCleanNext.StartTs)
 
 	db := s.dbs[getDB(span, len(s.dbs))]
 	err := db.DeleteRange(start, end, &pebble.WriteOptions{Sync: false})
 	if err != nil {
+		log.Info("clean stale table range fails",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Error(err))
 		return err
 	}
 
+	sorter.RangeCleanCount().Inc()
 	state.cleaned = toClean
 	return nil
 }
