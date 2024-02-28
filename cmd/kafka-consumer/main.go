@@ -310,6 +310,7 @@ func main() {
 				log.Panic("Error running consumer", zap.Error(err))
 			}
 		}
+		log.Info("kafka consumer stop run normally")
 	}()
 
 	<-consumer.ready // wait till the consumer has been set up
@@ -328,6 +329,8 @@ func main() {
 	if err = client.Close(); err != nil {
 		log.Panic("Error closing client", zap.Error(err))
 	}
+
+	log.Info("kafka consumer exited normally")
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
