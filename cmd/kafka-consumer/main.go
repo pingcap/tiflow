@@ -433,7 +433,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// rule, make sure decoded `RowChangedEvent` contains information
 	// identical to the CDC side.
 	if replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(replicaConfig, kafkaTopic)
+		eventRouter, err := dispatcher.NewEventRouter(replicaConfig, kafkaTopic, protocol)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -455,6 +455,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
+		nil,
 	)
 	if err != nil {
 		cancel()

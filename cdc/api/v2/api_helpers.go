@@ -88,7 +88,7 @@ type APIV2Helpers interface {
 		pdClient pd.Client,
 		gcServiceID string,
 		changefeedID model.ChangeFeedID,
-		checkpointTs uint64,
+		overrideCheckpointTs uint64,
 	) error
 
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
@@ -228,7 +228,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg, nil); err != nil {
 		return nil, err
 	}
 
@@ -352,7 +352,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
@@ -387,24 +387,24 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
+// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
+// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
+// or it is the checkpointTs of the changefeed before it is paused.
+// we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
-	checkpointTs uint64,
+	overrideCheckpointTs uint64,
 ) error {
-	if checkpointTs == 0 {
-		return nil
-	}
-
 	// 1h is enough for resuming a changefeed.
 	gcTTL := int64(60 * 60)
 	err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		gcServiceID,
-		model.DefaultChangeFeedID(changefeedID.ID),
-		gcTTL, checkpointTs)
+		changefeedID,
+		gcTTL, overrideCheckpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return cerror.ErrPDEtcdAPIError.Wrap(err)

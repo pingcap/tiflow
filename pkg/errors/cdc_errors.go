@@ -872,6 +872,10 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInternalCheckFailed = errors.Normalize(
+		"internal check failed, %s",
+		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
 		"handle ddl failed, job: %s, query: %s, startTs: %d. "+
@@ -879,5 +883,10 @@ var (
 			"you can manually execute this DDL downstream. Afterwards, "+
 			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
 		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
+	)
+
+	ErrMetaOpFailed = errors.Normalize(
+		"unexpected meta operation failure: %s",
+		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
 	)
 )

@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -172,10 +173,18 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
+			// for truncate table and truncate table partition DDL, the table ID is changed, but DML can be inserted to TiKV with old table ID.
+			// normally, cdc will close the old table pipeline and create a new one, and these invalid DMLs keys will not be pulled by CDC,
+			// but if redo is enabled or push based table pipeline is enabled, puller and mounter are not blocked by barrier ts.
+			// So some invalid DML keys will be decoded before processor removing the table pipeline
 			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
+			log.Error("can not found table schema",
+				zap.Uint64("ts", raw.CRTs),
+				zap.String("key", hex.EncodeToString(raw.Key)),
+				zap.Int64("tableID", physicalTableID))
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		if bytes.HasPrefix(key, recordPrefix) {
@@ -395,9 +404,35 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
+func (m *mounter) calculateChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+) (uint32, error) {
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		column := rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      &rawColumns[idx],
+		}
+		columns = append(columns, column)
+	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
+
+	calculator := rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}
+
+	checksum, err := calculator.Checksum(m.tz)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checksum, nil
+}
+
 // return error if cannot get the expected checksum from the decoder
 // return false if the checksum is not matched
-// return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, int, bool, error) {
@@ -423,24 +458,9 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
-	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
-		columns = append(columns, rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
-		})
-	}
-	sort.Slice(columns, func(i, j int) bool {
-		return columns[i].ID < columns[j].ID
-	})
-	calculator := rowcodec.RowData{
-		Cols: columns,
-		Data: make([]byte, 0),
-	}
-
-	checksum, err := calculator.Checksum()
+	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Error(err))
+		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, version, false, errors.Trace(err)
 	}
 
@@ -454,11 +474,8 @@ func (m *mounter) verifyChecksum(
 	extra, ok := decoder.GetExtraChecksum()
 	if !ok {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
-		return checksum, version,
-			false, errors.New("cannot found the extra checksum from the event")
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
+		return checksum, version, false, nil
 	}
 
 	if checksum == extra {

@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -34,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -77,6 +78,13 @@ type changefeed struct {
 	feedStateManager *feedStateManager
 	resolvedTs       model.Ts
 
+	// lastSyncedTs is the lastest resolvedTs that has been synced to downstream.
+	// pullerResolvedTs is the minimum resolvedTs of all pullers.
+	// we don't need to initialize lastSyncedTs and pullerResolvedTs specially
+	// because it will be updated in tick.
+	lastSyncedTs     model.Ts
+	pullerResolvedTs model.Ts
+
 	// ddl related fields
 	ddlManager  *ddlManager
 	redoDDLMgr  redo.DDLManager
@@ -115,6 +123,9 @@ type changefeed struct {
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
 
+	metricsChangefeedCreateTimeGuage  prometheus.Gauge
+	metricsChangefeedRestartTimeGauge prometheus.Gauge
+
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
@@ -124,7 +135,7 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) (puller.DDLPuller, error)
 
 	newSink func(
@@ -180,7 +191,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) (puller.DDLPuller, error),
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
@@ -369,10 +380,27 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
+	watermark, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures, barrier)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if c.lastSyncedTs < watermark.LastSyncedTs {
+		c.lastSyncedTs = watermark.LastSyncedTs
+	} else if c.lastSyncedTs > watermark.LastSyncedTs {
+		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+			zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+	}
+
+	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
+		if watermark.PullerResolvedTs > c.pullerResolvedTs {
+			c.pullerResolvedTs = watermark.PullerResolvedTs
+		} else if watermark.PullerResolvedTs < c.pullerResolvedTs {
+			log.Warn("the newPullerResolvedTs should not be smaller than c.pullerResolvedTs",
+				zap.Uint64("c.pullerResolvedTs", c.pullerResolvedTs),
+				zap.Uint64("newPullerResolvedTs", watermark.PullerResolvedTs))
+		}
 	}
 
 	pdTime, _ := c.upstream.PDClock.CurrentTime()
@@ -380,7 +408,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-	if newCheckpointTs == scheduler.CheckpointCannotProceed {
+	if watermark.CheckpointTs == scheduler.CheckpointCannotProceed {
 		if c.state.Status != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
@@ -391,13 +419,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", c.resolvedTs),
-		zap.Uint64("newResolvedTs", newResolvedTs),
-		zap.Uint64("newCheckpointTs", newCheckpointTs),
+		zap.Uint64("newResolvedTs", watermark.ResolvedTs),
+		zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 	// resolvedTs should never regress.
-	if newResolvedTs > c.resolvedTs {
-		c.resolvedTs = newResolvedTs
+	if watermark.ResolvedTs > c.resolvedTs {
+		c.resolvedTs = watermark.ResolvedTs
 	}
 
 	// MinTableBarrierTs should never regress
@@ -411,13 +439,17 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
 				zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
-				zap.Uint64("skipCheckpoint", newCheckpointTs))
-			newCheckpointTs = c.state.Status.CheckpointTs
+				zap.Uint64("skipCheckpoint", watermark.CheckpointTs))
+			watermark.CheckpointTs = c.state.Status.CheckpointTs
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, barrier.MinTableBarrierTs)
-	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
+	failpoint.Inject("ChangefeedOwnerNotUpdateCheckpoint", func() {
+		watermark.CheckpointTs = c.state.Status.CheckpointTs
+	})
+
+	c.updateStatus(watermark.CheckpointTs, barrier.MinTableBarrierTs)
+	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
 	c.tickDownstreamObserver(ctx)
 
 	return nil
@@ -526,7 +558,7 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	filter, err := pfilter.NewFilter(c.state.Info.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -614,6 +646,7 @@ LOOP2:
 		ddlStartTs,
 		c.state.Status.CheckpointTs,
 		c.ddlSink,
+		filter,
 		c.ddlPuller,
 		c.schema,
 		c.redoDDLMgr,
@@ -633,6 +666,8 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
@@ -664,10 +699,16 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedCreateTimeGuage = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "create")
+	c.metricsChangefeedRestartTimeGauge = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "restart")
 }
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	c.cleanupMetrics()
 	if c.isReleased {
 		return
 	}
@@ -705,7 +746,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		_ = c.downstreamObserver.Close()
 	}
 
-	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
 	c.initialized = false
@@ -744,6 +784,8 @@ func (c *changefeed) cleanupMetrics() {
 
 	if c.isRemoved {
 		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+		changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "create")
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "restart")
 	}
 }
 

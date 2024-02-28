@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -133,11 +134,12 @@ type VersionedTableName struct {
 
 // FilePathGenerator is used to generate data file path and index file path.
 type FilePathGenerator struct {
-	extension string
-	config    *Config
-	clock     clock.Clock
-	storage   storage.ExternalStorage
-	fileIndex map[VersionedTableName]*indexWithDate
+	changefeedID model.ChangeFeedID
+	extension    string
+	config       *Config
+	pdClock      pdutil.Clock
+	storage      storage.ExternalStorage
+	fileIndex    map[VersionedTableName]*indexWithDate
 
 	hasher     *hash.PositionInertia
 	versionMap map[VersionedTableName]uint64
@@ -145,19 +147,27 @@ type FilePathGenerator struct {
 
 // NewFilePathGenerator creates a FilePathGenerator.
 func NewFilePathGenerator(
+	changefeedID model.ChangeFeedID,
 	config *Config,
 	storage storage.ExternalStorage,
 	extension string,
-	clock clock.Clock,
+	pdclock pdutil.Clock,
 ) *FilePathGenerator {
+	if pdclock == nil {
+		pdclock = pdutil.NewMonotonicClock(clock.New())
+		log.Warn("pd clock is not set in storage sink, use local clock instead",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeedID", changefeedID.ID))
+	}
 	return &FilePathGenerator{
-		config:     config,
-		extension:  extension,
-		storage:    storage,
-		clock:      clock,
-		fileIndex:  make(map[VersionedTableName]*indexWithDate),
-		hasher:     hash.NewPositionInertia(),
-		versionMap: make(map[VersionedTableName]uint64),
+		changefeedID: changefeedID,
+		config:       config,
+		extension:    extension,
+		storage:      storage,
+		pdClock:      pdclock,
+		fileIndex:    make(map[VersionedTableName]*indexWithDate),
+		hasher:       hash.NewPositionInertia(),
+		versionMap:   make(map[VersionedTableName]uint64),
 	}
 }
 
@@ -176,8 +186,12 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	def.FromTableInfo(tableInfo, table.TableInfoVersion)
 	if !def.IsTableSchema() {
 		// only check schema for table
-		log.Panic("invalid table schema", zap.Any("versionedTableName", table),
+		log.Error("invalid table schema",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeedID", f.changefeedID.ID),
+			zap.Any("versionedTableName", table),
 			zap.Any("tableInfo", tableInfo))
+		return errors.ErrInternalCheckFailed.GenWithStackByArgs("invalid table schema in FilePathGenerator")
 	}
 
 	// Case 1: point check if the schema file exists.
@@ -210,10 +224,13 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		}
 		version, parsedChecksum := mustParseSchemaName(path)
 		if parsedChecksum != checksum {
-			// TODO: parsedChecksum should be ignored, remove this panic
-			// after the new path protocol is verified.
-			log.Panic("invalid schema file name",
+			log.Error("invalid schema file name",
+				zap.String("namespace", f.changefeedID.Namespace),
+				zap.String("changefeedID", f.changefeedID.ID),
 				zap.String("path", path), zap.Any("checksum", checksum))
+			errMsg := fmt.Sprintf("invalid schema filename in storage sink, "+
+				"expected checksum: %d, actual checksum: %d", checksum, parsedChecksum)
+			return errors.ErrInternalCheckFailed.GenWithStackByArgs(errMsg)
 		}
 		if version > lastVersion {
 			lastVersion = version
@@ -235,6 +252,8 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
 	if schemaFileCnt != 0 && lastVersion == 0 {
 		log.Warn("no table schema file found in an non-empty meta path",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeedID", f.changefeedID.ID),
 			zap.Any("versionedTableName", table),
 			zap.Uint32("checksum", checksum))
 	}
@@ -247,8 +266,8 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 }
 
 // SetClock is used for unit test
-func (f *FilePathGenerator) SetClock(clock clock.Clock) {
-	f.clock = clock
+func (f *FilePathGenerator) SetClock(pdClock pdutil.Clock) {
+	f.pdClock = pdClock
 }
 
 // GenerateDateStr generates a date string base on current time
@@ -256,7 +275,7 @@ func (f *FilePathGenerator) SetClock(clock clock.Clock) {
 func (f *FilePathGenerator) GenerateDateStr() string {
 	var dateStr string
 
-	currTime := f.clock.Now()
+	currTime, _ := f.pdClock.CurrentTime()
 	switch f.config.DateSeparator {
 	case config.DateSeparatorYear.String():
 		dateStr = currTime.Format("2006")

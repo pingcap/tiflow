@@ -999,6 +999,84 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
+func TestVerifyChecksumTime(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, changefeed, util.RoleTester, filter)
+	require.NoError(t, err)
+
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
+
+	helper.Tk().MustExec("set global time_zone = '-5:00'")
+
+	// apply ddl to schemaStorage
+	ddl := `CREATE table TBL2 (a int primary key, b TIMESTAMP)`
+	job := helper.DDL2Job(ddl)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	helper.Tk().MustExec(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`)
+
+	ctx := context.Background()
+	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
+		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
+
+			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+			require.NoError(t, err)
+			require.NotNil(t, row)
+
+			if row.Columns != nil {
+				require.NotNil(t, mounter.decoder)
+			}
+
+			if row.PreColumns != nil {
+				require.NotNil(t, mounter.preDecoder)
+			}
+		})
+	}
+
+	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+	}
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "TBL2")
+	require.True(t, ok)
+
+	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+
+	job = helper.DDL2Job("drop table TBL2")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+}
+
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
