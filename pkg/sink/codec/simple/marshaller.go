@@ -82,9 +82,7 @@ func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 
 // MarshalDDLEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
-	var (
-		msg *message
-	)
+	var msg *message
 	if event.IsBootstrap {
 		msg = newBootstrapMessage(event.TableInfo)
 	} else {
