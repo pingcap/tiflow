@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/edwingeng/deque"
 	"github.com/google/uuid"
 	cerror "github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -416,8 +415,6 @@ type partitionSinks struct {
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
 	resolvedTs uint64
-
-	flowController *flowController
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -484,9 +481,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 
 	memoryQuotaPerPartition := defaultMemoryQuotaInBytes / int(o.partitionNum)
 	for i := 0; i < int(o.partitionNum); i++ {
-		c.sinks[i] = &partitionSinks{
-			flowController: newFlowController(uint64(memoryQuotaPerPartition)),
-		}
+		c.sinks[i] = &partitionSinks{}
 	}
 	log.Info("flow controller created for each partition",
 		zap.Int32("partitionNum", o.partitionNum),
@@ -699,16 +694,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				group.Append(row)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
-
-				size := uint64(row.ApproximateBytes())
-				err = sink.flowController.consume(row.CommitTs, size)
-				if err != nil {
-					if errors.Is(err, errFlowControllerAborted) {
-						log.Info("flow control aborted")
-						return nil
-					}
-					return cerror.Trace(err)
-				}
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -927,7 +912,6 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
-			sink.flowController.release(checkpoint.Ts)
 			return true
 		})
 		if flushedResolvedTs {
@@ -979,142 +963,4 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	}
 	log.Info("open db success", zap.String("dsn", dsn))
 	return db, nil
-}
-
-var (
-	errFlowControllerLargerThanQuota = errors.New("flow controller request memory larger than quota")
-	errFlowControllerAborted         = errors.New("flow controller aborted")
-)
-
-type memoryQuota struct {
-	quota uint64 // should not be changed once initialized
-
-	isAborted atomic.Bool
-
-	consumed struct {
-		sync.Mutex
-		bytes uint64
-	}
-
-	consumedCond *sync.Cond
-}
-
-// newMemoryQuota creates a new memoryQuota
-// quota: max advised memory consumption in bytes.
-func newMemoryQuota(quota uint64) *memoryQuota {
-	ret := &memoryQuota{
-		quota: quota,
-	}
-
-	ret.consumedCond = sync.NewCond(&ret.consumed)
-	return ret
-}
-
-// consumeWithBlocking is called when a hard-limit is needed. The method will
-// block until enough memory has been freed up by release.
-// blockCallBack will be called if the function will block.
-// Should be used with care to prevent deadlock.
-func (c *memoryQuota) consumeWithBlocking(nBytes uint64) error {
-	if nBytes >= c.quota {
-		return errFlowControllerLargerThanQuota
-	}
-
-	c.consumed.Lock()
-	defer c.consumed.Unlock()
-
-	for {
-		if c.isAborted.Load() {
-			return errFlowControllerAborted
-		}
-
-		newConsumed := c.consumed.bytes + nBytes
-		if newConsumed < c.quota {
-			break
-		}
-		c.consumedCond.Wait()
-	}
-
-	c.consumed.bytes += nBytes
-	return nil
-}
-
-// release is called when a chuck of memory is done being used.
-func (c *memoryQuota) release(nBytes uint64) {
-	c.consumed.Lock()
-
-	if c.consumed.bytes < nBytes {
-		c.consumed.Unlock()
-		log.Panic("memoryQuota: releasing more than consumed, report a bug",
-			zap.Uint64("consumed", c.consumed.bytes),
-			zap.Uint64("released", nBytes))
-	}
-
-	c.consumed.bytes -= nBytes
-	if c.consumed.bytes < c.quota {
-		c.consumed.Unlock()
-		c.consumedCond.Signal()
-		return
-	}
-
-	c.consumed.Unlock()
-}
-
-type flowController struct {
-	memoryQuota *memoryQuota
-
-	queueMu struct {
-		sync.Mutex
-		queue deque.Deque
-	}
-}
-
-type entry struct {
-	commitTs uint64
-	size     uint64
-}
-
-func newFlowController(quota uint64) *flowController {
-	return &flowController{
-		memoryQuota: newMemoryQuota(quota),
-		queueMu: struct {
-			sync.Mutex
-			queue deque.Deque
-		}{
-			queue: deque.NewDeque(),
-		},
-	}
-}
-
-func (c *flowController) consume(commitTs uint64, size uint64) error {
-	err := c.memoryQuota.consumeWithBlocking(size)
-	if err != nil {
-		return cerror.Trace(err)
-	}
-
-	c.queueMu.Lock()
-	defer c.queueMu.Unlock()
-
-	c.queueMu.queue.PushBack(&entry{
-		commitTs: commitTs,
-		size:     size,
-	})
-
-	return nil
-}
-
-func (c *flowController) release(resolvedTs uint64) {
-	var nBytesToRelease uint64
-
-	c.queueMu.Lock()
-	for c.queueMu.queue.Len() > 0 {
-		if peeked := c.queueMu.queue.Front().(*entry); peeked.commitTs <= resolvedTs {
-			nBytesToRelease += peeked.size
-			c.queueMu.queue.PopFront()
-		} else {
-			break
-		}
-	}
-	c.queueMu.Unlock()
-
-	c.memoryQuota.release(nBytesToRelease)
 }
