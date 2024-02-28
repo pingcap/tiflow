@@ -399,7 +399,7 @@ func (m *mounter) calculateChecksum(
 		}
 		column := rowcodec.ColData{
 			ColumnInfo: colInfo,
-			Datum:      &datum,
+			Datum:      datum.Clone(),
 		}
 		columns = append(columns, column)
 	}
