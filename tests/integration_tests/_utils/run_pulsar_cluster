@@ -11,11 +11,9 @@ cluster_type=$2
 
 cd $workdir
 
-pulsar_dir=/usr/local/pulsar
-if [ -d "$PULSAR_HOME" ]; then
-	echo "PULSAR_HOME env found, using it to start pulsar cluster: $PULSAR_HOME"
-	pulsar_dir=$PULSAR_HOME
-fi
+DEFAULT_PULSAR_HOME="/usr/local/pulsar"
+# use PULSAR_HOME if it is set, otherwise use default pulsar home
+pulsar_dir=${PULSAR_HOME:-$DEFAULT_PULSAR_HOME}
 
 mtls_conf=$(
 	cat <<-EOF
