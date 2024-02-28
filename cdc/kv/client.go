@@ -1485,7 +1485,7 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 		attr := s.rangeLock.CollectLockedRangeAttrs(nil)
 		ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 		currTime := s.client.pdClock.CurrentTime()
-		log.Info("event feed starts to check locked regions",
+		s.client.logRegionDetails("event feed starts to check locked regions",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
