@@ -69,8 +69,8 @@ type ConsumerOption struct {
 
 	oauth2PrivateKey string
 	oauth2IssuerURL  string
-	privateKey       string
 	oauth2ClientID   string
+	oauth2Scope      string
 	oauth2Audience   string
 
 	mtlsAuthTLSCertificatePath string
@@ -156,6 +156,7 @@ func main() {
 	cmd.Flags().StringVar(&consumerOption.oauth2PrivateKey, "oauth2-private-key", "", "oauth2 private key path")
 	cmd.Flags().StringVar(&consumerOption.oauth2IssuerURL, "oauth2-issuer-url", "", "oauth2 issuer url")
 	cmd.Flags().StringVar(&consumerOption.oauth2ClientID, "oauth2-client-id", "", "oauth2 client id")
+	cmd.Flags().StringVar(&consumerOption.oauth2Audience, "oauth2-scope", "", "oauth2 scope")
 	cmd.Flags().StringVar(&consumerOption.oauth2Audience, "oauth2-audience", "", "oauth2 audience")
 	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-certificate-path", "", "mtls certificate path")
 	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSPrivateKeyPath, "auth-tls-private-key-path", "", "mtls private key path")
@@ -279,6 +280,7 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 			auth.ConfigParamAudience:  option.oauth2Audience,
 			auth.ConfigParamKeyFile:   option.oauth2PrivateKey,
 			auth.ConfigParamClientID:  option.oauth2ClientID,
+			auth.ConfigParamScope:     option.oauth2Scope,
 			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
 		})
 		log.Info("oauth2 authentication is enabled", zap.String("issuer url", option.oauth2IssuerURL))
