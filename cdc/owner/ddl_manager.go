@@ -450,6 +450,10 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 		if isGlobalDDL(ddl) {
 			// When there is a global DDL, we need to wait all tables
 			// checkpointTs reach its commitTs before we can execute it.
+			log.Info("try update global barrier",
+				zap.Any("ddlCommitTS", ddl.CommitTs),
+				zap.Any("query", ddl.Query),
+				zap.Any("globalBarrierTs", barrier.GlobalBarrierTs))
 			if ddl.CommitTs < barrier.GlobalBarrierTs {
 				barrier.GlobalBarrierTs = ddl.CommitTs
 			}
