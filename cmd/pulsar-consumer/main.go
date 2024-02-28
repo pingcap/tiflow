@@ -158,7 +158,7 @@ func main() {
 	cmd.Flags().StringVar(&consumerOption.oauth2ClientID, "oauth2-client-id", "", "oauth2 client id")
 	cmd.Flags().StringVar(&consumerOption.oauth2Audience, "oauth2-audience", "", "oauth2 audience")
 	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-certificate-path", "", "mtls certificate path")
-	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-private-key-path", "", "mtls private key path")
+	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSPrivateKeyPath, "auth-tls-private-key-path", "", "mtls private key path")
 	if err := cmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
@@ -281,16 +281,21 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 			auth.ConfigParamClientID:  option.oauth2ClientID,
 			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
 		})
+		log.Info("oauth2 authentication is enabled", zap.String("issuer url", option.oauth2IssuerURL))
 		clientOption.Authentication = authentication
 	}
 	if len(option.mtlsAuthTLSCertificatePath) != 0 {
-		pulsar.NewAuthenticationTLS(option.mtlsAuthTLSCertificatePath, option.mtlsAuthTLSPrivateKeyPath)
+		authentication = pulsar.NewAuthenticationTLS(option.mtlsAuthTLSCertificatePath, option.mtlsAuthTLSPrivateKeyPath)
+		log.Info("mtls authentication is enabled",
+			zap.String("cert", option.mtlsAuthTLSCertificatePath),
+			zap.String("key", option.mtlsAuthTLSPrivateKeyPath),
+		)
 		clientOption.Authentication = authentication
 	}
 
 	client, err := pulsar.NewClient(clientOption)
 	if err != nil {
-		log.Fatal("can't create pulsar client: %v", zap.Error(err))
+		log.Fatal("can't create pulsar client", zap.Error(err))
 	}
 
 	consumerConfig := pulsar.ConsumerOptions{
@@ -302,7 +307,7 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 
 	consumer, err := client.Subscribe(consumerConfig)
 	if err != nil {
-		log.Fatal("can't create pulsar consumer: %v", zap.Error(err))
+		log.Fatal("can't create pulsar consumer", zap.Error(err))
 	}
 	return consumer, client
 }
