@@ -363,11 +363,7 @@ func (a *avroMarshaller) collectColumns(
 		if onlyHandleKey && !colFlag.IsHandleKey() {
 			continue
 		}
-		value, avroType, err := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
-		if err != nil {
-			return nil, err
-		}
-
+		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
 		result[colName] = holder

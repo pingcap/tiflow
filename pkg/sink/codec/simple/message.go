@@ -16,7 +16,6 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -146,11 +145,7 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 
 	defaultValue := model.GetColumnDefaultValue(col)
 	if defaultValue != nil && col.GetType() == mysql.TypeBit {
-		var err error
-		defaultValue, err = common.BinaryLiteralToInt([]byte(defaultValue.(string)))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
+		defaultValue = common.MustBinaryLiteralToInt([]byte(defaultValue.(string)))
 	}
 	return &columnSchema{
 		Name:     col.Name.O,
@@ -650,10 +645,7 @@ func (a *jsonMarshaller) formatColumns(
 		if onlyHandleKey && !flag.IsHandleKey() {
 			continue
 		}
-		value, err := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
-		if err != nil {
-			return nil, err
-		}
+		value := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
 		result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 	}
 	return result, nil
@@ -661,79 +653,46 @@ func (a *jsonMarshaller) formatColumns(
 
 func (a *avroMarshaller) encodeValue4Avro(
 	value interface{}, ft *types.FieldType,
-) (interface{}, string, error) {
+) (interface{}, string) {
 	if value == nil {
-		return nil, "null", nil
+		return nil, "null"
 	}
 
 	switch ft.GetType() {
-	case mysql.TypeEnum:
-		v, ok := value.(uint64)
-		if !ok {
-			return nil, "", cerror.ErrEncodeFailed.
-				GenWithStack("unexpected type for the enum value: %+v, tp: %+v", value, reflect.TypeOf(value))
-		}
-
-		enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
-		if err != nil {
-			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		value = enumVar.Name
-	case mysql.TypeSet:
-		v, ok := value.(uint64)
-		if !ok {
-			return nil, "", cerror.ErrEncodeFailed.
-				GenWithStack("unexpected type for the set value: %+v, tp: %+v", value, reflect.TypeOf(value))
-		}
-		setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
-		if err != nil {
-			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		value = setValue.Name
 	case mysql.TypeTimestamp:
-		v, ok := value.(string)
-		if !ok {
-			return nil, "", cerror.ErrEncodeFailed.
-				GenWithStack("unexpected type for the timestamp value: %+v, tp: %+v", value, reflect.TypeOf(value))
-		}
 		return map[string]interface{}{
 			"location": a.config.TimeZone.String(),
-			"value":    v,
-		}, "com.pingcap.simple.avro.Timestamp", nil
+			"value":    value.(string),
+		}, "com.pingcap.simple.avro.Timestamp"
 	case mysql.TypeLonglong:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
-			v, ok := value.(uint64)
-			if !ok {
-				return nil, "", cerror.ErrEncodeFailed.
-					GenWithStack("unexpected type for the unsigned bigint value: %+v, tp: %+v", value, reflect.TypeOf(value))
-			}
 			return map[string]interface{}{
-				"value": int64(v),
-			}, "com.pingcap.simple.avro.UnsignedBigint", nil
+				"value": int64(value.(uint64)),
+			}, "com.pingcap.simple.avro.UnsignedBigint"
 		}
 	}
 
 	switch v := value.(type) {
 	case uint64:
-		return int64(v), "long", nil
+		return int64(v), "long"
 	case int64:
-		return v, "long", nil
+		return v, "long"
 	case []byte:
 		if mysql.HasBinaryFlag(ft.GetFlag()) {
-			return v, "bytes", nil
+			return v, "bytes"
 		}
-		return string(v), "string", nil
+		return string(v), "string"
 	case float32:
-		return v, "float", nil
+		return v, "float"
 	case float64:
-		return v, "double", nil
+		return v, "double"
 	case string:
-		return v, "string", nil
+		return v, "string"
 	default:
 		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
 
-	return value, "", nil
+	return value, ""
 }
 
 type timestamp struct {
@@ -745,55 +704,23 @@ type timestamp struct {
 
 func encodeValue(
 	value interface{}, ft *types.FieldType, location string,
-) (interface{}, error) {
+) interface{} {
 	if value == nil {
-		return nil, nil
+		return nil
 	}
 
 	switch ft.GetType() {
-	case mysql.TypeEnum:
-		switch v := value.(type) {
-		case uint64:
-			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
-			if err != nil {
-				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			return enumVar.Name, nil
-		case []uint8:
-			return string(v), nil
-		case string:
-			return v, nil
-		default:
-			log.Panic("unexpected type for enum value", zap.Any("value", value))
-		}
-	case mysql.TypeSet:
-		switch v := value.(type) {
-		case uint64:
-			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
-			if err != nil {
-				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			return setValue.Name, nil
-		case []uint8:
-			return string(v), nil
-		default:
-			log.Panic("unexpected type for set value", zap.Any("value", value))
-		}
 	case mysql.TypeBit:
 		switch v := value.(type) {
 		case []uint8:
-			bitValue, err := common.BinaryLiteralToInt(v)
-			if err != nil {
-				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			value = bitValue
+			value = common.MustBinaryLiteralToInt(v)
 		default:
 		}
 	case mysql.TypeTimestamp:
 		return timestamp{
 			Location: location,
 			Value:    value.(string),
-		}, nil
+		}
 	default:
 	}
 
@@ -819,7 +746,7 @@ func encodeValue(
 		result = fmt.Sprintf("%v", v)
 	}
 
-	return result, nil
+	return result
 }
 
 func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
@@ -849,27 +776,24 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 	}
 
 	switch fieldType.GetType() {
-	case mysql.TypeBit:
+	case mysql.TypeBit, mysql.TypeSet:
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				log.Error("invalid column value for bit",
+				log.Error("invalid column value for bit / set",
 					zap.String("name", name), zap.Any("data", v),
 					zap.Any("type", fieldType.GetType()), zap.Error(err))
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
 		case []uint8:
-			value, err = common.BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
+			value = common.MustBinaryLiteralToInt(v)
 		case uint64:
 			value = v
 		case int64:
 			value = uint64(v)
 		default:
-			log.Panic("unexpected type for bit value", zap.Any("value", value))
+			log.Panic("unexpected type for bit / set value", zap.Any("value", value))
 		}
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
 		switch v := value.(type) {
@@ -919,26 +843,13 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 	case mysql.TypeEnum:
 		switch v := value.(type) {
 		case string:
-			element := fieldType.GetElems()
-			enumVar, err := tiTypes.ParseEnumName(element, v, fieldType.GetCharset())
+			result, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
-			value = enumVar.Value
+			value = result
 		case uint64:
 			log.Panic("unexpected type for enum value", zap.Any("value", value))
-		}
-	case mysql.TypeSet:
-		switch v := value.(type) {
-		case string:
-			elements := fieldType.GetElems()
-			setVar, err := tiTypes.ParseSetName(elements, v, fieldType.GetCharset())
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
-			value = setVar.Value
-		case uint64:
-			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
 	case mysql.TypeTimestamp:
 		v := value.(map[string]interface{})
