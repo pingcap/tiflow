@@ -43,7 +43,7 @@ function run() {
 	fi
 
 	if [ "$SINK_TYPE" == "pulsar" ]; then
-		run_pulsar_consumer $WORK_DIR $SINK_URI
+		run_pulsar_consumer --upstream-uri $SINK_URI
 	fi
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
