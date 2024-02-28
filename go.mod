@@ -68,10 +68,10 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20240206021635-05a3758a1d24
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-	github.com/pingcap/tidb v1.1.0-beta.0.20240219052425-e3e0f7e1bc44
+	github.com/pingcap/tidb v1.1.0-beta.0.20240228100201-64d824acd827
 	github.com/pingcap/tidb-dashboard v0.0.0-20240127080020-2171c6e6b9d7
 	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240219043455-3ceeb3ff70bf
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240228100201-64d824acd827
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.6.0
 	github.com/r3labs/diff v1.1.0
@@ -109,8 +109,8 @@ require (
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.26.0
-	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
+	go.uber.org/zap v1.27.0
+	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225
 	golang.org/x/net v0.21.0
 	golang.org/x/oauth2 v0.17.0
 	golang.org/x/sync v0.6.0
@@ -411,7 +411,3 @@ replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace github.com/pingcap/tidb/pkg/parser => github.com/hongyunyan/tidb/pkg/parser v0.0.0-20240226034755-4c7dbcd03488
-
-replace github.com/pingcap/tidb => github.com/hongyunyan/tidb v1.1.0-beta.0.20240226034755-4c7dbcd03488

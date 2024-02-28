@@ -229,7 +229,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 	expr string,
 	ti *model.TableInfo,
 ) (expression.Expression, error) {
-	e, err := expression.ParseSimpleExprWithTableInfo(r.sessCtx, expr, ti.TableInfo)
+	e, err := expression.ParseSimpleExprWithTableInfo(r.sessCtx.GetExprCtx(), expr, ti.TableInfo)
 	if err != nil {
 		// If an expression contains an unknown column,
 		// we return an error and stop the changefeed.
@@ -326,7 +326,7 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 
 	row := chunk.MutRowFromDatums(rowData).ToRow()
 
-	d, err := expr.Eval(r.sessCtx, row)
+	d, err := expr.Eval(r.sessCtx.GetExprCtx(), row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)
