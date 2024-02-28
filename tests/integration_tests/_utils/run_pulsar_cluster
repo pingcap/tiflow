@@ -33,6 +33,17 @@ mtls_conf=$(
 	EOF
 )
 
+mtls_client_conf=$(
+	cat <<-EOF
+
+		webServiceUrl=https://localhost:8443/
+    brokerServiceUrl=pulsar+ssl://localhost:6651/
+    authPlugin=org.apache.pulsar.client.impl.auth.AuthenticationTls
+    authParams=tlsCertFile:${workdir}/broker_client.cert.pem,tlsKeyFile:${workdir}/broker_client.key-pk8.pem
+    tlsTrustCertsFilePath=${workdir}/ca.cert.pem
+	EOF
+)
+
 oauth_conf=$(
 	cat <<-EOF
 
@@ -82,6 +93,7 @@ function gen_mtls_config() {
 	openssl req -new -subj "/CN=broker_client" -key broker_client.key.pem -out broker_client.csr.pem -sha256
 	openssl x509 -req -in broker_client.csr.pem -CA ca.cert.pem -CAkey ca.key.pem -CAcreateserial -out broker_client.cert.pem -days 365 -sha256
 	echo "$mtls_conf" >>$pulsar_dir/conf/standalone.conf
+	echo "$mtls_client_conf" >>$pulsar_dir/conf/client.conf
 }
 
 function gen_oauth_config() {
@@ -98,15 +110,27 @@ else
 	echo "no cluster type specified, using default configuration."
 fi
 
-echo "[$(date)] <<<<<< START kafka consumer in $cluster_type mode in $TEST_NAME case >>>>>>"
+echo "[$(date)] <<<<<< START pulsar cluster in $cluster_type mode in $TEST_NAME case >>>>>>"
 $pulsar_dir/bin/pulsar standalone -nfw >>$workdir/pulsar_stdout.log 2>&1 &
-echo "Waiting for pulsar to be ready..."
+echo "Waiting for pulsar port to be ready..."
 i=0
 while ! nc -z localhost "$pulsar_port"; do
 	i=$((i + 1))
 	if [ "$i" -gt 10 ]; then
 		cat $workdir/pulsar_stdout.log
 		echo 'Failed to start pulsar'
+		exit 1
+	fi
+	sleep 2
+done
+
+echo "Waiting for pulsar namespace to be ready..."
+i=0
+while ! $pulsar_dir/bin/pulsar-admin namespaces list public; do
+	i=$((i + 1))
+	if [ "$i" -gt 10 ]; then
+		cat $workdir/pulsar_stdout.log
+		echo 'Failed to list pulsar namespace'
 		exit 1
 	fi
 	sleep 2
