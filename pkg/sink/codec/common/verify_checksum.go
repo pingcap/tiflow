@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -30,8 +31,8 @@ import (
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.Column, expected uint32) error {
-	checksum, err := calculateChecksum(columns)
+func VerifyChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo, expected uint32) error {
+	checksum, err := calculateChecksum(columns, columnInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -47,17 +48,17 @@ func VerifyChecksum(columns []*model.Column, expected uint32) error {
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint32, error) {
+func calculateChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo) (uint32, error) {
 	var (
 		checksum uint32
 		err      error
 	)
 	buf := make([]byte, 0)
-	for _, col := range columns {
+	for idx, col := range columns {
 		if len(buf) > 0 {
 			buf = buf[:0]
 		}
-		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
+		buf, err = buildChecksumBytes(buf, col.Value, columnInfo[idx].GetType())
 		if err != nil {
 			return 0, errors.Trace(err)
 		}

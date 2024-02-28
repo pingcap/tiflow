@@ -410,24 +410,24 @@ func buildRowChangedEvent(
 		TableInfo:       tableInfo,
 	}
 
-	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
+	columns, err := decodeColumns(msg.Data, tableInfo)
 	if err != nil {
 		return nil, err
 	}
-	result.Columns = model.Columns2ColumnDatas(columns, tableInfo)
+	result.Columns = columns
 
-	preColumns, err := decodeColumns(msg.Old, tableInfo.Columns)
+	preColumns, err := decodeColumns(msg.Old, tableInfo)
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns = model.Columns2ColumnDatas(preColumns, tableInfo)
+	result.PreColumns = preColumns
 
 	if enableRowChecksum && msg.Checksum != nil {
-		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
+		err = common.VerifyChecksum(preColumns, tableInfo.Columns, msg.Checksum.Previous)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		err = common.VerifyChecksum(columns, msg.Checksum.Current)
+		err = common.VerifyChecksum(columns, tableInfo.Columns, msg.Checksum.Current)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
@@ -443,23 +443,25 @@ func buildRowChangedEvent(
 			log.Warn("cdc detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
-			for _, col := range preColumns {
+			for idx, col := range preColumns {
+				colInfo := tableInfo.Columns[idx]
 				log.Info("data corrupted, print each previous column for debugging",
-					zap.String("name", col.Name),
-					zap.Any("type", col.Type),
-					zap.Any("charset", col.Charset),
-					zap.Any("flag", col.Flag),
+					zap.String("name", colInfo.Name.O),
+					zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()),
+					zap.Any("flag", colInfo.GetFlag()),
 					zap.Any("value", col.Value),
-					zap.Any("default", col.Default))
+					zap.Any("default", colInfo.GetDefaultValue()))
 			}
-			for _, col := range columns {
+			for idx, col := range columns {
+				colInfo := tableInfo.Columns[idx]
 				log.Info("data corrupted, print each column for debugging",
-					zap.String("name", col.Name),
-					zap.Any("type", col.Type),
-					zap.Any("charset", col.Charset),
-					zap.Any("flag", col.Flag),
+					zap.String("name", colInfo.Name.O),
+					zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()),
+					zap.Any("flag", colInfo.GetFlag()),
 					zap.Any("value", col.Value),
-					zap.Any("default", col.Default))
+					zap.Any("default", colInfo.GetDefaultValue()))
 			}
 		}
 	}
@@ -468,19 +470,19 @@ func buildRowChangedEvent(
 }
 
 func decodeColumns(
-	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo,
-) ([]*model.Column, error) {
+	rawData map[string]interface{}, tableInfo *model.TableInfo,
+) ([]*model.ColumnData, error) {
 	if rawData == nil {
 		return nil, nil
 	}
-	var result []*model.Column
-	for _, info := range columnInfos {
+	var result []*model.ColumnData
+	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
 			log.Error("cannot found the value for the column",
 				zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
+		col, err := decodeColumn(info.Name.O, value, tableInfo, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -822,13 +824,12 @@ func encodeValue(
 	return result, nil
 }
 
-func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
-	result := &model.Column{
-		Type:      fieldType.GetType(),
-		Charset:   fieldType.GetCharset(),
-		Collation: fieldType.GetCollate(),
-		Name:      name,
-		Value:     value,
+func decodeColumn(
+	name string, value interface{}, tableInfo *model.TableInfo, fieldType *types.FieldType,
+) (*model.ColumnData, error) {
+	result := &model.ColumnData{
+		ColumnID: tableInfo.ForceGetColumnIDByName(name),
+		Value:    value,
 	}
 	if value == nil {
 		return result, nil
