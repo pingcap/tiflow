@@ -39,10 +39,10 @@ mtls_client_conf=$(
 	cat <<-EOF
 
 		webServiceUrl=https://localhost:8443/
-		    brokerServiceUrl=pulsar+ssl://localhost:6651/
-		    authPlugin=org.apache.pulsar.client.impl.auth.AuthenticationTls
-		    authParams=tlsCertFile:${workdir}/broker_client.cert.pem,tlsKeyFile:${workdir}/broker_client.key-pk8.pem
-		    tlsTrustCertsFilePath=${workdir}/ca.cert.pem
+		brokerServiceUrl=pulsar+ssl://localhost:6651/
+		authPlugin=org.apache.pulsar.client.impl.auth.AuthenticationTls
+		authParams=tlsCertFile:${workdir}/broker_client.cert.pem,tlsKeyFile:${workdir}/broker_client.key-pk8.pem
+		tlsTrustCertsFilePath=${workdir}/ca.cert.pem
 	EOF
 )
 
