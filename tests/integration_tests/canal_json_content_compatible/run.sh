@@ -31,6 +31,7 @@ function run() {
 	fi
 
 	if [ "$SINK_TYPE" == "pulsar" ]; then
+		run_pulsar_cluster $WORK_DIR normal
 		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
 	fi
 

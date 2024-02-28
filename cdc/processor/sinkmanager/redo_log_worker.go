@@ -74,13 +74,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	)
 	advancer.lastPos = lowerBound.Prev()
 
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	defer func() {
-		eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
-		task.tableSink.updateRangeEventCounts(eventCount)
-
 		if err := iter.Close(); err != nil {
 			log.Error("redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -88,6 +85,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				zap.Stringer("span", &task.span),
 				zap.Error(err))
 		}
+	}()
+
+	defer func() {
 		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
