@@ -77,6 +77,8 @@ func newExprFilterRule(
 
 // verifyAndInitRule will verify and init the rule.
 // It should only be called in dmlExprFilter's verify method.
+// We ask users to set these expr only in default sql mode,
+// so we just need to  verify each expr in default sql mode
 func (r *dmlExprFilterRule) verify(tableInfos []*model.TableInfo) error {
 	// verify expression filter rule syntax.
 	p := parser.New()
