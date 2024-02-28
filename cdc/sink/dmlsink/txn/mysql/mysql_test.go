@@ -210,7 +210,7 @@ func TestAdjustSQLMode(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -301,7 +301,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -438,7 +438,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -515,7 +515,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -592,7 +592,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -661,7 +661,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -713,7 +713,7 @@ func TestNewMySQLBackend(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -748,7 +748,7 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -779,7 +779,7 @@ func TestGBKSupported(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -839,7 +839,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
