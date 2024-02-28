@@ -125,7 +125,7 @@ type dataType struct {
 }
 
 // newColumnSchema converts from TiDB ColumnInfo to columnSchema.
-func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
+func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 	tp := dataType{
 		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
 		Charset:   col.GetCharset(),
@@ -152,7 +152,7 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 		DataType: tp,
 		Nullable: !mysql.HasNotNullFlag(col.GetFlag()),
 		Default:  defaultValue,
-	}, nil
+	}
 }
 
 // newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
@@ -269,7 +269,7 @@ type TableSchema struct {
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
+func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
@@ -301,10 +301,7 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		colSchema, err := newColumnSchema(col)
-		if err != nil {
-			return nil, err
-		}
+		colSchema := newColumnSchema(col)
 		columns = append(columns, colSchema)
 	}
 
@@ -315,7 +312,7 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
-	}, nil
+	}
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
@@ -532,39 +529,29 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
-func newBootstrapMessage(tableInfo *model.TableInfo) (*message, error) {
-	schema, err := newTableSchema(tableInfo)
-	if err != nil {
-		return nil, err
-	}
+func newBootstrapMessage(tableInfo *model.TableInfo) *message {
+	schema := newTableSchema(tableInfo)
 	msg := &message{
 		Version:     defaultVersion,
 		Type:        MessageTypeBootstrap,
 		BuildTs:     time.Now().UnixMilli(),
 		TableSchema: schema,
 	}
-	return msg, nil
+	return msg
 }
 
-func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
+func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
 		schema    *TableSchema
 		preSchema *TableSchema
-		err       error
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
-		schema, err = newTableSchema(ddl.TableInfo)
-		if err != nil {
-			return nil, err
-		}
+		schema = newTableSchema(ddl.TableInfo)
 	}
 	// `PreTableInfo` may not exist for some DDL, such as `create table`
 	if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
-		preSchema, err = newTableSchema(ddl.PreTableInfo)
-		if err != nil {
-			return nil, err
-		}
+		preSchema = newTableSchema(ddl.PreTableInfo)
 	}
 	msg := &message{
 		Version:        defaultVersion,
@@ -575,13 +562,13 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 		TableSchema:    schema,
 		PreTableSchema: preSchema,
 	}
-	return msg, nil
+	return msg
 }
 
 func (a *jsonMarshaller) newDMLMessage(
 	event *model.RowChangedEvent,
 	onlyHandleKey bool, claimCheckFileName string,
-) (*message, error) {
+) *message {
 	m := &message{
 		Version:            defaultVersion,
 		Schema:             event.TableInfo.GetSchemaName(),
@@ -593,29 +580,16 @@ func (a *jsonMarshaller) newDMLMessage(
 		HandleKeyOnly:      onlyHandleKey,
 		ClaimCheckLocation: claimCheckFileName,
 	}
-	var err error
 	if event.IsInsert() {
 		m.Type = DMLTypeInsert
-		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		m.Data = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 	} else if event.IsDelete() {
 		m.Type = DMLTypeDelete
-		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		m.Old = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 	} else if event.IsUpdate() {
 		m.Type = DMLTypeUpdate
-		m.Data, err = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
-		m.Old, err = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		m.Data = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		m.Old = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
@@ -629,12 +603,12 @@ func (a *jsonMarshaller) newDMLMessage(
 		}
 	}
 
-	return m, nil
+	return m
 }
 
 func (a *jsonMarshaller) formatColumns(
 	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range columns {
@@ -648,7 +622,7 @@ func (a *jsonMarshaller) formatColumns(
 		value := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
 		result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 	}
-	return result, nil
+	return result
 }
 
 func (a *avroMarshaller) encodeValue4Avro(
