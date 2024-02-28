@@ -65,7 +65,6 @@ import (
 
 func newConsumerOption() *consumerOption {
 	return &consumerOption{
-		groupID: fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		version: "2.4.0",
 
 		maxMessageBytes: math.MaxInt64,
@@ -110,11 +109,6 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		o.version = s
-	}
-
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		o.groupID = s
 	}
 
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
@@ -209,13 +203,15 @@ func main() {
 		configFile     string
 	)
 
+	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
+
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-
+	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID, "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
