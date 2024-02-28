@@ -36,6 +36,7 @@ groups=(
 	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
 	["G03"]='row_format drop_many_tables processor_stop_delay partition_table'
 	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
+	# pulsar mtls authentication enabled
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
 	["G07"]='kv_client_stream_reconnect cdc split_region'
