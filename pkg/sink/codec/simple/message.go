@@ -752,6 +752,8 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 	switch fieldType.GetType() {
 	case mysql.TypeBit, mysql.TypeSet:
 		switch v := value.(type) {
+		// avro encoding, set is encoded as `int64`, bit encoded as `string`
+		// json encoding, set is encoded as `string`, bit encoded as `string`
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
@@ -766,8 +768,6 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 			value = v
 		case int64:
 			value = uint64(v)
-		default:
-			log.Panic("unexpected type for bit / set value", zap.Any("value", value))
 		}
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
 		switch v := value.(type) {
@@ -815,15 +815,14 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 			value = v
 		}
 	case mysql.TypeEnum:
+		// avro encoding, enum is encoded as `int64`, use it directly.
+		// json encoding, enum is encoded as `string`
 		switch v := value.(type) {
 		case string:
-			result, err := strconv.ParseInt(v, 10, 64)
+			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
-			value = result
-		case uint64:
-			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
 	case mysql.TypeTimestamp:
 		v := value.(map[string]interface{})
