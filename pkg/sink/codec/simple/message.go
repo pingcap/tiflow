@@ -479,7 +479,7 @@ func decodeColumns(
 	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the value for the column",
+			log.Panic("cannot found the value for the column",
 				zap.String("column", info.Name.O))
 		}
 		col, err := decodeColumn(info.Name.O, value, tableInfo, &info.FieldType)
