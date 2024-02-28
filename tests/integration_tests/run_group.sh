@@ -36,7 +36,6 @@ groups=(
 	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
 	["G03"]='row_format drop_many_tables processor_stop_delay partition_table'
 	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
-	# pulsar mtls authentication enabled
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
 	["G07"]='kv_client_stream_reconnect cdc split_region'
@@ -45,6 +44,7 @@ groups=(
 	["G10"]='default_value simple cdc_server_tips event_filter'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
+	# pulsar mtls authentication enabled
 	["G13"]='tiflash region_merge common_1'
 	["G14"]='big_txn changefeed_finish force_replicate_table'
 	["G15"]='new_ci_collation batch_add_table multi_rocks'

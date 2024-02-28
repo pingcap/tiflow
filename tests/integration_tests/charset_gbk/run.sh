@@ -30,23 +30,12 @@ function run() {
 		;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		cat <<EOF >>$WORK_DIR/pulsar_test.toml
-      [sink.pulsar-config]
-      tls-trust-certs-file-path="${WORK_DIR}/ca.cert.pem"
-      auth-tls-private-key-path="${WORK_DIR}/broker_client.key-pk8.pem"
-      auth-tls-certificate-path="${WORK_DIR}/broker_client.cert.pem"
-EOF
-		cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config=$WORK_DIR/pulsar_test.toml
-	else
-		cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	fi
-
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI --ca "${WORK_DIR}/ca.cert.pem" --auth-tls-private-key-path "${WORK_DIR}/broker_client.key-pk8.pem" --auth-tls-certificate-path="${WORK_DIR}/broker_client.cert.pem" ;;
+	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
 	esac
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
