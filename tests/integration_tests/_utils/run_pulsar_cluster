@@ -12,6 +12,11 @@ cluster_type=$2
 cd $workdir
 
 pulsar_dir=/usr/local/pulsar
+if [  -d "$PULSAR_HOME" ]; then
+  echo "PULSAR_HOME env found, using it to start pulsar cluster: $PULSAR_HOME"
+  pulsar_dir=$PULSAR_HOME
+fi
+
 
 mtls_conf=$(
 	cat <<-EOF
