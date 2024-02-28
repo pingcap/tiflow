@@ -213,16 +213,16 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 			variables.TimeZone = loc
 		}
 	}
-	session := session{
+	sessionCtx := session{
 		vars:                 variables,
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
-	session.exprctx = &exprCtxImpl{
-		session:             &session,
-		ExprCtxExtendedImpl: exprctximpl.NewExprExtendedImpl(&session),
+	sessionCtx.exprctx = &exprCtxImpl{
+		session:             &sessionCtx,
+		ExprCtxExtendedImpl: exprctximpl.NewExprExtendedImpl(&sessionCtx),
 	}
-	return &session
+	return &sessionCtx
 }
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
