@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -196,8 +197,9 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 }
 
 func main() {
-	consumerOption := newConsumerOption()
+	debug.SetMemoryLimit(14 * 1024 * 1024 * 1024)
 
+	consumerOption := newConsumerOption()
 	var (
 		upstreamURIStr string
 		configFile     string
