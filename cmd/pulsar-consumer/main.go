@@ -68,9 +68,9 @@ type ConsumerOption struct {
 	ca, cert, key string
 
 	oauth2PrivateKey string
-	oauth2IssuerUrl  string
+	oauth2IssuerURL  string
 	privateKey       string
-	oauth2ClientId   string
+	oauth2ClientID   string
 	oauth2Audience   string
 
 	mtlsAuthTLSCertificatePath string
@@ -154,8 +154,8 @@ func main() {
 	cmd.Flags().StringVar(&consumerOption.logPath, "log-file", "cdc_pulsar_consumer.log", "log file path")
 	cmd.Flags().StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 	cmd.Flags().StringVar(&consumerOption.oauth2PrivateKey, "oauth2-private-key", "", "oauth2 private key path")
-	cmd.Flags().StringVar(&consumerOption.oauth2IssuerUrl, "oauth2-issuer-url", "", "oauth2 issuer url")
-	cmd.Flags().StringVar(&consumerOption.oauth2ClientId, "oauth2-client-id", "", "oauth2 client id")
+	cmd.Flags().StringVar(&consumerOption.oauth2IssuerURL, "oauth2-issuer-url", "", "oauth2 issuer url")
+	cmd.Flags().StringVar(&consumerOption.oauth2ClientID, "oauth2-client-id", "", "oauth2 client id")
 	cmd.Flags().StringVar(&consumerOption.oauth2Audience, "oauth2-audience", "", "oauth2 audience")
 	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-certificate-path", "", "mtls certificate path")
 	cmd.Flags().StringVar(&consumerOption.mtlsAuthTLSCertificatePath, "auth-tls-private-key-path", "", "mtls private key path")
@@ -275,10 +275,10 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 	var authentication pulsar.Authentication
 	if len(option.oauth2PrivateKey) != 0 {
 		authentication = pulsar.NewAuthenticationOAuth2(map[string]string{
-			auth.ConfigParamIssuerURL: option.oauth2IssuerUrl,
+			auth.ConfigParamIssuerURL: option.oauth2IssuerURL,
 			auth.ConfigParamAudience:  option.oauth2Audience,
 			auth.ConfigParamKeyFile:   option.oauth2PrivateKey,
-			auth.ConfigParamClientID:  option.oauth2ClientId,
+			auth.ConfigParamClientID:  option.oauth2ClientID,
 			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
 		})
 		clientOption.Authentication = authentication
