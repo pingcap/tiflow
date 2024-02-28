@@ -26,7 +26,7 @@ function run() {
 	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	pulsar)
 		run_pulsar_cluster $WORK_DIR mtls
-		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
+		SINK_URI="pulsar+ssl://127.0.0.1:6651/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
 		;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
@@ -34,9 +34,9 @@ function run() {
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		cat <<EOF >>$WORK_DIR/pulsar_test.toml
       [sink.pulsar-config]
-      tls-trust-certs-file-path="${workdir}/ca.cert.pem"
-      auth-tls-private-key-path="${workdir}/broker_client.key-pk8.pem"
-      auth-tls-certificate-path="${workdir}/broker_client.cert.pem"
+      tls-trust-certs-file-path="${WORK_DIR}/ca.cert.pem"
+      auth-tls-private-key-path="${WORK_DIR}/broker_client.key-pk8.pem"
+      auth-tls-certificate-path="${WORK_DIR}/broker_client.cert.pem"
 EOF
 		cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config=$WORK_DIR/pulsar_test.toml
 	else
