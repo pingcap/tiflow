@@ -210,6 +210,9 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	}
 
 	for _, s := range stores {
+		if s == nil {
+			return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
+		}
 		if engine.IsTiFlash(s) {
 			continue
 		}
