@@ -415,18 +415,37 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: use client tls config for tidb connection if mutual tls is enabled.
-	if up.SecurityConfig != nil {
-		dsn.TLS, err = up.SecurityConfig.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
+	// Note: we use "preferred" here to make sure the connection is encrypted if possible. It is the same as the default
+	// behavior of mysql client, refer to: https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html.
+	dsn.TLSConfig = "preferred"
+
 	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer db.Close()
-	// TODO: check authentication here if needed
-	return db.Ping()
+
+	rows, err := db.Query("SHOW STATUS LIKE '%Ssl_cipher'")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Warn("query Ssl_cipher close rows failed", zap.Error(err))
+		}
+		if rows.Err() != nil {
+			log.Warn("query Ssl_cipher rows has error", zap.Error(rows.Err()))
+		}
+	}()
+
+	var name, value string
+	err = rows.Scan(&name, &value)
+	if err != nil {
+		log.Warn("failed to get ssl cipher", zap.Error(err),
+			zap.String("username", dsn.User), zap.Uint64("upstreamID", up.ID))
+	}
+	log.Info("verify tidb user successfully", zap.String("username", dsn.User),
+		zap.String("sslCipherName", name), zap.String("sslCipherValue", value),
+		zap.Uint64("upstreamID", up.ID))
+	return nil
 }
