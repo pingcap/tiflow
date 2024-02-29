@@ -82,17 +82,11 @@ func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 
 // MarshalDDLEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
-	var (
-		msg *message
-		err error
-	)
+	var msg *message
 	if event.IsBootstrap {
-		msg, err = newBootstrapMessage(event.TableInfo)
+		msg = newBootstrapMessage(event.TableInfo)
 	} else {
-		msg, err = newDDLMessage(event)
-	}
-	if err != nil {
-		return nil, err
+		msg = newDDLMessage(event)
 	}
 	value, err := json.Marshal(msg)
 	if err != nil {
@@ -106,11 +100,7 @@ func (m *jsonMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent,
 	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
-	msg, err := m.newDMLMessage(event, handleKeyOnly, claimCheckFileName)
-	if err != nil {
-		return nil, err
-	}
-
+	msg := m.newDMLMessage(event, handleKeyOnly, claimCheckFileName)
 	value, err := json.Marshal(msg)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
@@ -174,10 +164,7 @@ func (m *avroMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent,
 	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
-	msg, err := m.newDMLMessageMap(event, handleKeyOnly, claimCheckFileName)
-	if err != nil {
-		return nil, err
-	}
+	msg := m.newDMLMessageMap(event, handleKeyOnly, claimCheckFileName)
 	value, err := m.codec.BinaryFromNative(nil, msg)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)

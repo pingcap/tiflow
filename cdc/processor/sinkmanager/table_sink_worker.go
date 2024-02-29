@@ -117,7 +117,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		task.getUpperBound(task.tableSink.getUpperBoundTs()))
 	advancer.lastPos = lowerBound.Prev()
 
-	allEventSize := uint64(0)
 	allEventCount := 0
 
 	callbackIsPerformed := false
@@ -129,6 +128,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	defer func() {
+		// Prepare some information for stale table range cleaning.
+		task.tableSink.updateRangeEventCounts(newRangeEventCount(advancer.lastPos, allEventCount))
+
 		// Collect metrics.
 		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
@@ -167,7 +169,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		if err := iter.Close(); err != nil {
-			log.Error("Sink worker fails to close iterator",
+			log.Error("sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Stringer("span", &task.span),
@@ -205,7 +207,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
 			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
-			allEventSize += size
 		}
 
 		if err := advancer.tryAdvanceAndAcquireMem(false, pos.Valid()); err != nil {

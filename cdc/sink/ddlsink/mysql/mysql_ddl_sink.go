@@ -189,8 +189,8 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	})
 
 	start := time.Now()
-	log.Info("Start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
-		zap.String("changefeed", m.id.ID))
+	log.Info("Start exec DDL", zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs),
+		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID))
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

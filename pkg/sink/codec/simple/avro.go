@@ -232,7 +232,7 @@ func (a *avroMarshaller) newDMLMessageMap(
 	event *model.RowChangedEvent,
 	onlyHandleKey bool,
 	claimCheckFileName string,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
 		"database":      event.TableInfo.GetSchemaName(),
@@ -269,29 +269,17 @@ func (a *avroMarshaller) newDMLMessageMap(
 	}
 
 	if event.IsInsert() {
-		data, err := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m["data"] = data
 		m["type"] = string(DMLTypeInsert)
 	} else if event.IsDelete() {
-		old, err := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		m["old"] = old
 		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
-		data, err := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m["data"] = data
-		old, err := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		m["old"] = old
 		m["type"] = string(DMLTypeUpdate)
 	} else {
@@ -309,7 +297,7 @@ func (a *avroMarshaller) newDMLMessageMap(
 	messageHolder := messageHolderPool.Get().(map[string]interface{})
 	messageHolder["com.pingcap.simple.avro.Message"] = holder
 
-	return messageHolder, nil
+	return messageHolder
 }
 
 func recycleMap(m map[string]interface{}) {
@@ -351,7 +339,7 @@ func recycleMap(m map[string]interface{}) {
 
 func (a *avroMarshaller) collectColumns(
 	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
 	for _, col := range columns {
 		if col == nil {
@@ -363,11 +351,7 @@ func (a *avroMarshaller) collectColumns(
 		if onlyHandleKey && !colFlag.IsHandleKey() {
 			continue
 		}
-		value, avroType, err := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
-		if err != nil {
-			return nil, err
-		}
-
+		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
 		result[colName] = holder
@@ -375,7 +359,7 @@ func (a *avroMarshaller) collectColumns(
 
 	return map[string]interface{}{
 		"map": result,
-	}, nil
+	}
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {

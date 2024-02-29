@@ -188,7 +188,7 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 	}
 	r := chunk.MutRowFromDatums(data).ToRow()
 
-	d, err := expr.Eval(ctx, r)
+	d, err := expr.Eval(ctx.GetExprCtx(), r)
 	if err != nil {
 		return false, err
 	}
@@ -198,7 +198,7 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 // getSimpleExprOfTable returns an expression of given `expr` string, using the table structure that is tracked before.
 func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableInfo, logger log.Logger) (expression.Expression, error) {
 	// TODO: use upstream timezone?
-	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, ti)
+	e, err := expression.ParseSimpleExprWithTableInfo(ctx.GetExprCtx(), expr, ti)
 	if err != nil {
 		// if expression contains an unknown column, we return an expression that skips nothing
 		if plannererrors.ErrUnknownColumn.Equal(err) {
