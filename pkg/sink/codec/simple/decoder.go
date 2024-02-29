@@ -62,7 +62,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	m, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -272,17 +272,17 @@ func (d *decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		value, err := encodeValue(value, fieldType)
-		if err != nil {
-			return nil, err
-		}
-		result[col.Name()] = value
+		result[col.Name()] = encodeValue(value, fieldType, d.config.TimeZone.String())
 	}
 	return result, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if d.msg == nil {
+		return nil, cerror.ErrCodecDecode.GenWithStack(
+			"no message found when decode DDL event")
+	}
 	ddl, err := newDDLEvent(d.msg)
 	if err != nil {
 		return nil, err

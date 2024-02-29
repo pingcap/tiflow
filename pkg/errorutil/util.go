@@ -144,6 +144,17 @@ func IsRetryableDDLError(err error) bool {
 	return true
 }
 
+// IsAccessDeniedError checks if the error is an access denied error.
+func IsAccessDeniedError(err error) bool {
+	err = errors.Cause(err)
+	mysqlErr, ok := err.(*gmysql.MySQLError)
+	if !ok {
+		return false
+	}
+	return mysqlErr.Number == mysql.ErrAccessDenied ||
+		mysqlErr.Number == mysql.ErrAccessDeniedNoPassword
+}
+
 // IsSyncPointIgnoreError returns whether the error is ignorable for syncpoint.
 func IsSyncPointIgnoreError(err error) bool {
 	err = errors.Cause(err)

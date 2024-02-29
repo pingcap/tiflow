@@ -34,23 +34,23 @@ type marshaller interface {
 	MarshalDDLEvent(event *model.DDLEvent) ([]byte, error)
 
 	// MarshalRowChangedEvent marshals the row changed event into bytes.
-	MarshalRowChangedEvent(event *model.RowChangedEvent, config *common.Config,
+	MarshalRowChangedEvent(event *model.RowChangedEvent,
 		handleKeyOnly bool, claimCheckFileName string) ([]byte, error)
 
 	// Unmarshal the bytes into the given value.
 	Unmarshal(data []byte, v any) error
 }
 
-func newMarshaller(format common.EncodingFormatType) (marshaller, error) {
+func newMarshaller(config *common.Config) (marshaller, error) {
 	var (
 		result marshaller
 		err    error
 	)
-	switch format {
+	switch config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		result = newJSONMarshaller()
+		result = newJSONMarshaller(config)
 	case common.EncodingFormatAvro:
-		result, err = newAvroMarshaller(string(avroSchemaBytes))
+		result, err = newAvroMarshaller(config, string(avroSchemaBytes))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -60,10 +60,14 @@ func newMarshaller(format common.EncodingFormatType) (marshaller, error) {
 	return result, nil
 }
 
-type jsonMarshaller struct{}
+type jsonMarshaller struct {
+	config *common.Config
+}
 
-func newJSONMarshaller() *jsonMarshaller {
-	return &jsonMarshaller{}
+func newJSONMarshaller(config *common.Config) *jsonMarshaller {
+	return &jsonMarshaller{
+		config: config,
+	}
 }
 
 // MarshalCheckpoint implement the marshaller interface
@@ -78,17 +82,11 @@ func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 
 // MarshalDDLEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
-	var (
-		msg *message
-		err error
-	)
+	var msg *message
 	if event.IsBootstrap {
-		msg, err = newBootstrapMessage(event.TableInfo)
+		msg = newBootstrapMessage(event.TableInfo)
 	} else {
-		msg, err = newDDLMessage(event)
-	}
-	if err != nil {
-		return nil, err
+		msg = newDDLMessage(event)
 	}
 	value, err := json.Marshal(msg)
 	if err != nil {
@@ -99,14 +97,10 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 
 // MarshalRowChangedEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalRowChangedEvent(
-	event *model.RowChangedEvent, config *common.Config,
+	event *model.RowChangedEvent,
 	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
-	msg, err := newDMLMessage(event, config, handleKeyOnly, claimCheckFileName)
-	if err != nil {
-		return nil, err
-	}
-
+	msg := m.newDMLMessage(event, handleKeyOnly, claimCheckFileName)
 	value, err := json.Marshal(msg)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
@@ -120,16 +114,18 @@ func (m *jsonMarshaller) Unmarshal(data []byte, v any) error {
 }
 
 type avroMarshaller struct {
-	codec *goavro.Codec
+	codec  *goavro.Codec
+	config *common.Config
 }
 
-func newAvroMarshaller(schema string) (*avroMarshaller, error) {
+func newAvroMarshaller(config *common.Config, schema string) (*avroMarshaller, error) {
 	codec, err := goavro.NewCodec(schema)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &avroMarshaller{
-		codec: codec,
+		codec:  codec,
+		config: config,
 	}, nil
 }
 
@@ -165,13 +161,10 @@ func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 
 // MarshalRowChangedEvent implement the marshaller interface
 func (m *avroMarshaller) MarshalRowChangedEvent(
-	event *model.RowChangedEvent, config *common.Config,
+	event *model.RowChangedEvent,
 	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
-	msg, err := newDMLMessageMap(event, config, handleKeyOnly, claimCheckFileName)
-	if err != nil {
-		return nil, err
-	}
+	msg := m.newDMLMessageMap(event, handleKeyOnly, claimCheckFileName)
 	value, err := m.codec.BinaryFromNative(nil, msg)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)

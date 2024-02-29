@@ -22,13 +22,16 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,8 +57,6 @@ const (
 	closed
 
 	maxIdleDuration = time.Minute * 30
-	// topologyKey is /topology/ticdc/{clusterID}/{ip:port}
-	topologyTiCDC = "/topology/ticdc/%s/%s"
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
@@ -376,4 +377,75 @@ func (up *Upstream) shouldClose() bool {
 	}
 
 	return false
+}
+
+// VerifyTiDBUser verify whether the username and password are valid in TiDB. It does the validation via
+// the successfully build of a connection with upstream TiDB with the username and password.
+func (up *Upstream) VerifyTiDBUser(ctx context.Context, username, password string) error {
+	tidbs, err := fetchTiDBTopology(ctx, up.etcdCli.Unwrap())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(tidbs) == 0 {
+		return errors.New("tidb instance not found in topology, please check if the tidb is running")
+	}
+
+	for _, tidb := range tidbs {
+		// connect tidb
+		host := fmt.Sprintf("%s:%d", tidb.IP, tidb.Port)
+		dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/", username, password, host)
+		err = up.doVerify(ctx, dsnStr)
+		if err == nil {
+			return nil
+		}
+		if errorutil.IsAccessDeniedError(err) {
+			// For access denied error, we can return immediately.
+			// For other errors, we need to continue to verify the next tidb instance.
+			return errors.Trace(err)
+		}
+	}
+	return errors.Trace(err)
+}
+
+func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// Note: we use "preferred" here to make sure the connection is encrypted if possible. It is the same as the default
+	// behavior of mysql client, refer to: https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html.
+	dsn.TLSConfig = "preferred"
+
+	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SHOW STATUS LIKE '%Ssl_cipher'")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Warn("query Ssl_cipher close rows failed", zap.Error(err))
+		}
+		if rows.Err() != nil {
+			log.Warn("query Ssl_cipher rows has error", zap.Error(rows.Err()))
+		}
+	}()
+
+	var name, value string
+	err = rows.Scan(&name, &value)
+	if err != nil {
+		log.Warn("failed to get ssl cipher", zap.Error(err),
+			zap.String("username", dsn.User), zap.Uint64("upstreamID", up.ID))
+	}
+	log.Info("verify tidb user successfully", zap.String("username", dsn.User),
+		zap.String("sslCipherName", name), zap.String("sslCipherValue", value),
+		zap.Uint64("upstreamID", up.ID))
+	return nil
 }

@@ -39,7 +39,7 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	value, err := e.marshaller.MarshalRowChangedEvent(event, e.config, false, "")
+	value, err := e.marshaller.MarshalRowChangedEvent(event, false, "")
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (e *encoder) AppendRowChangedEvent(
 		}
 	}
 
-	value, err = e.marshaller.MarshalRowChangedEvent(event, e.config, true, claimCheckLocation)
+	value, err = e.marshaller.MarshalRowChangedEvent(event, true, claimCheckLocation)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	m, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
