@@ -121,19 +121,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeEnum, TypeSet encoded as string
 	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case int64:
+			number = uint64(v)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, number)
 	case mysql.TypeBit:
-		var (
-			number uint64
-			err    error
-		)
+		var number uint64
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			number = MustBinaryLiteralToInt(v)
 		// TypeBit encoded as uint64 for the simple protocol
 		case uint64:
 			number = v

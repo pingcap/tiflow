@@ -9,6 +9,12 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
+export TICDC_USER=ticdc
+export TICDC_PASSWORD=ticdc_password
+export TICDC_CA_PATH=$TLS_DIR/ca.pem
+export TICDC_CERT_PATH=$TLS_DIR/client.pem
+export TICDC_KEY_PATH=$TLS_DIR/client-key.pem
+
 function check_changefeed_count() {
 	pd_addr=$1
 	expected=$2
@@ -21,19 +27,47 @@ function check_changefeed_count() {
 }
 
 function run() {
+	# pulsar is not supported yet.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		return
+	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
+	start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
 	cd $WORK_DIR
-	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
+	pd_addr="https://$TLS_PD_HOST:$TLS_PD_PORT"
 
 	# record tso before we create tables to skip the system table DDLs
-	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
-	run_sql "CREATE table test.simple(id int primary key, val int);"
-	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
+	start_ts=$(run_cdc_cli_tso_query ${TLS_PD_HOST} ${TLS_PD_PORT} true)
+	run_sql "CREATE table test.simple(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
 
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	cd $WORK_DIR
+	echo " \
+  [security]
+   ca-path = \"$TLS_DIR/ca.pem\"
+   cert-path = \"$TLS_DIR/server.pem\"
+   key-path = \"$TLS_DIR/server-key.pem\"
+   cert-allowed-cn = [\"fake_cn\"]
+  " >$WORK_DIR/server.toml
+	run_cdc_server \
+		--workdir $WORK_DIR \
+		--binary $CDC_BINARY \
+		--logsuffix "_${TEST_NAME}_tls1" \
+		--pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+		--addr "127.0.0.1:8300" \
+		--config "$WORK_DIR/server.toml" \
+		--tlsdir "$TLS_DIR" \
+		--cert-allowed-cn "client" # The common name of client.pem
+	sleep 2
 
 	TOPIC_NAME="ticdc-cli-test-$RANDOM"
 	case $SINK_TYPE in
@@ -48,19 +82,16 @@ function run() {
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
+	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
 	esac
 
 	# Make sure changefeed is created.
 	check_table_exists test.simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists test."\`simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
+	check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" $uuid "normal" "null" "" $TLS_DIR
 
-	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1
-	check_changefeed_count http://${UP_PD_HOST_2}:${UP_PD_PORT_2} 1
-	check_changefeed_count http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
-	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1},http://${UP_PD_HOST_2}:${UP_PD_PORT_2},http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
+	check_changefeed_count https://${TLS_PD_HOST}:${TLS_PD_PORT} 1
 
 	# Make sure changefeed can not be created if the name is already exists.
 	set +e
@@ -86,11 +117,11 @@ EOF
 
 	# Pause changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "stopped" "null" ""
+	check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" $uuid "stopped" "null" "" $TLS_DIR
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
+	changefeed_info=$(curl -s -X GET "https://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem" 2>&1)
 	if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -110,14 +141,14 @@ EOF
 
 	# Resume changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
+	check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" $uuid "normal" "null" "" $TLS_DIR
 
 	# Remove changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
-	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
+	check_changefeed_count https://${TLS_PD_HOST}:${TLS_PD_PORT} 0
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
+	check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" $uuid "normal" "null" "" $TLS_DIR
 
 	# Make sure bad sink url fails at creating changefeed.
 	badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')
@@ -136,7 +167,7 @@ EOF
 	# Smoke test unsafe commands
 	echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
 	run_cdc_cli unsafe reset --no-confirm --pd=$pd_addr
-	REGION_ID=$(pd-ctl -u=$pd_addr region | jq '.regions[0].id')
+	REGION_ID=$(pd-ctl --cacert="${TLS_DIR}/ca.pem" --cert="${TLS_DIR}/client.pem" --key="${TLS_DIR}/client-key.pem" -u=$pd_addr region | jq '.regions[0].id')
 	TS=$(cdc cli tso query --pd=$pd_addr)
 	# wait for owner online
 	sleep 3
@@ -144,10 +175,10 @@ EOF
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID --ts=$TS
 
 	# Smoke test change log level
-	curl -X POST -d '"warn"' http://127.0.0.1:8300/api/v1/log
+	curl -X POST -d '"warn"' https://127.0.0.1:8300/api/v1/log --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem"
 	sleep 3
 	# make sure TiCDC does not panic
-	curl http://127.0.0.1:8300/status
+	curl https://127.0.0.1:8300/status --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem"
 
 	cleanup_process $CDC_BINARY
 }
