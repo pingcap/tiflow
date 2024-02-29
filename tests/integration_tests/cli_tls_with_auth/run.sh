@@ -27,6 +27,10 @@ function check_changefeed_count() {
 }
 
 function run() {
+	# pulsar is not supported yet.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		return
+	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
