@@ -30,6 +30,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Decoder implement the RowEventDecoder interface
 type Decoder struct {
 	config *common.Config
 
