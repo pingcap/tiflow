@@ -66,11 +66,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20231212100244-799fae176cfb
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
-	github.com/pingcap/kvproto v0.0.0-20231222062942-c0c73f41d0b2
+	github.com/pingcap/kvproto v0.0.0-20231226064240-4f28b82c7860
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-	github.com/pingcap/tidb v1.1.0-beta.0.20240105042433-54d8a1416ab0
+	github.com/pingcap/tidb v1.1.0-beta.0.20240122141050-52794d985ba6
 	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20231229060758-e19e06e1bc19
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240122141050-52794d985ba6
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/r3labs/diff v1.1.0
@@ -90,7 +90,7 @@ require (
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
 	github.com/tikv/pd v1.1.0-beta.0.20231212061647-ab97b9a267f3
-	github.com/tikv/pd/client v0.0.0-20240103101103-a4d2f1ca365a
+	github.com/tikv/pd/client v0.0.0-20240109100024-dd8df25316e9
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -113,7 +113,7 @@ require (
 	golang.org/x/net v0.19.0
 	golang.org/x/oauth2 v0.15.0
 	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.15.0
+	golang.org/x/sys v0.16.0
 	golang.org/x/text v0.14.0
 	golang.org/x/time v0.5.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20231212172506-995d672761c0
@@ -162,6 +162,7 @@ require (
 	github.com/ks3sdklib/aws-sdk-go v1.2.7 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
+	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -220,7 +221,7 @@ require (
 	github.com/creachadair/cityhash v0.1.1 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
-	github.com/danjacques/gofslock v0.0.0-20220131014315-6e321f4509c8 // indirect
+	github.com/danjacques/gofslock v0.0.0-20240212154529-d899e02bfe22 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect

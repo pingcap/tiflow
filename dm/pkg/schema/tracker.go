@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/ddl/schematracker"
 	"github.com/pingcap/tidb/pkg/executor"
@@ -45,6 +46,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -102,6 +104,30 @@ func (se executorContext) ExecRestrictedSQL(context.Context, []sqlexec.OptionFun
 	return nil, nil, nil
 }
 
+type trackerMockStore struct {
+	mock.Store
+}
+
+func (*trackerMockStore) Begin(...tikv.TxnOption) (kv.Transaction, error) {
+	return trackerMockTransaction{}, nil
+}
+
+// trackerMockTransaction implements some methods of kv.Transaction that are
+// called during CHANGE COLUMN DDL. A non-nil transaction was required starting
+// pingcap/tidb#50039 which checks the current BDR role from the txn :/.
+type trackerMockTransaction struct {
+	kv.Transaction
+}
+
+func (trackerMockTransaction) SetOption(int, interface{})         {}
+func (trackerMockTransaction) SetDiskFullOpt(kvrpcpb.DiskFullOpt) {}
+func (trackerMockTransaction) StartTS() uint64                    { return 0 }
+func (trackerMockTransaction) Valid() bool                        { return false }
+
+// Get implements kv.Transaction interface.
+// The GetBDRMode() function will call this with k having prefix "mBDRMode".
+func (trackerMockTransaction) Get(context.Context, kv.Key) ([]byte, error) { return nil, nil }
+
 // NewTracker simply returns an empty Tracker,
 // which should be followed by an initialization before used.
 func NewTracker() *Tracker {
@@ -141,7 +167,12 @@ func (tr *Tracker) Init(
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 	// TODO: need to use upstream timezone to correctly check literal is in [1970, 2038]
-	se := executorContext{Context: mock.NewContext()}
+	seContext := mock.NewContext()
+	seContext.Store = &trackerMockStore{}
+	if err = seContext.RefreshTxnCtx(ctx); err != nil {
+		return err
+	}
+	se := executorContext{Context: seContext}
 	tr.Lock()
 	defer tr.Unlock()
 	tr.lowerCaseTableNames = lowerCaseTableNames
