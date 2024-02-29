@@ -107,7 +107,7 @@ func TestApply(t *testing.T) {
 			dbIndex++
 		}()
 		if dbIndex%2 == 0 {
-			testDB, err := pmysql.MockTestDB(true)
+			testDB, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return testDB, nil
 		}
