@@ -633,6 +633,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 && ddl.Query != "" {
 					c.appendDDL(ddl)
 				}
+
+				if simple, ok := decoder.(*simple.Decoder); ok {
+					cachedEvents := simple.GetCachedEvents()
+					for _, row := range cachedEvents {
+						var partitionID int64
+						if row.TableInfo.IsPartitionTable() {
+							partitionID = row.PhysicalTableID
+						}
+						tableID := c.fakeTableIDGenerator.
+							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+						row.TableInfo.TableName.TableID = tableID
+
+						group, ok := eventGroups[tableID]
+						if !ok {
+							group = newEventsGroup()
+							eventGroups[tableID] = group
+						}
+						group.Append(row)
+					}
+				}
+
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
