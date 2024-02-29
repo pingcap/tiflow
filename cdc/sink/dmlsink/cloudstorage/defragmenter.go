@@ -15,11 +15,9 @@ package cloudstorage
 import (
 	"context"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
-	"go.uber.org/zap"
 )
 
 // defragmenter is used to handle event fragments which can be registered
@@ -92,7 +90,6 @@ func (d *defragmenter) writeMsgsConsecutive(
 }
 
 func (d *defragmenter) dispatchFragToDMLWorker(frag eventFragment) {
-	log.Info("dispatchFragToDMLWorker", zap.Uint64("seq", frag.seqNumber))
 	tableName := frag.versionedTable.TableNameWithPhysicTableID
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))

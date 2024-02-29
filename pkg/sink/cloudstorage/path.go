@@ -196,7 +196,6 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 
 	// Case 1: point check if the schema file exists.
 	tblSchemaFile, err := def.GenerateSchemaFilePath()
-	log.Info("CheckOrWriteSchema generate path", zap.String("tblSchemaFile", tblSchemaFile))
 	if err != nil {
 		return err
 	}
@@ -263,7 +262,6 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		return err
 	}
 	f.versionMap[table] = table.TableInfoVersion
-	log.Info("CheckOrWriteSchema write to file", zap.String("tblSchemaFile", tblSchemaFile))
 	return f.storage.WriteFile(ctx, tblSchemaFile, encodedDetail)
 }
 
@@ -304,13 +302,6 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 ) (string, error) {
 	dir := f.generateDataDirPath(tbl, date)
 	name, err := f.generateDataFileName(ctx, tbl, date)
-	log.Info("generate data file path",
-		zap.String("namespace", f.changefeedID.Namespace),
-		zap.String("changefeedID", f.changefeedID.ID),
-		zap.String("table", tbl.TableNameWithPhysicTableID.String()),
-		zap.String("dir", dir),
-		zap.String("name", name))
-
 	if err != nil {
 		return "", err
 	}

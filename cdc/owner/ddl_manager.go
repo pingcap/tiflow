@@ -417,7 +417,6 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 	res := make([]*model.DDLEvent, 0, 1)
 	for _, events := range m.pendingDDLs {
-		log.Info("getAllTableNextDDL", zap.Any("events", events))
 		if len(events) > 0 {
 			res = append(res, events[0])
 		}
@@ -429,7 +428,6 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	barrier := schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs)
 	tableBarrierMap := make(map[model.TableID]model.Ts)
-	log.Info("ddlManager.barrier start")
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
 		ddls = append(ddls, m.justSentDDL)
@@ -450,31 +448,21 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 		if isGlobalDDL(ddl) {
 			// When there is a global DDL, we need to wait all tables
 			// checkpointTs reach its commitTs before we can execute it.
-			log.Info("try update global barrier",
-				zap.Any("ddlCommitTS", ddl.CommitTs),
-				zap.Any("query", ddl.Query),
-				zap.Any("globalBarrierTs", barrier.GlobalBarrierTs))
 			if ddl.CommitTs < barrier.GlobalBarrierTs {
 				barrier.GlobalBarrierTs = ddl.CommitTs
 			}
 		} else {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
-			log.Info("ddlManager.barrier", zap.Any("ids", ids), zap.Any("ddl", ddl))
 			for _, id := range ids {
 				tableBarrierMap[id] = ddl.CommitTs
 			}
 		}
 	}
-	log.Info("ddlManager.barrier end")
 
 	// calculate tableBarriers
 	var tableBarriers []*schedulepb.TableBarrier
 	for tableID, tableBarrierTs := range tableBarrierMap {
-		log.Info("ddlManager.barrier",
-			zap.Uint64("tableID", uint64(tableID)),
-			zap.Uint64("tableBarrierTs", tableBarrierTs),
-			zap.Uint64("GlobalBarrierTs", barrier.GlobalBarrierTs))
 		if tableBarrierTs > barrier.GlobalBarrierTs {
 			continue
 		}
@@ -607,9 +595,6 @@ func getRelatedPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 			res = append(res, def.ID)
 		}
 	}
-	log.Info("getRelatedPhysicalTableIDs",
-		zap.Any("ddl", ddl),
-		zap.Any("res", res))
 	return res
 }
 
