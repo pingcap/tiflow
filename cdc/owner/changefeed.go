@@ -389,12 +389,15 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if c.lastSyncedTs < watermark.LastSyncedTs {
-		c.lastSyncedTs = watermark.LastSyncedTs
-	} else if c.lastSyncedTs > watermark.LastSyncedTs {
-		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
-			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
-			zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+
+	if watermark.LastSyncedTs != scheduler.CheckpointCannotProceed {
+		if c.lastSyncedTs < watermark.LastSyncedTs {
+			c.lastSyncedTs = watermark.LastSyncedTs
+		} else if c.lastSyncedTs > watermark.LastSyncedTs {
+			log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+				zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+				zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+		}
 	}
 
 	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
