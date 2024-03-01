@@ -326,7 +326,7 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 // GetCachedEvents returns the cached events
 func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
 	result := d.CachedRowChangedEvents
-	d.cachedMessages = nil
+	d.CachedRowChangedEvents = nil
 	return result
 }
 
