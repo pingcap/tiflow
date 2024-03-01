@@ -1,3 +1,5 @@
+# Description: Dockerfile for pulsar integration test
+# docker build -t hub.pingcap.net/jenkins/tini-golang-1.21:pulsar-test .
 FROM openjdk:17 as jdk_container
 
 FROM hub.pingcap.net/jenkins/centos7_golang-1.21:latest
@@ -8,6 +10,13 @@ RUN curl https://archive.apache.org/dist/pulsar/pulsar-3.2.0/apache-pulsar-3.2.0
 USER root
 RUN yum install -y nc
 RUN mv pulsar /usr/local
+
+# Add Tini
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini
+ENTRYPOINT ["/tini", "--"]
+
 USER jenkins
 COPY --from=jdk_container  /usr/java /usr/java
 ENV PATH="/usr/java/openjdk-17/bin:/usr/local/pulsar/bin:${PATH}"
