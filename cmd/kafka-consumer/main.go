@@ -592,7 +592,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+		if err = decoder.AddKeyValue(message.Key, message.Value); err != nil {
 			log.Error("add key value to the decoder failed", zap.Error(err))
 			return cerror.Trace(err)
 		}
@@ -629,9 +629,31 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				if partition == 0 {
+				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
+				if partition == 0 && ddl.Query != "" {
 					c.appendDDL(ddl)
 				}
+
+				if simple, ok := decoder.(*simple.Decoder); ok {
+					cachedEvents := simple.GetCachedEvents()
+					for _, row := range cachedEvents {
+						var partitionID int64
+						if row.TableInfo.IsPartitionTable() {
+							partitionID = row.PhysicalTableID
+						}
+						tableID := c.fakeTableIDGenerator.
+							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+						row.TableInfo.TableName.TableID = tableID
+
+						group, ok := eventGroups[tableID]
+						if !ok {
+							group = newEventsGroup()
+							eventGroups[tableID] = group
+						}
+						group.Append(row)
+					}
+				}
+
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
@@ -755,7 +777,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Warn("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.String("DDL", ddl.Query))
 		return
 	}
 
@@ -764,12 +786,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.ddlWithMaxCommitTs {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	c.ddlWithMaxCommitTs = ddl
 }
 
