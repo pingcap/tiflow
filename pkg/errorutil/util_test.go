@@ -105,6 +105,8 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
 		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
+		{newMysqlErr(tmysql.ErrNonuniqTable, "xx"), false},
+		{newMysqlErr(tmysql.ErrBadDB, "xx"), false},
 		{mysql.ErrInvalidConn, true},
 	}
 

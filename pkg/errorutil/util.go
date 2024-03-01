@@ -132,11 +132,13 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrSyntax,
 		mysql.ErrParse,
 		mysql.ErrNoDB,
+		mysql.ErrBadDB,
 		mysql.ErrNoSuchTable,
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
-		mysql.ErrPartitionMgmtOnNonpartitioned:
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		mysql.ErrNonuniqTable:
 		return false
 	}
 	return true
