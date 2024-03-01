@@ -248,12 +248,6 @@ func (t *tableStatistic) update(row *model.RowChangedEvent, totalPartition int32
 	if t.version.Load() != row.TableInfo.UpdateTS {
 		t.version.Store(row.TableInfo.UpdateTS)
 		t.tableInfo.Store(row.TableInfo)
-	} else {
-		// Note(dongmen): Rename Table DDL is a special case,
-		// the TableInfo.Name is changed but the TableInfo.UpdateTs is not changed.
-		if t.tableInfo.Load().(*model.TableInfo).Name != row.TableInfo.Name {
-			t.tableInfo.Store(row.TableInfo)
-		}
 	}
 
 	if t.totalPartition.Load() != totalPartition {
