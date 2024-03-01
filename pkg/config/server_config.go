@@ -164,16 +164,17 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig        `toml:"sorter" json:"sorter"`
-	Security *security.Credential `toml:"security" json:"security"`
+	Sorter                 *SorterConfig        `toml:"sorter" json:"sorter"`
+	Security               *security.Credential `toml:"security" json:"security"`
+	KVClient               *KVClientConfig      `toml:"kv-client" json:"kv-client"`
+	Debug                  *DebugConfig         `toml:"debug" json:"debug"`
+	ClusterID              string               `toml:"cluster-id" json:"cluster-id"`
+	GcTunerMemoryThreshold uint64               `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
+
 	// Deprecated: we don't use this field anymore.
-	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
-	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
-	Debug               *DebugConfig    `toml:"debug" json:"debug"`
-	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
+	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	// Deprecated: we don't use this field anymore.
-	MaxMemoryPercentage    int    `toml:"max-memory-percentage" json:"max-memory-percentage"`
-	GcTunerMemoryThreshold uint64 `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
+	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig

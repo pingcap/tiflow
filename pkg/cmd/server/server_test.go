@@ -209,8 +209,7 @@ func TestParseCfg(t *testing.T) {
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -357,8 +356,7 @@ check-balance-interval = "10s"
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -497,8 +495,7 @@ cert-allowed-cn = ["dd","ee"]
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
-		ClusterID:           "default",
-		MaxMemoryPercentage: config.DisableMemoryLimit,
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 

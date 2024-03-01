@@ -138,7 +138,6 @@ const (
     "client-user-required": false,
     "client-allowed-user": null
   },
-  "per-table-memory-quota": 0,
   "kv-client": {
     "enable-multiplexing": true,
     "worker-concurrent": 8,
@@ -194,8 +193,9 @@ const (
     }
   },
   "cluster-id": "default",
-  "max-memory-percentage": 0,
-  "gc-tuner-memory-threshold": 0
+  "gc-tuner-memory-threshold": 0,
+  "per-table-memory-quota": 0,
+  "max-memory-percentage": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
