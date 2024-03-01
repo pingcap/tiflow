@@ -205,11 +205,26 @@ func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.
 // Close close all producers
 func (p *pulsarProducers) Close() {
 	keys := p.producers.Keys()
-	p.producersMutex.Lock()
-	defer p.producersMutex.Unlock()
-	for _, topic := range keys {
-		p.producers.Remove(topic) // callback func will be called
-	}
+	// We need to close it asynchronously. Otherwise, we might get stuck
+	// with an unhealthy(i.e. Network jitter, isolation) state of pulsar.
+	// Why:
+	// * If the pulsar cluster is running well, it will be closed as soon as possible.
+	//   Also, we cancel all table pipelines before closed, so it's safe.
+	// * If there is a problem with the pulsar cluster, close process will be blocked.
+	//   And this will cause the main tick loop to be stuck.
+	// Risky:
+	// * There may be double write happen in the downstream, when the producer is closing and the
+	// same table of this producer is re-created. This may cause the downstream to receive duplicate
+	// data, and may cause the downstream to be inconsistent.
+	// * There is also a risk of goroutine leakage.
+	go func() {
+		p.producersMutex.Lock()
+		defer p.producersMutex.Unlock()
+		p.client.Close()
+		for _, topic := range keys {
+			p.producers.Remove(topic) // callback func will be called
+		}
+	}()
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic
