@@ -362,7 +362,8 @@ const (
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -527,6 +528,7 @@ const (
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 )
