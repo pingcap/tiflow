@@ -123,17 +123,18 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	value, err := e.marshaller.MarshalCheckpoint(ts)
-	if err != nil {
-		return nil, err
-	}
-
-	value, err = common.Compress(e.config.ChangefeedID,
-		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return nil, err
-	}
-	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
+	return nil, nil
+	//value, err := e.marshaller.MarshalCheckpoint(ts)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//value, err = common.Compress(e.config.ChangefeedID,
+	//	e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface

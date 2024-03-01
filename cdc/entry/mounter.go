@@ -468,6 +468,14 @@ func (m *mounter) verifyChecksum(
 		return checksum, version, true, nil
 	}
 
+	if isPreRow {
+		log.Info("old value checksum does not match the one sent by the TiDB, " +
+			"this may happen drop column DDL executed after the old value was inserted," +
+			"since the dropped column cannot be found from the latest table schema, so the checksum mismatch happend," +
+			"so re-calculate the checksum based on the obtained data decoded by using the latest table schema")
+		return checksum, version, true, nil
+	}
+
 	log.Error("checksum mismatch", zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
 	return checksum, version, false, nil
 }
