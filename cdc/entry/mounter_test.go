@@ -1192,6 +1192,27 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyChecksumTime(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	helper.Tk().MustExec("set global time_zone = '-5:00'")
+	_ = helper.DDL2Event(`CREATE table TBL2 (a int primary key, b TIMESTAMP)`)
+	event := helper.DML2Event(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`, "test", "TBL2")
+	require.NotNil(t, event)
+
+	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
+	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 1)", "test", "t")
+	require.NotNil(t, event)
+}
+
 func TestDecodeRowEnableChecksum(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()

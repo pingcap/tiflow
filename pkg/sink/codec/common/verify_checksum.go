@@ -18,11 +18,14 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -76,25 +79,32 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeLongLong is encoded as int64 if signed, else uint64,
 	// if bigintUnsignedHandlingMode set as string, encode as string.
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+		var (
+			v   uint64
+			err error
+		)
 		switch a := value.(type) {
 		case int32:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
+			v = uint64(a)
 		case uint32:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
+			v = uint64(a)
 		case int64:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
+			v = uint64(a)
 		case uint64:
-			buf = binary.LittleEndian.AppendUint64(buf, a)
+			v = a
 		case string:
-			v, err := strconv.ParseUint(a, 10, 64)
+			v, err = strconv.ParseUint(a, 10, 64)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			buf = binary.LittleEndian.AppendUint64(buf, v)
+		case map[string]interface{}:
+			// this may only happen for bigint larger than math.uint64
+			v = uint64(a["value"].(int64))
 		default:
 			log.Panic("unknown golang type for the integral value",
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
+		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// TypeFloat encoded as float32, TypeDouble encoded as float64
 	case mysql.TypeFloat, mysql.TypeDouble:
 		var v float64
@@ -111,19 +121,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeEnum, TypeSet encoded as string
 	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case int64:
+			number = uint64(v)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, number)
 	case mysql.TypeBit:
-		var (
-			number uint64
-			err    error
-		)
+		var number uint64
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			number = MustBinaryLiteralToInt(v)
 		// TypeBit encoded as uint64 for the simple protocol
 		case uint64:
 			number = v
@@ -140,10 +151,23 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 			log.Panic("unknown golang type for the string value",
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
+	case mysql.TypeTimestamp:
+		location := config.GetDefaultServerConfig().TZ
+		timestamp := value.(string)
+
+		loc, err := util.GetTimezone(location)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		buf = appendLengthValue(buf, []byte(timestamp))
 	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
-		v := value.(string)
-		buf = appendLengthValue(buf, []byte(v))
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+		buf = appendLengthValue(buf, []byte(value.(string)))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.
 	case mysql.TypeNewDecimal:
 		buf = appendLengthValue(buf, []byte(value.(string)))

@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -44,7 +45,7 @@ type statusAPI struct {
 func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	statusAPI := statusAPI{capture: capture}
 	router.GET("/status", gin.WrapF(statusAPI.handleStatus))
-	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
+	router.GET("/debug/info", middleware.AuthenticateMiddleware(capture), gin.WrapF(statusAPI.handleDebugInfo))
 }
 
 func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w io.Writer) {

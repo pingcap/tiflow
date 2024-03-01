@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/pkg/planner/core"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -322,7 +322,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -441,7 +441,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -636,7 +636,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			if c.updateDDl != "" {
@@ -758,7 +758,7 @@ func TestVerify(t *testing.T) {
 			ti := helper.execDDL(ddl)
 			tableInfos = append(tableInfos, ti)
 		}
-		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
+		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		err = f.verify(tableInfos)
 		require.True(t, errors.ErrorEqual(tc.err, err), "case: %+v", tc, err)
@@ -776,11 +776,11 @@ func TestGetColumnFromError(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			err:      core.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
+			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
 			expected: "mother",
 		},
 		{
-			err:      core.ErrUnknownColumn.FastGenByArgs("company", "expression"),
+			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("company", "expression"),
 			expected: "company",
 		},
 		{

@@ -425,12 +425,15 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
-	if c.lastSyncedTs < watermark.LastSyncedTs {
-		c.lastSyncedTs = watermark.LastSyncedTs
-	} else if c.lastSyncedTs > watermark.LastSyncedTs {
-		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
-			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
-			zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+
+	if watermark.LastSyncedTs != scheduler.CheckpointCannotProceed {
+		if c.lastSyncedTs < watermark.LastSyncedTs {
+			c.lastSyncedTs = watermark.LastSyncedTs
+		} else if c.lastSyncedTs > watermark.LastSyncedTs {
+			log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+				zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+				zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+		}
 	}
 
 	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
@@ -659,10 +662,10 @@ LOOP2:
 			defer c.wg.Done()
 			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
 		}()
+		log.Info("owner creates redo manager",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
 	}
-	log.Info("owner creates redo manager",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID))
 
 	c.ddlManager = newDDLManager(
 		c.id,

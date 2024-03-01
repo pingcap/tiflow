@@ -136,7 +136,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
 						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
@@ -205,7 +204,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
 						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
@@ -279,7 +277,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
 						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
@@ -375,7 +372,6 @@ func TestPatchInfo(t *testing.T) {
 			Scheduler:                    defaultConfig.Scheduler,
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
-			SQLMode:                      defaultConfig.SQLMode,
 			SyncedStatus:                 defaultConfig.SyncedStatus,
 		},
 	}
@@ -399,7 +395,6 @@ func TestPatchInfo(t *testing.T) {
 			Scheduler:                    defaultConfig.Scheduler,
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
-			SQLMode:                      defaultConfig.SQLMode,
 			SyncedStatus:                 defaultConfig.SyncedStatus,
 		},
 	}

@@ -101,6 +101,13 @@ var (
 		Name:      "block_cache_access_total",
 		Help:      "The total number of db block cache access",
 	}, []string{"id", "type"})
+
+	dbRangeCleanCount = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "db",
+		Name:      "range_clean_count",
+		Help:      "The total number of db range clean",
+	})
 )
 
 /* Some metrics are shared in pipeline sorter and pull-based-sink sort engine */
@@ -155,6 +162,11 @@ func BlockCacheAccess() *prometheus.GaugeVec {
 	return dbBlockCacheAccess
 }
 
+// RangeCleanCount returns dbRangeCleanCount.
+func RangeCleanCount() prometheus.Counter {
+	return dbRangeCleanCount
+}
+
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(mountWaitDuration)
@@ -170,4 +182,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(dbLevelCount)
 	registry.MustRegister(dbWriteDelayCount)
 	registry.MustRegister(dbBlockCacheAccess)
+	registry.MustRegister(dbRangeCleanCount)
 }
