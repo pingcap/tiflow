@@ -491,7 +491,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 	if m.decoder != nil {
 		checksumVersion = m.decoder.ChecksumVersion()
-	} else {
+	} else if m.preDecoder != nil {
 		checksumVersion = m.preDecoder.ChecksumVersion()
 	}
 
