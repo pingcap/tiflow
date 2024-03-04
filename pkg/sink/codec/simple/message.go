@@ -416,7 +416,7 @@ func buildRowChangedEvent(
 
 	if enableRowChecksum && msg.Checksum != nil {
 		var (
-			previoudCorrupted bool
+			previousCorrupted bool
 			currentCorrupted  bool
 		)
 		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
@@ -437,7 +437,7 @@ func buildRowChangedEvent(
 			Version:   msg.Checksum.Version,
 		}
 
-		if msg.Checksum.Corrupted || previoudCorrupted {
+		if msg.Checksum.Corrupted || previousCorrupted {
 			log.Warn("cdc detect previous checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))

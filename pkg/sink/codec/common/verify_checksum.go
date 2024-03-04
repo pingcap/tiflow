@@ -18,6 +18,7 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -154,16 +155,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	case mysql.TypeTimestamp:
 		location := config.GetDefaultServerConfig().TZ
 		timestamp := value.(string)
+		format := "2006-01-02 15:04:05"
+		if strings.Contains(timestamp, ".") {
+			format = "2006-01-02 15:04:05.999999"
+		}
 
 		loc, err := util.GetTimezone(location)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		t, err := time.ParseInLocation(format, timestamp, loc)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		timestamp = t.UTC().Format(format)
 		buf = appendLengthValue(buf, []byte(timestamp))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
