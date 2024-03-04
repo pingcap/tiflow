@@ -170,6 +170,11 @@ type ServerConfig struct {
 	Debug                  *DebugConfig         `toml:"debug" json:"debug"`
 	ClusterID              string               `toml:"cluster-id" json:"cluster-id"`
 	GcTunerMemoryThreshold uint64               `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
+
+	// Deprecated: we don't use this field anymore.
+	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	// Deprecated: we don't use this field anymore.
+	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
