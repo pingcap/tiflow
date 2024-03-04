@@ -1792,13 +1792,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
-            "max": false,
+            "current": true,
+            "max": true,
             "min": false,
             "rightSide": true,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
