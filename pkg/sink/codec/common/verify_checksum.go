@@ -155,6 +155,8 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	case mysql.TypeTimestamp:
 		location := config.GetDefaultServerConfig().TZ
 		timestamp := value.(string)
+		// if timestamp contains microseconds,
+		// keep it in the value to match the TiDB representation.
 		format := "2006-01-02 15:04:05"
 		if strings.Contains(timestamp, ".") {
 			format = "2006-01-02 15:04:05.999999"
