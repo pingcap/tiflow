@@ -13,7 +13,7 @@ source-instances = ["tidb0"]
 
 target-instance = "mysql1"
 
-target-check-tables = ["dispatcher.?*"]
+target-check-tables = ["dispatcher.?*", "verify.?*"]
 
 [data-sources]
 [data-sources.tidb0]
