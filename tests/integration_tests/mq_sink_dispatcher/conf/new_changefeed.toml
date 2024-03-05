@@ -1,4 +1,4 @@
 [sink]
 dispatchers = [
-    {matcher = ['dispatcher.index'], partition = "index-value", index = ""}
+    {matcher = ['dispatcher.index'], partition = "index-value"}
 ]
