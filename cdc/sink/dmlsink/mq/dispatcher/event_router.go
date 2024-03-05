@@ -132,24 +132,22 @@ func (s *EventRouter) GetPartitionDispatcher(schema, table string) partition.Dis
 // VerifyTables return error if any one table route rule is invalid.
 func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
 	for _, table := range infos {
-		log.Info("VerifyTables",
-			zap.String("schema", table.TableName.Schema),
-			zap.String("table", table.TableName.Table))
 		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
 		switch v := partitionDispatcher.(type) {
 		case *partition.IndexValueDispatcher:
-			log.Info("VerifyTables IndexValueDispatcher", zap.String("indexName", v.IndexName))
-			index := table.GetIndex(v.IndexName)
-			if index == nil {
-				return cerror.ErrDispatcherFailed.GenWithStack(
-					"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
-			}
-			// only allow the unique index to be set.
-			// For the non-unique index, if any column belongs to the index is updated,
-			// the event is not split, it may cause incorrect data consumption.
-			if !index.Unique {
-				return cerror.ErrDispatcherFailed.GenWithStack(
-					"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+			if v.IndexName != "" {
+				index := table.GetIndex(v.IndexName)
+				if index == nil {
+					return cerror.ErrDispatcherFailed.GenWithStack(
+						"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+				}
+				// only allow the unique index to be set.
+				// For the non-unique index, if any column belongs to the index is updated,
+				// the event is not split, it may cause incorrect data consumption.
+				if !index.Unique {
+					return cerror.ErrDispatcherFailed.GenWithStack(
+						"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+				}
 			}
 		case *partition.ColumnsDispatcher:
 			_, ok := table.OffsetsByNames(v.Columns)
