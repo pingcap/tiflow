@@ -29,6 +29,12 @@ function run() {
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
+
+	# create a table before changefeed created to reproduce https://github.com/pingcap/tiflow/issues/10707
+	run_sql "DROP DATABASE if exists verify;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE DATABASE verify;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE TABLE verify.t (a int primary key, b int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c ${changefeed_id} --config="$CUR/conf/changefeed.toml"
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "normal" "null" ""
