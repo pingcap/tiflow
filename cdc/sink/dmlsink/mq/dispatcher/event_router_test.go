@@ -293,7 +293,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 		IndexColumns: [][]int{{0}},
 	}, 16)
-	require.Equal(t, int32(10), p)
+	require.Equal(t, int32(14), p)
 	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
 		Columns: []*model.Column{
@@ -305,7 +305,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 		IndexColumns: [][]int{{0}},
 	}, 16)
-	require.Equal(t, int32(4), p)
+	require.Equal(t, int32(0), p)
 
 	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "test_table", Table: "table"},

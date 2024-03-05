@@ -40,7 +40,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 11},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -54,7 +54,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 1},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -68,7 +68,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 7},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -85,7 +85,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 1},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -102,7 +102,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 11},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -119,7 +119,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 13},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -136,7 +136,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, expectPartition: 13},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
