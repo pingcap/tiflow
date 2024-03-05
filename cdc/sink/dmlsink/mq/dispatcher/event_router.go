@@ -243,7 +243,7 @@ func getPartitionDispatcher(
 	case partitionDispatchRuleTable:
 		d = partition.NewTableDispatcher()
 	case partitionDispatchRuleDefault:
-		d = partition.NewDefaultDispatcher(enableOldValue)
+		d = partition.NewDefaultDispatcher()
 	}
 
 	return d
