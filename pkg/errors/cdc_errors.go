@@ -571,8 +571,7 @@ var (
 	)
 
 	ErrCorruptedDataMutation = errors.Normalize(
-		"Changefeed %s.%s stopped due to corrupted data mutation received. "+
-			"Corrupted mutation detail information %+v",
+		"Changefeed %s.%s stopped due to corrupted data mutation received",
 		errors.RFCCodeText("CDC:ErrCorruptedDataMutation"))
 
 	// server related errors
