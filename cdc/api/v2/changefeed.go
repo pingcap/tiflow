@@ -324,6 +324,7 @@ func getNamespaceValueWithDefault(c *gin.Context) string {
 
 // verifyTable verify table, return ineligibleTables and EligibleTables.
 func (h *OpenAPIV2) verifyTable(c *gin.Context) {
+	log.Info("verifyTable")
 	cfg := getDefaultVerifyTableConfig()
 	if err := c.BindJSON(cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))

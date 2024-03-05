@@ -41,7 +41,7 @@ function run() {
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrDispatcherFailed"
 
-	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/new_changefeed.toml"
+	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/new_changefeed.toml" --no-confirm
 
 	run_cdc_cli changefeed resume -c ${changefeed_id}
 

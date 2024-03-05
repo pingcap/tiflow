@@ -131,8 +131,10 @@ func (s *EventRouter) GetPartitionDispatcher(schema, table string) partition.Dis
 
 // VerifyTables return error if any one table route rule is invalid.
 func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
-	log.Info("VerifyTables")
 	for _, table := range infos {
+		log.Info("VerifyTables",
+			zap.String("schema", table.TableName.Schema),
+			zap.String("table", table.TableName.Table))
 		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
 		switch v := partitionDispatcher.(type) {
 		case *partition.IndexValueDispatcher:
