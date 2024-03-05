@@ -342,20 +342,17 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 
 func datum2Column(
 	tableInfo *model.TableInfo, datums map[int64]types.Datum,
-) ([]*model.ColumnData, []types.Datum, []*timodel.ColumnInfo, error) {
+) ([]*model.ColumnData, []types.Datum, error) {
 	cols := make([]*model.ColumnData, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
-	// columnInfos should have the same length and order with cols
-	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
-
 	for _, colInfo := range tableInfo.Columns {
+		// todo: make sure this won't cause problem.
 		if !model.IsColCDCVisible(colInfo) {
 			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
-
 		colID := colInfo.ID
 		colDatum, exist := datums[colID]
 
@@ -371,7 +368,7 @@ func datum2Column(
 			colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
@@ -386,19 +383,23 @@ func datum2Column(
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
-		columnInfos[offset] = colInfo
 	}
-	return cols, rawCols, columnInfos, nil
+	return cols, rawCols, nil
 }
 
 func (m *mounter) calculateChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+	rawDatums map[int64]types.Datum, tableInfo *model.TableInfo,
 ) (uint32, error) {
-	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
+	columns := make([]rowcodec.ColData, 0, len(rawDatums))
+	for colID, datum := range rawDatums {
+		colInfo, ok := tableInfo.GetColumnInfo(colID)
+		if !ok {
+			// todo: fill it by infer the datum.
+			colInfo = &timodel.ColumnInfo{}
+		}
 		column := rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
+			ColumnInfo: colInfo,
+			Datum:      datum.Clone(),
 		}
 		columns = append(columns, column)
 	}
@@ -421,7 +422,7 @@ func (m *mounter) calculateChecksum(
 // return error when calculate the checksum.
 // return false if the checksum is not matched
 func (m *mounter) verifyChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
+	rawDatums map[int64]types.Datum, tableInfo *model.TableInfo, isPreRow bool,
 ) (uint32, int, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, 0, true, nil
@@ -445,7 +446,7 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
-	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
+	checksum, err := m.calculateChecksum(rawDatums, tableInfo)
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, version, false, errors.Trace(err)
@@ -459,14 +460,7 @@ func (m *mounter) verifyChecksum(
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
-	if !ok {
-		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first))
-		return checksum, version, false, nil
-	}
-
-	if checksum == extra {
+	if ok && checksum == extra {
 		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
 			"execution phase",
 			zap.Uint32("checksum", checksum),
@@ -474,19 +468,23 @@ func (m *mounter) verifyChecksum(
 		return checksum, version, true, nil
 	}
 
-	log.Error("checksum mismatch",
-		zap.Uint32("checksum", checksum),
-		zap.Uint32("first", first),
-		zap.Uint32("extra", extra))
+	if isPreRow {
+		log.Info("old value checksum does not match the one sent by the TiDB, " +
+			"this may happen drop column DDL executed after the old value was inserted," +
+			"since the dropped column cannot be found from the latest table schema, so the checksum mismatch happend," +
+			"so re-calculate the checksum based on the obtained data decoded by using the latest table schema")
+		return checksum, version, true, nil
+	}
+
+	log.Error("checksum mismatch", zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
 	return checksum, version, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
-		rawRow      model.RowChangedDatums
-		columnInfos []*timodel.ColumnInfo
-		matched     bool
-		err         error
+		rawRow  model.RowChangedDatums
+		matched bool
+		err     error
 
 		checksum *integrity.Checksum
 
@@ -503,12 +501,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow)
+		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, checksumVersion, matched, err = m.verifyChecksum(row.PreRow, tableInfo, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -532,12 +530,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		currentChecksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row)
+		cols, rawCols, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		currentChecksum, checksumVersion, matched, err = m.verifyChecksum(row.Row, tableInfo, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
