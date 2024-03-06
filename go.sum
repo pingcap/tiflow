@@ -34,8 +34,8 @@ cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohl
 cloud.google.com/go/storage v1.36.0 h1:P0mOkAcaJxhCTvAkMhxMfrTKiNcub4YmmPBtlhAyTr8=
 cloud.google.com/go/storage v1.36.0/go.mod h1:M6M/3V/D3KpzMTJyPOR/HU6n2Si5QdaXYEsng2xgOs8=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/3AceShowHand/tidb v1.1.0-beta.0.20240304102859-cc95ada26dbd h1:dUV4CQxSojjrQ0nAEBYgIkO4gnrHPrnp1J70EfbEWLE=
-github.com/3AceShowHand/tidb v1.1.0-beta.0.20240304102859-cc95ada26dbd/go.mod h1:WztZx8l3vBuEKxUch5nYpnLBrCWMV37qWGTUm9x2af0=
+github.com/3AceShowHand/tidb v1.1.0-beta.0.20240306101513-2e70cccfaa82 h1:NmSrNJw5wz8/3Vs7ecGg58LPDSbP8tnbOZts8k4XPNA=
+github.com/3AceShowHand/tidb v1.1.0-beta.0.20240306101513-2e70cccfaa82/go.mod h1:WztZx8l3vBuEKxUch5nYpnLBrCWMV37qWGTUm9x2af0=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=
