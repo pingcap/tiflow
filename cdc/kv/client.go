@@ -460,6 +460,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(scanRegionsConcurrency)
 
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 
@@ -468,8 +469,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	g.Go(func() error {
-		g, ctx := errgroup.WithContext(ctx)
-		g.SetLimit(scanRegionsConcurrency)
 		for {
 			select {
 			case <-ctx.Done():
