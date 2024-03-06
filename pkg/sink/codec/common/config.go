@@ -48,8 +48,10 @@ type Config struct {
 	AvroSchemaRegistry             string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
+	AvroEnableWatermark            bool
 
-	AvroEnableWatermark bool
+	// canal-json only
+	ContentCompatible bool
 
 	// for sinking to cloud storage
 	Delimiter            string
@@ -200,6 +202,13 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
+	}
+
 	return nil
 }
 
