@@ -109,7 +109,7 @@ func (b *bootstrapWorker) addEvent(
 ) error {
 	table, ok := b.activeTables.Load(row.PhysicalTableID)
 	if !ok {
-		tb := newTableStatus(key, row)
+		tb := newTableStatistic(key, row)
 		b.activeTables.Store(tb.id, tb)
 		// Send bootstrap message immediately when a new table is added
 		err := b.sendBootstrapMsg(ctx, tb)
@@ -218,7 +218,7 @@ type tableStatistic struct {
 	tableInfo atomic.Value
 }
 
-func newTableStatus(key model.TopicPartitionKey, row *model.RowChangedEvent) *tableStatistic {
+func newTableStatistic(key model.TopicPartitionKey, row *model.RowChangedEvent) *tableStatistic {
 	res := &tableStatistic{
 		id:    row.PhysicalTableID,
 		topic: key.Topic,
@@ -245,11 +245,13 @@ func (t *tableStatistic) update(row *model.RowChangedEvent, totalPartition int32
 	t.counter.Add(1)
 	t.lastMsgReceivedTime.Store(time.Now())
 
-	if t.version.Load() != row.TableInfo.UpdateTS {
+	// Note(dongmen): Rename Table DDL is a special case,
+	// the TableInfo.Name is changed but the TableInfo.UpdateTs is not changed.
+	if t.version.Load() != row.TableInfo.UpdateTS ||
+		t.tableInfo.Load().(*model.TableInfo).Name != row.TableInfo.Name {
 		t.version.Store(row.TableInfo.UpdateTS)
 		t.tableInfo.Store(row.TableInfo)
 	}
-
 	if t.totalPartition.Load() != totalPartition {
 		t.totalPartition.Store(totalPartition)
 	}
