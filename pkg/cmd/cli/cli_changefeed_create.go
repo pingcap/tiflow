@@ -88,7 +88,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 
 // strictDecodeConfig do strictDecodeFile check and only verify the rules for now.
 func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *config.ReplicaConfig) error {
-	log.Info("changefeedCommonOptions.strictDecodeConfig")
 	err := util.StrictDecodeFile(o.configFile, component, cfg)
 	if err != nil {
 		return err
@@ -192,6 +191,9 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
+	if o.cfg.EnableOldValue {
+		cmd.Printf("[WARN] enable-old-value is deprecated in changefeed config files.\n")
+	}
 
 	// user is not allowed to set sort-dir at changefeed level
 	if o.commonChangefeedOptions.sortDir != "" {
@@ -284,9 +286,6 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		SinkURI:       createChangefeedCfg.SinkURI,
 	}
 
-	if verifyTableConfig.ReplicaConfig.EnableOldValue {
-		cmd.Printf("[WARN] Config option enable-old-value is deprecated.\n")
-	}
 	if !verifyTableConfig.ReplicaConfig.EnableOldValue {
 		cmd.Printf("[WARN] Config not set.\n")
 	}
