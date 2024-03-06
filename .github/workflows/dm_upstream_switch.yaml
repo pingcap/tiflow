@@ -83,7 +83,7 @@ jobs:
   #       with:
   #         args: "upstream-switch job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
 
-upstream-database-switch-mariadb:
+  upstream-database-switch-mariadb:
     name: upstream-database-switch-mariadb
     runs-on: ubuntu-20.04
 
