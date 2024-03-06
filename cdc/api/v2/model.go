@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -103,6 +102,15 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// SyncedStatusConfig represents synced check interval config for a changefeed
+type SyncedStatusConfig struct {
+	// The minimum interval between the latest synced ts and now required to reach synced state
+	SyncedCheckInterval int64 `json:"synced_check_interval"`
+	// The maximum interval between latest checkpoint ts and now or
+	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+	CheckpointInterval int64 `json:"checkpoint_interval"`
+}
+
 // MarshalJSON marshal changefeed common info to json
 // we need to set feed state to normal if it is uninitialized and pending to warning
 // to hide the detail of uninitialized and pending state from user
@@ -182,6 +190,7 @@ type ReplicaConfig struct {
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
 	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
+	EnableTableMonitor    *bool  `json:"enable_table_monitor,omitempty"`
 	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
@@ -194,7 +203,10 @@ type ReplicaConfig struct {
 	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
 	Integrity                    *IntegrityConfig           `json:"integrity"`
 	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
-	SQLMode                      string                     `json:"sql_mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
+
+	// Deprecated: we don't use this field since v8.0.0.
+	SQLMode string `json:"sql_mode,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -211,8 +223,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.EnableTableMonitor = c.EnableTableMonitor
 	res.IgnoreIneligibleTable = c.IgnoreIneligibleTable
-	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = &c.SyncPointInterval.duration
 	}
@@ -222,30 +234,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
-		var mySQLReplicationRules *filter.MySQLReplicationRules
-		if c.Filter.MySQLReplicationRules != nil {
-			mySQLReplicationRules = &filter.MySQLReplicationRules{}
-			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
-			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
-			if c.Filter.MySQLReplicationRules.DoTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
-					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
-						&filter.Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
-					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
-						&filter.Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-		}
 		var efs []*config.EventFilterRule
 		if len(c.Filter.EventFilters) != 0 {
 			efs = make([]*config.EventFilterRule, len(c.Filter.EventFilters))
@@ -254,10 +242,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			}
 		}
 		res.Filter = &config.FilterConfig{
-			Rules:                 c.Filter.Rules,
-			MySQLReplicationRules: mySQLReplicationRules,
-			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			Rules:            c.Filter.Rules,
+			IgnoreTxnStartTs: c.Filter.IgnoreTxnStartTs,
+			EventFilters:     efs,
 		}
 	}
 	if c.Consistent != nil {
@@ -270,6 +257,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
+			Compression:           c.Consistent.Compression,
+			FlushConcurrency:      c.Consistent.FlushConcurrency,
+		}
+		if c.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
+				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
+			}
 		}
 	}
 	if c.Sink != nil {
@@ -299,6 +293,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				NullString:           c.Sink.CSVConfig.NullString,
 				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
+				OutputOldValue:       c.Sink.CSVConfig.OutputOldValue,
+				OutputHandleKey:      c.Sink.CSVConfig.OutputHandleKey,
 			}
 		}
 		var pulsarConfig *config.PulsarConfig
@@ -344,6 +340,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -468,7 +465,21 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
+		if c.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*c.Sink.DebeziumDisableSchema)
+		}
 
+		if c.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*c.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if c.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*c.Sink.SendBootstrapInMsgCount)
+		}
+
+		if c.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -491,6 +502,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	if c.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
 	}
+	if c.SyncedStatus != nil {
+		res.SyncedStatus = &config.SyncedStatusConfig{
+			SyncedCheckInterval: c.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
+		}
+	}
 	return res
 }
 
@@ -505,8 +522,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
+		EnableTableMonitor:    cloned.EnableTableMonitor,
 		BDRMode:               cloned.BDRMode,
-		SQLMode:               cloned.SQLMode,
 	}
 
 	if cloned.SyncPointInterval != nil {
@@ -518,31 +535,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 
 	if cloned.Filter != nil {
-		var mySQLReplicationRules *MySQLReplicationRules
-		if c.Filter.MySQLReplicationRules != nil {
-			mySQLReplicationRules = &MySQLReplicationRules{}
-			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
-			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
-			if c.Filter.MySQLReplicationRules.DoTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
-					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
-						&Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
-					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
-						&Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-		}
-
 		var efs []EventFilterRule
 		if len(c.Filter.EventFilters) != 0 {
 			efs = make([]EventFilterRule, len(c.Filter.EventFilters))
@@ -552,10 +544,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: mySQLReplicationRules,
-			Rules:                 cloned.Filter.Rules,
-			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			Rules:            cloned.Filter.Rules,
+			IgnoreTxnStartTs: cloned.Filter.IgnoreTxnStartTs,
+			EventFilters:     efs,
 		}
 	}
 	if cloned.Sink != nil {
@@ -584,6 +575,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				NullString:           cloned.Sink.CSVConfig.NullString,
 				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
+				OutputOldValue:       cloned.Sink.CSVConfig.OutputOldValue,
+				OutputHandleKey:      cloned.Sink.CSVConfig.OutputHandleKey,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -597,6 +590,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -752,6 +746,22 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
+
+		if cloned.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*cloned.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if cloned.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
+		}
+
+		if cloned.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
+		}
+
+		if cloned.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -763,8 +773,16 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
+			Compression:           cloned.Consistent.Compression,
+			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
+		}
+		if cloned.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
+				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
+			}
 		}
 	}
+
 	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
 			WorkerNum: cloned.Mounter.WorkerNum,
@@ -787,6 +805,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	if cloned.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
 	}
+	if cloned.SyncedStatus != nil {
+		res.SyncedStatus = &SyncedStatusConfig{
+			SyncedCheckInterval: cloned.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
+		}
+	}
 	return res
 }
 
@@ -798,7 +822,6 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
@@ -866,19 +889,6 @@ func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
 	return res
 }
 
-// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
-type MySQLReplicationRules struct {
-	// DoTables is an allowlist of tables.
-	DoTables []*Table `json:"do_tables,omitempty"`
-	// DoDBs is an allowlist of schemas.
-	DoDBs []string `json:"do_dbs,omitempty"`
-
-	// IgnoreTables is a blocklist of tables.
-	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
-	// IgnoreDBs is a blocklist of schemas.
-	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
-}
-
 // Table represents a qualified table name.
 type Table struct {
 	// Schema is the name of the schema (database) containing this table.
@@ -911,6 +921,10 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
+	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -921,6 +935,8 @@ type CSVConfig struct {
 	NullString           string `json:"null"`
 	IncludeCommitTs      bool   `json:"include_commit_ts"`
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
+	OutputOldValue       bool   `json:"output_old_value"`
+	OutputHandleKey      bool   `json:"output_handle_key"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config
@@ -959,6 +975,15 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
+	Compression           string `json:"compression,omitempty"`
+	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
+
+	MemoryUsage *ConsistentMemoryUsage `json:"memory_usage"`
+}
+
+// ConsistentMemoryUsage represents memory usage of Consistent module.
+type ConsistentMemoryUsage struct {
+	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
@@ -1015,6 +1040,16 @@ type ChangeFeedInfo struct {
 	CheckpointTs   uint64                    `json:"checkpoint_ts"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
+}
+
+// SyncedStatus describes the detail of a changefeed's synced status
+type SyncedStatus struct {
+	Synced           bool           `json:"synced"`
+	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
+	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
+	NowTs            model.JSONTime `json:"now_ts"`
+	Info             string         `json:"info"`
 }
 
 // RunningError represents some running error from cdc components,
@@ -1104,9 +1139,10 @@ type Capture struct {
 type CodecConfig struct {
 	EnableTiDBExtension            *bool   `json:"enable_tidb_extension,omitempty"`
 	MaxBatchSize                   *int    `json:"max_batch_size,omitempty"`
-	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
+	AvroEnableWatermark            *bool   `json:"avro_enable_watermark,omitempty"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+	EncodingFormat                 *string `json:"encoding_format,omitempty"`
 }
 
 // PulsarConfig represents a pulsar sink configuration

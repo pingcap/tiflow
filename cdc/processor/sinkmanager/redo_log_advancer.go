@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"go.uber.org/zap"
 )
@@ -41,7 +41,7 @@ type redoLogAdvancer struct {
 	usedMem uint64
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
-	lastPos engine.Position
+	lastPos sorter.Position
 	// Buffer the events to be written to the redo log.
 	events []*model.RowChangedEvent
 
@@ -73,13 +73,13 @@ func newRedoLogAdvancer(
 
 // advance tries to emit the events to the redo log manager and
 // advance the resolved ts of the redo log manager.
-func (a *redoLogAdvancer) advance(ctx context.Context, cachedSize uint64) error {
+func (a *redoLogAdvancer) advance(ctx context.Context) error {
 	if len(a.events) > 0 {
 		// releaseMem is used to release the memory quota
 		// after the events are written to redo log.
 		// It more like a callback function.
 		var releaseMem func()
-		refundMem := a.pendingTxnSize - cachedSize
+		refundMem := a.pendingTxnSize
 		if refundMem > 0 {
 			releaseMem = func() {
 				a.memQuota.Refund(refundMem)
@@ -124,11 +124,9 @@ func (a *redoLogAdvancer) advance(ctx context.Context, cachedSize uint64) error 
 // Otherwise, we need to advance the redo log at least to the current transaction.
 func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 	ctx context.Context,
-	cachedSize uint64,
 	allFetched bool,
 	txnFinished bool,
-) (bool, error) {
-	var advanced bool
+) error {
 	// If used memory size exceeds the required limit, do a force acquire to
 	// make sure the memory quota is not exceeded or leak.
 	// For example, if the memory quota is 100MB, and current usedMem is 90MB,
@@ -153,15 +151,13 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 	if exceedAvailableMem || a.pendingTxnSize >= maxUpdateIntervalSize || allFetched {
 		if err := a.advance(
 			ctx,
-			cachedSize,
 		); err != nil {
-			return false, errors.Trace(err)
+			return errors.Trace(err)
 		}
-		advanced = true
 	}
 
 	if allFetched {
-		return advanced, nil
+		return nil
 	}
 
 	if a.usedMem >= a.availableMem {
@@ -178,7 +174,7 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 			// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
 			// It's because memory will finally be `refund` after redo-logs are written.
 			if err := a.memQuota.BlockAcquire(requestMemSize); err != nil {
-				return false, errors.Trace(err)
+				return errors.Trace(err)
 			}
 			a.availableMem += requestMemSize
 			log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
@@ -189,19 +185,17 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 		}
 	}
 
-	return advanced, nil
+	return nil
 }
 
 func (a *redoLogAdvancer) finish(
 	ctx context.Context,
-	cachedSize uint64,
-	upperBound engine.Position,
+	upperBound sorter.Position,
 ) error {
 	a.lastPos = upperBound
 	a.lastTxnCommitTs = upperBound.CommitTs
-	_, err := a.tryAdvanceAndAcquireMem(
+	err := a.tryAdvanceAndAcquireMem(
 		ctx,
-		cachedSize,
 		true,
 		true,
 	)
@@ -214,7 +208,7 @@ func (a *redoLogAdvancer) finish(
 // 2. If current position is a commit fence, it means the current transaction
 // is finished. We can safely move to the next transaction early. It would be
 // helpful to advance the redo log manager.
-func (a *redoLogAdvancer) tryMoveToNextTxn(commitTs model.Ts, pos engine.Position) {
+func (a *redoLogAdvancer) tryMoveToNextTxn(commitTs model.Ts, pos sorter.Position) {
 	if a.currTxnCommitTs != commitTs {
 		a.lastTxnCommitTs = a.currTxnCommitTs
 		a.currTxnCommitTs = commitTs

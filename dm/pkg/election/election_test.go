@@ -59,13 +59,13 @@ func (t *testElectionSuite) SetUpTest(c *C) {
 	t.endPoint = tempurl.Alloc()
 	url2, err := url.Parse(t.endPoint)
 	c.Assert(err, IsNil)
-	cfg.LCUrls = []url.URL{*url2}
-	cfg.ACUrls = cfg.LCUrls
+	cfg.ListenClientUrls = []url.URL{*url2}
+	cfg.AdvertiseClientUrls = cfg.ListenClientUrls
 
 	url2, err = url.Parse(tempurl.Alloc())
 	c.Assert(err, IsNil)
-	cfg.LPUrls = []url.URL{*url2}
-	cfg.APUrls = cfg.LPUrls
+	cfg.ListenPeerUrls = []url.URL{*url2}
+	cfg.AdvertisePeerUrls = cfg.ListenPeerUrls
 
 	cfg.InitialCluster = fmt.Sprintf("%s=%s", cfg.Name, url2)
 	cfg.ClusterState = embed.ClusterStateFlagNew

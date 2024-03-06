@@ -55,16 +55,23 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up)
 
 	// test Tick
-	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	globalState := &orchestrator.GlobalReactorState{
+		Changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState),
+	}
+	// add one changefeed state whose info is nil to make sure it won't be checked
+	globalState.Changefeeds[model.DefaultChangeFeedID("1")] = &orchestrator.ChangefeedReactorState{
+		Info: nil,
+	}
+	_ = manager.Tick(context.Background(), globalState)
 	mockClock.Add(maxIdleDuration * 2)
 	manager.lastTickTime = atomic.Time{}
-	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	_ = manager.Tick(context.Background(), globalState)
 	// wait until up2 is closed
 	for !up2.IsClosed() {
 	}
 	manager.lastTickTime = atomic.Time{}
-	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
-	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	_ = manager.Tick(context.Background(), globalState)
+	_ = manager.Tick(context.Background(), globalState)
 	up, ok = manager.Get(testID)
 	require.False(t, ok)
 	require.Nil(t, up)
@@ -100,25 +107,23 @@ func TestRemoveErrorUpstream(t *testing.T) {
 }
 
 func TestAddDefaultUpstream(t *testing.T) {
-	m := NewManager(context.Background(), "id")
-	m.initUpstreamFunc = func(ctx context.Context,
-		up *Upstream, gcID string,
-	) error {
+	m := NewManager(context.Background(), CaptureTopologyCfg{GCServiceID: "id"})
+	m.initUpstreamFunc = func(context.Context, *Upstream, CaptureTopologyCfg) error {
 		return errors.New("test")
 	}
+
 	pdClient := &gc.MockPDClient{}
-	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient)
+
+	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient, nil)
 	require.NotNil(t, err)
 	up, err := m.GetDefaultUpstream()
 	require.Nil(t, up)
 	require.NotNil(t, err)
-	m.initUpstreamFunc = func(ctx context.Context,
-		up *Upstream, gcID string,
-	) error {
+	m.initUpstreamFunc = func(_ context.Context, up *Upstream, _ CaptureTopologyCfg) error {
 		up.ID = uint64(2)
 		return nil
 	}
-	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient)
+	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient, nil)
 	require.Nil(t, err)
 	up, err = m.GetDefaultUpstream()
 	require.NotNil(t, up)
@@ -129,10 +134,8 @@ func TestAddDefaultUpstream(t *testing.T) {
 }
 
 func TestAddUpstream(t *testing.T) {
-	m := NewManager(context.Background(), "id")
-	m.initUpstreamFunc = func(ctx context.Context,
-		up *Upstream, gcID string,
-	) error {
+	m := NewManager(context.Background(), CaptureTopologyCfg{GCServiceID: "id"})
+	m.initUpstreamFunc = func(context.Context, *Upstream, CaptureTopologyCfg) error {
 		return errors.New("test")
 	}
 	up := m.AddUpstream(&model.UpstreamInfo{ID: uint64(3)})
@@ -167,10 +170,8 @@ func TestCloseManager(t *testing.T) {
 }
 
 func TestRemoveThenAddAgain(t *testing.T) {
-	m := NewManager(context.Background(), "id")
-	m.initUpstreamFunc = func(ctx context.Context,
-		up *Upstream, gcID string,
-	) error {
+	m := NewManager(context.Background(), CaptureTopologyCfg{GCServiceID: "id"})
+	m.initUpstreamFunc = func(context.Context, *Upstream, CaptureTopologyCfg) error {
 		return nil
 	}
 	up := m.AddUpstream(&model.UpstreamInfo{ID: uint64(3)})

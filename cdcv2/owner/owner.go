@@ -57,7 +57,6 @@ type Owner struct {
 func (o *Owner) UpdateChangefeedAndUpstream(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	changeFeedInfo *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
 ) error {
 	panic("implement me")
 }

@@ -18,8 +18,8 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -307,10 +307,12 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	buf.WriteString(r.targetTable.QuoteString())
 	buf.WriteString(" SET ")
 
+	// Build target generated columns lower names set to accelerate following check
+	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
 	for i, col := range r.sourceTableInfo.Columns {
-		if isGenerated(r.targetTableInfo.Columns, col.Name) {
+		if _, ok := generatedColumns[col.Name.L]; ok {
 			continue
 		}
 

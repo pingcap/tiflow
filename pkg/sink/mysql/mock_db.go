@@ -20,16 +20,11 @@ import (
 )
 
 // MockTestDB creates a mock mysql database connection.
-func MockTestDB(adjustSQLMode bool) (*sql.DB, error) {
+func MockTestDB() (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, err
-	}
-	if adjustSQLMode {
-		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
 
 	columns := []string{"Variable_name", "Value"}
@@ -56,7 +51,10 @@ func MockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 		"where character_set_name = 'gbk';").WillReturnRows(
 		sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
 	)
-
+	mock.ExpectQuery("select tidb_version()").
+		WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+	mock.ExpectQuery("select tidb_version()").
+		WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
 	mock.ExpectClose()
 	return db, nil
 }

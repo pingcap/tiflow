@@ -9,7 +9,7 @@ relay-binlog-gtid: ''
 from:
   host: 127.0.0.1
   user: root
-  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
+  password: '123456'
   port: 3307
 
 

@@ -213,19 +213,16 @@ func TestHandleRowChangedEventNormalEvent(t *testing.T) {
 			Value: "col2-value",
 		},
 	}
-
+	tableInfo := model.BuildTableInfo("test", "test", columns, nil)
 	events := []*model.PolymorphicEvent{
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 			Row: &model.RowChangedEvent{
 				CommitTs:   1,
-				Columns:    columns,
-				PreColumns: preColumns,
-				Table: &model.TableName{
-					Schema: "test",
-					Table:  "test",
-				},
+				TableInfo:  tableInfo,
+				Columns:    model.Columns2ColumnDatas(columns, tableInfo),
+				PreColumns: model.Columns2ColumnDatas(preColumns, tableInfo),
 			},
 		},
 	}
@@ -233,7 +230,7 @@ func TestHandleRowChangedEventNormalEvent(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 1, len(result))
-	require.Equal(t, uint64(224), size)
+	require.Equal(t, uint64(testEventSize), size)
 }
 
 func TestGetUpperBoundTs(t *testing.T) {

@@ -158,20 +158,28 @@ func (c *SourceConfig) Yaml() (string, error) {
 	return string(b), nil
 }
 
-// Parse parses flag definitions from the argument list.
+// FromToml parses flag definitions from the argument list.
 // accept toml content for legacy use (mainly used by etcd).
-func (c *SourceConfig) Parse(content string) error {
+func (c *SourceConfig) FromToml(content string) error {
 	// Parse first to get config file.
 	metaData, err := toml.Decode(content, c)
-	err2 := c.check(&metaData, err)
-	if err2 != nil {
-		return err2
+	if err != nil {
+		return terror.ErrWorkerDecodeConfigFromFile.Delegate(err)
 	}
+	undecoded := metaData.Undecoded()
+	if len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
+		}
+		return terror.ErrWorkerUndecodedItemFromFile.Generate(strings.Join(undecodedItems, ","))
+	}
+	c.adjust()
 	return c.Verify()
 }
 
-// ParseYaml parses flag definitions from the argument list, content should be yaml format.
-func ParseYaml(content string) (*SourceConfig, error) {
+// SourceCfgFromYaml parses flag definitions from the argument list, content should be yaml format.
+func SourceCfgFromYaml(content string) (*SourceConfig, error) {
 	c := newSourceConfig()
 	if err := yaml.UnmarshalStrict([]byte(content), c); err != nil {
 		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
@@ -180,9 +188,9 @@ func ParseYaml(content string) (*SourceConfig, error) {
 	return c, nil
 }
 
-// ParseYamlAndVerify does ParseYaml and Verify.
-func ParseYamlAndVerify(content string) (*SourceConfig, error) {
-	c, err := ParseYaml(content)
+// SourceCfgFromYamlAndVerify does SourceCfgFromYaml and Verify.
+func SourceCfgFromYamlAndVerify(content string) (*SourceConfig, error) {
+	c, err := SourceCfgFromYaml(content)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +249,6 @@ func (c *SourceConfig) Verify() error {
 		}
 	}
 
-	c.DecryptPassword()
-
 	_, err = bf.NewBinlogEvent(c.CaseSensitive, c.Filters)
 	if err != nil {
 		return terror.ErrConfigBinlogEventFilter.Delegate(err)
@@ -255,8 +261,8 @@ func (c *SourceConfig) Verify() error {
 	return nil
 }
 
-// DecryptPassword returns a decrypted config replica in config.
-func (c *SourceConfig) DecryptPassword() *SourceConfig {
+// GetDecryptedClone returns a decrypted config replica in config.
+func (c *SourceConfig) GetDecryptedClone() *SourceConfig {
 	clone := c.Clone()
 	var pswdFrom string
 	if len(clone.From.Password) > 0 {
@@ -269,7 +275,7 @@ func (c *SourceConfig) DecryptPassword() *SourceConfig {
 // GenerateDBConfig creates DBConfig for DB.
 func (c *SourceConfig) GenerateDBConfig() *dbconfig.DBConfig {
 	// decrypt password
-	clone := c.DecryptPassword()
+	clone := c.GetDecryptedClone()
 	from := &clone.From
 	from.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(conn.DefaultDBTimeout.String())
 	return from
@@ -380,35 +386,15 @@ func LoadFromFile(path string) (*SourceConfig, error) {
 	if err != nil {
 		return nil, terror.ErrConfigReadCfgFromFile.Delegate(err, path)
 	}
-	return ParseYaml(string(content))
-}
-
-func (c *SourceConfig) check(metaData *toml.MetaData, err error) error {
-	if err != nil {
-		return terror.ErrWorkerDecodeConfigFromFile.Delegate(err)
-	}
-	undecoded := metaData.Undecoded()
-	if len(undecoded) > 0 && err == nil {
-		var undecodedItems []string
-		for _, item := range undecoded {
-			undecodedItems = append(undecodedItems, item.String())
-		}
-		return terror.ErrWorkerUndecodedItemFromFile.Generate(strings.Join(undecodedItems, ","))
-	}
-	c.adjust()
-	return nil
+	return SourceCfgFromYaml(string(content))
 }
 
 // YamlForDowngrade returns YAML format represents of config for downgrade.
 func (c *SourceConfig) YamlForDowngrade() (string, error) {
 	s := NewSourceConfigForDowngrade(c)
 
-	// encrypt password
-	cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(c.From.Password))
-	if err != nil {
-		return "", err
-	}
-	s.From.Password = cipher
+	// try to encrypt password
+	s.From.Password = utils.EncryptOrPlaintext(utils.DecryptOrPlaintext(c.From.Password))
 	s.omitDefaultVals()
 	return s.Yaml()
 }

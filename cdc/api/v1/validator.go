@@ -63,13 +63,17 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changefeedConfig.ID)
 	}
 
+	ts, logical, err := up.PDClient.GetTS(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := up.PDClient.GetTS(ctx)
-		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
-		}
-		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
+		changefeedConfig.StartTS = currentTSO
+	} else if changefeedConfig.StartTS > currentTSO {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid start-ts %v, larger than current tso %v", changefeedConfig.StartTS, currentTSO)
 	}
 
 	// Ensure the start ts is valid in the next 1 hour.
@@ -173,7 +177,8 @@ func verifyCreateChangefeedConfig(
 	}
 	if err := validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
-		info.SinkURI, info.Config); err != nil {
+		info.SinkURI, info.Config, up.PDClock,
+	); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +238,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
-			newInfo.SinkURI, newInfo.Config); err != nil {
+			newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

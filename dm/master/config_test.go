@@ -14,17 +14,22 @@
 package master
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"testing"
 
 	capturer "github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
@@ -131,10 +136,10 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(etcdCfg.Name, check.Equals, fmt.Sprintf("dm-master-%s", hostname))
 	c.Assert(etcdCfg.Dir, check.Equals, fmt.Sprintf("default.%s", etcdCfg.Name))
-	c.Assert(etcdCfg.LCUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}})
-	c.Assert(etcdCfg.ACUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}})
-	c.Assert(etcdCfg.LPUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
-	c.Assert(etcdCfg.APUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
+	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}})
+	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}})
+	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
+	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
 	c.Assert(etcdCfg.InitialCluster, check.DeepEquals, fmt.Sprintf("dm-master-%s=http://127.0.0.1:8291", hostname))
 	c.Assert(etcdCfg.ClusterState, check.Equals, embed.ClusterStateFlagExisting)
 	c.Assert(etcdCfg.AutoCompactionMode, check.Equals, "periodic")
@@ -151,8 +156,8 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg2.AdvertiseAddr = "172.100.8.8:8261"
 	etcdCfg, err = cfg2.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.LCUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
-	c.Assert(etcdCfg.ACUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
+	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
+	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
 
 	cfg3 := *cfg1
 	cfg3.PeerUrls = "127.0.0.1:\n8291"
@@ -162,7 +167,7 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg3.PeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg3.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.LPUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
 
 	cfg4 := *cfg1
 	cfg4.AdvertisePeerUrls = "127.0.0.1:\n8291"
@@ -172,7 +177,7 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg4.AdvertisePeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg4.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.APUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
 }
 
 func (t *testConfigSuite) TestParseURLs(c *check.C) {
@@ -293,4 +298,42 @@ func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
 	c.Assert(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.OpenAPI, check.Equals, true)
+}
+
+func TestAdjustSecretKeyPath(t *testing.T) {
+	cfg := &Config{}
+	require.NoError(t, cfg.adjustSecretKeyPath())
+
+	// non exist file
+	dir := t.TempDir()
+	cfg.SecretKeyPath = filepath.Join(dir, "non-exist")
+	err := cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "no such file")
+	require.Nil(t, cfg.SecretKey)
+
+	// not hex string
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret"), []byte("secret"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret")
+	err = cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "encoding/hex: invalid byte")
+	require.Nil(t, cfg.SecretKey)
+
+	// not enough length
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-2"), []byte("2334"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret-2")
+	err = cfg.adjustSecretKeyPath()
+	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
+	require.ErrorContains(t, err, "hex AES-256 key of length 64")
+	require.Nil(t, cfg.SecretKey)
+
+	// works
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-3"), []byte(" \t"+hex.EncodeToString(key)+"\r\n   \n"), 0o644))
+	cfg.SecretKeyPath = filepath.Join(dir, "secret-3")
+	require.NoError(t, cfg.adjustSecretKeyPath())
+	require.Equal(t, key, cfg.SecretKey)
 }

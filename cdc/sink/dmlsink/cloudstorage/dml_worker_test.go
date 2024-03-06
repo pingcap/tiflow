@@ -21,15 +21,16 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -52,8 +53,9 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 
 	statistics := metrics.NewStatistics(ctx, model.DefaultChangeFeedID("dml-worker-test"),
 		sink.TxnSink)
+	pdlock := pdutil.NewMonotonicClock(clock.New())
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), clock.New(), statistics)
+		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), pdlock, statistics)
 	return d
 }
 
@@ -71,19 +73,15 @@ func TestDMLWorkerRun(t *testing.T) {
 		Table:   "table1",
 		TableID: 100,
 	}
-	tableInfo := &model.TableInfo{
-		TableName: model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 100,
-		},
-		Version: 99,
-		TableInfo: &timodel.TableInfo{
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: timodel.NewCIStr("name"), FieldType: *types.NewFieldType(mysql.TypeLong)},
-			},
+	tidbTableInfo := &timodel.TableInfo{
+		ID:   100,
+		Name: timodel.NewCIStr("table1"),
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: timodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeVarchar)},
 		},
 	}
+	tableInfo := model.WrapTableInfo(100, "test", 99, tidbTableInfo)
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
@@ -96,14 +94,11 @@ func TestDMLWorkerRun(t *testing.T) {
 					TableInfo: tableInfo,
 					Rows: []*model.RowChangedEvent{
 						{
-							Table: &model.TableName{
-								Schema:  "test",
-								Table:   "table1",
-								TableID: 100,
-							},
-							Columns: []*model.Column{
-								{Name: "c1", Value: 100},
-								{Name: "c2", Value: "hello world"},
+							PhysicalTableID: 100,
+							TableInfo:       tableInfo,
+							Columns: []*model.ColumnData{
+								{ColumnID: 1, Value: 100},
+								{ColumnID: 2, Value: "hello world"},
 							},
 						},
 					},

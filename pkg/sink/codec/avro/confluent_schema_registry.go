@@ -122,6 +122,7 @@ func (m *confluentSchemaManager) Register(
 ) (schemaID, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	id := schemaID{}
+	log.Info("confluentSchemaManager", zap.String("schemaDefinition", schemaDefinition), zap.String("schemaName", schemaName))
 
 	buffer := new(bytes.Buffer)
 	err := json.Compact(buffer, []byte(schemaDefinition))

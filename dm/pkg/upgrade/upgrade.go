@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -173,7 +173,7 @@ func upgradeToVer2(cli *clientv3.Client, uctx Context) error {
 	for task, m := range uctx.SubTaskConfigs {
 		for sourceID, subCfg := range m {
 			tableName := dbutil.TableName(subCfg.MetaSchema, cputil.SyncerCheckpoint(subCfg.Name))
-			subCfg2, err := subCfg.DecryptPassword()
+			subCfg2, err := subCfg.DecryptedClone()
 			if err != nil {
 				log.L().Error("subconfig error when upgrading", zap.String("task", task),
 					zap.String("source id", sourceID), zap.String("subtask config", subCfg.String()), zap.Error(err))

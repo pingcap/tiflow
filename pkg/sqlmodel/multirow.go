@@ -21,6 +21,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// CommonIndexColumnsCount means common columns count of an index, index contains 1, 2,
+	// , 3 or 4 columns are common, but index contains 5 columns or more are not that common,
+	// so we use 4 as the common index column count. It will be used to pre-allocate slice space.
+	CommonIndexColumnsCount = 4
+)
+
 // SameTypeTargetAndColumns check whether two row changes have same type, target
 // and columns, so they can be merged to a multi-value DML.
 func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
@@ -83,8 +90,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(first.targetTable.QuoteString())
 	buf.WriteString(" WHERE (")
 
-	whereColumns, _ := first.whereColumnsAndValues()
-	allArgs := make([]interface{}, 0, len(changes)*len(whereColumns))
+	allArgs := make([]interface{}, 0, len(changes)*CommonIndexColumnsCount)
 
 	for i, c := range changes {
 		if i > 0 {
@@ -129,12 +135,16 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
+	// Build gegerated columns lower name set to accelerate the following check
+	targetGeneratedColSet := generatedColumnsNameSet(first.targetTableInfo.Columns)
+
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
 	// Use this value in order to identify which is the first CaseWhenThen line,
 	// because generated column can happen any where and it will be skipped.
 	isFirstCaseWhenThenLine := true
 	for _, column := range first.targetTableInfo.Columns {
-		if isGenerated(first.targetTableInfo.Columns, column.Name) {
+		// skip generated columns
+		if _, ok := targetGeneratedColSet[column.Name.L]; ok {
 			continue
 		}
 		if !isFirstCaseWhenThenLine {
@@ -166,7 +176,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	var assignValueColumnCount int
 	var skipColIdx []int
 	for i, col := range first.sourceTableInfo.Columns {
-		if isGenerated(first.targetTableInfo.Columns, col.Name) {
+		if _, ok := targetGeneratedColSet[col.Name.L]; ok {
 			skipColIdx = append(skipColIdx, i)
 			continue
 		}
@@ -235,8 +245,11 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(" (")
 	columnNum := 0
 	var skipColIdx []int
+
+	// build gegerated columns lower name set to accelerate the following check
+	generatedColumns := generatedColumnsNameSet(first.targetTableInfo.Columns)
 	for i, col := range first.sourceTableInfo.Columns {
-		if isGenerated(first.targetTableInfo.Columns, col.Name) {
+		if _, ok := generatedColumns[col.Name.L]; ok {
 			skipColIdx = append(skipColIdx, i)
 			continue
 		}

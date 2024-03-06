@@ -18,31 +18,61 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/hex"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-var (
-	secretKey, _ = hex.DecodeString("a529b7665997f043a30ac8fadcb51d6aa032c226ab5b7750530b12b8c1a16a48")
-	ivSep        = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
-)
+var ivSep = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
 
-// SetSecretKey sets the secret key which used to encrypt.
-func SetSecretKey(key []byte) error {
-	switch len(key) {
-	case 16, 24, 32:
-		break
-	default:
-		return terror.ErrEncryptSecretKeyNotValid.Generate(len(key))
-	}
-	secretKey = key
-	return nil
+// Cipher is the interface for encrypt/decrypt.
+type Cipher interface {
+	Encrypt(plaintext []byte) ([]byte, error)
+	Decrypt(ciphertext []byte) ([]byte, error)
 }
 
-// Encrypt encrypts plaintext to ciphertext.
-func Encrypt(plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(secretKey)
+// defaultCipher is the default cipher, it should be initialized using
+// InitCipher before any call to Encrypt and Decrypt.
+// we keep it as a global variable to avoid change existing call site.
+var defaultCipher Cipher = &notInitializedCipher{}
+
+// InitCipher initializes the defaultCipher.
+func InitCipher(key []byte) {
+	if len(key) == 0 {
+		log.L().Warn("empty secret key, password in config file will be in plain text")
+		defaultCipher = &notInitializedCipher{}
+		return
+	}
+	log.L().Info("password in config file will be encrypted")
+	defaultCipher = &aesCipher{secretKey: key}
+}
+
+// IsInitialized returns whether the defaultCipher is initialized or not.
+func IsInitialized() bool {
+	_, ok := defaultCipher.(*aesCipher)
+	return ok
+}
+
+// DM will guess whether the password is encrypted or not.
+// to compatible with this behavior when InitCipher is not called,
+// we use a notInitializedCipher to always return error.
+type notInitializedCipher struct{}
+
+func (n *notInitializedCipher) Encrypt([]byte) ([]byte, error) {
+	return nil, errors.New("secret key is not initialized")
+}
+
+func (n *notInitializedCipher) Decrypt([]byte) ([]byte, error) {
+	return nil, errors.New("secret key is not initialized")
+}
+
+type aesCipher struct {
+	secretKey []byte
+}
+
+func (c *aesCipher) Encrypt(plaintext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(c.secretKey)
 	if err != nil {
 		return nil, terror.ErrEncryptGenCipher.Delegate(err)
 	}
@@ -63,9 +93,8 @@ func Encrypt(plaintext []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-// Decrypt decrypts ciphertext to plaintext.
-func Decrypt(ciphertext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(secretKey)
+func (c *aesCipher) Decrypt(ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(c.secretKey)
 	if err != nil {
 		return nil, err
 	}
@@ -92,4 +121,14 @@ func genIV(n int) ([]byte, error) {
 	b := make([]byte, n)
 	_, err := rand.Read(b)
 	return b, terror.ErrEncryptGenIV.Delegate(err)
+}
+
+// Encrypt encrypts plaintext to ciphertext.
+func Encrypt(plaintext []byte) ([]byte, error) {
+	return defaultCipher.Encrypt(plaintext)
+}
+
+// Decrypt decrypts ciphertext to plaintext.
+func Decrypt(ciphertext []byte) ([]byte, error) {
+	return defaultCipher.Decrypt(ciphertext)
 }

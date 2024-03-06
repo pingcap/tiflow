@@ -1210,6 +1210,12 @@ description = ""
 workaround = "Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`."
 tags = ["internal", "medium"]
 
+[error.DM-config-20067]
+message = "invalid secret key path or content: %v"
+description = ""
+workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
