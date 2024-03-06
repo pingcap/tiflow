@@ -192,46 +192,31 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 	return nil
 }
 
-func (p *pulsarDMLProducer) Close() {
-	// We need to close it asynchronously. Otherwise, we might get stuck
-	// with an unhealthy(i.e. Network jitter, isolation) state of pulsar.
-	// Why:
-	// * If the pulsar cluster is running well, it will be closed as soon as possible.
-	//   Also, we cancel all table pipelines before closed, so it's safe.
-	// * If there is a problem with the pulsar cluster, close process will be blocked.
-	//   And this will cause the main tick loop to be stuck.
-	// Risky:
-	// * There may be double write happen in the downstream, when the producer is closing and the
-	// same table of this producer is re-created. This may cause the downstream to receive duplicate
-	// data, and may cause the downstream to be inconsistent.
-	// * There is also a risk of goroutine leakage.
-	go func() {
-		// We have to hold the lock to synchronize closing with writing.
-		p.closedMu.Lock()
-		defer p.closedMu.Unlock()
-		// If the producer has already been closed, we should skip this close operation.
-		if p.closed {
-			// We need to guard against double closing the clients,
-			// which could lead to panic.
-			log.Warn("Pulsar DML producer already closed",
-				zap.String("namespace", p.id.Namespace),
-				zap.String("changefeed", p.id.ID))
-			return
-		}
-		close(p.failpointCh)
-		p.closed = true
-		start := time.Now()
-		keys := p.producers.Keys()
-		for _, topic := range keys {
-			p.producers.Remove(topic) // callback func will be called
-			topicName, _ := topic.(string)
-			log.Info("Async client closed in pulsar DML producer",
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", p.id.Namespace),
-				zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
-		}
-		p.client.Close()
-	}()
+func (p *pulsarDMLProducer) Close() { // We have to hold the lock to synchronize closing with writing.
+	p.closedMu.Lock()
+	defer p.closedMu.Unlock()
+	// If the producer has already been closed, we should skip this close operation.
+	if p.closed {
+		// We need to guard against double closing the clients,
+		// which could lead to panic.
+		log.Warn("Pulsar DML producer already closed",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID))
+		return
+	}
+	close(p.failpointCh)
+	p.closed = true
+	start := time.Now()
+	keys := p.producers.Keys()
+	for _, topic := range keys {
+		p.producers.Remove(topic) // callback func will be called
+		topicName, _ := topic.(string)
+		log.Info("Async client closed in pulsar DML producer",
+			zap.Duration("duration", time.Since(start)),
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
+	}
+	p.client.Close()
 }
 
 // newProducer creates a pulsar producer
@@ -241,24 +226,26 @@ func newProducer(
 	client pulsar.Client,
 	topicName string,
 ) (pulsar.Producer, error) {
-	po := pulsar.ProducerOptions{
-		Topic: topicName,
+	maxReconnectToBroker := uint(config.DefaultMaxReconnectToPulsarBroker)
+	option := pulsar.ProducerOptions{
+		Topic:                topicName,
+		MaxReconnectToBroker: &maxReconnectToBroker,
 	}
 	if pConfig.BatchingMaxMessages != nil {
-		po.BatchingMaxMessages = *pConfig.BatchingMaxMessages
+		option.BatchingMaxMessages = *pConfig.BatchingMaxMessages
 	}
 	if pConfig.BatchingMaxPublishDelay != nil {
-		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
+		option.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
 	}
 	if pConfig.CompressionType != nil {
-		po.CompressionType = pConfig.CompressionType.Value()
-		po.CompressionLevel = pulsar.Default
+		option.CompressionType = pConfig.CompressionType.Value()
+		option.CompressionLevel = pulsar.Default
 	}
 	if pConfig.SendTimeout != nil {
-		po.SendTimeout = pConfig.SendTimeout.Duration()
+		option.SendTimeout = pConfig.SendTimeout.Duration()
 	}
 
-	producer, err := client.CreateProducer(po)
+	producer, err := client.CreateProducer(option)
 	if err != nil {
 		return nil, err
 	}
