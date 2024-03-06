@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
+	datumTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -89,6 +90,11 @@ type TableInfo struct {
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+
+	// number of virtual columns
+	virtualColumnCount int
+	// rowColInfosWithoutVirtualCols is the same as rowColInfos, but without virtual columns
+	rowColInfosWithoutVirtualCols *[]rowcodec.ColInfo
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -117,6 +123,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	rowColumnsCurrentOffset := 0
 
+	ti.virtualColumnCount = 0
 	for i, col := range ti.Columns {
 		ti.columnsOffset[col.ID] = i
 		pkIsHandle := false
@@ -140,6 +147,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 					ti.handleColID = append(ti.handleColID, id)
 				}
 			}
+		} else {
+			ti.virtualColumnCount += 1
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:            col.ID,
@@ -169,9 +178,30 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		}
 	}
 
+	ti.initRowColInfosWithoutVirtualCols()
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
 	return ti
+}
+
+func (ti *TableInfo) initRowColInfosWithoutVirtualCols() {
+	if ti.virtualColumnCount == 0 {
+		ti.rowColInfosWithoutVirtualCols = &ti.rowColInfos
+		return
+	}
+	colInfos := make([]rowcodec.ColInfo, 0, len(ti.rowColInfos)-ti.virtualColumnCount)
+	for i, col := range ti.Columns {
+		if IsColCDCVisible(col) {
+			colInfos = append(colInfos, ti.rowColInfos[i])
+		}
+	}
+	if len(colInfos) != len(ti.rowColInfos)-ti.virtualColumnCount {
+		log.Panic("invalid rowColInfosWithoutVirtualCols",
+			zap.Int("len(colInfos)", len(colInfos)),
+			zap.Int("len(ti.rowColInfos)", len(ti.rowColInfos)),
+			zap.Int("ti.virtualColumnCount", ti.virtualColumnCount))
+	}
+	ti.rowColInfosWithoutVirtualCols = &colInfos
 }
 
 func (ti *TableInfo) findHandleIndex() {
@@ -295,16 +325,6 @@ func (ti *TableInfo) ForceGetColumnName(colID int64) string {
 	return ti.ForceGetColumnInfo(colID).Name.O
 }
 
-// ForceGetExtraColumnInfo return the extra column info by ID
-// Caller must ensure `colID` exists
-func (ti *TableInfo) ForceGetExtraColumnInfo(colID int64) rowcodec.ColInfo {
-	colOffset, ok := ti.columnsOffset[colID]
-	if !ok {
-		log.Panic("invalid column id", zap.Int64("columnID", colID))
-	}
-	return ti.rowColInfos[colOffset]
-}
-
 // ForceGetColumnIDByName return column ID by column name
 // Caller must ensure `colID` exists
 func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
@@ -315,6 +335,31 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 	return colID
 }
 
+// GetSchemaName returns the schema name of the table
+func (ti *TableInfo) GetSchemaName() string {
+	return ti.TableName.Schema
+}
+
+// GetTableName returns the table name of the table
+func (ti *TableInfo) GetTableName() string {
+	return ti.TableName.Table
+}
+
+// GetSchemaNamePtr returns the pointer to the schema name of the table
+func (ti *TableInfo) GetSchemaNamePtr() *string {
+	return &ti.TableName.Schema
+}
+
+// GetTableNamePtr returns the pointer to the table name of the table
+func (ti *TableInfo) GetTableNamePtr() *string {
+	return &ti.TableName.Table
+}
+
+// IsPartitionTable returns whether the table is partition table
+func (ti *TableInfo) IsPartitionTable() bool {
+	return ti.TableName.IsPartition
+}
+
 func (ti *TableInfo) String() string {
 	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }
@@ -322,6 +367,12 @@ func (ti *TableInfo) String() string {
 // GetRowColInfos returns all column infos for rowcodec
 func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
+}
+
+// GetColInfosForRowChangedEvent return column infos for non-virtual columns
+// The column order in the result is the same as the order in its corresponding RowChangedEvent
+func (ti *TableInfo) GetColInfosForRowChangedEvent() []rowcodec.ColInfo {
+	return *ti.rowColInfosWithoutVirtualCols
 }
 
 // IsColCDCVisible returns whether the col is visible for CDC
@@ -336,6 +387,11 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 // HasUniqueColumn returns whether the table has a unique column
 func (ti *TableInfo) HasUniqueColumn() bool {
 	return ti.hasUniqueColumn
+}
+
+// HasVirtualColumns returns whether the table has virtual columns
+func (ti *TableInfo) HasVirtualColumns() bool {
+	return ti.virtualColumnCount > 0
 }
 
 // IsEligible returns whether the table is a eligible table
@@ -449,4 +505,14 @@ func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
 		}
 	}
 	return result
+}
+
+// GetColumnDefaultValue returns the default definition of a column.
+func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
+	defaultValue := col.GetDefaultValue()
+	if defaultValue == nil {
+		defaultValue = col.GetOriginDefaultValue()
+	}
+	defaultDatum := datumTypes.NewDatum(defaultValue)
+	return defaultDatum.GetValue()
 }

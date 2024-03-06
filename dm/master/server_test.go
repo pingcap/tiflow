@@ -947,7 +947,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 	var wg sync.WaitGroup
 	// taskName is relative to taskConfig
 	cfg := config.NewTaskConfig()
-	err := cfg.Decode(taskConfig)
+	err := cfg.FromYaml(taskConfig)
 	require.NoError(t.T(), err)
 	taskName := cfg.Name
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1769,7 +1769,7 @@ func (t *testMasterSuite) TestOperateSource() {
 	s1.leader.Store(oneselfLeader)
 	require.NoError(t.T(), s1.Start(ctx))
 	defer s1.Close()
-	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	mysqlCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
 	task, err := mysqlCfg.Yaml()

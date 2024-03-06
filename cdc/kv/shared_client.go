@@ -16,8 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -123,6 +121,8 @@ type requestedTable struct {
 	startTs   model.Ts
 	rangeLock *regionlock.RegionRangeLock
 	eventCh   chan<- MultiplexingEvent
+
+	lastAdvanceTime atomic.Int64
 
 	// To handle table removing.
 	stopped atomic.Bool
@@ -671,7 +671,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -725,7 +725,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -748,15 +748,11 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.Holes) > 0 {
-				holes := make([]string, 0, len(attr.Holes))
-				for _, hole := range attr.Holes {
-					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
-				}
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.String("holes", strings.Join(holes, ", ")))
+					zap.Any("holes", attr.Holes))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -780,7 +776,7 @@ func (s *SharedClient) newRequestedTable(
 
 	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}

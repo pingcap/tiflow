@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
@@ -72,6 +73,10 @@ func TestTxnSinkNolocking(t *testing.T) {
 
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0
+	tableInfo := model.BuildTableInfo("test", "t1", []*model.Column{
+		{Name: "a", Type: mysql.TypeLong},
+		{Name: "b", Type: mysql.TypeLong},
+	}, nil)
 	for i := 0; i < 100; i++ {
 		sinkState := new(state.TableSinkState)
 		*sinkState = state.TableSinkSinking
@@ -79,11 +84,11 @@ func TestTxnSinkNolocking(t *testing.T) {
 			Event: &model.SingleTableTxn{
 				Rows: []*model.RowChangedEvent{
 					{
-						Table: &model.TableName{Schema: "test", Table: "t1"},
-						Columns: []*model.Column{
+						TableInfo: tableInfo,
+						Columns: model.Columns2ColumnDatas([]*model.Column{
 							{Name: "a", Value: 1},
 							{Name: "b", Value: 2},
-						},
+						}, tableInfo),
 					},
 				},
 			},

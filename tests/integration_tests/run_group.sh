@@ -11,10 +11,10 @@ group=$2
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
 mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_suicide server_config_compatibility"
-mysql_only_http="http_api http_api_tls api_v2"
+mysql_only_http="http_api http_api_tls api_v2 http_api_tls_with_user_auth cli_tls_with_auth"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
-kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro"
+kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro debezium"
 kafka_only_protocol="kafka_simple_basic kafka_simple_basic_avro kafka_simple_handle_key_only kafka_simple_handle_key_only_avro kafka_simple_claim_check kafka_simple_claim_check_avro canal_json_adapter_compatibility canal_json_basic canal_json_content_compatible multi_topics avro_basic canal_json_handle_key_only open_protocol_handle_key_only canal_json_claim_check open_protocol_claim_check"
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
@@ -39,9 +39,9 @@ groups=(
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
 	["G07"]='kv_client_stream_reconnect cdc split_region'
-	["G08"]='processor_err_chan changefeed_reconstruct multi_capture'
+	["G08"]='processor_err_chan changefeed_reconstruct multi_capture synced_status_with_redo'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint synced_status'
-	["G10"]='default_value simple cdc_server_tips event_filter'
+	["G10"]='default_value simple cdc_server_tips event_filter sql_mode'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
 	["G13"]='tiflash region_merge common_1'

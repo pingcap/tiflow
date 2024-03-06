@@ -22,13 +22,13 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/spf13/cobra"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -232,7 +232,7 @@ func exportCfgsFunc(cmd *cobra.Command, args []string) error {
 	}
 
 	// get all configs
-	sourceCfgsMap, subTaskCfgsMap, relayWorkersSet, err := getAllCfgs(common.GlobalCtlClient.EtcdClient)
+	sourceCfgContents, taskCfgContents, relayWorkersSet, err := getAllCfgs(common.GlobalCtlClient.EtcdClient)
 	if err != nil {
 		return err
 	}
@@ -242,11 +242,11 @@ func exportCfgsFunc(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// write sourceCfg files
-	if err = writeSourceCfgs(sourceDir, sourceCfgsMap); err != nil {
+	if err = writeSourceCfgs(sourceDir, sourceCfgContents); err != nil {
 		return err
 	}
 	// write taskCfg files
-	if err = writeTaskCfgs(taskDir, subTaskCfgsMap); err != nil {
+	if err = writeTaskCfgs(taskDir, taskCfgContents); err != nil {
 		return err
 	}
 	// write relayWorkers
@@ -314,42 +314,42 @@ func collectDirCfgs(dir string) ([]string, error) {
 	return cfgs, nil
 }
 
-// getSourceCfgs gets all source cfgs.
-func getSourceCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, error) {
-	sourceCfgsMap, _, err := ha.GetSourceCfg(cli, "", 0)
-	if err != nil {
-		return nil, err
+func getAllCfgs(cli *clientv3.Client) (map[string]string, map[string]string, map[string]map[string]struct{}, error) {
+	listSourceResp := &pb.ListSourceConfigsResponse{}
+	err2 := common.SendRequest(
+		context.Background(),
+		"ListSourceConfigs",
+		&emptypb.Empty{},
+		&listSourceResp,
+	)
+	if err2 != nil {
+		return nil, nil, nil, err2
 	}
-	// try to get all source cfgs before v2.0.2
-	if len(sourceCfgsMap) == 0 {
-		sourceCfgsMap, _, err = ha.GetAllSourceCfgBeforeV202(cli)
-		if err != nil {
-			return nil, err
-		}
+	if !listSourceResp.Result {
+		return nil, nil, nil, errors.New(listSourceResp.Msg)
 	}
-	return sourceCfgsMap, nil
-}
 
-func getAllCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, map[string]map[string]config.SubTaskConfig, map[string]map[string]struct{}, error) {
-	// get all source cfgs
-	sourceCfgsMap, err := getSourceCfgs(cli)
-	if err != nil {
-		common.PrintLinesf("can not get source configs from etcd")
-		return nil, nil, nil, err
+	listTaskResp := &pb.ListTaskConfigsResponse{}
+	err2 = common.SendRequest(
+		context.Background(),
+		"ListTaskConfigs",
+		&emptypb.Empty{},
+		&listTaskResp,
+	)
+	if err2 != nil {
+		return nil, nil, nil, err2
 	}
-	// get all task cfgs
-	subTaskCfgsMap, _, err := ha.GetAllSubTaskCfg(cli)
-	if err != nil {
-		common.PrintLinesf("can not get subtask configs from etcd")
-		return nil, nil, nil, err
+	if !listTaskResp.Result {
+		return nil, nil, nil, errors.New(listTaskResp.Msg)
 	}
+
 	// get all relay configs.
 	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
 	if err != nil {
 		common.PrintLinesf("can not get relay workers from etcd")
 		return nil, nil, nil, err
 	}
-	return sourceCfgsMap, subTaskCfgsMap, relayWorkers, nil
+	return listSourceResp.SourceConfigs, listTaskResp.TaskConfigs, relayWorkers, nil
 }
 
 func createDirectory(dir string) (string, string, error) {
@@ -366,16 +366,11 @@ func createDirectory(dir string) (string, string, error) {
 	return taskDir, sourceDir, nil
 }
 
-func writeSourceCfgs(sourceDir string, sourceCfgsMap map[string]*config.SourceConfig) error {
-	for source, sourceCfg := range sourceCfgsMap {
+func writeSourceCfgs(sourceDir string, sourceCfgContents map[string]string) error {
+	for source, fileContent := range sourceCfgContents {
 		sourceFile := path.Join(sourceDir, source)
 		sourceFile += yamlSuffix
-		fileContent, err := sourceCfg.YamlForDowngrade()
-		if err != nil {
-			common.PrintLinesf("fail to marshal source config of `%s`", source)
-			return err
-		}
-		err = os.WriteFile(sourceFile, []byte(fileContent), 0o600)
+		err := os.WriteFile(sourceFile, []byte(fileContent), 0o600)
 		if err != nil {
 			common.PrintLinesf("fail to write source config to file `%s`", sourceFile)
 			return err
@@ -384,29 +379,12 @@ func writeSourceCfgs(sourceDir string, sourceCfgsMap map[string]*config.SourceCo
 	return nil
 }
 
-func writeTaskCfgs(taskDir string, subTaskCfgsMap map[string]map[string]config.SubTaskConfig) error {
-	subTaskCfgsListMap := make(map[string][]*config.SubTaskConfig, len(subTaskCfgsMap))
-	// from source => task => subtask to task => subtask
-	for _, subTaskCfgs := range subTaskCfgsMap {
-		for task, subTaskCfg := range subTaskCfgs {
-			clone := subTaskCfg
-			subTaskCfgsListMap[task] = append(subTaskCfgsListMap[task], &clone)
-		}
-	}
+func writeTaskCfgs(taskDir string, taskCfgContents map[string]string) error {
 	// from task => subtask to task => taskCfg
-	for task, subTaskCfgs := range subTaskCfgsListMap {
-		sort.Slice(subTaskCfgs, func(i, j int) bool {
-			return subTaskCfgs[i].SourceID < subTaskCfgs[j].SourceID
-		})
-		taskCfg := config.SubTaskConfigsToTaskConfig(subTaskCfgs...)
-
+	for task, content := range taskCfgContents {
 		taskFile := path.Join(taskDir, task)
 		taskFile += yamlSuffix
-		taskContent, err := taskCfg.YamlForDowngrade()
-		if err != nil {
-			common.PrintLinesf("fail to marshal source config of `%s`", task)
-		}
-		if err := os.WriteFile(taskFile, []byte(taskContent), 0o600); err != nil {
+		if err := os.WriteFile(taskFile, []byte(content), 0o600); err != nil {
 			common.PrintLinesf("can not write task config to file `%s`", taskFile)
 			return err
 		}

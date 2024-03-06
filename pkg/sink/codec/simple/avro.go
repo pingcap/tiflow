@@ -21,65 +21,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
 func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
-	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
-		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
-	})
-
-	columnsSchema := make([]interface{}, 0, len(tableInfo.Columns))
-	for _, col := range tableInfo.Columns {
-		mysqlType := map[string]interface{}{
-			"mysqlType": types.TypeToStr(col.GetType(), col.GetCharset()),
-			"charset":   col.GetCharset(),
-			"collate":   col.GetCollate(),
-			"length":    col.GetFlen(),
-		}
-
-		switch col.GetType() {
-		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
-			mysql.TypeFloat, mysql.TypeDouble, mysql.TypeBit, mysql.TypeYear:
-			mysqlType["unsigned"] = map[string]interface{}{
-				"boolean": mysql.HasUnsignedFlag(col.GetFlag()),
-			}
-			mysqlType["zerofill"] = map[string]interface{}{
-				"boolean": mysql.HasZerofillFlag(col.GetFlag()),
-			}
-		case mysql.TypeEnum, mysql.TypeSet:
-			mysqlType["elements"] = map[string]interface{}{
-				"array": col.GetElems(),
-			}
-		case mysql.TypeNewDecimal:
-			mysqlType["decimal"] = map[string]interface{}{
-				"int": col.GetDecimal(),
-			}
-		default:
-		}
-
-		column := map[string]interface{}{
-			"name":     col.Name.O,
-			"dataType": mysqlType,
-			"nullable": !mysql.HasNotNullFlag(col.GetFlag()),
-			"default":  nil,
-		}
-		defaultValue := entry.GetColumnDefaultValue(col)
-		if defaultValue != nil {
-			// according to TiDB source code, the default value is converted to string if not nil.
-			column["default"] = map[string]interface{}{
-				"string": defaultValue,
-			}
-		}
-
-		columnsSchema = append(columnsSchema, column)
-	}
-
 	pkInIndexes := false
 	indexesSchema := make([]interface{}, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
@@ -120,6 +67,56 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 		}
 	}
 
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
+	columnsSchema := make([]interface{}, 0, len(tableInfo.Columns))
+	for _, col := range tableInfo.Columns {
+		mysqlType := map[string]interface{}{
+			"mysqlType": types.TypeToStr(col.GetType(), col.GetCharset()),
+			"charset":   col.GetCharset(),
+			"collate":   col.GetCollate(),
+			"length":    col.GetFlen(),
+		}
+
+		switch col.GetType() {
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
+			mysql.TypeFloat, mysql.TypeDouble, mysql.TypeBit, mysql.TypeYear:
+			mysqlType["unsigned"] = map[string]interface{}{
+				"boolean": mysql.HasUnsignedFlag(col.GetFlag()),
+			}
+			mysqlType["zerofill"] = map[string]interface{}{
+				"boolean": mysql.HasZerofillFlag(col.GetFlag()),
+			}
+		case mysql.TypeEnum, mysql.TypeSet:
+			mysqlType["elements"] = map[string]interface{}{
+				"array": col.GetElems(),
+			}
+		case mysql.TypeNewDecimal:
+			mysqlType["decimal"] = map[string]interface{}{
+				"int": col.GetDecimal(),
+			}
+		default:
+		}
+
+		column := map[string]interface{}{
+			"name":     col.Name.O,
+			"dataType": mysqlType,
+			"nullable": !mysql.HasNotNullFlag(col.GetFlag()),
+			"default":  nil,
+		}
+		defaultValue := model.GetColumnDefaultValue(col)
+		if defaultValue != nil {
+			// according to TiDB source code, the default value is converted to string if not nil.
+			column["default"] = map[string]interface{}{
+				"string": defaultValue,
+			}
+		}
+
+		columnsSchema = append(columnsSchema, column)
+	}
+
 	result := map[string]interface{}{
 		"database": tableInfo.TableName.Schema,
 		"table":    tableInfo.TableName.Table,
@@ -135,7 +132,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	watermark := map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(WatermarkType),
+		"type":     string(MessageTypeWatermark),
 		"commitTs": int64(ts),
 		"buildTs":  time.Now().UnixMilli(),
 	}
@@ -144,6 +141,7 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	}
 
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeWatermark),
 		"payload": watermark,
 	}
 
@@ -155,7 +153,7 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	m := map[string]interface{}{
 		"version":     defaultVersion,
-		"type":        string(BootstrapType),
+		"type":        string(MessageTypeBootstrap),
 		"tableSchema": newTableSchemaMap(tableInfo),
 		"buildTs":     time.Now().UnixMilli(),
 	}
@@ -165,6 +163,7 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	}
 
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeBootstrap),
 		"payload": m,
 	}
 
@@ -199,6 +198,7 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 		"com.pingcap.simple.avro.DDL": result,
 	}
 	payload := map[string]interface{}{
+		"type":    string(MessageTypeDDL),
 		"payload": result,
 	}
 	return map[string]interface{}{
@@ -214,8 +214,8 @@ var (
 		},
 	}
 
-	// payloadHolderPool return holder for the payload
-	payloadHolderPool = sync.Pool{
+	// dmlPayloadHolderPool return holder for the payload
+	dmlPayloadHolderPool = sync.Pool{
 		New: func() any {
 			return make(map[string]interface{})
 		},
@@ -228,34 +228,34 @@ var (
 	}
 )
 
-func newDMLMessageMap(
-	event *model.RowChangedEvent, config *common.Config,
+func (a *avroMarshaller) newDMLMessageMap(
+	event *model.RowChangedEvent,
 	onlyHandleKey bool,
 	claimCheckFileName string,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
-		"database":      event.Table.Schema,
-		"table":         event.Table.Table,
+		"database":      event.TableInfo.GetSchemaName(),
+		"table":         event.TableInfo.GetTableName(),
 		"tableID":       event.TableInfo.ID,
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
 		"schemaVersion": int64(event.TableInfo.UpdateTS),
 	}
 
-	if !config.LargeMessageHandle.Disabled() && onlyHandleKey {
+	if !a.config.LargeMessageHandle.Disabled() && onlyHandleKey {
 		m["handleKeyOnly"] = map[string]interface{}{
 			"boolean": true,
 		}
 	}
 
-	if config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
+	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
 		m["claimCheckLocation"] = map[string]interface{}{
 			"string": claimCheckFileName,
 		}
 	}
 
-	if config.EnableRowChecksum && event.Checksum != nil {
+	if a.config.EnableRowChecksum && event.Checksum != nil {
 		cc := map[string]interface{}{
 			"version":   event.Checksum.Version,
 			"corrupted": event.Checksum.Corrupted,
@@ -269,31 +269,19 @@ func newDMLMessageMap(
 	}
 
 	if event.IsInsert() {
-		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m["data"] = data
-		m["type"] = string(InsertType)
+		m["type"] = string(DMLTypeInsert)
 	} else if event.IsDelete() {
-		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		m["old"] = old
-		m["type"] = string(DeleteType)
+		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
-		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m["data"] = data
-		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		if err != nil {
-			return nil, err
-		}
+		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
 		m["old"] = old
-		m["type"] = string(UpdateType)
+		m["type"] = string(DMLTypeUpdate)
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
@@ -302,13 +290,14 @@ func newDMLMessageMap(
 		"com.pingcap.simple.avro.DML": m,
 	}
 
-	holder := payloadHolderPool.Get().(map[string]interface{})
+	holder := dmlPayloadHolderPool.Get().(map[string]interface{})
+	holder["type"] = string(MessageTypeDML)
 	holder["payload"] = m
 
 	messageHolder := messageHolderPool.Get().(map[string]interface{})
 	messageHolder["com.pingcap.simple.avro.Message"] = holder
 
-	return messageHolder, nil
+	return messageHolder
 }
 
 func recycleMap(m map[string]interface{}) {
@@ -343,35 +332,34 @@ func recycleMap(m map[string]interface{}) {
 		}
 	}
 	holder["payload"] = nil
-	payloadHolderPool.Put(holder)
+	dmlPayloadHolderPool.Put(holder)
 	m["com.pingcap.simple.avro.Message"] = nil
 	messageHolderPool.Put(m)
 }
 
-func collectColumns(
-	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
-) (map[string]interface{}, error) {
+func (a *avroMarshaller) collectColumns(
+	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
+) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
-	for idx, col := range columns {
+	for _, col := range columns {
 		if col == nil {
 			continue
 		}
-		if onlyHandleKey && !col.Flag.IsHandleKey() {
+		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
+		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+		colName := tableInfo.ForceGetColumnName(col.ColumnID)
+		if onlyHandleKey && !colFlag.IsHandleKey() {
 			continue
 		}
-		value, avroType, err := encodeValue4Avro(col.Value, columnInfos[idx].Ft)
-		if err != nil {
-			return nil, err
-		}
-
+		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
-		result[col.Name] = holder
+		result[colName] = holder
 	}
 
 	return map[string]interface{}{
 		"map": result,
-	}, nil
+	}
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
@@ -475,7 +463,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = WatermarkType
+		m.Type = MessageTypeWatermark
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
 		return nil
@@ -485,7 +473,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = BootstrapType
+		m.Type = MessageTypeBootstrap
 		m.BuildTs = rawValues["buildTs"].(int64)
 		m.TableSchema = newTableSchemaFromAvroNative(rawValues["tableSchema"].(map[string]interface{}))
 		return nil
@@ -495,7 +483,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = EventType(rawValues["type"].(string))
+		m.Type = MessageType(rawValues["type"].(string))
 		m.SQL = rawValues["sql"].(string)
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
@@ -517,7 +505,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	}
 
 	rawValues = rawPayload["com.pingcap.simple.avro.DML"].(map[string]interface{})
-	m.Type = EventType(rawValues["type"].(string))
+	m.Type = MessageType(rawValues["type"].(string))
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)

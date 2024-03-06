@@ -122,6 +122,119 @@ func BenchmarkDecodeColumn(b *testing.B) {
 	}
 }
 
+func TestMarshalUnmarshalColumnData(t *testing.T) {
+	v := ColumnData{}
+	bts, err := v.MarshalMsg(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, err := v.UnmarshalMsg(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after UnmarshalMsg(): %q", len(left), left)
+	}
+
+	left, err = msgp.Skip(bts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("%d bytes left over after Skip(): %q", len(left), left)
+	}
+}
+
+func BenchmarkMarshalMsgColumnData(b *testing.B) {
+	v := ColumnData{}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.MarshalMsg(nil)
+	}
+}
+
+func BenchmarkAppendMsgColumnData(b *testing.B) {
+	v := ColumnData{}
+	bts := make([]byte, 0, v.Msgsize())
+	bts, _ = v.MarshalMsg(bts[0:0])
+	b.SetBytes(int64(len(bts)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bts, _ = v.MarshalMsg(bts[0:0])
+	}
+}
+
+func BenchmarkUnmarshalColumnData(b *testing.B) {
+	v := ColumnData{}
+	bts, _ := v.MarshalMsg(nil)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(bts)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := v.UnmarshalMsg(bts)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestEncodeDecodeColumnData(t *testing.T) {
+	v := ColumnData{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+
+	m := v.Msgsize()
+	if buf.Len() > m {
+		t.Log("WARNING: TestEncodeDecodeColumnData Msgsize() is inaccurate")
+	}
+
+	vn := ColumnData{}
+	err := msgp.Decode(&buf, &vn)
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf.Reset()
+	msgp.Encode(&buf, &v)
+	err = msgp.NewReader(&buf).Skip()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func BenchmarkEncodeColumnData(b *testing.B) {
+	v := ColumnData{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	en := msgp.NewWriter(msgp.Nowhere)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		v.EncodeMsg(en)
+	}
+	en.Flush()
+}
+
+func BenchmarkDecodeColumnData(b *testing.B) {
+	v := ColumnData{}
+	var buf bytes.Buffer
+	msgp.Encode(&buf, &v)
+	b.SetBytes(int64(buf.Len()))
+	rd := msgp.NewEndlessReader(buf.Bytes(), b)
+	dc := msgp.NewReader(rd)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := v.DecodeMsg(dc)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestMarshalUnmarshalDDLEvent(t *testing.T) {
 	v := DDLEvent{}
 	bts, err := v.MarshalMsg(nil)
@@ -687,8 +800,8 @@ func BenchmarkDecodeRedoRowChangedEvent(b *testing.B) {
 	}
 }
 
-func TestMarshalUnmarshalRowChangedEvent(t *testing.T) {
-	v := RowChangedEvent{}
+func TestMarshalUnmarshalRowChangedEventInRedoLog(t *testing.T) {
+	v := RowChangedEventInRedoLog{}
 	bts, err := v.MarshalMsg(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -710,8 +823,8 @@ func TestMarshalUnmarshalRowChangedEvent(t *testing.T) {
 	}
 }
 
-func BenchmarkMarshalMsgRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkMarshalMsgRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -719,8 +832,8 @@ func BenchmarkMarshalMsgRowChangedEvent(b *testing.B) {
 	}
 }
 
-func BenchmarkAppendMsgRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkAppendMsgRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	bts := make([]byte, 0, v.Msgsize())
 	bts, _ = v.MarshalMsg(bts[0:0])
 	b.SetBytes(int64(len(bts)))
@@ -731,8 +844,8 @@ func BenchmarkAppendMsgRowChangedEvent(b *testing.B) {
 	}
 }
 
-func BenchmarkUnmarshalRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkUnmarshalRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	bts, _ := v.MarshalMsg(nil)
 	b.ReportAllocs()
 	b.SetBytes(int64(len(bts)))
@@ -745,17 +858,17 @@ func BenchmarkUnmarshalRowChangedEvent(b *testing.B) {
 	}
 }
 
-func TestEncodeDecodeRowChangedEvent(t *testing.T) {
-	v := RowChangedEvent{}
+func TestEncodeDecodeRowChangedEventInRedoLog(t *testing.T) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 
 	m := v.Msgsize()
 	if buf.Len() > m {
-		t.Log("WARNING: TestEncodeDecodeRowChangedEvent Msgsize() is inaccurate")
+		t.Log("WARNING: TestEncodeDecodeRowChangedEventInRedoLog Msgsize() is inaccurate")
 	}
 
-	vn := RowChangedEvent{}
+	vn := RowChangedEventInRedoLog{}
 	err := msgp.Decode(&buf, &vn)
 	if err != nil {
 		t.Error(err)
@@ -769,8 +882,8 @@ func TestEncodeDecodeRowChangedEvent(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkEncodeRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 	b.SetBytes(int64(buf.Len()))
@@ -783,8 +896,8 @@ func BenchmarkEncodeRowChangedEvent(b *testing.B) {
 	en.Flush()
 }
 
-func BenchmarkDecodeRowChangedEvent(b *testing.B) {
-	v := RowChangedEvent{}
+func BenchmarkDecodeRowChangedEventInRedoLog(b *testing.B) {
+	v := RowChangedEventInRedoLog{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 	b.SetBytes(int64(buf.Len()))

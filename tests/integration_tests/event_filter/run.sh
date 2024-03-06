@@ -30,7 +30,7 @@ function run() {
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
+	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
 	esac
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -38,8 +38,9 @@ function run() {
 	# make suer table t1 is deleted in upstream and exists in downstream
 	check_table_not_exists "event_filter.t1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "event_filter.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "event_filter.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "event_filter.finish_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_normal" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_truncate" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_alter" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	# check those rows that are not filtered are synced to downstream
 	run_sql "select count(1) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -53,7 +54,14 @@ function run() {
 	run_sql "select count(5) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "count(5): 1"
 
-	# check table t2 is replicated
+	run_sql "TRUNCATE TABLE event_filter.t_truncate;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql_file $CUR/data/test_truncate.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "ALTER TABLE event_filter.t_alter MODIFY t_bigint BIGINT;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql_file $CUR/data/test_alter.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table event_filter.finish_mark(id int primary key);" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.finish_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+	# check table t_normal is replicated
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

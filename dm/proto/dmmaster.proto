@@ -4,6 +4,7 @@ package pb;
 
 import "dmworker.proto"; // refine if needed
 import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
 
 service Master {
   rpc StartTask (StartTaskRequest) returns (StartTaskResponse) {
@@ -120,6 +121,13 @@ service Master {
   rpc OperateValidationError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
 
   rpc UpdateValidation(UpdateValidationRequest) returns(UpdateValidationResponse) {}
+
+  // Encrypt encrypts the plaintext using the secret key of dm-master
+  rpc Encrypt(EncryptRequest) returns(EncryptResponse) {}
+
+  rpc ListTaskConfigs(google.protobuf.Empty) returns(ListTaskConfigsResponse) {}
+
+  rpc ListSourceConfigs(google.protobuf.Empty) returns(ListSourceConfigsResponse) {}
 }
 
 message StartTaskRequest {
@@ -215,9 +223,9 @@ message ShowDDLLocksResponse {
 }
 
 enum UnlockDDLLockOp {
-    InvalidLockOp = 0;
-    SkipLock = 1;
-    ExecLock = 2;
+  InvalidLockOp = 0;
+  SkipLock = 1;
+  ExecLock = 2;
 }
 
 // UnlockDDLLockRequest used to unlock (resolve) DDL lock manually
@@ -313,6 +321,7 @@ message RegisterWorkerRequest {
 message RegisterWorkerResponse {
   bool result = 1;
   string msg = 2;
+  bytes secretKey = 3;
 }
 
 message OfflineMemberRequest {
@@ -492,29 +501,29 @@ enum RelayOpV2 {
 }
 
 message StartValidationRequest {
-    // proto3 support optional, but need to upgrade protoc-gen-gogofaster, not do it in this pr
-    // see https://github.com/protocolbuffers/protobuf/issues/1606
-    oneof mode{ string mode_value = 1;}
-    oneof startTime{string start_time_value = 2;}
-    repeated string sources = 3;
-    string taskName = 4;
+  // proto3 support optional, but need to upgrade protoc-gen-gogofaster, not do it in this pr
+  // see https://github.com/protocolbuffers/protobuf/issues/1606
+  oneof mode{string mode_value = 1;}
+  oneof startTime{string start_time_value = 2;}
+  repeated string sources = 3;
+  string taskName = 4;
 }
 
 message StartValidationResponse {
-    bool result = 1;
-    string msg = 2;
-    repeated CommonWorkerResponse sources = 3;
+  bool result = 1;
+  string msg = 2;
+  repeated CommonWorkerResponse sources = 3;
 }
 
 message StopValidationRequest {
-    repeated string sources = 1;
-    string taskName = 2;
+  repeated string sources = 1;
+  string taskName = 2;
 }
 
 message StopValidationResponse {
-    bool result = 1;
-    string msg = 2;
-    repeated CommonWorkerResponse sources = 3;
+  bool result = 1;
+  string msg = 2;
+  repeated CommonWorkerResponse sources = 3;
 }
 
 message UpdateValidationRequest {
@@ -528,4 +537,26 @@ message UpdateValidationResponse {
   bool result = 1;
   string msg = 2;
   repeated CommonWorkerResponse sources = 3;
+}
+
+message EncryptRequest {
+  string plaintext = 1;
+}
+
+message EncryptResponse {
+  bool result = 1;
+  string msg = 2;
+  string ciphertext = 3;
+}
+
+message ListTaskConfigsResponse {
+  bool result = 1;
+  string msg = 2;
+  map<string, string> taskConfigs = 3;
+}
+
+message ListSourceConfigsResponse {
+  bool result = 1;
+  string msg = 2;
+  map<string, string> sourceConfigs = 3;
 }

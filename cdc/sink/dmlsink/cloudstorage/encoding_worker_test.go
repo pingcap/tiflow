@@ -19,9 +19,9 @@ import (
 	"sync"
 	"testing"
 
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -65,20 +65,16 @@ func TestEncodeEvents(t *testing.T) {
 		return defragmenter.run(egCtx)
 	})
 
-	colInfos := []rowcodec.ColInfo{
-		{
-			ID:            1,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeLong),
-		},
-		{
-			ID:            2,
-			IsPKHandle:    false,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeString),
+	tidbTableInfo := &timodel.TableInfo{
+		ID:   100,
+		Name: timodel.NewCIStr("table1"),
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: timodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeString)},
 		},
 	}
+	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
+
 	err := encodingWorker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
@@ -90,37 +86,23 @@ func TestEncodeEvents(t *testing.T) {
 		seqNumber: 1,
 		event: &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				TableInfo: &model.TableInfo{
-					TableName: model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
-				},
+				TableInfo: tableInfo,
 				Rows: []*model.RowChangedEvent{
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
+						PhysicalTableID: 100,
+						TableInfo:       tableInfo,
+						Columns: []*model.ColumnData{
+							{ColumnID: 1, Value: 100},
+							{ColumnID: 2, Value: "hello world"},
 						},
-						Columns: []*model.Column{
-							{Name: "c1", Value: 100},
-							{Name: "c2", Value: "hello world"},
-						},
-						ColInfos: colInfos,
 					},
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
+						PhysicalTableID: 100,
+						TableInfo:       tableInfo,
+						Columns: []*model.ColumnData{
+							{ColumnID: 1, Value: 200},
+							{ColumnID: 2, Value: "你好，世界"},
 						},
-						Columns: []*model.Column{
-							{Name: "c1", Value: 200},
-							{Name: "c2", Value: "你好，世界"},
-						},
-						ColInfos: colInfos,
 					},
 				},
 			},
@@ -148,28 +130,24 @@ func TestEncodingWorkerRun(t *testing.T) {
 		Table:   "table1",
 		TableID: 100,
 	}
-	event := &model.SingleTableTxn{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 100,
-			},
+	tidbTableInfo := &timodel.TableInfo{
+		ID:   100,
+		Name: timodel.NewCIStr("table1"),
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: timodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeVarchar)},
 		},
+	}
+	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
+	event := &model.SingleTableTxn{
+		TableInfo: tableInfo,
 		Rows: []*model.RowChangedEvent{
 			{
-				Table: &model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
-				},
-				Columns: []*model.Column{
-					{Name: "c1", Value: 100},
-					{Name: "c2", Value: "hello world"},
-				},
-				ColInfos: []rowcodec.ColInfo{
-					{ID: 1, Ft: types.NewFieldType(mysql.TypeLong)},
-					{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
+				PhysicalTableID: 100,
+				TableInfo:       tableInfo,
+				Columns: []*model.ColumnData{
+					{ColumnID: 1, Value: 100},
+					{ColumnID: 2, Value: "hello world"},
 				},
 			},
 		},

@@ -14,62 +14,92 @@
 package filter
 
 import (
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
-// allowDDLList is a list of DDL types that can be applied to cdc's schema storage.
-// It's a white list.
-var allowDDLList = []timodel.ActionType{
-	timodel.ActionCreateSchema,
-	timodel.ActionDropSchema,
-	timodel.ActionCreateTable,
-	timodel.ActionDropTable,
-	timodel.ActionAddColumn,
-	timodel.ActionDropColumn,
-	timodel.ActionAddIndex,
-	timodel.ActionDropIndex,
-	timodel.ActionTruncateTable,
-	timodel.ActionModifyColumn,
-	timodel.ActionRenameTable,
-	timodel.ActionRenameTables,
-	timodel.ActionSetDefaultValue,
-	timodel.ActionModifyTableComment,
-	timodel.ActionRenameIndex,
-	timodel.ActionAddTablePartition,
-	timodel.ActionDropTablePartition,
-	timodel.ActionCreateView,
-	timodel.ActionModifyTableCharsetAndCollate,
-	timodel.ActionTruncateTablePartition,
-	timodel.ActionDropView,
-	timodel.ActionRecoverTable,
-	timodel.ActionModifySchemaCharsetAndCollate,
-	timodel.ActionAddPrimaryKey,
-	timodel.ActionDropPrimaryKey,
-	timodel.ActionAddColumns,  // Removed in TiDB v6.2.0, see https://github.com/pingcap/tidb/pull/35862.
-	timodel.ActionDropColumns, // Removed in TiDB v6.2.0
-	timodel.ActionRebaseAutoID,
-	timodel.ActionAlterIndexVisibility,
-	timodel.ActionMultiSchemaChange,
-	timodel.ActionExchangeTablePartition,
-	timodel.ActionReorganizePartition,
-	timodel.ActionAlterTTLInfo,
-	timodel.ActionAlterTTLRemove,
-	timodel.ActionAlterTablePartitioning,
-	timodel.ActionRemovePartitioning,
+const (
+	// SyncPointTable is the tale name use to write ts-map when sync-point is enable.
+	SyncPointTable = "syncpoint_v1"
+	// TiCDCSystemSchema is the schema only use by TiCDC.
+	TiCDCSystemSchema = "tidb_cdc"
+)
+
+// ddlWhiteListMap is a map of all DDL types that can be applied to cdc's schema storage.
+var ddlWhiteListMap = map[timodel.ActionType]bf.EventType{
+	// schema related DDLs
+	timodel.ActionCreateSchema:                  bf.CreateDatabase,
+	timodel.ActionDropSchema:                    bf.DropDatabase,
+	timodel.ActionModifySchemaCharsetAndCollate: bf.ModifySchemaCharsetAndCollate,
+
+	// table related DDLs
+	timodel.ActionCreateTable:                  bf.CreateTable,
+	timodel.ActionDropTable:                    bf.DropTable,
+	timodel.ActionTruncateTable:                bf.TruncateTable,
+	timodel.ActionRenameTable:                  bf.RenameTable,
+	timodel.ActionRenameTables:                 bf.RenameTable,
+	timodel.ActionRecoverTable:                 bf.RecoverTable,
+	timodel.ActionModifyTableComment:           bf.ModifyTableComment,
+	timodel.ActionModifyTableCharsetAndCollate: bf.ModifyTableCharsetAndCollate,
+
+	// view related DDLs
+	timodel.ActionCreateView: bf.CreateView,
+	timodel.ActionDropView:   bf.DropView,
+
+	// partition related DDLs
+	timodel.ActionAddTablePartition:      bf.AddTablePartition,
+	timodel.ActionDropTablePartition:     bf.DropTablePartition,
+	timodel.ActionTruncateTablePartition: bf.TruncateTablePartition,
+	timodel.ActionExchangeTablePartition: bf.ExchangePartition,
+	timodel.ActionReorganizePartition:    bf.ReorganizePartition,
+	timodel.ActionAlterTablePartitioning: bf.AlterTablePartitioning,
+	timodel.ActionRemovePartitioning:     bf.RemovePartitioning,
+
+	// column related DDLs
+	timodel.ActionAddColumn:       bf.AddColumn,
+	timodel.ActionDropColumn:      bf.DropColumn,
+	timodel.ActionModifyColumn:    bf.ModifyColumn,
+	timodel.ActionSetDefaultValue: bf.SetDefaultValue,
+
+	// index related DDLs
+	timodel.ActionRebaseAutoID:         bf.RebaseAutoID,
+	timodel.ActionAddPrimaryKey:        bf.AddPrimaryKey,
+	timodel.ActionDropPrimaryKey:       bf.DropPrimaryKey,
+	timodel.ActionAddIndex:             bf.CreateIndex,
+	timodel.ActionDropIndex:            bf.DropIndex,
+	timodel.ActionRenameIndex:          bf.RenameIndex,
+	timodel.ActionAlterIndexVisibility: bf.AlterIndexVisibility,
+
+	// TTL related DDLs
+	timodel.ActionAlterTTLInfo:   bf.AlterTTLInfo,
+	timodel.ActionAlterTTLRemove: bf.AlterTTLRemove,
+
+	// difficult to classify DDLs
+	timodel.ActionMultiSchemaChange: bf.MultiSchemaChange,
+
+	// deprecated DDLs,see https://github.com/pingcap/tidb/pull/35862.
+	// DDL types below are deprecated in TiDB v6.2.0, but we still keep them here
+	// In case that some users will use TiCDC to replicate data from TiDB v6.1.x.
+	timodel.ActionAddColumns:  bf.AddColumn,
+	timodel.ActionDropColumns: bf.DropColumn,
 }
 
 // Filter are safe for concurrent use.
 // TODO: find a better way to abstract this interface.
 type Filter interface {
-	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
+	// ShouldIgnoreDMLEvent returns true if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
+	// ShouldIgnoreDDLEvent returns true if the DDL event should be ignored.
+	// If a ddl is ignored, it will be applied to cdc's schema storage,
+	// but will not be sent to downstream.
+	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
-	ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table, query string) (bool, error)
+	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
@@ -102,11 +132,11 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 		f = tfilter.CaseInsensitive(f)
 	}
 
-	dmlExprFilter, err := newExprFilter(tz, cfg.Filter, cfg.SQLMode)
+	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
 	if err != nil {
 		return nil, err
 	}
-	sqlEventFilter, err := newSQLEventFilter(cfg.Filter, cfg.SQLMode)
+	sqlEventFilter, err := newSQLEventFilter(cfg.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +162,7 @@ func (f *filter) ShouldIgnoreDMLEvent(
 		return true, nil
 	}
 
-	if f.ShouldIgnoreTable(dml.Table.Schema, dml.Table.Table) {
+	if f.ShouldIgnoreTable(dml.TableInfo.GetSchemaName(), dml.TableInfo.GetTableName()) {
 		return true, nil
 	}
 
@@ -146,31 +176,41 @@ func (f *filter) ShouldIgnoreDMLEvent(
 	return f.dmlExprFilter.shouldSkipDML(dml, rawRow, ti)
 }
 
-// ShouldDiscardDDL returns true if this DDL should be discarded.
-// If a ddl is discarded, it will not be applied to cdc's schema storage
-// and sent to downstream.
-func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table, query string) (discard bool, err error) {
-	discard = !isAllowedDDL(ddlType)
-	if discard {
-		return
-	}
-
-	discard = f.shouldIgnoreStartTs(startTs)
-	if discard {
-		return
+// ShouldDiscardDDL checks if a DDL should be discarded by conditions below:
+// 0. By allow list.
+// 1. By schema name.
+// 2. By table name.
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool {
+	if !isAllowedDDL(ddlType) {
+		return true
 	}
 
 	if IsSchemaDDL(ddlType) {
-		discard = !f.tableFilter.MatchSchema(schema)
-	} else {
-		discard = f.ShouldIgnoreTable(schema, table)
+		return f.ShouldIgnoreSchema(schema)
 	}
+	return f.ShouldIgnoreTable(schema, table)
+}
 
-	if discard {
-		return
+// ShouldIgnoreDDLEvent checks if a DDL event should be ignore by conditions below:
+// 0. By startTs.
+// 1. By ddl type.
+// 2. By ddl query.
+//
+// If a ddl is ignored, it will be applied to cdc's schema storage,
+// but will not be sent to downstream.
+// Note that a ignored ddl is different from a discarded ddl. For example, suppose
+// we have a changefeed-test with the following config:
+//   - table filter: rules = ['test.*']
+//   - event-filters: matcher = ["test.worker"] ignore-event = ["create table"]
+//
+// Then, for the following DDLs:
+//  1. `CREATE TABLE test.worker` will be ignored, but the table will be replicated by changefeed-test.
+//  2. `CREATE TABLE other.worker` will be discarded, and the table will not be replicated by changefeed-test.
+func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
+	if f.shouldIgnoreStartTs(ddl.StartTs) {
+		return true, nil
 	}
-
-	return f.sqlEventFilter.shouldSkipDDL(ddlType, schema, table, query)
+	return f.sqlEventFilter.shouldSkipDDL(ddl)
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this changefeed.
@@ -201,12 +241,8 @@ func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
 }
 
 func isAllowedDDL(actionType timodel.ActionType) bool {
-	for _, action := range allowDDLList {
-		if actionType == action {
-			return true
-		}
-	}
-	return false
+	_, ok := ddlWhiteListMap[actionType]
+	return ok
 }
 
 // IsSchemaDDL returns true if the action type is a schema DDL.

@@ -9,7 +9,7 @@ target-database:
   host: "127.0.0.1"
   port: 4000
   user: "test"
-  password: "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+  password: '123456'
 
 mysql-instances:
   - source-id: "mysql-replica-02"

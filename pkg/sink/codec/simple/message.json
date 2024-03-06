@@ -189,10 +189,6 @@
         "type": "int"
       },
       {
-        "name": "type",
-        "type": "string"
-      },
-      {
         "name": "commitTs",
         "type": "long"
       },
@@ -211,10 +207,6 @@
       {
         "name": "version",
         "type": "int"
-      },
-      {
-        "name": "type",
-        "type": "string"
       },
       {
         "name": "buildTs",
@@ -280,6 +272,34 @@
           "com.pingcap.simple.avro.TableSchema"
         ],
         "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Timestamp",
+    "type": "record",
+    "docs": "the timestamp value format",
+    "fields": [
+      {
+        "name": "location",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "string"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "UnsignedBigint",
+    "type": "record",
+    "docs": "unsigned bigint value format",
+    "fields": [
+      {
+        "name": "value",
+        "type": "long"
       }
     ]
   },
@@ -361,13 +381,13 @@
             "type": "map",
             "values": [
               "null",
-              "int",
               "long",
               "float",
               "double",
               "string",
-              "boolean",
-              "bytes"
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
             ],
             "default": null
           }
@@ -382,13 +402,13 @@
             "type": "map",
             "values": [
               "null",
-              "int",
               "long",
               "float",
               "double",
               "string",
-              "boolean",
-              "bytes"
+              "bytes",
+              "com.pingcap.simple.avro.Timestamp",
+              "com.pingcap.simple.avro.UnsignedBigint"
             ],
             "default": null
           }
@@ -403,6 +423,19 @@
     "docs": "the wrapper for all kind of messages",
     "type": "record",
     "fields": [
+      {
+        "name": "type",
+        "type": {
+          "type": "enum",
+          "name": "MessageType",
+          "symbols": [
+            "WATERMARK",
+            "BOOTSTRAP",
+            "DDL",
+            "DML"
+          ]
+        }
+      },
       {
         "name": "payload",
         "type": [

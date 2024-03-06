@@ -56,10 +56,18 @@ type CDCRESTInterface interface {
 	Delete() *Request
 }
 
+// BasicAuth holds the basic authentication information.
+type BasicAuth struct {
+	User     string
+	Password string
+}
+
 // CDCRESTClient defines a TiCDC RESTful client
 type CDCRESTClient struct {
 	// base is the root URL for all invocations of the client.
-	base *url.URL
+	base      *url.URL
+	basicAuth BasicAuth
+	params    url.Values
 
 	// versionedAPIPath is a http url prefix with api version. eg. /api/v1.
 	versionedAPIPath string
@@ -69,7 +77,13 @@ type CDCRESTClient struct {
 }
 
 // NewCDCRESTClient creates a new CDCRESTClient.
-func NewCDCRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputil.Client) (*CDCRESTClient, error) {
+func NewCDCRESTClient(
+	baseURL *url.URL,
+	versionedAPIPath string,
+	client *httputil.Client,
+	basicAuth BasicAuth,
+	params url.Values,
+) (*CDCRESTClient, error) {
 	if !strings.HasSuffix(baseURL.Path, "/") {
 		baseURL.Path += "/"
 	}
@@ -78,8 +92,10 @@ func NewCDCRESTClient(baseURL *url.URL, versionedAPIPath string, client *httputi
 
 	return &CDCRESTClient{
 		base:             baseURL,
+		basicAuth:        basicAuth,
 		versionedAPIPath: versionedAPIPath,
 		Client:           client,
+		params:           params,
 	}, nil
 }
 

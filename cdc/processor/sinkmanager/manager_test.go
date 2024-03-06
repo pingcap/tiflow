@@ -34,7 +34,6 @@ import (
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Consistent.MemoryUsage.MemoryQuotaPercentage = 75
-	replicaConfig.Consistent.MemoryUsage.EventCachePercentage = 50
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
@@ -48,7 +47,7 @@ func addTableAndAddEventsToSortEngine(
 	t *testing.T,
 	engine sorter.SortEngine,
 	span tablepb.Span,
-) {
+) uint64 {
 	engine.AddTable(span, 0)
 	events := []*model.PolymorphicEvent{
 		{
@@ -106,9 +105,14 @@ func addTableAndAddEventsToSortEngine(
 			},
 		},
 	}
+	size := uint64(0)
 	for _, event := range events {
+		if event.Row != nil {
+			size += uint64(event.Row.ApproximateBytes())
+		}
 		engine.Add(span, event)
 	}
+	return size
 }
 
 func TestAddTable(t *testing.T) {
@@ -158,13 +162,13 @@ func TestRemoveTable(t *testing.T) {
 	require.NotNil(t, tableSink)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
-	addTableAndAddEventsToSortEngine(t, e, span)
+	totalEventSize := addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 	manager.schemaStorage.AdvanceResolvedTs(5)
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.sinkMemQuota.GetUsedBytes() == 904
+		return manager.sinkMemQuota.GetUsedBytes() == totalEventSize
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Call this function times to test the idempotence.

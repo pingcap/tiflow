@@ -145,7 +145,7 @@ mysql-instances:
 	// test after to string, taskStr can be `Decode` normally
 	taskStr := task1.String()
 	task2 := NewTaskConfig()
-	err = task2.Decode(taskStr)
+	err = task2.FromYaml(taskStr)
 	c.Require().NoError(err)
 	c.Require().True(bytes.Contains(task2.TargetDB.Security.SSLCABytes, c.noContent))
 	c.Require().True(bytes.Contains(task2.TargetDB.Security.SSLCertBytes, c.noContent))
