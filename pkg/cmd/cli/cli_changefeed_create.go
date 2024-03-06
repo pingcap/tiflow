@@ -146,12 +146,10 @@ func (o *createChangefeedOptions) complete(f factory.Factory) error {
 func (o *createChangefeedOptions) completeReplicaCfg() error {
 	cfg := config.GetDefaultReplicaConfig()
 	if len(o.commonChangefeedOptions.configFile) > 0 {
-		log.Warn("completeReplicaCfg decode file")
 		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return err
 		}
 	}
-	log.Warn("completeReplicaCfg", zap.Bool("enableOldValue", cfg.EnableOldValue))
 
 	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
 	if err != nil {
@@ -192,7 +190,8 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
 	if o.cfg.EnableOldValue {
-		cmd.Printf("[WARN] enable-old-value is deprecated in changefeed config files.\n")
+		cmd.Printf("[WARN] `enable-old-value` is deprecated in changefeed config files. " +
+			"And it is the default behaviour of cdc now.\n")
 	}
 
 	// user is not allowed to set sort-dir at changefeed level
@@ -284,10 +283,6 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		ReplicaConfig: createChangefeedCfg.ReplicaConfig,
 		StartTs:       createChangefeedCfg.StartTs,
 		SinkURI:       createChangefeedCfg.SinkURI,
-	}
-
-	if !verifyTableConfig.ReplicaConfig.EnableOldValue {
-		cmd.Printf("[WARN] Config not set.\n")
 	}
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)
