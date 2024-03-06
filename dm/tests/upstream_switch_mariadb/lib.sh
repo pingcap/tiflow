@@ -68,6 +68,11 @@ function change_master_to_pos() {
 
 function change_master_to_gtid() {
 	exec_sql $1 "stop slave;"
+	if [ "$1" == "$master_8_host" ]; then
+		exec_sql $1 "SET GLOBAL gtid_slave_pos = '2-2-1';"
+	else
+		exec_sql $1 "SET GLOBAL gtid_slave_pos = '1-1-1';"
+	fi
 	exec_sql $1 "change master to master_host='$2',master_user='root',master_password='123456',master_use_gtid=slave_pos;"
 	exec_sql $1 "start slave;"
 }
