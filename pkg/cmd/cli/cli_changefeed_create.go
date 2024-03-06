@@ -88,6 +88,7 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 
 // strictDecodeConfig do strictDecodeFile check and only verify the rules for now.
 func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *config.ReplicaConfig) error {
+	log.Info("changefeedCommonOptions.strictDecodeConfig")
 	err := util.StrictDecodeFile(o.configFile, component, cfg)
 	if err != nil {
 		return err
