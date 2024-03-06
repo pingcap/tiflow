@@ -1,5 +1,3 @@
-blainsmith.com/go/seahash v1.2.1 h1:6tEG97FuuhU06FdFD4tXZlyw7saa9CoXBorsc+rnuZA=
-blainsmith.com/go/seahash v1.2.1/go.mod h1:pnKU6FdQMfYOGoDBo5FPdlZG7kmOJ/nuNyfu0czty8k=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
@@ -86,6 +84,8 @@ github.com/VividCortex/ewma v1.2.0 h1:f58SaIzcDXrSy3kWaHNvuJgJ3Nmz59Zji6XoJR/q1o
 github.com/VividCortex/ewma v1.2.0/go.mod h1:nz4BbCtbLyFDeC9SUHbtcT5644juEuWfUAUnGx7j5l4=
 github.com/VividCortex/mysqlerr v1.0.0 h1:5pZ2TZA+YnzPgzBfiUWGqWmKDVNBdrkf9g+DNe1Tiq8=
 github.com/VividCortex/mysqlerr v1.0.0/go.mod h1:xERx8E4tBhLvpjzdUyQiSfUxeMcATEQrflDAfXsqcAE=
+github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140 h1:t7DNyDoEPlT5YYkkTBHEH90VZ3GSZXCPD4d2zLnqhds=
+github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140/go.mod h1:pnKU6FdQMfYOGoDBo5FPdlZG7kmOJ/nuNyfu0czty8k=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
