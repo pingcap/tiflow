@@ -2,7 +2,7 @@
 
 # call the MySQL image provided entrypoint script
 # "$@" is to pass all parameters as they are provided
-/entrypoint.sh "$@" &
+/docker-entrypoint.sh "$@" &
 
 i=0
 while [ "$(netstat -na | grep "LISTEN" | grep "3306" | wc -l)" -eq 0 ]; do

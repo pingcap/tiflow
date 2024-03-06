@@ -16,4 +16,13 @@ RUN chmod +x /chk_mysql.sh
 
 ENTRYPOINT ["/init.sh"]
 
-CMD ["mariadbd"]
+# # 创建一个新用户并赋予相应的权限
+# RUN useradd -ms /bin/bash mariadb
+# RUN chown -R mariadb /var/lib/mysql
+
+# # 切换到新用户
+# USER mariadb
+
+# RUN mysql_install_db --user=mariadb --ldata=/var/lib/mysql
+
+CMD ["mysqld"]

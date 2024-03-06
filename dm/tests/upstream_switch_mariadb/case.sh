@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -exu
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PATH=$CUR/../_utils:$PATH # for sync_diff_inspector

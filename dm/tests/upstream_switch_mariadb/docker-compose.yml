@@ -11,7 +11,7 @@ x-node: &default-node
   privileged: true
   restart: always
   environment:
-    MARIADB_ROOT_PASSWORD: "123456"
+    MYSQL_ROOT_PASSWORD: "123456"
 
 services:
   mysql57_master:
@@ -20,8 +20,9 @@ services:
       context: .
       args:
         conf: mysql57_master
-        version: 10.2
-    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+        version: 10.3
+    # command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW
     container_name: mysql57_master
     hostname: mysql57_master
     networks:
@@ -34,8 +35,9 @@ services:
       context: .
       args:
         conf: mysql57_slave
-        version: 10.2
-    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+        version: 10.3
+    # command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW
     container_name: mysql57_slave
     hostname: mysql57_slave
     networks:
@@ -48,8 +50,9 @@ services:
       context: .
       args:
         conf: mysql8_master
-        version: 10.2
-    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+        version: 10.3
+    # command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW
     container_name: mysql8_master
     hostname: mysql8_master
     networks:
@@ -62,8 +65,9 @@ services:
       context: .
       args:
         conf: mysql8_slave
-        version: 10.2
-    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+        version: 10.3
+    # command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW --gtid_mode=ON --enforce-gtid-consistency=true
+    command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW
     container_name: mysql8_slave
     hostname: mysql8_slave
     networks:
