@@ -19,9 +19,17 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+=======
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl.go
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -56,7 +64,12 @@ type EventTableSink[E eventsink.TableEvent] struct {
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
+<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
 	eventAppender   eventsink.Appender[E]
+=======
+	eventAppender   P
+	pdClock         pdutil.Clock
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl.go
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
@@ -65,6 +78,8 @@ type EventTableSink[E eventsink.TableEvent] struct {
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	metricsTableSinkFlushLagDuration prometheus.Observer
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -72,6 +87,7 @@ func New[E eventsink.TableEvent](
 	changefeedID model.ChangeFeedID,
 	tableID model.TableID,
 	startTs model.Ts,
+<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
@@ -89,6 +105,28 @@ func New[E eventsink.TableEvent](
 		state:                     state.TableSinkSinking,
 		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: startTs},
 		metricsTableSinkTotalRows: totalRowsCounter,
+=======
+	backendSink dmlsink.EventSink[E],
+	appender P,
+	pdClock pdutil.Clock,
+	totalRowsCounter prometheus.Counter,
+	flushLagDuration prometheus.Observer,
+) *EventTableSink[E, P] {
+	return &EventTableSink[E, P]{
+		changefeedID:                     changefeedID,
+		span:                             span,
+		startTs:                          startTs,
+		maxResolvedTs:                    model.NewResolvedTs(0),
+		backendSink:                      backendSink,
+		progressTracker:                  newProgressTracker(span, defaultBufferSize),
+		eventAppender:                    appender,
+		pdClock:                          pdClock,
+		eventBuffer:                      make([]E, 0, 1024),
+		state:                            state.TableSinkSinking,
+		lastSyncedTs:                     LastSyncedTsRecord{lastSyncedTs: startTs},
+		metricsTableSinkTotalRows:        totalRowsCounter,
+		metricsTableSinkFlushLagDuration: flushLagDuration,
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl.go
 	}
 }
 
@@ -135,7 +173,12 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 		// We have to record the event ID for the callback.
 		postEventFlushFunc := e.progressTracker.addEvent()
 		evCommitTs := ev.GetCommitTs()
+<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
 		ce := &eventsink.CallbackableEvent[E]{
+=======
+		phyCommitTs := oracle.ExtractPhysical(evCommitTs)
+		ce := &dmlsink.CallbackableEvent[E]{
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl.go
 			Event: ev,
 			Callback: func() {
 				// Due to multi workers will call this callback concurrently,
@@ -149,6 +192,10 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 						e.lastSyncedTs.lastSyncedTs = evCommitTs
 					}
 				}
+				pdTime := e.pdClock.CurrentTime()
+				currentTs := oracle.GetPhysical(pdTime)
+				flushLag := float64(currentTs-phyCommitTs) / 1e3
+				e.metricsTableSinkFlushLagDuration.Observe(flushLag)
 				postEventFlushFunc()
 			},
 			SinkState: &e.state,

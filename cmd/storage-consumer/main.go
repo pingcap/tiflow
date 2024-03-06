@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -343,9 +342,14 @@ func (c *consumer) emitDMLEvents(
 			if _, ok := c.tableSinkMap[tableID]; !ok {
 				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
+<<<<<<< HEAD
 					tableID,
 					row.CommitTs,
 					prometheus.NewCounter(prometheus.CounterOpts{}))
+=======
+					spanz.TableIDToComparableSpan(tableID),
+					row.CommitTs)
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 			}
 
 			_, ok := c.tableTsMap[tableID]

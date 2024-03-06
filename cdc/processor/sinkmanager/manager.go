@@ -130,6 +130,8 @@ type SinkManager struct {
 
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	metricsTableSinkFlushLagDuration prometheus.Observer
 }
 
 // New creates a new sink manager.
@@ -158,7 +160,15 @@ func New(
 		sinkWorkerAvailable: make(chan struct{}, 1),
 		sinkRetry:           retry.NewInfiniteErrorRetry(),
 
+<<<<<<< HEAD
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+=======
+		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+
+		metricsTableSinkFlushLagDuration: tablesinkmetrics.TableSinkFlushLagDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 	}
 
 	totalQuota := changefeedInfo.Config.MemoryQuota
@@ -846,7 +856,11 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			if m.sinkFactory.TryLock() {
 				defer m.sinkFactory.Unlock()
 				if m.sinkFactory.f != nil {
+<<<<<<< HEAD
 					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, tableID, startTs, m.metricsTableSinkTotalRows)
+=======
+					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.up.PDClock, m.metricsTableSinkTotalRows, m.metricsTableSinkFlushLagDuration)
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 					version = m.sinkFactory.version
 				}
 			}

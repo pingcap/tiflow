@@ -22,8 +22,14 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -92,8 +98,17 @@ func (t *mockDelayedTableSink) AsyncClose() bool {
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
+<<<<<<< HEAD
 	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID, model.Ts(0),
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+=======
+	innerTableSink := tablesink.New[*model.RowChangedEvent](
+		changefeedID, span, model.Ts(0),
+		sink, &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}))
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		tableID,
@@ -332,9 +347,16 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 	t.Parallel()
 
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
+<<<<<<< HEAD
 		model.ChangeFeedID{}, 1, model.Ts(0),
 		newMockSink(), &eventsink.RowChangeEventAppender{},
+=======
+		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
+		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}),
 	)
 	version := new(uint64)
 
@@ -378,9 +400,16 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	t.Parallel()
 
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
+<<<<<<< HEAD
 		model.ChangeFeedID{}, 1, model.Ts(0),
 		newMockSink(), &eventsink.RowChangeEventAppender{},
+=======
+		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
+		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}),
 	)
 	version := new(uint64)
 
