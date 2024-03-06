@@ -45,23 +45,7 @@ type BatchEncoder struct {
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
 	result             []*common.Message
-
-	enableTiDBExtension bool
-	enableRowChecksum   bool
-
-<<<<<<< HEAD
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
-=======
-	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
-	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
-	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
-	// exposed to the outside users.
-	EnableWatermarkEvent bool
-
-	DecimalHandlingMode        string
-	BigintUnsignedHandlingMode string
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
+	config             *common.Config
 }
 
 type avroEncodeInput struct {
@@ -149,7 +133,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 // EncodeCheckpointEvent only encode checkpoint event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
 		data := []interface{}{checkpointByte, ts}
 		for _, v := range data {
@@ -168,7 +152,7 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 // EncodeDDLEvent only encode DDL event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
-	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
 		data := []interface{}{ddlByte, e.Query}
 		for _, v := range data {
@@ -228,8 +212,8 @@ func (a *BatchEncoder) avroEncode(
 			colInfos: e.ColInfos,
 		}
 
-		enableTiDBExtension = a.enableTiDBExtension
-		enableRowLevelChecksum = a.enableRowChecksum
+		enableTiDBExtension = a.config.EnableTiDBExtension
+		enableRowLevelChecksum = a.config.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -254,8 +238,8 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.decimalHandlingMode,
-			a.bigintUnsignedHandlingMode,
+			a.config.AvroDecimalHandlingMode,
+			a.config.AvroBigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -279,8 +263,8 @@ func (a *BatchEncoder) avroEncode(
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.decimalHandlingMode,
-		a.bigintUnsignedHandlingMode,
+		a.config.AvroDecimalHandlingMode,
+		a.config.AvroBigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
@@ -969,31 +953,11 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-<<<<<<< HEAD
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
-=======
-	encoder := &BatchEncoder{
+	return &BatchEncoder{
+		result:             make([]*common.Message, 0, 1),
 		namespace:          b.namespace,
 		keySchemaManager:   b.keySchemaManager,
 		valueSchemaManager: b.valueSchemaManager,
-		result:             make([]*common.Message, 0, 1),
-		Options: &Options{
-			EnableTiDBExtension:        b.config.EnableTiDBExtension,
-			EnableRowChecksum:          b.config.EnableRowChecksum,
-			EnableWatermarkEvent:       b.config.AvroEnableWatermark,
-			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
-			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
-		},
+		config:             b.config,
 	}
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
-
-	return encoder
 }

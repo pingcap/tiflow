@@ -49,12 +49,7 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
-<<<<<<< HEAD
-	// canal-json only
-	ContentCompatible bool
-=======
 	AvroEnableWatermark bool
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 
 	// for sinking to cloud storage
 	Delimiter            string
@@ -98,13 +93,10 @@ const (
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 
-<<<<<<< HEAD
-=======
 	// codecOPTAvroEnableWatermark is the option for enabling watermark in avro protocol
 	// only used for internal testing, do not set this in the production environment since the
 	// confluent official consumer cannot handle watermark.
 	codecOPTAvroEnableWatermark      = "avro-enable-watermark"
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
@@ -121,6 +113,7 @@ const (
 
 type urlConfig struct {
 	EnableTiDBExtension            *bool   `form:"enable-tidb-extension"`
+	AvroEnableWatermark            *bool   `form:"avro-enable-watermark"`
 	MaxBatchSize                   *int    `form:"max-batch-size"`
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
@@ -133,7 +126,6 @@ type urlConfig struct {
 
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
-<<<<<<< HEAD
 	req := &http.Request{URL: sinkURI}
 	var err error
 	urlParameter := &urlConfig{}
@@ -142,15 +134,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
-=======
-	params := sinkURI.Query()
-	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.EnableTiDBExtension = b
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 	}
 
 	if urlParameter.EnableTiDBExtension != nil {
@@ -174,27 +157,14 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.AvroBigintUnsignedHandlingMode = *urlParameter.AvroBigintUnsignedHandlingMode
 	}
 
-<<<<<<< HEAD
 	if urlParameter.AvroSchemaRegistry != "" {
 		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
 	}
 
-=======
-	if s := params.Get(codecOPTAvroEnableWatermark); s != "" {
-		if c.EnableTiDBExtension && c.Protocol == config.ProtocolAvro {
-			b, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.AvroEnableWatermark = b
-		}
+	if urlParameter.AvroEnableWatermark != nil {
+		c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 	}
 
-	if replicaConfig.Sink != nil && replicaConfig.Sink.SchemaRegistry != "" {
-		c.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
-	}
-
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 	if replicaConfig.Sink != nil {
 		c.Terminator = replicaConfig.Sink.Terminator
 		if replicaConfig.Sink.CSVConfig != nil {
@@ -202,7 +172,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
-<<<<<<< HEAD
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 		}
 
@@ -214,24 +183,11 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 				return cerror.ErrCodecInvalidConfig.GenWithStack(
 					`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
 			}
-=======
-		}
-
-		c.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
-	}
-	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
-		a, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 		}
 	}
-<<<<<<< HEAD
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
 	}
-=======
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
 	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`old value must be enabled when configuration "%s" is true.`,
@@ -241,19 +197,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 
 	if replicaConfig.Integrity != nil {
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
-<<<<<<< HEAD
 	}
 
 	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
-	if c.Protocol == config.ProtocolCanalJSON {
-		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
-		if c.ContentCompatible {
-			c.OnlyOutputUpdatedColumns = true
-		}
-=======
->>>>>>> f987ee1a65 (codec(ticdc): avro encode watermark event to be compatible with consumer (#8864))
-	}
-
 	return nil
 }
 
