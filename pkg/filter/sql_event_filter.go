@@ -132,7 +132,7 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 }
 
 // skipDDLEvent skips ddl event by its type and query.
-func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
+func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (skip bool, err error) {
 	if len(f.rules) == 0 {
 		return false, nil
 	}
