@@ -1279,6 +1279,44 @@ func TestChecksumAfterAlterIntegerType(t *testing.T) {
 	require.NotNil(t, polymorphicEvent.Row)
 }
 
+func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event("create table t (a int primary key, b int default 1)")
+	event := helper.DML2Event("insert into t (a) values (1)", "test", "t")
+	require.NotNil(t, event)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	_ = helper.DDL2Event("alter table t modify column b int default 2")
+	helper.Tk().MustExec("update t set b = 10 where a = 1")
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+	
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+}
+
 func TestChecksumAfterAddColumns(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
@@ -1299,13 +1337,6 @@ func TestChecksumAfterAddColumns(t *testing.T) {
 	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
 
 	_ = helper.DDL2Event("alter table t add column b int default 1")
-
-	event = helper.DML2Event("insert into t (a) values (2)", "test", "t")
-	require.NotNil(t, event)
-
-	_ = helper.DDL2Event("alter table t alter column b set default 2")
-
-	event = helper.DML2Event("insert into t (a) values (3)", "test", "t")
 
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
 	key, value := helper.getLastKeyValue(tableInfo.ID)
