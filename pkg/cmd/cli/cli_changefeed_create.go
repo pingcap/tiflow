@@ -165,6 +165,10 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
 
+	if cfg.EnableOldValue {
+		log.Warn("Config option enable-old-value is deprecated")
+	}
+
 	switch o.commonChangefeedOptions.sortEngine {
 	case model.SortInMemory:
 	case model.SortInFile:
