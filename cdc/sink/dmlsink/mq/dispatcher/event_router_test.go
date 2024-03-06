@@ -393,14 +393,12 @@ func TestVerifyTables(t *testing.T) {
 	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
 	require.NoError(t, err)
 
-	cols := []*model.Column{
-		{
-			Name:  "id",
-			Value: 1,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test_index_value",
+			Table:  "table",
 		},
 	}
-	tableInfo := model.BuildTableInfo("test_index_value", "table", cols, [][]int{{0}})
 	err = d.VerifyTables([]*model.TableInfo{tableInfo})
 	require.NoError(t, err)
 }
