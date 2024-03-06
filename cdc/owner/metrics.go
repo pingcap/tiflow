@@ -16,6 +16,7 @@ package owner
 import (
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -56,7 +57,7 @@ var (
 			Subsystem: "owner",
 			Name:      "checkpoint_lag_histogram",
 			Help:      "checkpoint lag histogram of changefeeds",
-			Buckets:   lagBucket(),
+			Buckets:   metrics.LagBucket(),
 		}, []string{"namespace", "changefeed"})
 
 	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
@@ -80,7 +81,7 @@ var (
 			Subsystem: "owner",
 			Name:      "resolved_ts_lag_histogram",
 			Help:      "resolved_ts lag histogram of changefeeds",
-			Buckets:   lagBucket(),
+			Buckets:   metrics.LagBucket(),
 		}, []string{"namespace", "changefeed"})
 
 	ownershipCounter = prometheus.NewCounter(
@@ -159,6 +160,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedIgnoredDDLEventCounter)
 	registry.MustRegister(changefeedStartTimeGauge)
 }
+<<<<<<< HEAD
 
 // lagBucket returns the lag buckets for prometheus metric
 // 10 seconds is the reasonable LAG for most cases,
@@ -170,3 +172,5 @@ func lagBucket() []float64 {
 	buckets = append(buckets, prometheus.ExponentialBuckets(40, 2, 10)...)
 	return buckets
 }
+=======
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))

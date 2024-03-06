@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package metrics
 
 import (
 	"testing"
@@ -20,8 +20,16 @@ import (
 )
 
 func TestLagBucket(t *testing.T) {
-	buckets := lagBucket()
-	require.Equal(t, 40, len(buckets))
+	buckets := LagBucket()
+	require.Equal(t, 64, len(buckets))
 	require.Equal(t, 0.5, buckets[0])
+<<<<<<< HEAD:cdc/owner/metrics_test.go
 	require.Equal(t, float64(20480), buckets[39])
+=======
+	require.Equal(t, 1.0, buckets[1])
+	require.Equal(t, 21.0, buckets[30])
+	require.Equal(t, 900.0, buckets[50])
+	require.Equal(t, 4000.0, buckets[60])
+	require.Equal(t, float64(32000), buckets[63])
+>>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/metrics/metrics_test.go
 }
