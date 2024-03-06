@@ -96,11 +96,11 @@ upstream-database-switch-mariadb:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Check out code by workflow dispatch
-        if: ${{ github.event.inputs.pr != '' }}
-        uses: actions/checkout@v2
-        with:
-          ref: refs/pull/${{ github.event.inputs.pr }}/head
+      # - name: Check out code by workflow dispatch
+      #   if: ${{ github.event.inputs.pr != '' }}
+      #   uses: actions/checkout@v2
+      #   with:
+      #     ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Cache go modules
         uses: actions/cache@v2
