@@ -184,14 +184,16 @@ func (d *JSONDuration) UnmarshalJSON(b []byte) error {
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64 `json:"memory_quota"`
-	CaseSensitive         bool   `json:"case_sensitive"`
-	ForceReplicate        bool   `json:"force_replicate"`
-	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
-	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
-	EnableTableMonitor    *bool  `json:"enable_table_monitor,omitempty"`
-	BDRMode               *bool  `json:"bdr_mode,omitempty"`
+	MemoryQuota   uint64 `json:"memory_quota"`
+	CaseSensitive bool   `json:"case_sensitive"`
+	// Deprecated: we don't use this field since v7.5.0.
+	EnableOldValue        bool  `json:"-"`
+	ForceReplicate        bool  `json:"force_replicate"`
+	IgnoreIneligibleTable bool  `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool  `json:"check_gc_safe_point"`
+	EnableSyncPoint       *bool `json:"enable_sync_point,omitempty"`
+	EnableTableMonitor    *bool `json:"enable_table_monitor,omitempty"`
+	BDRMode               *bool `json:"bdr_mode,omitempty"`
 
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`

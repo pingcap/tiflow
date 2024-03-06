@@ -166,10 +166,6 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
 
-	if cfg.EnableOldValue {
-		log.Warn("Config option enable-old-value is deprecated")
-	}
-
 	switch o.commonChangefeedOptions.sortEngine {
 	case model.SortInMemory:
 	case model.SortInFile:
@@ -284,6 +280,10 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		ReplicaConfig: createChangefeedCfg.ReplicaConfig,
 		StartTs:       createChangefeedCfg.StartTs,
 		SinkURI:       createChangefeedCfg.SinkURI,
+	}
+
+	if verifyTableConfig.ReplicaConfig.EnableOldValue {
+		cmd.Printf("[WARN] Config option enable-old-value is deprecated.")
 	}
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)
