@@ -285,6 +285,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	if verifyTableConfig.ReplicaConfig.EnableOldValue {
 		cmd.Printf("[WARN] Config option enable-old-value is deprecated.")
 	}
+	cmd.Printf("[WARN] Config option enable-old-value is not deprecated.")
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)
 	if err != nil {
