@@ -147,10 +147,12 @@ func (o *createChangefeedOptions) complete(f factory.Factory) error {
 func (o *createChangefeedOptions) completeReplicaCfg() error {
 	cfg := config.GetDefaultReplicaConfig()
 	if len(o.commonChangefeedOptions.configFile) > 0 {
+		log.Warn("completeReplicaCfg decode file")
 		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return err
 		}
 	}
+	log.Warn("completeReplicaCfg", zap.Bool("enableOldValue", cfg.EnableOldValue))
 
 	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
 	if err != nil {
