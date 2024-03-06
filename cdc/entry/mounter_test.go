@@ -1298,7 +1298,14 @@ func TestChecksumAfterAddColumns(t *testing.T) {
 	require.True(t, ok)
 	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
 
-	_ = helper.DDL2Event("alter table t add column b int default 0")
+	_ = helper.DDL2Event("alter table t add column b int default 1")
+
+	event = helper.DML2Event("insert into t (a) values (2)", "test", "t")
+	require.NotNil(t, event)
+
+	_ = helper.DDL2Event("alter table t alter column b set default 2")
+
+	event = helper.DML2Event("insert into t (a) values (3)", "test", "t")
 
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
 	key, value := helper.getLastKeyValue(tableInfo.ID)
