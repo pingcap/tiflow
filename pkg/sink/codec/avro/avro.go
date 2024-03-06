@@ -45,12 +45,7 @@ type BatchEncoder struct {
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
 	result             []*common.Message
-
-	enableTiDBExtension bool
-	enableRowChecksum   bool
-
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
+	config             *common.Config
 }
 
 type avroEncodeInput struct {
@@ -135,13 +130,42 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeCheckpointEvent is no-op for now
+// EncodeCheckpointEvent only encode checkpoint event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
+		buf := new(bytes.Buffer)
+		data := []interface{}{checkpointByte, ts}
+		for _, v := range data {
+			err := binary.Write(buf, binary.BigEndian, v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+			}
+		}
+
+		value := buf.Bytes()
+		return common.NewResolvedMsg(config.ProtocolAvro, nil, value, ts), nil
+	}
 	return nil, nil
 }
 
-// EncodeDDLEvent is no-op now
+// EncodeDDLEvent only encode DDL event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
+		buf := new(bytes.Buffer)
+		data := []interface{}{ddlByte, e.Query}
+		for _, v := range data {
+			err := binary.Write(buf, binary.BigEndian, v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+			}
+		}
+
+		value := buf.Bytes()
+		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
+	}
+
 	return nil, nil
 }
 
@@ -188,8 +212,8 @@ func (a *BatchEncoder) avroEncode(
 			colInfos: e.ColInfos,
 		}
 
-		enableTiDBExtension = a.enableTiDBExtension
-		enableRowLevelChecksum = a.enableRowChecksum
+		enableTiDBExtension = a.config.EnableTiDBExtension
+		enableRowLevelChecksum = a.config.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -214,8 +238,8 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.decimalHandlingMode,
-			a.bigintUnsignedHandlingMode,
+			a.config.AvroDecimalHandlingMode,
+			a.config.AvroBigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -239,8 +263,8 @@ func (a *BatchEncoder) avroEncode(
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.decimalHandlingMode,
-		a.bigintUnsignedHandlingMode,
+		a.config.AvroDecimalHandlingMode,
+		a.config.AvroBigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
@@ -857,7 +881,16 @@ func columnToAvroData(
 	}
 }
 
-const magicByte = uint8(0)
+const (
+	// confluent avro wire format, the first byte is always 0
+	// https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
+	magicByte = uint8(0)
+
+	// avro does not send ddl and checkpoint message, the following 2 field is used to distinguish
+	// TiCDC DDL event and checkpoint event, only used for testing purpose, not for production
+	ddlByte        = uint8(1)
+	checkpointByte = uint8(2)
+)
 
 // confluent avro wire format, confluent avro is not same as apache avro
 // https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
@@ -920,15 +953,11 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
-
-	return encoder
+	return &BatchEncoder{
+		result:             make([]*common.Message, 0, 1),
+		namespace:          b.namespace,
+		keySchemaManager:   b.keySchemaManager,
+		valueSchemaManager: b.valueSchemaManager,
+		config:             b.config,
+	}
 }

@@ -48,6 +48,7 @@ type Config struct {
 	AvroSchemaRegistry             string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
+	AvroEnableWatermark            bool
 
 	// canal-json only
 	ContentCompatible bool
@@ -74,11 +75,13 @@ func NewConfig(protocol config.Protocol) *Config {
 		MaxMessageBytes: config.DefaultMaxMessageBytes,
 		MaxBatchSize:    defaultMaxBatchSize,
 
-		EnableTiDBExtension:            false,
-		EnableRowChecksum:              false,
+		EnableTiDBExtension: false,
+		EnableRowChecksum:   false,
+
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+		AvroEnableWatermark:            false,
 
 		OnlyOutputUpdatedColumns: false,
 
@@ -92,6 +95,10 @@ const (
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 
+	// codecOPTAvroEnableWatermark is the option for enabling watermark in avro protocol
+	// only used for internal testing, do not set this in the production environment since the
+	// confluent official consumer cannot handle watermark.
+	codecOPTAvroEnableWatermark      = "avro-enable-watermark"
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
@@ -108,6 +115,7 @@ const (
 
 type urlConfig struct {
 	EnableTiDBExtension            *bool   `form:"enable-tidb-extension"`
+	AvroEnableWatermark            *bool   `form:"avro-enable-watermark"`
 	MaxBatchSize                   *int    `form:"max-batch-size"`
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
@@ -153,6 +161,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 
 	if urlParameter.AvroSchemaRegistry != "" {
 		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
+	}
+
+	if urlParameter.AvroEnableWatermark != nil {
+		c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 	}
 
 	if replicaConfig.Sink != nil {

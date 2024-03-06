@@ -28,15 +28,12 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
-func setupEncoderAndSchemaRegistry(
-	enableTiDBExtension bool,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
-) (*BatchEncoder, error) {
+func setupEncoderAndSchemaRegistry(config *common.Config) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
 
 	keyManager, err := NewAvroSchemaManager(
@@ -60,13 +57,11 @@ func setupEncoderAndSchemaRegistry(
 	}
 
 	return &BatchEncoder{
-		namespace:                  model.DefaultNamespace,
-		valueSchemaManager:         valueManager,
-		keySchemaManager:           keyManager,
-		result:                     make([]*common.Message, 0, 1),
-		enableTiDBExtension:        enableTiDBExtension,
-		decimalHandlingMode:        decimalHandlingMode,
-		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+		namespace:          model.DefaultNamespace,
+		valueSchemaManager: valueManager,
+		keySchemaManager:   keyManager,
+		result:             make([]*common.Message, 0, 1),
+		config:             config,
 	}, nil
 }
 
@@ -764,7 +759,11 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.AvroBigintUnsignedHandlingMode = "long"
+	codecConfig.AvroDecimalHandlingMode = "precise"
+	encoder, err := setupEncoderAndSchemaRegistry(codecConfig)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -959,7 +958,12 @@ func TestGetAvroNamespace(t *testing.T) {
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	t.Parallel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.AvroBigintUnsignedHandlingMode = "long"
+	codecConfig.AvroDecimalHandlingMode = "precise"
+
+	encoder, err := setupEncoderAndSchemaRegistry(codecConfig)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 

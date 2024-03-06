@@ -91,6 +91,25 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 		err = c.Validate()
 		require.Error(t, err)
 	}
+
+	// avro, enable tidb extension and enable watermark event.
+	uri = "kafka://127.0.0.1:9092/avro?protocol=avro&enable-tidb-extension=true&avro-enable-watermark=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol = sinkURI.Query().Get("protocol")
+	p, err = config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c = NewConfig(p)
+
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	err = c.Validate()
+	require.NoError(t, err)
+	require.True(t, c.AvroEnableWatermark)
 }
 
 func TestConfigApplyValidate(t *testing.T) {
