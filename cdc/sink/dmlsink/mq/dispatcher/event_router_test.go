@@ -385,3 +385,20 @@ func TestGetTopicForDDL(t *testing.T) {
 		require.Equal(t, test.expectedTopic, d.GetTopicForDDL(test.ddl))
 	}
 }
+
+func TestVerifyTables(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := newReplicaConfig4DispatcherTest()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	require.NoError(t, err)
+
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test_index_value",
+			Table:  "table",
+		},
+	}
+	err = d.VerifyTables([]*model.TableInfo{tableInfo})
+	require.NoError(t, err)
+}
