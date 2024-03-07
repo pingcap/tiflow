@@ -26,6 +26,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -149,18 +150,33 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return nil, nil
 }
 
+type ddlEvent struct {
+	Query    string             `json:"query"`
+	Type     timodel.ActionType `json:"type"`
+	Schema   string             `json:"schema"`
+	Table    string             `json:"table"`
+	CommitTs uint64             `json:"commitTs"`
+}
+
 // EncodeDDLEvent only encode DDL event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
-		data := []interface{}{ddlByte, e.Query}
-		for _, v := range data {
-			err := binary.Write(buf, binary.BigEndian, v)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
-			}
+		_ = binary.Write(buf, binary.BigEndian, ddlByte)
+
+		event := &ddlEvent{
+			Query:    e.Query,
+			Type:     e.Type,
+			Schema:   e.TableInfo.TableName.Schema,
+			Table:    e.TableInfo.TableName.Table,
+			CommitTs: e.CommitTs,
 		}
+		data, err := json.Marshal(event)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+		}
+		buf.Write(data)
 
 		value := buf.Bytes()
 		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
@@ -387,6 +403,55 @@ func sanitizeName(name string) string {
 // sanitizeTopic escapes ".", it may have special meanings for sink connectors
 func sanitizeTopic(name string) string {
 	return strings.ReplaceAll(name, ".", replacementChar)
+}
+
+func flagFromTiDBType(tp string) model.ColumnFlagType {
+	var flag model.ColumnFlagType
+	if strings.Contains(tp, "UNSIGNED") {
+		flag.SetIsUnsigned()
+	}
+	return flag
+}
+
+func mysqlTypeFromTiDBType(tidbType string) byte {
+	var result byte
+	switch tidbType {
+	case "INT", "INT UNSIGNED":
+		result = mysql.TypeLong
+	case "BIGINT", "BIGINT UNSIGNED":
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
+	}
+	return result
 }
 
 // https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro/v2"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -1005,4 +1006,90 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 		msgs[0].Callback()
 		require.Equal(t, expected, count, "expected one callback be called")
 	}
+}
+
+func TestEncodeCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	config := &common.Config{
+		EnableTiDBExtension: true,
+		AvroEnableWatermark: true,
+	}
+
+	encoder := &BatchEncoder{
+		namespace: model.DefaultNamespace,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
+	}
+
+	message, err := encoder.EncodeCheckpointEvent(446266400629063682)
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	topic := "test-topic"
+	decoder := NewDecoder(config, nil, topic)
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeResolved, messageType)
+
+	obtained, err := decoder.NextResolvedEvent()
+	require.NoError(t, err)
+	require.Equal(t, uint64(446266400629063682), obtained)
+}
+
+func TestEncodeDDLEvent(t *testing.T) {
+	t.Parallel()
+
+	config := &common.Config{
+		EnableTiDBExtension: true,
+		AvroEnableWatermark: true,
+	}
+
+	encoder := &BatchEncoder{
+		namespace: model.DefaultNamespace,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
+	}
+
+	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
+		StartTs:  1020,
+		CommitTs: 1030,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:      "test",
+				Table:       "t1",
+				TableID:     0,
+				IsPartition: false,
+			},
+		},
+		Type:  timodel.ActionAddColumn,
+		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	topic := "test-topic"
+	decoder := NewDecoder(config, nil, topic)
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+
+	decodedEvent, err := decoder.NextDDLEvent()
+	require.NoError(t, err)
+	require.NotNil(t, decodedEvent)
+	require.Equal(t, uint64(1030), decodedEvent.CommitTs)
+	require.Equal(t, timodel.ActionAddColumn, decodedEvent.Type)
+	require.Equal(t, "ALTER TABLE test.t1 ADD COLUMN a int", decodedEvent.Query)
+	require.Equal(t, "test", decodedEvent.TableInfo.TableName.Schema)
+	require.Equal(t, "t1", decodedEvent.TableInfo.TableName.Table)
+	require.Equal(t, int64(0), decodedEvent.TableInfo.TableName.TableID)
+	require.False(t, decodedEvent.TableInfo.TableName.IsPartition)
 }
