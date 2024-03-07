@@ -149,17 +149,3 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCloseDuration)
 	registry.MustRegister(changefeedIgnoredDDLEventCounter)
 }
-<<<<<<< HEAD
-
-// lagBucket returns the lag buckets for prometheus metric
-// 10 seconds is the reasonable LAG for most cases,
-// for prometheus histogram_quantile func,
-// we use small bucket distance to do accurate approximation
-func lagBucket() []float64 {
-	buckets := prometheus.LinearBuckets(0.5, 0.5, 20)
-	buckets = append(buckets, prometheus.LinearBuckets(11, 1, 10)...)
-	buckets = append(buckets, prometheus.ExponentialBuckets(40, 2, 10)...)
-	return buckets
-}
-=======
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))

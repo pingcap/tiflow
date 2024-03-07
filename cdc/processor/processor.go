@@ -100,13 +100,14 @@ type processor struct {
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
 
-	metricSyncTableNumGauge      prometheus.Gauge
-	metricSchemaStorageGcTsGauge prometheus.Gauge
-	metricProcessorErrorCounter  prometheus.Counter
-	metricProcessorTickDuration  prometheus.Observer
-	metricsTableSinkTotalRows    prometheus.Counter
-	metricsTableMemoryHistogram  prometheus.Observer
-	metricsProcessorMemoryGauge  prometheus.Gauge
+	metricSyncTableNumGauge          prometheus.Gauge
+	metricSchemaStorageGcTsGauge     prometheus.Gauge
+	metricProcessorErrorCounter      prometheus.Counter
+	metricProcessorTickDuration      prometheus.Observer
+	metricsTableSinkTotalRows        prometheus.Counter
+	metricsTableSinkFlushLagDuration prometheus.Observer
+	metricsTableMemoryHistogram      prometheus.Observer
+	metricsProcessorMemoryGauge      prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -532,6 +533,8 @@ func newProcessor(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsTableSinkFlushLagDuration: sinkmetric.TableSinkFlushLagDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsTableMemoryHistogram: tableMemoryHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
@@ -835,7 +838,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.warnCh, p.metricsTableSinkTotalRows)
+			p.errCh, p.warnCh, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -1133,7 +1136,7 @@ func (p *processor) createTablePipelineImpl(
 		}
 	} else {
 		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, tableID,
-			replicaInfo.StartTs, p.metricsTableSinkTotalRows)
+			replicaInfo.StartTs, p.upstream.PDClock, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,

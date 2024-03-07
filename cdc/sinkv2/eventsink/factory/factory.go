@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
@@ -113,37 +114,22 @@ func New(ctx context.Context,
 // CreateTableSink creates a TableSink by schema.
 func (s *SinkFactory) CreateTableSink(
 	changefeedID model.ChangeFeedID,
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 	tableID model.TableID, startTs model.Ts,
-=======
-	span tablepb.Span,
-	startTs model.Ts,
-	PDClock pdutil.Clock,
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory.go
+	pdClock pdutil.Clock,
 	totalRowsCounter prometheus.Counter,
 	flushLagDuration prometheus.Observer,
 ) tablesink.TableSink {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
-			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+			s.rowSink, &eventsink.RowChangeEventAppender{}, pdClock, totalRowsCounter, flushLagDuration)
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs,
-			s.txnSink, &eventsink.TxnEventAppender{TableSinkStartTs: startTs}, totalRowsCounter)
+			s.txnSink, &eventsink.TxnEventAppender{TableSinkStartTs: startTs}, pdClock, totalRowsCounter, flushLagDuration)
 	default:
 		panic("unknown sink type")
 	}
-=======
-	if s.txnSink != nil {
-		return tablesink.New(changefeedID, span, startTs, s.txnSink,
-			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs}, PDClock, totalRowsCounter, flushLagDuration)
-	}
-
-	return tablesink.New(changefeedID, span, startTs, s.rowSink,
-		&dmlsink.RowChangeEventAppender{}, PDClock, totalRowsCounter, flushLagDuration)
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory.go
 }
 
 // CreateTableSinkForConsumer creates a TableSink by schema for consumer.
@@ -152,40 +138,26 @@ func (s *SinkFactory) CreateTableSink(
 // NOTICE: This only used for the consumer. Please do not use it in the processor.
 func (s *SinkFactory) CreateTableSinkForConsumer(
 	changefeedID model.ChangeFeedID,
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 	tableID model.TableID, startTs model.Ts,
-	totalRowsCounter prometheus.Counter,
-=======
-	span tablepb.Span, startTs model.Ts,
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory.go
 ) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
-			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+			s.rowSink, &eventsink.RowChangeEventAppender{}, pdutil.NewClock4Test(),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+			prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs, s.txnSink,
 			// IgnoreStartTs is true because the consumer can
 			// **not** get the start ts of the row changed event.
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 			&eventsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
-			totalRowsCounter)
-	default:
-		panic("unknown sink type")
-	}
-=======
-			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
 			pdutil.NewClock4Test(),
 			prometheus.NewCounter(prometheus.CounterOpts{}),
 			prometheus.NewHistogram(prometheus.HistogramOpts{}))
+	default:
+		panic("unknown sink type")
 	}
-
-	return tablesink.New(changefeedID, span, startTs, s.rowSink,
-		&dmlsink.RowChangeEventAppender{}, pdutil.NewClock4Test(),
-		prometheus.NewCounter(prometheus.CounterOpts{}),
-		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory.go
 }
 
 // Close closes the sink.

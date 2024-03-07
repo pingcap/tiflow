@@ -62,7 +62,9 @@ func createManagerWithMemEngine(
 		ctx, changefeedID, changefeedInfo, up,
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
-		errChan, errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+		errChan, errChan,
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	require.NoError(t, err)
 	return manager, sortEngine
 }

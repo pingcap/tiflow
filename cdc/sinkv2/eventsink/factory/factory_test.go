@@ -26,11 +26,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory_test.go
-	"github.com/pingcap/tiflow/pkg/sink"
-=======
 	"github.com/pingcap/tiflow/pkg/pdutil"
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory_test.go
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -110,15 +107,10 @@ func TestSinkFactory(t *testing.T) {
 	require.NotNil(t, sinkFactory.txnSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory_test.go
-		1, 0, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-		spanz.TableIDToComparableSpan(1),
-		0,
+		1, 0,
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/dmlsink/factory/factory_test.go
 	require.NotNil(t, tableSink, "table sink can be created")
 
 	sinkFactory.Close()

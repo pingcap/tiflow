@@ -20,14 +20,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
-=======
-	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
-	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/pdutil"
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -168,17 +163,11 @@ func TestNewEventTableSink(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	require.Equal(t, uint64(0), tb.eventID, "eventID should start from 0")
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
@@ -193,17 +182,11 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
@@ -213,17 +196,11 @@ func TestUpdateResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
@@ -271,17 +248,11 @@ func TestGetCheckpointTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
@@ -321,17 +292,11 @@ func TestClose(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -359,16 +324,11 @@ func TestOperationsAfterClose(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 		model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	require.True(t, tb.AsyncClose())
 
@@ -381,17 +341,11 @@ func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -419,17 +373,11 @@ func TestCloseReentrant(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -460,17 +408,11 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl_test.go
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"), 1, model.Ts(0),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
-=======
-	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{},
+		sink, &eventsink.TxnEventAppender{},
 		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596)):cdc/sink/tablesink/table_sink_impl_test.go
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
