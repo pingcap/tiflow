@@ -662,10 +662,10 @@ LOOP2:
 			defer c.wg.Done()
 			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
 		}()
-		log.Info("owner creates redo manager",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
 	}
+	log.Info("owner creates redo manager",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID))
 
 	c.ddlManager = newDDLManager(
 		c.id,
