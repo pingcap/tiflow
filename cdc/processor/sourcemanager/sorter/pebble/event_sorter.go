@@ -465,27 +465,32 @@ func (s *EventSorter) handleEvents(
 	ticker := time.NewTicker(batchCommitInterval / 2)
 	defer ticker.Stop()
 
-	doBatching := func(batch *pebble.Batch) {
+	// we batch item and commit until batch size is larger than batchCommitSize,
+	// or the time since the last commit is larger than batchCommitInterval.
+	// we only return false when the sorter is closed.
+	doBatching := func(batch *pebble.Batch) bool {
 		startToBatch := time.Now()
 		for {
 			select {
 			case item := <-inputCh:
 				encodeItemAndBatch(item)
 				if len(batch.Repr()) >= batchCommitSize {
-					return
+					return true
 				}
 			case <-s.closed:
-				return
+				return false
 			case <-ticker.C:
 				if time.Since(startToBatch) >= batchCommitInterval {
-					return
+					return true
 				}
 			}
 		}
 	}
 
 	for {
-		doBatching(batch)
+		if !doBatching(batch) {
+			return
+		}
 		if !batch.Empty() {
 			batchCh <- &DBBatchEvent{batch, newResolved}
 
