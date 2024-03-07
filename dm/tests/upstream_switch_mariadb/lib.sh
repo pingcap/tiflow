@@ -25,7 +25,7 @@ WORKER2_PORT=8263
 
 function exec_sql() {
 	echo $2 | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306
-	echo "show variables like '%gtid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306
+	# echo "show variables like '%gtid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306
 }
 
 function exec_tidb() {
