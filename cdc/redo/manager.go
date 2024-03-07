@@ -160,6 +160,12 @@ type statefulRts struct {
 	unflushed atomic.Uint64
 }
 
+func newStatefulRts(ts model.Ts) (ret statefulRts) {
+	ret.unflushed.Store(uint64(ts))
+	ret.flushed.Store(uint64(ts))
+	return
+}
+
 func (s *statefulRts) getFlushed() model.Ts {
 	return s.flushed.Load()
 }
@@ -355,7 +361,8 @@ func (m *logManager) GetResolvedTs(span tablepb.Span) model.Ts {
 
 // AddTable adds a new table in redo log manager
 func (m *logManager) AddTable(span tablepb.Span, startTs uint64) {
-	_, loaded := m.rtsMap.LoadOrStore(span, &statefulRts{flushed: startTs, unflushed: startTs})
+	rts := newStatefulRts(startTs)
+	_, loaded := m.rtsMap.LoadOrStore(span, &rts)
 	if loaded {
 		log.Warn("add duplicated table in redo log manager",
 			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
