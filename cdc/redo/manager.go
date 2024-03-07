@@ -156,42 +156,24 @@ type cacheEvents struct {
 }
 
 type statefulRts struct {
-	flushed   model.Ts
-	unflushed model.Ts
+	flushed   atomic.Uint64
+	unflushed atomic.Uint64
 }
 
 func (s *statefulRts) getFlushed() model.Ts {
-	return atomic.LoadUint64(&s.flushed)
+	return s.flushed.Load()
 }
 
 func (s *statefulRts) getUnflushed() model.Ts {
-	return atomic.LoadUint64(&s.unflushed)
+	return s.unflushed.Load()
 }
 
 func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
-	for {
-		old := atomic.LoadUint64(&s.unflushed)
-		if old > unflushed {
-			return false
-		}
-		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
-			break
-		}
-	}
-	return true
+	return util.CompareAndIncrease(&s.unflushed, uint64(unflushed))
 }
 
 func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (changed bool) {
-	for {
-		old := atomic.LoadUint64(&s.flushed)
-		if old > flushed {
-			return false
-		}
-		if atomic.CompareAndSwapUint64(&s.flushed, old, flushed) {
-			break
-		}
-	}
-	return true
+	return util.CompareAndIncrease(&s.flushed, uint64(flushed))
 }
 
 // logManager manages redo log writer, buffers un-persistent redo logs, calculates

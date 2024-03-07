@@ -784,15 +784,7 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 }
 
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
-	for {
-		old := r.staleLocksVersion.Load()
-		if old >= maxVersion {
-			return
-		}
-		if r.staleLocksVersion.CompareAndSwap(old, maxVersion) {
-			break
-		}
-	}
+	util.MustCompareAndIncrease(&r.lastAdvanceTime, int64(maxVersion))
 
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",
