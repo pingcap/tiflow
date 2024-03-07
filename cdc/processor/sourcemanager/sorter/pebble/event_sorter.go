@@ -443,9 +443,6 @@ func (s *EventSorter) handleEvents(
 	s.wg.Add(1)
 	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
 
-	batch := db.NewBatch()
-	newResolved := spanz.NewHashMap[model.Ts]()
-
 	ticker := time.NewTicker(batchCommitInterval / 2)
 	defer ticker.Stop()
 
@@ -472,33 +469,33 @@ func (s *EventSorter) handleEvents(
 	// we batch item and commit until batch size is larger than batchCommitSize,
 	// or the time since the last commit is larger than batchCommitInterval.
 	// we only return false when the sorter is closed.
-	doBatching := func(batch *pebble.Batch, newResolved *spanz.HashMap[model.Ts]) bool {
+	doBatching := func() (*DBBatchEvent, bool) {
+		batch := db.NewBatch()
+		newResolved := spanz.NewHashMap[model.Ts]()
 		startToBatch := time.Now()
 		for {
 			select {
 			case item := <-inputCh:
 				encodeItemAndBatch(batch, newResolved, item)
 				if len(batch.Repr()) >= batchCommitSize {
-					return true
+					return &DBBatchEvent{batch, newResolved}, true
 				}
 			case <-s.closed:
-				return false
+				return nil, false
 			case <-ticker.C:
 				if time.Since(startToBatch) >= batchCommitInterval {
-					return true
+					return &DBBatchEvent{batch, newResolved}, true
 				}
 			}
 		}
 	}
 
 	for {
-		if !doBatching(batch, newResolved) {
+		batchEvent, ok := doBatching()
+		if !ok {
 			return
 		}
-		batchCh <- &DBBatchEvent{batch, newResolved}
-
-		batch = db.NewBatch()
-		newResolved = spanz.NewHashMap[model.Ts]()
+		batchCh <- batchEvent
 	}
 }
 
