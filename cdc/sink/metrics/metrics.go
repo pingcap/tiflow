@@ -14,6 +14,7 @@
 package metrics
 
 import (
+	"github.com/pingcap/tiflow/cdc/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -116,6 +117,16 @@ var (
 			Name:      "table_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by table sink",
 		}, []string{"namespace", "changefeed"})
+
+	// TableSinkFlushLagDuration is the  per event flush lag calculated by ts_after_event_flushed_to_downstream - commit_ts_of_event
+	TableSinkFlushLagDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "flush_lag_histogram",
+			Help:      "flush lag histogram of rows that are processed by table sink",
+			Buckets:   metrics.LagBucket(),
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -130,5 +141,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
+	registry.MustRegister(TableSinkFlushLagDuration)
 	codec.InitMetrics(registry)
 }

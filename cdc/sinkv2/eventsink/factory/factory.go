@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
@@ -114,16 +115,18 @@ func New(ctx context.Context,
 func (s *SinkFactory) CreateTableSink(
 	changefeedID model.ChangeFeedID,
 	tableID model.TableID, startTs model.Ts,
+	pdClock pdutil.Clock,
 	totalRowsCounter prometheus.Counter,
+	flushLagDuration prometheus.Observer,
 ) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
-			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+			s.rowSink, &eventsink.RowChangeEventAppender{}, pdClock, totalRowsCounter, flushLagDuration)
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs,
-			s.txnSink, &eventsink.TxnEventAppender{TableSinkStartTs: startTs}, totalRowsCounter)
+			s.txnSink, &eventsink.TxnEventAppender{TableSinkStartTs: startTs}, pdClock, totalRowsCounter, flushLagDuration)
 	default:
 		panic("unknown sink type")
 	}
@@ -136,19 +139,22 @@ func (s *SinkFactory) CreateTableSink(
 func (s *SinkFactory) CreateTableSinkForConsumer(
 	changefeedID model.ChangeFeedID,
 	tableID model.TableID, startTs model.Ts,
-	totalRowsCounter prometheus.Counter,
 ) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
-			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+			s.rowSink, &eventsink.RowChangeEventAppender{}, pdutil.NewClock4Test(),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+			prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs, s.txnSink,
 			// IgnoreStartTs is true because the consumer can
 			// **not** get the start ts of the row changed event.
 			&eventsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
-			totalRowsCounter)
+			pdutil.NewClock4Test(),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+			prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	default:
 		panic("unknown sink type")
 	}

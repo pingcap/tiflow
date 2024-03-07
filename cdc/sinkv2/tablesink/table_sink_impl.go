@@ -21,7 +21,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -57,6 +59,7 @@ type EventTableSink[E eventsink.TableEvent] struct {
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
 	eventAppender   eventsink.Appender[E]
+	pdClock         pdutil.Clock
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
@@ -65,6 +68,8 @@ type EventTableSink[E eventsink.TableEvent] struct {
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	metricsTableSinkFlushLagDuration prometheus.Observer
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -74,21 +79,25 @@ func New[E eventsink.TableEvent](
 	startTs model.Ts,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
+	pdClock pdutil.Clock,
 	totalRowsCounter prometheus.Counter,
+	flushLagDuration prometheus.Observer,
 ) *EventTableSink[E] {
 	return &EventTableSink[E]{
-		changefeedID:              changefeedID,
-		tableID:                   tableID,
-		eventID:                   0,
-		startTs:                   startTs,
-		maxResolvedTs:             model.NewResolvedTs(0),
-		backendSink:               backendSink,
-		progressTracker:           newProgressTracker(tableID, defaultBufferSize),
-		eventAppender:             appender,
-		eventBuffer:               make([]E, 0, 1024),
-		state:                     state.TableSinkSinking,
-		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: startTs},
-		metricsTableSinkTotalRows: totalRowsCounter,
+		changefeedID:                     changefeedID,
+		tableID:                          tableID,
+		eventID:                          0,
+		startTs:                          startTs,
+		maxResolvedTs:                    model.NewResolvedTs(0),
+		backendSink:                      backendSink,
+		progressTracker:                  newProgressTracker(tableID, defaultBufferSize),
+		eventAppender:                    appender,
+		pdClock:                          pdClock,
+		eventBuffer:                      make([]E, 0, 1024),
+		state:                            state.TableSinkSinking,
+		lastSyncedTs:                     LastSyncedTsRecord{lastSyncedTs: startTs},
+		metricsTableSinkTotalRows:        totalRowsCounter,
+		metricsTableSinkFlushLagDuration: flushLagDuration,
 	}
 }
 
@@ -135,6 +144,7 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 		// We have to record the event ID for the callback.
 		postEventFlushFunc := e.progressTracker.addEvent()
 		evCommitTs := ev.GetCommitTs()
+		phyCommitTs := oracle.ExtractPhysical(evCommitTs)
 		ce := &eventsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
@@ -149,6 +159,10 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 						e.lastSyncedTs.lastSyncedTs = evCommitTs
 					}
 				}
+				pdTime := e.pdClock.CurrentTime()
+				currentTs := oracle.GetPhysical(pdTime)
+				flushLag := float64(currentTs-phyCommitTs) / 1e3
+				e.metricsTableSinkFlushLagDuration.Observe(flushLag)
 				postEventFlushFunc()
 			},
 			SinkState: &e.state,

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
@@ -106,7 +107,10 @@ func TestSinkFactory(t *testing.T) {
 	require.NotNil(t, sinkFactory.txnSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
-		1, 0, prometheus.NewCounter(prometheus.CounterOpts{}))
+		1, 0,
+		pdutil.NewClock4Test(),
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
 	sinkFactory.Close()
