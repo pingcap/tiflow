@@ -653,7 +653,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
 				}
-<<<<<<< HEAD
 				if ts > resolvedTs {
 					for tableID, group := range eventGroups {
 						events := group.Resolve(ts)
@@ -665,7 +664,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
 								events[0].CommitTs,
-								prometheus.NewCounter(prometheus.CounterOpts{}),
 							))
 						}
 						s, _ := sink.tableSinksMap.Load(tableID)
@@ -675,27 +673,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						if !ok || lastCommitTs.(uint64) < commitTs {
 							sink.tablesCommitTsMap.Store(tableID, commitTs)
 						}
-=======
-
-				for tableID, group := range eventGroups {
-					events := group.Resolve(ts)
-					if len(events) == 0 {
-						continue
-					}
-					if _, ok := sink.tableSinksMap.Load(tableID); !ok {
-						sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
-							model.DefaultChangeFeedID("kafka-consumer"),
-							spanz.TableIDToComparableSpan(tableID),
-							events[0].CommitTs,
-						))
-					}
-					s, _ := sink.tableSinksMap.Load(tableID)
-					s.(tablesink.TableSink).AppendRowChangedEvents(events...)
-					commitTs := events[len(events)-1].CommitTs
-					lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
-					if !ok || lastCommitTs.(uint64) < commitTs {
-						sink.tablesCommitTsMap.Store(tableID, commitTs)
->>>>>>> 8c51dfa5c0 (sink(ticdc): adjust lag bucket and add metrics for sink flush lag (#10596))
 					}
 					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
