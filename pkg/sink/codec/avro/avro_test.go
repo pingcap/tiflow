@@ -1037,10 +1037,11 @@ func TestEncodeCheckpoint(t *testing.T) {
 	require.Equal(t, model.MessageTypeResolved, messageType)
 
 	obtained, err := decoder.NextResolvedEvent()
+	require.NoError(t, err)
 	require.Equal(t, uint64(446266400629063682), obtained)
 }
 
-func TestEecodeDDLEvent(t *testing.T) {
+func TestEncodeDDLEvent(t *testing.T) {
 	t.Parallel()
 
 	config := &common.Config{
