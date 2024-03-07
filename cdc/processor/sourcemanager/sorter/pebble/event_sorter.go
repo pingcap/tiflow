@@ -442,7 +442,6 @@ func (s *EventSorter) handleEvents(
 
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
-	startToCollectBatch := time.Now()
 
 	handleItem := func(item eventWithTableID) {
 		if item.event.IsResolved() {
@@ -463,23 +462,36 @@ func (s *EventSorter) handleEvents(
 		}
 	}
 
-	for {
-		timer := time.NewTimer(batchCommitInterval * time.Millisecond)
-		defer timer.Stop()
-		for len(batch.Repr()) < batchCommitSize {
+	ticker := time.NewTicker(batchCommitInterval / 2)
+	defer ticker.Stop()
+
+	doBatching := func(batch *pebble.Batch) {
+		startToBatch := time.Now()
+		for {
 			select {
 			case item := <-inputCh:
 				handleItem(item)
+				if len(batch.Repr()) >= batchCommitSize {
+					return
+				}
 			case <-s.closed:
 				return
-			case <-timer.C:
-				break
+			case <-ticker.C:
+				if time.Since(startToBatch) >= batchCommitInterval {
+					return
+				}
 			}
 		}
-		batchCh <- &DBBatchEvent{batch, newResolved}
+	}
 
-		batch = db.NewBatch()
-		newResolved = spanz.NewHashMap[model.Ts]()
+	for {
+		doBatching(batch)
+		if !batch.Empty() {
+			batchCh <- &DBBatchEvent{batch, newResolved}
+
+			batch = db.NewBatch()
+			newResolved = spanz.NewHashMap[model.Ts]()
+		}
 	}
 }
 
