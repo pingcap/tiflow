@@ -189,9 +189,9 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
-	if o.cfg.EnableOldValue {
+	if o.cfg != nil && o.cfg.EnableOldValue {
 		cmd.Printf("[WARN] `enable-old-value` is deprecated in changefeed config files. " +
-			"And it is the default behaviour of cdc now.\n")
+			"And it is the default behaviour of cdc now. You don't need to specify it manually.\n")
 	}
 
 	// user is not allowed to set sort-dir at changefeed level
