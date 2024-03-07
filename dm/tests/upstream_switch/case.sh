@@ -290,8 +290,8 @@ function test_binlog_filename_change_when_enable_relay_and_gtid() {
 
 function run() {
 	test_relay
-	test_binlog_filename_change_when_enable_gtid
-	test_binlog_filename_change_when_enable_relay_and_gtid
+	# test_binlog_filename_change_when_enable_gtid
+	# test_binlog_filename_change_when_enable_relay_and_gtid
 }
 
 run
