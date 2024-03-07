@@ -443,7 +443,7 @@ func (s *EventSorter) handleEvents(
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
 
-	handleItem := func(item eventWithTableID) {
+	encodeItemAndBatch := func(item eventWithTableID) {
 		if item.event.IsResolved() {
 			newResolved.ReplaceOrInsert(item.span, item.event.CRTs)
 			return
@@ -470,7 +470,7 @@ func (s *EventSorter) handleEvents(
 		for {
 			select {
 			case item := <-inputCh:
-				handleItem(item)
+				encodeItemAndBatch(item)
 				if len(batch.Repr()) >= batchCommitSize {
 					return
 				}
