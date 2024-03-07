@@ -464,20 +464,22 @@ func (s *EventSorter) handleEvents(
 	}
 
 	for {
-		for len(batch.Repr()) < batchCommitSize && time.Since(startToCollectBatch) < batchCommitInterval {
+		timer := time.NewTimer(batchCommitInterval * time.Millisecond)
+		defer timer.Stop()
+		for len(batch.Repr()) < batchCommitSize {
 			select {
 			case item := <-inputCh:
 				handleItem(item)
 			case <-s.closed:
 				return
-			default:
+			case <-timer.C:
+				break
 			}
 		}
 		batchCh <- &DBBatchEvent{batch, newResolved}
 
 		batch = db.NewBatch()
 		newResolved = spanz.NewHashMap[model.Ts]()
-		startToCollectBatch = time.Now()
 	}
 }
 
