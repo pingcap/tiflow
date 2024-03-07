@@ -14,6 +14,7 @@
 package pebble
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -392,14 +393,16 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 		case batchEvent := <-batchCh:
 			// do batch commit
 			batch := batchEvent.batch
-			writeBytes.Observe(float64(len(batch.Repr())))
-			start := time.Now()
-			if err := batch.Commit(&pebbleWriteOptions); err != nil {
-				log.Panic("failed to commit pebble batch", zap.Error(err),
-					zap.String("namespace", s.changefeedID.Namespace),
-					zap.String("changefeed", s.changefeedID.ID))
+			if !batch.Empty() {
+				writeBytes.Observe(float64(len(batch.Repr())))
+				start := time.Now()
+				if err := batch.Commit(&pebbleWriteOptions); err != nil {
+					log.Panic("failed to commit pebble batch", zap.Error(err),
+						zap.String("namespace", s.changefeedID.Namespace),
+						zap.String("changefeed", s.changefeedID.ID))
+				}
+				writeDuration.Observe(time.Since(start).Seconds())
 			}
-			writeDuration.Observe(time.Since(start).Seconds())
 
 			// update resolved ts after commit successfully
 			batchResolved := batchEvent.batchResolved
@@ -443,7 +446,10 @@ func (s *EventSorter) handleEvents(
 	batch := db.NewBatch()
 	newResolved := spanz.NewHashMap[model.Ts]()
 
-	encodeItemAndBatch := func(item eventWithTableID) {
+	ticker := time.NewTicker(batchCommitInterval / 2)
+	defer ticker.Stop()
+
+	encodeItemAndBatch := func(batch *pebble.Batch, newResolved *spanz.HashMap[model.Ts], item eventWithTableID) {
 		if item.event.IsResolved() {
 			newResolved.ReplaceOrInsert(item.span, item.event.CRTs)
 			return
@@ -455,6 +461,7 @@ func (s *EventSorter) handleEvents(
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
+		fmt.Println("set batch here")
 		if err = batch.Set(key, value, &pebbleWriteOptions); err != nil {
 			log.Panic("failed to update pebble batch", zap.Error(err),
 				zap.String("namespace", s.changefeedID.Namespace),
@@ -462,18 +469,15 @@ func (s *EventSorter) handleEvents(
 		}
 	}
 
-	ticker := time.NewTicker(batchCommitInterval / 2)
-	defer ticker.Stop()
-
 	// we batch item and commit until batch size is larger than batchCommitSize,
 	// or the time since the last commit is larger than batchCommitInterval.
 	// we only return false when the sorter is closed.
-	doBatching := func(batch *pebble.Batch) bool {
+	doBatching := func(batch *pebble.Batch, newResolved *spanz.HashMap[model.Ts]) bool {
 		startToBatch := time.Now()
 		for {
 			select {
 			case item := <-inputCh:
-				encodeItemAndBatch(item)
+				encodeItemAndBatch(batch, newResolved, item)
 				if len(batch.Repr()) >= batchCommitSize {
 					return true
 				}
@@ -488,15 +492,13 @@ func (s *EventSorter) handleEvents(
 	}
 
 	for {
-		if !doBatching(batch) {
+		if !doBatching(batch, newResolved) {
 			return
 		}
-		if !batch.Empty() {
-			batchCh <- &DBBatchEvent{batch, newResolved}
+		batchCh <- &DBBatchEvent{batch, newResolved}
 
-			batch = db.NewBatch()
-			newResolved = spanz.NewHashMap[model.Ts]()
-		}
+		batch = db.NewBatch()
+		newResolved = spanz.NewHashMap[model.Ts]()
 	}
 }
 
