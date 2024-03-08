@@ -11,7 +11,7 @@ group=$2
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
 mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_suicide server_config_compatibility"
-mysql_only_http="http_api http_api_tls api_v2 http_api_tls_with_user_auth"
+mysql_only_http="http_api http_api_tls api_v2 http_api_tls_with_user_auth cli_tls_with_auth"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro debezium"
@@ -39,7 +39,7 @@ groups=(
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
 	["G07"]='kv_client_stream_reconnect cdc split_region'
-	["G08"]='processor_err_chan changefeed_reconstruct multi_capture'
+	["G08"]='processor_err_chan changefeed_reconstruct multi_capture synced_status_with_redo'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint synced_status'
 	["G10"]='default_value simple cdc_server_tips event_filter sql_mode'
 	["G11"]='resolve_lock move_table autorandom generate_column'

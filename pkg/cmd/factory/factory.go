@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
@@ -34,9 +35,14 @@ import (
 )
 
 const (
-	envVarTiCDCUser              = "TICDC_USER"
-	envVarTiCDCPassword          = "TICDC_PASSWORD"
 	defaultCrendentialConfigFile = ".ticdc/credentials"
+	// User Credential Environment Variables
+	envVarTiCDCUser     = "TICDC_USER"
+	envVarTiCDCPassword = "TICDC_PASSWORD"
+	// TLS Client Certificate Environment Variables
+	envVarTiCDCCAPath   = "TICDC_CA_PATH"
+	envVarTiCDCCertPath = "TICDC_CERT_PATH"
+	envVarTiCDCKeyPath  = "TICDC_KEY_PATH"
 )
 
 // Factory defines the client-side construction factory.
@@ -60,8 +66,68 @@ type ClientGetter interface {
 
 // ClientAuth specifies the authentication parameters.
 type ClientAuth struct {
+	// User Credential
 	User     string `toml:"ticdc_user,omitempty"`
 	Password string `toml:"ticdc_password,omitempty"`
+
+	// TLS Client Certificate
+	CaPath   string `toml:"ca_path,omitempty"`
+	CertPath string `toml:"cert_path,omitempty"`
+	KeyPath  string `toml:"key_path,omitempty"`
+}
+
+// StoreToDefaultPath stores the client authentication to default path.
+func (c *ClientAuth) StoreToDefaultPath() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		msg := "failed to get user home directory"
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+
+	filename := filepath.Join(homeDir, defaultCrendentialConfigFile)
+	err = os.MkdirAll(filepath.Dir(filename), os.ModePerm)
+	if err != nil {
+		msg := fmt.Sprintf("failed to create directory for creandential file <%s>", filename)
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	file, err := os.Create(filename)
+	if err != nil {
+		msg := fmt.Sprintf("failed to create creandential file <%s>", filename)
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+
+	err = toml.NewEncoder(file).Encode(c)
+	if err != nil {
+		msg := fmt.Sprintf("failed to encode client authentication to creandential file <%s>", filename)
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+
+	err = file.Close()
+	if err != nil {
+		msg := fmt.Sprintf("failed to store client authentication to creandential file <%s>", filename)
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return nil
+}
+
+// ReadFromDefaultPath reads the client authentication from default path.
+func ReadFromDefaultPath() (*ClientAuth, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		msg := "failed to get user home directory"
+		return nil, fmt.Errorf("%s: %w", msg, err)
+	}
+
+	res := &ClientAuth{}
+	filename := filepath.Join(homeDir, defaultCrendentialConfigFile)
+	if _, err := os.Stat(filename); err == nil {
+		err = util.StrictDecodeFile(filename, "cdc cli auth config", res)
+		if err != nil {
+			msg := fmt.Sprintf("failed to parse client authentication from creandential file <%s>", filename)
+			return nil, fmt.Errorf("%s: %w", msg, err)
+		}
+	}
+	return res, nil
 }
 
 // ClientFlags specifies the parameters needed to construct the client.
@@ -70,9 +136,6 @@ type ClientFlags struct {
 	pdAddr     string
 	serverAddr string
 	logLevel   string
-	caPath     string
-	certPath   string
-	keyPath    string
 }
 
 var _ ClientGetter = &ClientFlags{}
@@ -126,11 +189,11 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "",
 		"PD address, use ',' to separate multiple PDs, "+
 			"Parameter --pd is deprecated, please use parameter --server instead.")
-	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "",
+	cmd.PersistentFlags().StringVar(&c.CaPath, "ca", "",
 		"CA certificate path for TLS connection to CDC server")
-	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "",
+	cmd.PersistentFlags().StringVar(&c.CertPath, "cert", "",
 		"Certificate path for TLS connection to CDC server")
-	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "",
+	cmd.PersistentFlags().StringVar(&c.KeyPath, "key", "",
 		"Private key path for TLS connection to CDC server")
 	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn",
 		"log level (etc: debug|info|warn|error)")
@@ -146,15 +209,20 @@ func (c *ClientFlags) GetCredential() *security.Credential {
 	var certAllowedCN []string
 
 	return &security.Credential{
-		CAPath:        c.caPath,
-		CertPath:      c.certPath,
-		KeyPath:       c.keyPath,
+		CAPath:        c.CaPath,
+		CertPath:      c.CertPath,
+		KeyPath:       c.KeyPath,
 		CertAllowedCN: certAllowedCN,
 	}
 }
 
-// CompleteAuthParameters completes the authentication parameters.
-func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
+// CompleteClientAuthParameters completes the authentication parameters.
+func (c *ClientFlags) CompleteClientAuthParameters(cmd *cobra.Command) error {
+	c.completeTLSClientCertificate(cmd)
+	return c.completeUserCredential(cmd)
+}
+
+func (c *ClientFlags) completeUserCredential(cmd *cobra.Command) (err error) {
 	authType := "command line"
 	defer func() {
 		if err == nil {
@@ -188,20 +256,50 @@ func (c *ClientFlags) CompleteAuthParameters(cmd *cobra.Command) (err error) {
 
 	// If user is not specified via command line or environment variable, try to get it from credential file.
 	authType = "credential file"
-	homeDir, err := os.UserHomeDir()
+	res, err := ReadFromDefaultPath()
 	if err != nil {
-		return errors.WrapError(errors.ErrCredentialNotFound, err, "failed to get user home directory")
+		return errors.WrapError(errors.ErrCredentialNotFound, err)
 	}
-	filename := filepath.Join(homeDir, defaultCrendentialConfigFile)
-	if _, err := os.Stat(filename); err == nil {
-		err = util.StrictDecodeFile(filename, "cdc cli auth config", &c.ClientAuth)
-		if err != nil {
-			msg := fmt.Sprintf("failed to parse authentication from creandential file <%s>", filename)
-			return errors.WrapError(errors.ErrCredentialNotFound, err, msg)
+	if res != nil {
+		c.User = res.User
+		c.Password = res.Password
+	}
+	return nil
+}
+
+func (c *ClientFlags) completeTLSClientCertificate(cmd *cobra.Command) {
+	authType := "command line"
+	defer func() {
+		if c.CaPath == "" && c.CertPath == "" && c.KeyPath == "" {
+			authType = "disabled"
 		}
+		log.Info(fmt.Sprintf("cli tls client certificate type: %s", authType))
+	}()
+	// If one of the client certificate is specified via command line, all of them should be specified.
+	if c.CaPath != "" || c.CertPath != "" || c.KeyPath != "" {
+		return
 	}
 
-	return nil
+	// If none of the client certificate is specified via command line, try to get it from environment variable.
+	authType = "environment variable"
+	c.CaPath = os.Getenv(envVarTiCDCCAPath)
+	c.CertPath = os.Getenv(envVarTiCDCCertPath)
+	c.KeyPath = os.Getenv(envVarTiCDCKeyPath)
+	if c.CaPath != "" || c.CertPath != "" || c.KeyPath != "" {
+		return
+	}
+
+	// If none of the client certificate is specified via command line or environment variable, try to get it from credential file.
+	authType = "credential file"
+	res, err := ReadFromDefaultPath()
+	if err != nil {
+		cmd.Println("failed to read client certificate from default config file: , try to use insecure connection", err)
+	}
+	if res != nil {
+		c.CaPath = res.CaPath
+		c.CertPath = res.CertPath
+		c.KeyPath = res.KeyPath
+	}
 }
 
 // GetAuthParameters returns the authentication parameters.

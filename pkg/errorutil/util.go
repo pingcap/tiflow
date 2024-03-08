@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
@@ -132,11 +133,13 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrSyntax,
 		mysql.ErrParse,
 		mysql.ErrNoDB,
+		mysql.ErrBadDB,
 		mysql.ErrNoSuchTable,
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
-		mysql.ErrPartitionMgmtOnNonpartitioned:
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		mysql.ErrNonuniqTable:
 		return false
 	}
 	return true
@@ -163,4 +166,14 @@ func IsSyncPointIgnoreError(err error) bool {
 	// We should ignore the error when the downstream has no
 	// such system variable for compatibility.
 	return mysqlErr.Number == mysql.ErrUnknownSystemVariable
+}
+
+// ConvertErr converts an error to a specific error by worker type.
+func ConvertErr(tp frameModel.WorkerType, err error) error {
+	switch tp {
+	case frameModel.DMJobMaster:
+		err = cerror.ToDMError(err)
+	default:
+	}
+	return err
 }

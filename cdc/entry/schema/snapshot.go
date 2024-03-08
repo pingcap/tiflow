@@ -123,6 +123,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -134,11 +135,12 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
+	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -151,7 +153,8 @@ func NewSnapshotFromMeta(
 	}
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
-
+	// record all tables to be replicated for logging use
+	tables := make([]*model.TableInfo, 0, 1024)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
@@ -190,6 +193,8 @@ func NewSnapshotFromMeta(
 			ineligible := !tableInfo.IsEligible(forceReplicate)
 			if ineligible {
 				snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
+			} else {
+				tables = append(tables, tableInfo)
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
@@ -204,6 +209,15 @@ func NewSnapshotFromMeta(
 		}
 	}
 	snap.inner.currentTs = currentTs
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%d tables to be replicated: ", len(tables)))
+	for _, table := range tables {
+		sb.WriteString(fmt.Sprintf("%s.%s, ", table.TableName.Schema, table.TableName.Table))
+	}
+	log.Info("schema snapshot created",
+		zap.Stringer("changefeed", id),
+		zap.Uint64("currentTs", currentTs),
+		zap.String("tables", sb.String()))
 	return snap, nil
 }
 

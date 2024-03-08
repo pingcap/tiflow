@@ -1,5 +1,9 @@
 #!/bin/bash
 
+## test the same logic as `sync_status``, but with redo mode
+
+#!/bin/bash
+
 # [DISCRIPTION]:
 #   This test is related to
 #   It will test the sync status request of cdc server in the following scenarios:
@@ -293,10 +297,12 @@ Otherwise, if the gap is small and PD is online, it means the data syncing is in
 }
 
 trap stop_tidb_cluster EXIT
-run_normal_case_and_unavailable_pd "conf/changefeed.toml"
-run_case_with_unavailable_tikv "conf/changefeed.toml"
-run_case_with_unavailable_tidb "conf/changefeed.toml"
-run_case_with_failpoint "conf/changefeed.toml"
+
+# enable redo
+run_normal_case_and_unavailable_pd "conf/changefeed-redo.toml"
+run_case_with_unavailable_tikv "conf/changefeed-redo.toml"
+run_case_with_unavailable_tidb "conf/changefeed-redo.toml"
+run_case_with_failpoint "conf/changefeed-redo.toml"
 
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

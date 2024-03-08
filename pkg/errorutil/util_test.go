@@ -20,6 +20,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/stretchr/testify/require"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/raft/v3"
@@ -105,6 +107,8 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
 		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
+		{newMysqlErr(tmysql.ErrNonuniqTable, "xx"), false},
+		{newMysqlErr(tmysql.ErrBadDB, "xx"), false},
 		{mysql.ErrInvalidConn, true},
 	}
 
@@ -128,4 +132,23 @@ func TestIsSyncPointIgnoreError(t *testing.T) {
 	for _, c := range cases {
 		require.Equal(t, c.ret, IsSyncPointIgnoreError(c.err))
 	}
+}
+
+func TestConvertErr(t *testing.T) {
+	normalErr := errors.New("normal error")
+	require.Equal(t, normalErr, ConvertErr(model.DMJobMaster, normalErr))
+
+	// 11074 codeBinlogEventNoColumns
+	baseDMError, ok := terror.ErrorFromCode(terror.ErrCode(11074))
+	require.True(t, ok)
+	raw := baseDMError.Generate()
+	err := errors.New(raw.Error())
+	reflectErr := ConvertErr(model.DMJobMaster, err)
+	require.NotNil(t, reflectErr)
+	require.True(t, baseDMError.Equal(reflectErr))
+	// convert using other worker type
+	reflectErr2 := ConvertErr(model.WorkerDMDump, err)
+	require.NotNil(t, reflectErr2)
+	require.False(t, baseDMError.Equal(reflectErr2))
+	require.Equal(t, reflectErr2, err)
 }
