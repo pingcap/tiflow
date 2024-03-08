@@ -276,14 +276,14 @@ func (m *mounter) decodeRow(
 			m.decoder = decoder
 		}
 		datums, err = decodeRowV2(decoder, rawValue)
-		for colID, datum := range datums {
-			rawBytes, err := rowcodec.EncodeValueDatum(m.tz, &datum, nil)
-			if err != nil {
-				return nil, false, errors.Trace(err)
-			}
-			expected := decoder.GetDataByColumnID(int(colID))
-			bytes.Compare(expected, rawBytes)
-		}
+		//for colID, datum := range datums {
+		//	rawBytes, err := rowcodec.EncodeValueDatum(m.tz, &datum, nil)
+		//	if err != nil {
+		//		return nil, false, errors.Trace(err)
+		//	}
+		//	expected := decoder.GetDataByColumnID(int(colID))
+		//	bytes.Compare(expected, rawBytes)
+		//}
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
 	}

@@ -1205,11 +1205,11 @@ func TestVerifyChecksumTime(t *testing.T) {
 
 	helper.Tk().MustExec("set global time_zone = '-5:00'")
 	_ = helper.DDL2Event(`CREATE table TBL2 (a int primary key, b TIMESTAMP)`)
-	event := helper.DML2Event(`INSERT INTO TBL2 VALUES (1, '2023-02-09 13:00:00')`, "test", "TBL2")
+	event := helper.DML2Event(`INSERT INTO TBL2 VALUES (3, '2023-02-09 13:00:00')`, "test", "TBL2")
 	require.NotNil(t, event)
 
 	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
-	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 1)", "test", "t")
+	event := helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 3)", "test", "t")
 	require.NotNil(t, event)
 }
 
