@@ -14,7 +14,6 @@
 package pebble
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -458,7 +457,6 @@ func (s *EventSorter) handleEvents(
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
-		fmt.Println("set batch here")
 		if err = batch.Set(key, value, &pebbleWriteOptions); err != nil {
 			log.Panic("failed to update pebble batch", zap.Error(err),
 				zap.String("namespace", s.changefeedID.Namespace),
@@ -466,9 +464,9 @@ func (s *EventSorter) handleEvents(
 		}
 	}
 
-	// we batch item and commit until batch size is larger than batchCommitSize,
+	// Batch item and commit until batch size is larger than batchCommitSize,
 	// or the time since the last commit is larger than batchCommitInterval.
-	// we only return false when the sorter is closed.
+	// Only return false when the sorter is closed.
 	doBatching := func() (*DBBatchEvent, bool) {
 		batch := db.NewBatch()
 		newResolved := spanz.NewHashMap[model.Ts]()
