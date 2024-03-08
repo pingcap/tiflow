@@ -14,6 +14,7 @@ x-node: &default-node
     MYSQL_ROOT_PASSWORD: "123456"
 
 services:
+  # In Mariadb case, mysql57 represents mariadb binlog test; mysql8 represents mariadb gtid test. It has nothing to do with the version now
   mysql57_master:
     <<: *default-node
     build:
