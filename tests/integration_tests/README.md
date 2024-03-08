@@ -2,37 +2,9 @@
 
 ### Run integration tests locally
 
-1. The following executables must be copied or generated or linked into these locations. The versions of them should be 
-   the same as that of TiCDC. If you are compiling the master branch of TiCDC, try the latest release versions of the 
-   components.
-
-   * `bin/tidb-server` # version >= 6.0.0-rc.1
-   * `bin/tikv-server` # version >= 6.0.0-rc.1
-   * `bin/pd-server`   # version >= 6.0.0-rc.1
-   * `bin/pd-ctl`      # version >= 6.0.0-rc.1
-   * `bin/tiflash`     # needs tiflash binary and some necessary so files
-   * `bin/sync_diff_inspector`
-   * [bin/go-ycsb](https://github.com/pingcap/go-ycsb)
-   * [bin/etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
-   * [bin/jq](https://stedolan.github.io/jq/)
-   * [bin/minio](https://github.com/minio/minio)
-
-   > You can also download the binaries. `sync_diff_inspector` can be downloaded 
-   > from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz), 
-   > `tidb-server` related binaries can be downloaded 
-   > from [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz):
-
-   > If you are running tests on MacOS, tidb related binaries can be downloaded from tiup mirrors, such as 
-   > https://tiup-mirrors.pingcap.com/tidb-v4.0.2-darwin-amd64.tar.gz. And `sync_diff_inspector` can be compiled by 
-   > yourself from source [tidb-tools](https://github.com/pingcap/tidb-tools)
+1. Run `make prepare_test_binaries` to generate TiCDC related binaries for integration test.
+If you are running tests on MacOS Silicon, run `make prepare_test_binaries os=darwin arch=arm64`.
    
-   > All Tiflash required files can be found in 
-   > [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz) packages. 
-   > You should put `flash_cluster_manager`, `libtiflash_proxy.so` and `tiflash` into `bin` directory in TiCDC code base.
-
-   > Old versions of Minio may cause the integration test cases to fail. You can get a newer version by installing it from source
-   > ([Source Installation](https://github.com/minio/minio#install-from-source)).
-   > [RELEASE.2022-05-08T23-50-31Z](https://github.com/minio/minio/releases/tag/RELEASE.2022-05-08T23-50-31Z) is suggested.
 
 2. These are programs/packages need be installed. 
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,

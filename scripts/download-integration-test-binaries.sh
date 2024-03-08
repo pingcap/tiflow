@@ -15,10 +15,6 @@
 # download-integration-test-binaries.sh will
 # * download all the binaries you need for integration testing
 
-# Notice:
-# Please don't try the script locally,
-# it downloads files for linux platform. We only use it in docker-compose.
-
 set -o errexit
 set -o pipefail
 
@@ -29,7 +25,7 @@ branch=${1:-master}
 # Specify whether to download the community version of binaries, the following
 # four arguments are applicable only when utilizing the community version of
 # binaries.
-community=${2:-false}
+community=${2:-true}
 # Specify which version of the community binaries that will be utilized.
 ver=${3:-v6.5.2}
 # Specify which os that will be used to pack the binaries.
@@ -101,11 +97,12 @@ function download_community_binaries() {
 	tar -xz -C third_bin -f tmp/$ycsb_tar_name
 
 	# minio
-	local minio_url="https://dl.min.io/server/minio/release/linux-amd64/minio"
+	local minio_url="https://dl.min.io/server/minio/release/${os}-${arch}/minio"
 	download "$minio_url" "minio" "third_bin/minio"
 
 	# jq
-	local jq_url="https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
+	local os_system=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
+	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_system}-${arch}"
 	wget -O third_bin/jq "$jq_url"
 
 	chmod a+x third_bin/*
