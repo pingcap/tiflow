@@ -472,6 +472,25 @@ func verifyColumnChecksum(
 	return checksum, false, nil
 }
 
+func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
+	switch ft.GetType() {
+
+	}
+	//if value == nil {
+	//	return types.Datum{}, nil
+	//}
+	//switch ft.Tp {
+	//case mysql.TypeSet:
+	//	return types.Set{Value: value.(uint64), Name: ft.Elems}, nil
+	//case mysql.TypeEnum:
+	//	return types.Enum{Value: value.(uint64), Name: ft.Elems}, nil
+	//case mysql.TypeBit:
+	//	return types.NewBinaryLiteralFromUint(value.(uint64), -1), nil
+	//default:
+	//	return types.NewDatum(value), nil
+	//}
+}
+
 func verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, tz *time.Location,
 ) (uint32, bool, error) {
@@ -479,8 +498,24 @@ func verifyRawBytesChecksum(
 	if !ok {
 		return 0, true, nil
 	}
-
-	//handleColIDs, handleColFt, reqCols := tableInfo.GetRowColInfos()
+	var (
+		columnIDs []int64
+		datums    []types.Datum
+		//
+		//handleColData []*model.ColumnData
+	)
+	//_, fieldTypes, _ := tableInfo.GetRowColInfos()
+	tableInfo.GetColumnInfo(col.column)
+	for _, col := range columns {
+		columnID := col.ColumnID
+		columnIDs = append(columnIDs, columnID)
+		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
+		datum, err := newDatum(col.Value, columnInfo.FieldType)
+		if err != nil {
+			return 0, false, errors.Trace(err)
+		}
+		datums = append(datums, datum)
+	}
 
 	return expectedRawChecksum, true, nil
 }
