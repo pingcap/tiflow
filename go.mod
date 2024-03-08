@@ -89,7 +89,7 @@ require (
 	github.com/swaggo/swag v1.16.2
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240229075803-bfab41501bc5
+	github.com/tikv/client-go/v2 v2.0.8-0.20240305085506-3625fc04d0bd
 	github.com/tikv/pd v1.1.0-beta.0.20231212061647-ab97b9a267f3
 	github.com/tikv/pd/client v0.0.0-20240229065730-92a31c12238e
 	github.com/tinylib/msgp v1.1.6
@@ -412,4 +412,4 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
-replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240306101513-2e70cccfaa82
+replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240308071103-f4b5c648873d

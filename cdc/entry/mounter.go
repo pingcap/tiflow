@@ -276,14 +276,6 @@ func (m *mounter) decodeRow(
 			m.decoder = decoder
 		}
 		datums, err = decodeRowV2(decoder, rawValue)
-		//for colID, datum := range datums {
-		//	rawBytes, err := rowcodec.EncodeValueDatum(m.tz, &datum, nil)
-		//	if err != nil {
-		//		return nil, false, errors.Trace(err)
-		//	}
-		//	expected := decoder.GetDataByColumnID(int(colID))
-		//	bytes.Compare(expected, rawBytes)
-		//}
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
 	}
@@ -291,6 +283,15 @@ func (m *mounter) decodeRow(
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
+
+	//colIDs := make([]int64, 0, len(datums))
+	//columns := make([]types.Datum, 0, len(datums))
+	//for colID, datum := range datums {
+	//	colIDs = append(colIDs, colID)
+	//	columns = append(columns, datum)
+	//}
+	//var encoder rowcodec.Encoder
+	//encoder.Encode(m.tz, colIDs, columns, nil, tablecodec.EncodeRecordKey(recordPrefix, recordID))
 
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
@@ -426,6 +427,12 @@ func (m *mounter) calculateChecksum(
 	return checksum, nil
 }
 
+func (m *mounter) verifyColumnChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, decoder *rowcodec.DatumMapDecoder,
+) (uint32, bool error) {
+
+}
+
 // return error when calculate the checksum.
 // return false if the checksum is not matched
 func (m *mounter) verifyChecksum(
@@ -446,6 +453,15 @@ func (m *mounter) verifyChecksum(
 	}
 
 	version := decoder.ChecksumVersion()
+	switch version {
+	case 0:
+		return verifyColumnChecksum(columnInfos, rawColumns, decoder)
+	case 1:
+		return verifyRawBytesCheckum()
+	default:
+		return 0, 0, false, errors.Errorf("unknown checksum version %d", version)
+	}
+
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()

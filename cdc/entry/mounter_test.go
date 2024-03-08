@@ -1209,7 +1209,7 @@ func TestVerifyChecksumTime(t *testing.T) {
 	require.NotNil(t, event)
 
 	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
-	event := helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 3)", "test", "t")
+	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 3)", "test", "t")
 	require.NotNil(t, event)
 }
 
