@@ -174,11 +174,11 @@ func (s *statefulRts) getUnflushed() model.Ts {
 	return s.unflushed.Load()
 }
 
-func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
+func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (ok bool) {
 	return util.CompareAndIncrease(&s.unflushed, uint64(unflushed))
 }
 
-func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (changed bool) {
+func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (ok bool) {
 	return util.CompareAndIncrease(&s.flushed, uint64(flushed))
 }
 

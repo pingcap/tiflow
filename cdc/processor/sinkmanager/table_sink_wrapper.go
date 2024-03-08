@@ -191,7 +191,7 @@ func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	increased := util.CompareAndIncrease(&t.receivedSorterResolvedTs, ts)
+	increased := util.CompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, ts)
 	if increased && t.state.Load() == tablepb.TableStatePreparing {
 		// Update the state to `Prepared` when the receivedSorterResolvedTs is updated for the first time.
 		t.state.Store(tablepb.TableStatePrepared)
