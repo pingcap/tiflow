@@ -70,7 +70,7 @@ require (
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20240228123331-27ce02afd2e3
 	github.com/pingcap/tidb-dashboard v0.0.0-20240127080020-2171c6e6b9d7
-	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
+	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240228123331-27ce02afd2e3
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.0
@@ -411,5 +411,8 @@ replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
+
+
+replace blainsmith.com/go/seahash => github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140
 
 replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240308071103-f4b5c648873d
