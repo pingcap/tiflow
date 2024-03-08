@@ -421,12 +421,12 @@ func buildRowChangedEvent(
 		)
 		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
 		if err != nil {
-			log.Info("checksum corrupted on the previous columns")
+			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
 			currentCorrupted = true
 		}
 		err = common.VerifyChecksum(columns, msg.Checksum.Current)
 		if err != nil {
-			log.Info("checksum corrupted on the previous columns")
+			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
 			currentCorrupted = true
 		}
 
