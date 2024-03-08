@@ -23,24 +23,35 @@ type genericAtomic[T numbers] interface {
 	CompareAndSwap(old, new T) bool
 }
 
-// MustCompareAndIncrease only updates the target if the new value is larger than the old value.
-func MustCompareAndIncrease[T numbers](target genericAtomic[T], val T) {
+// MustCompareAndIncrease updates the target if the new value is larger than the old value. It do nothing
+// if the new value is smaller than or equal to the old value.
+func MustCompareAndIncrease[T numbers](target genericAtomic[T], new T) {
+	_ = CompareAndMonotonicIncrease(target, new)
+}
+
+// CompareAndIncrease updates the target if the new value is larger than or equal to the old value.
+// It returns false if the new value is smaller than the old value.
+func CompareAndIncrease[T numbers](target genericAtomic[T], new T) bool {
 	for {
 		old := target.Load()
-		if val <= old || target.CompareAndSwap(old, val) {
-			return
+		if new < old {
+			return false
+		}
+		if new == old || target.CompareAndSwap(old, new) {
+			return true
 		}
 	}
 }
 
-// CompareAndIncrease only updates the target if the new value is larger than or equal to the old value.
-func CompareAndIncrease[T numbers](target genericAtomic[T], val T) bool {
+// CompareAndMonotonicIncrease updates the target if the new value is larger than the old value.
+// It returns false if the new value is smaller than or equal to the old value.
+func CompareAndMonotonicIncrease[T numbers](target genericAtomic[T], new T) bool {
 	for {
 		old := target.Load()
-		if old > val {
+		if new <= old {
 			return false
 		}
-		if val <= old || target.CompareAndSwap(old, val) {
+		if target.CompareAndSwap(old, new) {
 			return true
 		}
 	}
