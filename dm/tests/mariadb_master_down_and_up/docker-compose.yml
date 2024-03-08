@@ -1,0 +1,44 @@
+version: "3.7"
+
+networks:
+  db-networks:
+    ipam: # for static IP
+      config:
+        - subnet: "172.28.128.0/24"
+
+# re-usable extension fields, https://docs.docker.com/compose/compose-file/#extension-fields.
+x-node: &default-node
+  privileged: true
+  restart: always
+  environment:
+    MYSQL_ROOT_PASSWORD: "123456"
+
+services:
+  mariadb_master:
+    <<: *default-node
+    image: mariadb:10.1
+    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=1 --binlog-format=ROW
+    container_name: mariadb_master
+    hostname: mariadb_master
+    networks:
+      db-networks:
+        ipv4_address: 172.28.128.6
+
+  mariadb_slave:
+    <<: *default-node
+    image: mariadb:10.1
+    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=2 --binlog-format=ROW
+    container_name: mariadb_slave
+    hostname: mariadb_slave
+    networks:
+      db-networks:
+        ipv4_address: 172.28.128.7
+
+  tidb: # downstream TiDB
+    container_name: tidb
+    hostname: tidb
+    networks:
+      db-networks:
+        ipv4_address: 172.28.128.8
+    image: pingcap/tidb:latest
+    restart: always

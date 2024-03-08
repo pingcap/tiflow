@@ -1,0 +1,65 @@
+name: Mariadb Master Down and Up
+
+on:
+  push:
+    branches:
+      - test-*
+  schedule:
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  workflow_dispatch:
+
+jobs:
+  mariadb-master-down-and-up:
+    name: mariadb-master-down-and-up
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.21'
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-ticdc-${{ hashFiles('go.sum') }}
+
+      - name: Cache Tools
+        id: cache-tools
+        uses: actions/cache@v2
+        with:
+          path: tools/bin
+          key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
+
+      - name: Build DM binary
+        run: make dm_integration_test_build
+
+      - name: Setup containers
+        run: |
+          docker-compose -f ./dm/tests/mariadb_master_down_and_up/docker-compose.yml up -d
+
+      - name: Run test cases
+        run: |
+          bash ./dm/tests/mariadb_master_down_and_up/case.sh
+
+      - name: Copy logs to hack permission
+        if: ${{ always() }}
+        run: |
+          mkdir ./logs
+          sudo cp -r -L /tmp/dm_test/mariadb_master_down_and_up/master/log ./logs/master
+          sudo cp -r -L /tmp/dm_test/mariadb_master_down_and_up/worker1/log ./logs/worker1
+          sudo chown -R runner ./logs
+
+      # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: upstream-switch-logs
+          path: |
+            ./logs
