@@ -474,21 +474,29 @@ func verifyColumnChecksum(
 
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	switch ft.GetType() {
-
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
+		t, err := types.ParseTime(types.StrictContext, value.(string), ft.GetType(), ft.GetDecimal())
+		return types.NewTimeDatum(t), nil
+	case mysql.TypeDuration:
+		d, b, err := types.ParseDuration(types.StrictContext, value.(string), ft.GetDecimal())
+		return types.NewDurationDatum(d), nil
+	case mysql.TypeJSON:
+		bj, err := types.ParseBinaryJSONFromString(value.(string))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewJSONDatum(bj), nil
+	case mysql.TypeNewDecimal:
+	case mysql.TypeEnum:
+	case mysql.TypeSet:
+	case mysql.TypeBit:
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeFloat:
+	case mysql.TypeDouble:
+	default:
 	}
-	//if value == nil {
-	//	return types.Datum{}, nil
-	//}
-	//switch ft.Tp {
-	//case mysql.TypeSet:
-	//	return types.Set{Value: value.(uint64), Name: ft.Elems}, nil
-	//case mysql.TypeEnum:
-	//	return types.Enum{Value: value.(uint64), Name: ft.Elems}, nil
-	//case mysql.TypeBit:
-	//	return types.NewBinaryLiteralFromUint(value.(uint64), -1), nil
-	//default:
-	//	return types.NewDatum(value), nil
-	//}
+	return types.Datum{}, nil
 }
 
 func verifyRawBytesChecksum(
@@ -505,7 +513,7 @@ func verifyRawBytesChecksum(
 		//handleColData []*model.ColumnData
 	)
 	//_, fieldTypes, _ := tableInfo.GetRowColInfos()
-	tableInfo.GetColumnInfo(col.column)
+	//tableInfo.GetColumnInfo(col.column)
 	for _, col := range columns {
 		columnID := col.ColumnID
 		columnIDs = append(columnIDs, columnID)
