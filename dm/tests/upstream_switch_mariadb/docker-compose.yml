@@ -20,7 +20,7 @@ services:
       context: .
       args:
         conf: mysql57_master
-        version: 10.1.9
+        version: 10.1
     command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --binlog-format=ROW
     container_name: mysql57_master
     hostname: mysql57_master
@@ -34,7 +34,7 @@ services:
       context: .
       args:
         conf: mysql57_slave
-        version: 10.1.9
+        version: 10.1
     command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --binlog-format=ROW
     container_name: mysql57_slave
     hostname: mysql57_slave
@@ -48,7 +48,7 @@ services:
       context: .
       args:
         conf: mysql8_master
-        version: 10.1.9
+        version: 10.1
     command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=1 --binlog-format=ROW
     container_name: mysql8_master
     hostname: mysql8_master
@@ -62,7 +62,7 @@ services:
       context: .
       args:
         conf: mysql8_slave
-        version: 10.1.9
+        version: 10.1
     command: --default-authentication-plugin=mysql_native_password --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=2 --binlog-format=ROW
     container_name: mysql8_slave
     hostname: mysql8_slave
