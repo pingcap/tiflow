@@ -162,7 +162,7 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	util.MustCompareAndIncrease(&t.barrierTs, startTs)
+	util.MustCompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, startTs)
 	// the barrierTs should always larger than or equal to the checkpointTs, so we need to update
 	// barrierTs before the checkpointTs is updated.
 	t.updateBarrierTs(startTs)
@@ -187,7 +187,7 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
-	util.MustCompareAndIncrease(&t.barrierTs, ts)
+	util.MustCompareAndMonotonicIncrease(&t.barrierTs, ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
