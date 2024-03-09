@@ -40,7 +40,7 @@ func TestMustCompareAndIncrease(t *testing.T) {
 			default:
 				delta := rand.Int63n(100)
 				v := target.Load() + delta
-				MustCompareAndIncrease(&target, v)
+				MustCompareAndMonotonicIncrease(&target, v)
 				require.GreaterOrEqual(t, target.Load(), v)
 			}
 		}
@@ -67,7 +67,7 @@ func TestMustCompareAndIncrease(t *testing.T) {
 				return
 			default:
 				v := target.Load() - 1
-				MustCompareAndIncrease(&target, v)
+				MustCompareAndMonotonicIncrease(&target, v)
 				require.Greater(t, target.Load(), v)
 			}
 		}

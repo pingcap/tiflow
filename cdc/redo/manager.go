@@ -161,8 +161,8 @@ type statefulRts struct {
 }
 
 func newStatefulRts(ts model.Ts) (ret statefulRts) {
-	ret.unflushed.Store(uint64(ts))
-	ret.flushed.Store(uint64(ts))
+	ret.unflushed.Store(ts)
+	ret.flushed.Store(ts)
 	return
 }
 
@@ -175,11 +175,11 @@ func (s *statefulRts) getUnflushed() model.Ts {
 }
 
 func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (ok bool) {
-	return util.CompareAndIncrease(&s.unflushed, uint64(unflushed))
+	return util.CompareAndIncrease(&s.unflushed, unflushed)
 }
 
 func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (ok bool) {
-	return util.CompareAndIncrease(&s.flushed, uint64(flushed))
+	return util.CompareAndIncrease(&s.flushed, flushed)
 }
 
 // logManager manages redo log writer, buffers un-persistent redo logs, calculates

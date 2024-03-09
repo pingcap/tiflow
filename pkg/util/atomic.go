@@ -23,12 +23,6 @@ type genericAtomic[T numbers] interface {
 	CompareAndSwap(old, new T) bool
 }
 
-// MustCompareAndIncrease updates the target if the new value is larger than the old value. It do nothing
-// if the new value is smaller than or equal to the old value.
-func MustCompareAndIncrease[T numbers](target genericAtomic[T], new T) {
-	_ = CompareAndMonotonicIncrease(target, new)
-}
-
 // CompareAndIncrease updates the target if the new value is larger than or equal to the old value.
 // It returns false if the new value is smaller than the old value.
 func CompareAndIncrease[T numbers](target genericAtomic[T], new T) bool {
@@ -55,4 +49,10 @@ func CompareAndMonotonicIncrease[T numbers](target genericAtomic[T], new T) bool
 			return true
 		}
 	}
+}
+
+// MustCompareAndMonotonicIncrease updates the target if the new value is larger than the old value. It do nothing
+// if the new value is smaller than or equal to the old value.
+func MustCompareAndMonotonicIncrease[T numbers](target genericAtomic[T], new T) {
+	_ = CompareAndMonotonicIncrease(target, new)
 }
