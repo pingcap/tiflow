@@ -20,9 +20,8 @@ services:
     command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=1 --binlog-format=ROW
     container_name: mariadb_master
     hostname: mariadb_master
-    networks:
-      db-networks:
-        ipv4_address: 172.28.128.6
+    ports:
+      - "3306:3306"
 
   mariadb_slave:
     <<: *default-node
@@ -30,15 +29,13 @@ services:
     command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=2 --binlog-format=ROW
     container_name: mariadb_slave
     hostname: mariadb_slave
-    networks:
-      db-networks:
-        ipv4_address: 172.28.128.7
+    ports:
+      - "3307:3306"
 
   tidb: # downstream TiDB
     container_name: tidb
     hostname: tidb
-    networks:
-      db-networks:
-        ipv4_address: 172.28.128.8
+    ports:
+      - "4000:4000"
     image: pingcap/tidb:latest
     restart: always

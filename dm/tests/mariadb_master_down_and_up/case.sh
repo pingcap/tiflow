@@ -10,18 +10,19 @@ source $CUR/lib.sh
 function clean_data() {
 	echo "-------clean_data--------"
 
-	exec_sql $slave_host "stop slave;"
+	exec_sql $slave_port "stop slave;"
+	exec_sql $slave_port "reset master;"
 
-	exec_sql $master_host "drop database if exists db1;"
-	exec_sql $master_host "drop database if exists db2;"
-	exec_sql $master_host "drop database if exists ${db};"
-	exec_sql $slave_host "drop database if exists db1;"
-	exec_sql $slave_host "drop database if exists db2;"
-	exec_sql $slave_host "drop database if exists ${db};"
-	exec_sql $slave_host "reset master;"
-	exec_tidb $tidb_host "drop database if exists db1;"
-	exec_tidb $tidb_host "drop database if exists db2;"
-	exec_tidb $tidb_host "drop database if exists ${db};"
+	exec_sql $master_port "drop database if exists db1;"
+	exec_sql $master_port "drop database if exists db2;"
+	exec_sql $master_port "drop database if exists ${db};"
+	exec_sql $slave_port "drop database if exists db1;"
+	exec_sql $slave_port "drop database if exists db2;"
+	exec_sql $slave_port "drop database if exists ${db};"
+	exec_sql $slave_port "reset master;"
+	exec_tidb $tidb_port "drop database if exists db1;"
+	exec_tidb $tidb_port "drop database if exists db2;"
+	exec_tidb $tidb_port "drop database if exists ${db};"
 	rm -rf /tmp/dm_test
 }
 
@@ -35,8 +36,12 @@ function cleanup_process() {
 function setup_replica() {
 	echo "-------setup_replica--------"
 
+	master_status=($(get_master_status))
+	master_gtid=$(exec_sql $master_port "select binlog_gtid_pos('${master_status[0]}', ${master_status[1]})" | awk 'NR==2')
+	exec_sql $slave_port "set global gtid_slave_pos = '$master_gtid';"
+
 	# master --> slave
-	change_master_to_gtid $slave_8_host $master_8_host
+	change_master_to_gtid $slave_port $master_port
 }
 
 function run_dm_components_and_create_sources() {
@@ -61,29 +66,23 @@ function run_dm_components_and_create_sources() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member" \
 		"alive" 1 \
-		"bound" 2
+		"bound" 1
 }
 
 function gen_full_data() {
 	echo "-------gen_full_data--------"
 
-	exec_sql $host1 "create database ${db} collate latin1_bin;"
-	exec_sql $host1 "create table ${db}.${tb}(id int primary key, a int);"
+	exec_sql $master_port "create database ${db} collate latin1_bin;"
+	exec_sql $master_port "create table ${db}.${tb}(id int primary key, a int);"
 	for i in $(seq 1 100); do
-		exec_sql $host1 "insert into ${db}.${tb} values($i,$i);"
-	done
-
-	exec_sql $host2 "create database ${db} collate latin1_bin;"
-	exec_sql $host2 "create table ${db}.${tb}(id int primary key, a int);"
-	for i in $(seq 101 200); do
-		exec_sql $host2 "insert into ${db}.${tb} values($i,$i);"
+		exec_sql $master_port "insert into ${db}.${tb} values($i,$i);"
 	done
 }
 
 function start_task() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $CUR/conf/task-pessimistic.yaml --remove-meta" \
-		"\result\": true" 3
+		"\"result\": true" 2
 }
 
 function verify_result() {
@@ -93,30 +92,25 @@ function verify_result() {
 function clean_task() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task task_pessimistic" \
-		"\result\": true" 3
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-relay -s mysql-replica-02" \
-		"\result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source stop mysql-replica-01" \
-		"\result\": true" 2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-source stop mysql-replica-02" \
-		"\result\": true" 2
+		"\"result\": true" 2
 }
 
 function test_master_down_and_up() {
 	cleanup_process
 	clean_data
+	# install_sync_diff
 	setup_replica
 	gen_full_data
 	run_dm_components_and_create_sources
 	start_task
-
+	verify_result
 	echo "-------start test--------"
 
 	for i in $(seq 201 250); do
-		exec_sql $master_host "insert into ${db}.${tb} values($i,$i);"
+		exec_sql $master_port "insert into ${db}.${tb} values($i,$i);"
 	done
 	verify_result
 
@@ -124,14 +118,14 @@ function test_master_down_and_up() {
 	docker-compose -f $CUR/docker-compose.yml pause mariadb_master
 	# execute sqls in slave
 	for i in $(seq 401 450); do
-		exec_sql $slave_host "insert into ${db}.${tb} values($i,$i);"
+		exec_sql $slave_port "insert into ${db}.${tb} values($i,$i);"
 	done
 	verify_result
 
 	# make master up
 	docker-compose -f $CUR/docker-compose.yml unpause mariadb_master
 	for i in $(seq 501 550); do
-		exec_sql $master_host "insert into ${db}.${tb} values($i,$i,$i,$i);"
+		exec_sql $master_port "insert into ${db}.${tb} values($i,$i);"
 	done
 
 	verify_result

@@ -13,20 +13,18 @@ mkdir -p $WORK_DIR
 db="db_pessimistic"
 tb="tb"
 
-master_host="172.28.128.6"
-slave_host="172.28.128.7"
-tidb_host="172.28.128.8"
+master_port="3306"
+slave_port="3307"
+tidb_port="4000"
 MASTER_PORT=8261
 WORKER1_PORT=8262
-WORKER2_PORT=8263
 
 function exec_sql() {
-	echo $2 | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306
-	# echo "show variables like '%gtid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306
+	echo $2 | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1
 }
 
 function exec_tidb() {
-	echo $2 | mysql -uroot -h$1 -P4000
+	echo $2 | mysql -uroot -h127.0.0.1 -P$1
 }
 
 function install_sync_diff() {
@@ -36,13 +34,12 @@ function install_sync_diff() {
 }
 
 function get_master_status() {
-	arr=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h$1 -P3306 | awk 'NR==2')
+	arr=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P3306 | awk 'NR==2')
 	echo $arr
 }
 
 function change_master_to_gtid() {
 	exec_sql $1 "stop slave;"
-	exec_sql $1 "change master to master_host='$2',master_user='root',master_password='123456',master_use_gtid=slave_pos;"
+	exec_sql $1 "change master to master_host='mariadb_master',master_port=$2,master_user='root',master_password='123456',master_use_gtid=slave_pos;"
 	exec_sql $1 "start slave;"
 }
-
