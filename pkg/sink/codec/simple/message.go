@@ -422,11 +422,11 @@ func buildRowChangedEvent(
 		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
 		if err != nil {
 			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
-			currentCorrupted = true
+			previousCorrupted = true
 		}
 		err = common.VerifyChecksum(columns, msg.Checksum.Current)
 		if err != nil {
-			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
+			log.Info("checksum corrupted on the current columns", zap.Any("message", msg))
 			currentCorrupted = true
 		}
 
@@ -438,7 +438,7 @@ func buildRowChangedEvent(
 		}
 
 		if msg.Checksum.Corrupted || previousCorrupted {
-			log.Warn("cdc detect previous checksum corrupted",
+			log.Warn("consumer detect previous checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
 			for _, col := range preColumns {
@@ -454,7 +454,7 @@ func buildRowChangedEvent(
 		}
 
 		if msg.Checksum.Corrupted || currentCorrupted {
-			log.Warn("cdc detect checksum corrupted",
+			log.Warn("consumer detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
 			for _, col := range columns {
