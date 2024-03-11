@@ -433,8 +433,6 @@ type Consumer struct {
 
 	eventRouter *dispatcher.EventRouter
 
-	tz *time.Location
-
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
@@ -450,7 +448,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		return nil, cerror.Annotate(err, "can not load timezone")
 	}
 	config.GetGlobalServerConfig().TZ = o.timezone
-	c.tz = tz
+	o.codecConfig.TimeZone = tz
 
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
@@ -575,7 +573,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		if err != nil {
 			return cerror.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic, c.tz)
+		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	default:

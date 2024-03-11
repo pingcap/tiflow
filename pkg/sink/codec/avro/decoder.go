@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -36,7 +35,6 @@ import (
 type decoder struct {
 	config *common.Config
 	topic  string
-	sc     *stmtctx.StatementContext
 
 	schemaM SchemaManager
 
@@ -49,13 +47,11 @@ func NewDecoder(
 	config *common.Config,
 	schemaM SchemaManager,
 	topic string,
-	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -119,7 +115,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 
-	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete)
+	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete, d.config.TimeZone)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -163,7 +159,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // keyMap hold primary key or unique key columns
 // valueMap hold all columns information
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
-func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete bool) (*model.RowChangedEvent, error) {
+func assembleEvent(
+	keyMap, valueMap, schema map[string]interface{}, isDelete bool, tz *time.Location,
+) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
@@ -215,7 +213,7 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 		if !ok {
 			return nil, errors.New("value not found")
 		}
-		value, err := getColumnValue(value, holder, mysqlType)
+		value, err := getColumnValue(value, holder, mysqlType, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -290,7 +288,9 @@ func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, err
 
 // value is an interface, need to convert it to the real value with the help of type info.
 // holder has the value's column info.
-func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType byte) (interface{}, error) {
+func getColumnValue(
+	value interface{}, holder map[string]interface{}, mysqlType byte, tz *time.Location,
+) (interface{}, error) {
 	switch t := value.(type) {
 	// for nullable columns, the value is encoded as a map with one pair.
 	// key is the encoded type, value is the encoded value, only care about the value here.
@@ -299,36 +299,43 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 			value = v
 		}
 	}
+	if value == nil {
+		return nil, nil
+	}
 
 	switch mysqlType {
 	case mysql.TypeEnum:
 		// enum type is encoded as string,
 		// we need to convert it to int by the order of the enum values definition.
 		allowed := strings.Split(holder["allowed"].(string), ",")
-		switch t := value.(type) {
-		case string:
-			enum, err := types.ParseEnum(allowed, t, "")
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			value = enum.Value
-		case nil:
-			value = nil
+		enum, err := types.ParseEnum(allowed, value.(string), "")
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		value = enum.Value
 	case mysql.TypeSet:
 		// set type is encoded as string,
 		// we need to convert it to int by the order of the set values definition.
 		elems := strings.Split(holder["allowed"].(string), ",")
-		switch t := value.(type) {
-		case string:
-			s, err := types.ParseSet(elems, t, "")
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			value = s.Value
-		case nil:
-			value = nil
+		s, err := types.ParseSet(elems, value.(string), "")
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		value = s.Value
+	case mysql.TypeTimestamp:
+		timestamp := value.(string)
+		// if timestamp contains microseconds,
+		// keep it in the value to match the TiDB representation.
+		format := "2006-01-02 15:04:05"
+		if strings.Contains(timestamp, ".") {
+			format = "2006-01-02 15:04:05.999999"
+		}
+
+		t, err := time.ParseInLocation(format, timestamp, tz)
+		if err != nil {
+			return "", err
+		}
+		return t.UTC().Format(format), nil
 	}
 	return value, nil
 }
