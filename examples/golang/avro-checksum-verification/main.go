@@ -379,6 +379,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		}
 	// all encoded as string
 	case mysql.TypeTimestamp:
+		// CAUTION: the timezone location should be the same as the ticdc server.
 		location := "local"
 		timestamp := value.(string)
 		loc, err := time.LoadLocation(location)
