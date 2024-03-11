@@ -33,6 +33,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/sink/observer"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+>>>>>>> 0424aba6e4 (gc(ticdc):  add min service gc safe point metrics (#10553))
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	tikvmetrics "github.com/tikv/client-go/v2/metrics"
@@ -65,6 +70,11 @@ func init() {
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 	scheduler.InitMetrics(registry)
+<<<<<<< HEAD
+=======
+	observer.InitMetrics(registry)
+	gc.InitMetrics(registry)
+>>>>>>> 0424aba6e4 (gc(ticdc):  add min service gc safe point metrics (#10553))
 	// TiKV client metrics, including metrics about resolved and region cache.
 	originalRegistry := prometheus.DefaultRegisterer
 	prometheus.DefaultRegisterer = registry
