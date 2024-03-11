@@ -178,7 +178,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tidwall/rtred v0.1.2 // indirect
-	github.com/tidwall/rtree v0.0.0-20180113144539-6cd427091e0e // indirect
 	github.com/tidwall/tinyqueue v0.1.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.47.0 // indirect
