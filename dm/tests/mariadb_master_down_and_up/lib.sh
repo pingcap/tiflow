@@ -3,7 +3,7 @@
 set -eu
 
 export TEST_DIR=/tmp/dm_test
-export TEST_NAME="upstream_switch_mariadb"
+export TEST_NAME="mariadb_master_down_and_up"
 export DM_MASTER_EXTRA_ARG=""
 
 WORK_DIR=$TEST_DIR/$TEST_NAME
