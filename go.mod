@@ -413,3 +413,5 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
 replace blainsmith.com/go/seahash => github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140
+
+replace github.com/go-mysql-org/go-mysql => github.com/okJiang/go-mysql v0.0.0-20240311092605-d4ec338e85f5

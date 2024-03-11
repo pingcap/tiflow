@@ -736,21 +736,23 @@ func GenMariaDBGTIDListEvent(header *replication.EventHeader, latestPos uint32, 
 		return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write Number of GTIDs %d", numOfGTIDs)
 	}
 
-	for _, mGTID := range mariaDBGSet.Sets {
-		// Replication Domain ID, 4 bytes
-		err = binary.Write(payload, binary.LittleEndian, mGTID.DomainID)
-		if err != nil {
-			return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write Replication Domain ID %d", mGTID.DomainID)
-		}
-		// Server_ID, 4 bytes
-		err = binary.Write(payload, binary.LittleEndian, mGTID.ServerID)
-		if err != nil {
-			return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write Server_ID %d", mGTID.ServerID)
-		}
-		// GTID sequence, 8 bytes
-		err = binary.Write(payload, binary.LittleEndian, mGTID.SequenceNumber)
-		if err != nil {
-			return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write GTID sequence %d", mGTID.SequenceNumber)
+	for _, set := range mariaDBGSet.Sets {
+		for _, mGTID := range set {
+			// Replication Domain ID, 4 bytes
+			err = binary.Write(payload, binary.LittleEndian, mGTID.DomainID)
+			if err != nil {
+				return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write Replication Domain ID %d", mGTID.DomainID)
+			}
+			// Server_ID, 4 bytes
+			err = binary.Write(payload, binary.LittleEndian, mGTID.ServerID)
+			if err != nil {
+				return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write Server_ID %d", mGTID.ServerID)
+			}
+			// GTID sequence, 8 bytes
+			err = binary.Write(payload, binary.LittleEndian, mGTID.SequenceNumber)
+			if err != nil {
+				return nil, terror.ErrBinlogWriteBinaryData.AnnotateDelegate(err, "write GTID sequence %d", mGTID.SequenceNumber)
+			}
 		}
 	}
 

@@ -17,7 +17,7 @@ services:
   mariadb_master:
     <<: *default-node
     image: mariadb:10.1
-    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=1 --binlog-format=ROW
+    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=0 --binlog-format=ROW
     container_name: mariadb_master
     hostname: mariadb_master
     ports:
@@ -26,7 +26,7 @@ services:
   mariadb_slave:
     <<: *default-node
     image: mariadb:10.1
-    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=2 --binlog-format=ROW
+    command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=0 --binlog-format=ROW
     container_name: mariadb_slave
     hostname: mariadb_slave
     ports:

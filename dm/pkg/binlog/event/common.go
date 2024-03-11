@@ -163,7 +163,11 @@ func GTIDIncrease(flavor string, gSet gmysql.GTIDSet) (gmysql.GTIDSet, error) {
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
 		mariaGTID.SequenceNumber++
 		gtidSet := new(gmysql.MariadbGTIDSet)
-		gtidSet.Sets = map[uint32]*gmysql.MariadbGTID{mariaGTID.DomainID: mariaGTID}
+		gtidSet.Sets = map[uint32]map[uint32]*gmysql.MariadbGTID{
+			mariaGTID.DomainID: {
+				mariaGTID.ServerID: mariaGTID,
+			},
+		}
 		clone = gtidSet
 	default:
 		err = terror.ErrBinlogGTIDSetNotValid.Generate(gSet, flavor)
@@ -207,7 +211,9 @@ func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
 			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(mariaGTIDs.Sets), gSet)
 		}
 		var mariaGTID *gmysql.MariadbGTID
-		for _, mariaGTID = range mariaGTIDs.Sets {
+		for _, set := range mariaGTIDs.Sets {
+			for _, mariaGTID = range set {
+			}
 		}
 		return mariaGTID, nil
 	default:
