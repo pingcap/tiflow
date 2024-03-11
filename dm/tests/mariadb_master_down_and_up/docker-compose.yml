@@ -13,6 +13,7 @@ x-node: &default-node
   environment:
     MYSQL_ROOT_PASSWORD: "123456"
 
+# In this case, gtid_domain_id should be the same, and gtid_strict_mode should be OFF.
 services:
   mariadb_master:
     <<: *default-node
