@@ -135,23 +135,23 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
-	columns := event.GetColumns()
 	if isCorrupted(valueMap) {
 		log.Warn("row data is corrupted",
 			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
-		for _, col := range columns {
+		for _, col := range event.Columns {
+			colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 			log.Info("data corrupted, print each column for debugging",
-				zap.String("name", col.Name),
-				zap.Any("type", col.Type),
-				zap.Any("charset", col.Charset),
-				zap.Any("flag", col.Flag),
+				zap.String("name", colInfo.Name.O),
+				zap.Any("type", colInfo.GetType()),
+				zap.Any("charset", colInfo.GetCharset()),
+				zap.Any("flag", colInfo.GetFlag()),
 				zap.Any("value", col.Value),
-				zap.Any("default", col.Default))
+				zap.Any("default", colInfo.GetDefaultValue()))
 		}
 	}
 
 	if found {
-		if err := common.VerifyChecksum(columns, uint32(expectedChecksum)); err != nil {
+		if err := common.VerifyChecksum(event.Columns, event.TableInfo.Columns, uint32(expectedChecksum)); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
