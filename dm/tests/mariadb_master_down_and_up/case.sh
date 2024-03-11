@@ -135,6 +135,8 @@ function test_master_down_and_up() {
 }
 
 function run() {
+	wait_mysql 3306 1
+	wait_mysql 3307 2
 	test_master_down_and_up
 }
 

@@ -43,3 +43,31 @@ function change_master_to_gtid() {
 	exec_sql $1 "change master to master_host='mariadb_master',master_port=$2,master_user='root',master_password='123456',master_use_gtid=slave_pos;"
 	exec_sql $1 "start slave;"
 }
+
+function wait_mysql() {
+	echo "-------wait_mysql--------"
+
+	i=0
+	while ! mysqladmin -h127.0.0.1 -P$1 -uroot ping --connect-timeout=1 >/dev/null 2>&1; do
+		echo "wait mysql"
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo "wait for mysql $1:3306 timeout"
+			exit 1
+		fi
+		sleep 1
+	done
+	i=0
+
+	server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1  | awk 'NR==2' | awk '{print $2}')
+	while [ "$server_id" != $2 ]; do
+		echo "wait server_id"
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo "different server_id: $server_id, expect: $2, host: $1"
+			exit 1
+		fi
+		sleep 1
+		server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1  | awk 'NR==2' | awk '{print $2}')
+	done
+}
