@@ -4,7 +4,6 @@ set -eu
 
 export TEST_DIR=/tmp/dm_test
 export TEST_NAME="upstream_switch"
-export DM_MASTER_EXTRA_ARG=""
 
 WORK_DIR=$TEST_DIR/$TEST_NAME
 rm -rf $WORK_DIR
