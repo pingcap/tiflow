@@ -480,7 +480,12 @@ func decodeColumns(
 			log.Panic("cannot found the value for the column",
 				zap.String("column", info.Name.O))
 		}
-		col := decodeColumn(info.Name.O, value, tableInfo, &info.FieldType)
+		columnID := tableInfo.ForceGetColumnIDByName(info.Name.O)
+		col := decodeColumn(value, columnID, &info.FieldType)
+		if col == nil {
+			log.Panic("cannot decode column",
+				zap.String("name", info.Name.O), zap.Any("data", value))
+		}
 		result = append(result, col)
 	}
 	return result
@@ -728,9 +733,9 @@ func encodeValue(
 	return result
 }
 
-func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fieldType *types.FieldType) *model.ColumnData {
+func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *model.ColumnData {
 	result := &model.ColumnData{
-		ColumnID: tableInfo.ForceGetColumnIDByName(name),
+		ColumnID: id,
 		Value:    value,
 	}
 	if value == nil {
@@ -743,8 +748,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = base64.StdEncoding.DecodeString(v)
 			if err != nil {
-				log.Panic("cannot decode binary value by using base64",
-					zap.String("name", name), zap.String("value", v))
 				return nil
 			}
 		default:
@@ -761,9 +764,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				log.Panic("invalid column value for bit / set",
-					zap.String("name", name), zap.Any("data", v),
-					zap.Any("type", fieldType.GetType()), zap.Error(err))
 				return nil
 			}
 		case []uint8:
@@ -778,8 +778,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				log.Panic("invalid column value for integral type",
-					zap.String("name", name), zap.Any("data", v))
 				return nil
 			}
 		default:
@@ -792,8 +790,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 			if err != nil {
 				value, err = strconv.ParseUint(v, 10, 64)
 				if err != nil {
-					log.Panic("invalid column value for bigint",
-						zap.String("name", name), zap.Any("data", v))
 					return nil
 				}
 			}
@@ -807,8 +803,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = strconv.ParseFloat(v, 32)
 			if err != nil {
-				log.Panic("invalid column value for float",
-					zap.String("name", name), zap.Any("data", v))
 				return nil
 			}
 		default:
@@ -819,8 +813,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = strconv.ParseFloat(v, 64)
 			if err != nil {
-				log.Panic("invalid column value for double",
-					zap.String("name", name), zap.Any("data", v))
 				return nil
 			}
 		default:
@@ -833,8 +825,6 @@ func decodeColumn(name string, value interface{}, tableInfo *model.TableInfo, fi
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				log.Panic("invalid column value for enum",
-					zap.String("name", name), zap.Any("data", v))
 				return nil
 			}
 		}
