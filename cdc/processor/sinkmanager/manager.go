@@ -128,6 +128,8 @@ type SinkManager struct {
 
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	metricsTableSinkFlushLagDuration prometheus.Observer
 }
 
 // New creates a new sink manager.
@@ -153,6 +155,9 @@ func New(
 		sinkRetry:           retry.NewInfiniteErrorRetry(),
 
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+
+		metricsTableSinkFlushLagDuration: tablesinkmetrics.TableSinkFlushLagDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
@@ -827,7 +832,7 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 			if m.sinkFactory.TryLock() {
 				defer m.sinkFactory.Unlock()
 				if m.sinkFactory.f != nil {
-					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows)
+					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.up.PDClock, m.metricsTableSinkTotalRows, m.metricsTableSinkFlushLagDuration)
 					version = m.sinkFactory.version
 				}
 			}

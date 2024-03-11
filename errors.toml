@@ -203,7 +203,7 @@ failed to convert ddl '%s' to filter event type
 
 ["CDC:ErrCorruptedDataMutation"]
 error = '''
-Changefeed %s.%s stopped due to corrupted data mutation received. Corrupted mutation detail information %+v
+Changefeed %s.%s stopped due to corrupted data mutation received
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]

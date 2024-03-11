@@ -39,7 +39,7 @@ func TestWriteDDLEvent(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -161,7 +161,7 @@ func TestAsyncExecAddIndex(t *testing.T) {
 		}()
 		if atomic.LoadInt32(&dbIndex) == 0 {
 			// test db
-			db, err := pmysql.MockTestDB(true)
+			db, err := pmysql.MockTestDB()
 			require.Nil(t, err)
 			return db, nil
 		}

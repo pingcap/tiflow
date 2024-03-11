@@ -1006,7 +1006,8 @@ type DDLEvent struct {
 	IsBootstrap  bool             `msg:"-"`
 	// BDRRole is the role of the TiDB cluster, it is used to determine whether
 	// the DDL is executed by the primary cluster.
-	BDRRole string `msg:"-"`
+	BDRRole string        `msg:"-"`
+	SQLMode mysql.SQLMode `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -1028,6 +1029,7 @@ func (d *DDLEvent) FromJobWithArgs(
 	d.Charset = job.Charset
 	d.Collate = job.Collate
 	d.BDRRole = job.BDRRole
+	d.SQLMode = job.SQLMode
 	switch d.Type {
 	// The query for "DROP TABLE" and "DROP VIEW" statements need
 	// to be rebuilt. The reason is elaborated as follows:

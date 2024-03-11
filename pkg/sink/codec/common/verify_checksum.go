@@ -18,6 +18,7 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -121,19 +122,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeEnum, TypeSet encoded as string
 	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case int64:
+			number = uint64(v)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, number)
 	case mysql.TypeBit:
-		var (
-			number uint64
-			err    error
-		)
+		var number uint64
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			number = MustBinaryLiteralToInt(v)
 		// TypeBit encoded as uint64 for the simple protocol
 		case uint64:
 			number = v
@@ -153,16 +155,22 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	case mysql.TypeTimestamp:
 		location := config.GetDefaultServerConfig().TZ
 		timestamp := value.(string)
+		// if timestamp contains microseconds,
+		// keep it in the value to match the TiDB representation.
+		format := "2006-01-02 15:04:05"
+		if strings.Contains(timestamp, ".") {
+			format = "2006-01-02 15:04:05.999999"
+		}
 
 		loc, err := util.GetTimezone(location)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		t, err := time.ParseInLocation(format, timestamp, loc)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		timestamp = t.UTC().Format(format)
 		buf = appendLengthValue(buf, []byte(timestamp))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:

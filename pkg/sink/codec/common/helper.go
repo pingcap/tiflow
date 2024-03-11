@@ -132,19 +132,19 @@ func SnapshotQuery(
 	return holder, nil
 }
 
-// BinaryLiteralToInt convert bytes into uint64,
+// MustBinaryLiteralToInt convert bytes into uint64,
 // by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
-func BinaryLiteralToInt(bytes []byte) (uint64, error) {
+func MustBinaryLiteralToInt(bytes []byte) uint64 {
 	bytes = trimLeadingZeroBytes(bytes)
 	length := len(bytes)
 
 	if length > 8 {
-		log.Error("invalid bit value found", zap.ByteString("value", bytes))
-		return math.MaxUint64, errors.New("invalid bit value")
+		log.Panic("invalid bit value found", zap.ByteString("value", bytes))
+		return math.MaxUint64
 	}
 
 	if length == 0 {
-		return 0, nil
+		return 0
 	}
 
 	// Note: the byte-order is BigEndian.
@@ -152,7 +152,7 @@ func BinaryLiteralToInt(bytes []byte) (uint64, error) {
 	for i := 1; i < length; i++ {
 		val = (val << 8) | uint64(bytes[i])
 	}
-	return val, nil
+	return val
 }
 
 func trimLeadingZeroBytes(bytes []byte) []byte {
