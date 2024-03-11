@@ -32,6 +32,11 @@ import (
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
 func VerifyChecksum(columns []*model.Column, expected uint32) error {
+	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
+	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
+	if expected == 0 {
+		return nil
+	}
 	checksum, err := calculateChecksum(columns)
 	if err != nil {
 		return errors.Trace(err)
