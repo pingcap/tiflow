@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/log"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -830,10 +832,36 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		}
 	case mysql.TypeTimestamp:
 		v := value.(map[string]interface{})
-		value = v["value"].(string)
+		timestamp := v["value"].(string)
+		location := v["location"].(string)
+		result, err := convertTimezone(timestamp, location)
+		if err != nil {
+			return nil
+		}
+		value = result
 	default:
 	}
 
 	result.Value = value
 	return result
+}
+
+func convertTimezone(timestamp string, location string) (string, error) {
+	loc, err := util.GetTimezone(location)
+	if err != nil {
+		return "", err
+	}
+
+	// if timestamp contains microseconds,
+	// keep it in the value to match the TiDB representation.
+	format := "2006-01-02 15:04:05"
+	if strings.Contains(timestamp, ".") {
+		format = "2006-01-02 15:04:05.999999"
+	}
+
+	t, err := time.ParseInLocation(format, timestamp, loc)
+	if err != nil {
+		return "", err
+	}
+	return t.UTC().Format(format), nil
 }

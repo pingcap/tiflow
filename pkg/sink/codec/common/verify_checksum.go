@@ -18,16 +18,12 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -159,25 +155,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		location := config.GetDefaultServerConfig().TZ
-		timestamp := value.(string)
-		// if timestamp contains microseconds,
-		// keep it in the value to match the TiDB representation.
-		format := "2006-01-02 15:04:05"
-		if strings.Contains(timestamp, ".") {
-			format = "2006-01-02 15:04:05.999999"
-		}
-
-		loc, err := util.GetTimezone(location)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		t, err := time.ParseInLocation(format, timestamp, loc)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		timestamp = t.UTC().Format(format)
-		buf = appendLengthValue(buf, []byte(timestamp))
+		buf = appendLengthValue(buf, []byte(value.(string)))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		buf = appendLengthValue(buf, []byte(value.(string)))

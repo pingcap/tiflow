@@ -79,64 +79,6 @@ func TestEncodeCheckpoint(t *testing.T) {
 	}
 }
 
-func TestEncodeChecksum(t *testing.T) {
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
-	defer helper.Close()
-
-	helper.Tk().MustExec("use test")
-
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.EnableRowChecksum = true
-	codecConfig.EncodingFormat = common.EncodingFormatAvro
-
-	createTableDDL := helper.DDL2Event("CREATE TABLE `t1` (`pk` varchar(32) NOT NULL, `sk` varchar(32) NOT NULL, `ts` timestamp(6) NOT NULL, `v` varchar(10240) DEFAULT NULL, PRIMARY KEY (`pk`,`sk`,`ts`) /*T![clustered_index] CLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
-
-	b, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := b.Build()
-
-	m, err := enc.EncodeDDLEvent(createTableDDL)
-	require.NoError(t, err)
-
-	dec, err := NewDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
-
-	_, err = dec.NextDDLEvent()
-	require.NoError(t, err)
-
-	insertEvent := helper.DML2Event("INSERT INTO `t1` VALUES ('168716582', 'z2_10', '2024-03-08 07:20:55.953494', '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')", "test", "t1")
-	err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
-
-	messages := enc.Build()
-	require.Len(t, messages, 1)
-
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
-
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
-	require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
-	require.False(t, decodedRow.Checksum.Corrupted)
-}
-
 func TestEncodeDMLEnableChecksum(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
@@ -844,9 +786,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			decodedRow, err = dec.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.Equal(t, decodedRow.CommitTs, insertEvent2.CommitTs)
-			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), insertEvent2.TableInfo.GetSchemaName())
-			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent2.TableInfo.GetTableName())
+			require.Equal(t, insertEvent2.CommitTs, decodedRow.CommitTs)
+			require.Equal(t, insertEvent2.TableInfo.GetSchemaName(), decodedRow.TableInfo.GetSchemaName())
+			require.Equal(t, insertEvent2.TableInfo.GetTableName(), decodedRow.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
 			helper.Tk().MustExec("drop table test.abc")
@@ -1210,7 +1152,14 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+					expectedValue := col.Value
+					if colInfo.GetType() == mysql.TypeTimestamp {
+						timezone := config.GetGlobalServerConfig().TZ
+						expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+						require.NoError(t, err)
+					}
+					require.EqualValues(t, expectedValue, decoded.Value)
 				}
 
 				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
@@ -1222,7 +1171,14 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedPreviousColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+					expectedValue := col.Value
+					if colInfo.GetType() == mysql.TypeTimestamp {
+						timezone := config.GetGlobalServerConfig().TZ
+						expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+						require.NoError(t, err)
+					}
+					require.EqualValues(t, expectedValue, decoded.Value)
 				}
 			}
 		}
@@ -1340,7 +1296,14 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.EqualValues(t, col.Value, decoded.Value)
+				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				expectedValue := col.Value
+				if colInfo.GetType() == mysql.TypeTimestamp {
+					timezone := config.GetGlobalServerConfig().TZ
+					expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+					require.NoError(t, err)
+				}
+				require.EqualValues(t, expectedValue, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
@@ -1351,7 +1314,14 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.EqualValues(t, col.Value, decoded.Value)
+				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				expectedValue := col.Value
+				if colInfo.GetType() == mysql.TypeTimestamp {
+					timezone := config.GetGlobalServerConfig().TZ
+					expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+					require.NoError(t, err)
+				}
+				require.EqualValues(t, expectedValue, decoded.Value)
 			}
 		}
 	}
