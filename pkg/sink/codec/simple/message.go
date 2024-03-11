@@ -831,14 +831,14 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 			}
 		}
 	case mysql.TypeTimestamp:
-		v := value.(map[string]interface{})
-		timestamp := v["value"].(string)
-		location := v["location"].(string)
-		result, err := convertTimezone(timestamp, location)
+		data := value.(map[string]interface{})
+		ts := data["value"].(string)
+		location := data["location"].(string)
+		ts, err := convertTimezone(ts, location)
 		if err != nil {
 			return nil
 		}
-		value = result
+		value = ts
 	default:
 	}
 
@@ -849,6 +849,8 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 func convertTimezone(timestamp string, location string) (string, error) {
 	loc, err := util.GetTimezone(location)
 	if err != nil {
+		log.Info("cannot load timezone location",
+			zap.String("location", location), zap.Error(err))
 		return "", err
 	}
 
@@ -861,6 +863,10 @@ func convertTimezone(timestamp string, location string) (string, error) {
 
 	t, err := time.ParseInLocation(format, timestamp, loc)
 	if err != nil {
+		log.Info("parse timestamp in location failed",
+			zap.String("timestamp", timestamp),
+			zap.String("location", location),
+			zap.Error(err))
 		return "", err
 	}
 	return t.UTC().Format(format), nil
