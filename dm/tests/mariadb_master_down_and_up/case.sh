@@ -101,7 +101,7 @@ function clean_task() {
 function test_master_down_and_up() {
 	cleanup_process
 	clean_data
-	# install_sync_diff
+	install_sync_diff
 	setup_replica
 	gen_full_data
 	run_dm_components_and_create_sources
