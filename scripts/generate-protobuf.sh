@@ -61,8 +61,8 @@ generate ./dm/pb ./dm/proto/dmworker.proto plugins=grpc,protoc-gen-grpc-gateway=
 generate ./dm/pb ./dm/proto/dmmaster.proto plugins=grpc,protoc-gen-grpc-gateway="$GRPC_GATEWAY"
 
 for pb in $(find cdc -name '*.proto'); do
-    # Output generated go files next to protobuf files.
-    generate ./cdc $pb paths="source_relative"
+	# Output generated go files next to protobuf files.
+	generate ./cdc $pb paths="source_relative"
 done
 
 echo "generate enginepb..."
