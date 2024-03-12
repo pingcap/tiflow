@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -121,6 +120,9 @@ type changefeed struct {
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
+
+	metricsChangefeedCreateTimeGuage  prometheus.Gauge
+	metricsChangefeedRestartTimeGauge prometheus.Gauge
 
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
@@ -536,7 +538,7 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	filter, err := pfilter.NewFilter(c.state.Info.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -636,6 +638,8 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
@@ -667,6 +671,11 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedCreateTimeGuage = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "create")
+	c.metricsChangefeedRestartTimeGauge = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "restart")
 }
 
 // releaseResources is idempotent.
@@ -744,6 +753,8 @@ func (c *changefeed) cleanupMetrics() {
 
 	if c.isRemoved {
 		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+		changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "create")
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "restart")
 	}
 }
 
