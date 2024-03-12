@@ -3,6 +3,7 @@
 ### Run integration tests locally
 
 1. Run `make prepare_test_binaries community=true` to generate TiCDC related binaries for integration test.
+You can specify version and arch, for example: `make prepare_test_binaries community=true ver=v7.0.0 arch=amd64`
 
 2. These are programs/packages need be installed.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
