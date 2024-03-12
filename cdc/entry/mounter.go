@@ -284,6 +284,15 @@ func (m *mounter) decodeRow(
 		return nil, false, errors.Trace(err)
 	}
 
+	//colIDs := make([]int64, 0, len(datums))
+	//columns := make([]types.Datum, 0, len(datums))
+	//for colID, datum := range datums {
+	//	colIDs = append(colIDs, colID)
+	//	columns = append(columns, datum)
+	//}
+	//var encoder rowcodec.Encoder
+	//encoder.Encode(m.tz, colIDs, columns, nil, tablecodec.EncodeRecordKey(recordPrefix, recordID))
+
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
@@ -391,8 +400,8 @@ func datum2Column(
 	return cols, rawCols, columnInfos, nil
 }
 
-func (m *mounter) calculateChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+func calculateColumnChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, tz *time.Location,
 ) (uint32, error) {
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
@@ -411,29 +420,16 @@ func (m *mounter) calculateChecksum(
 		Data: make([]byte, 0),
 	}
 
-	checksum, err := calculator.Checksum(m.tz)
+	checksum, err := calculator.Checksum(tz)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 	return checksum, nil
 }
 
-// return error when calculate the checksum failed.
-// return false if the checksum is not matched
-func (m *mounter) verifyChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
+func verifyColumnChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, decoder *rowcodec.DatumMapDecoder, tz *time.Location,
 ) (uint32, bool, error) {
-	if !m.integrity.Enabled() {
-		return 0, true, nil
-	}
-
-	var decoder *rowcodec.DatumMapDecoder
-	if isPreRow {
-		decoder = m.preDecoder
-	} else {
-		decoder = m.decoder
-	}
-
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
@@ -441,7 +437,7 @@ func (m *mounter) verifyChecksum(
 		return 0, true, nil
 	}
 
-	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
+	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, tz)
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, false, err
@@ -474,6 +470,90 @@ func (m *mounter) verifyChecksum(
 		zap.Uint32("first", first),
 		zap.Uint32("extra", extra))
 	return checksum, false, nil
+}
+
+func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
+	switch ft.GetType() {
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
+		t, err := types.ParseTime(types.StrictContext, value.(string), ft.GetType(), ft.GetDecimal())
+		return types.NewTimeDatum(t), nil
+	case mysql.TypeDuration:
+		d, b, err := types.ParseDuration(types.StrictContext, value.(string), ft.GetDecimal())
+		return types.NewDurationDatum(d), nil
+	case mysql.TypeJSON:
+		bj, err := types.ParseBinaryJSONFromString(value.(string))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewJSONDatum(bj), nil
+	case mysql.TypeNewDecimal:
+	case mysql.TypeEnum:
+	case mysql.TypeSet:
+	case mysql.TypeBit:
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeFloat:
+	case mysql.TypeDouble:
+	default:
+	}
+	return types.Datum{}, nil
+}
+
+func verifyRawBytesChecksum(
+	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, tz *time.Location,
+) (uint32, bool, error) {
+	expectedRawChecksum, ok := decoder.GetChecksum()
+	if !ok {
+		return 0, true, nil
+	}
+	var (
+		columnIDs []int64
+		datums    []types.Datum
+		//
+		//handleColData []*model.ColumnData
+	)
+	//_, fieldTypes, _ := tableInfo.GetRowColInfos()
+	//tableInfo.GetColumnInfo(col.column)
+	for _, col := range columns {
+		columnID := col.ColumnID
+		columnIDs = append(columnIDs, columnID)
+		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
+		datum, err := newDatum(col.Value, columnInfo.FieldType)
+		if err != nil {
+			return 0, false, errors.Trace(err)
+		}
+		datums = append(datums, datum)
+	}
+
+	return expectedRawChecksum, true, nil
+}
+
+// return error when calculate the checksum.
+// return false if the checksum is not matched
+func (m *mounter) verifyChecksum(
+	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
+	columns []*model.ColumnData, rawColumns []types.Datum, isPreRow bool,
+) (uint32, bool, error) {
+	if !m.integrity.Enabled() {
+		return 0, true, nil
+	}
+
+	var decoder *rowcodec.DatumMapDecoder
+	if isPreRow {
+		decoder = m.preDecoder
+	} else {
+		decoder = m.decoder
+	}
+
+	version := decoder.ChecksumVersion()
+	switch version {
+	case 0:
+		return verifyColumnChecksum(columnInfos, rawColumns, decoder, m.tz)
+	case 1:
+		return verifyRawBytesChecksum(tableInfo, columns, decoder, m.tz)
+	default:
+	}
+	return 0, false, errors.Errorf("unknown checksum version %d", version)
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
@@ -509,7 +589,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, true)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
@@ -541,7 +621,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, false)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
