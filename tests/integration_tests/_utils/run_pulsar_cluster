@@ -166,7 +166,7 @@ echo "Waiting for pulsar port to be ready..."
 i=0
 while ! nc -z localhost "$pulsar_port"; do
 	i=$((i + 1))
-	if [ "$i" -gt 10 ]; then
+	if [ "$i" -gt 20 ]; then
 		cat $workdir/pulsar_stdout.log
 		echo 'Failed to start pulsar'
 		exit 1
@@ -178,7 +178,7 @@ echo "Waiting for pulsar namespace to be ready..."
 i=0
 while ! $pulsar_dir/bin/pulsar-admin namespaces list public; do
 	i=$((i + 1))
-	if [ "$i" -gt 10 ]; then
+	if [ "$i" -gt 20 ]; then
 		cat $workdir/pulsar_stdout.log
 		echo 'Failed to list pulsar namespace'
 		exit 1
