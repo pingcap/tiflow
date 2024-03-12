@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pingcap/log"
@@ -847,6 +846,11 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 }
 
 func convertTimezone(timestamp string, location string) (string, error) {
+	t, err := tiTypes.ParseTimestamp(tiTypes.StrictContext, timestamp)
+	if err != nil {
+		return "", err
+	}
+
 	loc, err := util.GetTimezone(location)
 	if err != nil {
 		log.Info("cannot load timezone location",
@@ -854,20 +858,10 @@ func convertTimezone(timestamp string, location string) (string, error) {
 		return "", err
 	}
 
-	// if timestamp contains microseconds,
-	// keep it in the value to match the TiDB representation.
-	format := "2006-01-02 15:04:05"
-	if strings.Contains(timestamp, ".") {
-		format = "2006-01-02 15:04:05.999999"
-	}
-
-	t, err := time.ParseInLocation(format, timestamp, loc)
+	err = t.ConvertTimeZone(loc, time.UTC)
 	if err != nil {
-		log.Info("parse timestamp in location failed",
-			zap.String("timestamp", timestamp),
-			zap.String("location", location),
-			zap.Error(err))
 		return "", err
 	}
-	return t.UTC().Format(format), nil
+
+	return t.String(), nil
 }
