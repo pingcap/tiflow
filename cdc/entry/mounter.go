@@ -474,11 +474,18 @@ func verifyColumnChecksum(
 
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	switch ft.GetType() {
+	// todo: what is `TypeNewDate` and when it used.
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		t, err := types.ParseTime(types.StrictContext, value.(string), ft.GetType(), ft.GetDecimal())
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
 		return types.NewTimeDatum(t), nil
 	case mysql.TypeDuration:
-		d, b, err := types.ParseDuration(types.StrictContext, value.(string), ft.GetDecimal())
+		d, _, err := types.ParseDuration(types.StrictContext, value.(string), ft.GetDecimal())
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
 		return types.NewDurationDatum(d), nil
 	case mysql.TypeJSON:
 		bj, err := types.ParseBinaryJSONFromString(value.(string))
@@ -487,14 +494,39 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		}
 		return types.NewJSONDatum(bj), nil
 	case mysql.TypeNewDecimal:
+		mysqlDecimal := new(types.MyDecimal)
+		err := mysqlDecimal.FromString([]byte(value.(string)))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewDecimalDatum(mysqlDecimal), nil
 	case mysql.TypeEnum:
+		enum, err := types.ParseEnum(ft.GetElems(), value.(string), ft.GetCollate())
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewMysqlEnumDatum(enum), nil
 	case mysql.TypeSet:
+		set, err := types.ParseSetName(ft.GetElems(), value.(string), ft.GetCollate())
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewMysqlSetDatum(set, ft.GetCollate()), nil
 	case mysql.TypeBit:
+		binaryLiteral, err := types.ParseBitStr()
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewMysqlBitDatum(binaryLiteral), nil
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		return types.NewStringDatum(value.(string)), nil
 	case mysql.TypeFloat:
+		return types.NewFloat32Datum(float32(value.(float64))), nil
 	case mysql.TypeDouble:
+		return types.NewFloat64Datum(value.(float64)), nil
 	default:
+		log.Panic("unexpected mysql type found", zap.Any("type", ft.GetType()))
 	}
 	return types.Datum{}, nil
 }
