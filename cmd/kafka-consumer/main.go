@@ -455,7 +455,8 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
-		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
+		upstreamTiDBDSN := o.upstreamTiDBDSN + "&time_zone=" + o.timezone
+		db, err := openDB(ctx, upstreamTiDBDSN)
 		if err != nil {
 			return nil, err
 		}
