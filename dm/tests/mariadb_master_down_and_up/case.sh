@@ -129,7 +129,7 @@ function test_master_down_and_up() {
 	done
 
 	verify_result
-	
+
 	clean_task
 	echo "CASE=test_master_down_and_up success"
 }

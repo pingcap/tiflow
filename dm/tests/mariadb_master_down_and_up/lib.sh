@@ -59,7 +59,7 @@ function wait_mysql() {
 	done
 	i=0
 
-	server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1  | awk 'NR==2' | awk '{print $2}')
+	server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1 | awk 'NR==2' | awk '{print $2}')
 	while [ "$server_id" != $2 ]; do
 		echo "wait server_id"
 		i=$((i + 1))
@@ -68,6 +68,6 @@ function wait_mysql() {
 			exit 1
 		fi
 		sleep 1
-		server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1  | awk 'NR==2' | awk '{print $2}')
+		server_id=$(echo "show variables like 'server_id';" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P$1 | awk 'NR==2' | awk '{print $2}')
 	done
 }
