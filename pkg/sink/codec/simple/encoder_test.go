@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1155,7 +1156,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 					expectedValue := col.Value
 					if colInfo.GetType() == mysql.TypeTimestamp {
-						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
+						expectedValue, err = util.ConvertTimezone(expectedValue.(string), "Local")
 						require.NoError(t, err)
 					}
 					require.EqualValues(t, expectedValue, decoded.Value)
@@ -1173,7 +1174,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 					expectedValue := col.Value
 					if colInfo.GetType() == mysql.TypeTimestamp {
-						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
+						expectedValue, err = util.ConvertTimezone(expectedValue.(string), "Local")
 						require.NoError(t, err)
 					}
 					require.EqualValues(t, expectedValue, decoded.Value)
@@ -1297,7 +1298,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				expectedValue := col.Value
 				if colInfo.GetType() == mysql.TypeTimestamp {
-					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
+					expectedValue, err = util.ConvertTimezone(expectedValue.(string), "Local")
 					require.NoError(t, err)
 				}
 				require.EqualValues(t, expectedValue, decoded.Value)
@@ -1314,7 +1315,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				expectedValue := col.Value
 				if colInfo.GetType() == mysql.TypeTimestamp {
-					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
+					expectedValue, err = util.ConvertTimezone(expectedValue.(string), "Local")
 					require.NoError(t, err)
 				}
 				require.EqualValues(t, expectedValue, decoded.Value)

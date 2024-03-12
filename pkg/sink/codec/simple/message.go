@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -832,7 +833,7 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		data := value.(map[string]interface{})
 		ts := data["value"].(string)
 		location := data["location"].(string)
-		ts, err := convertTimezone(ts, location)
+		ts, err := util.ConvertTimezone(ts, location)
 		if err != nil {
 			return nil
 		}
@@ -842,25 +843,4 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 
 	result.Value = value
 	return result
-}
-
-func convertTimezone(timestamp string, location string) (string, error) {
-	t, err := tiTypes.ParseTimestamp(tiTypes.StrictContext, timestamp)
-	if err != nil {
-		return "", err
-	}
-
-	loc, err := time.LoadLocation(location)
-	if err != nil {
-		log.Info("cannot load timezone location",
-			zap.String("location", location), zap.Error(err))
-		return "", err
-	}
-
-	err = t.ConvertTimeZone(loc, time.UTC)
-	if err != nil {
-		return "", err
-	}
-
-	return t.String(), nil
 }

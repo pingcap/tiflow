@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -324,18 +325,11 @@ func getColumnValue(
 		value = s.Value
 	case mysql.TypeTimestamp:
 		timestamp := value.(string)
-		// if timestamp contains microseconds,
-		// keep it in the value to match the TiDB representation.
-		format := "2006-01-02 15:04:05"
-		if strings.Contains(timestamp, ".") {
-			format = "2006-01-02 15:04:05.999999"
-		}
-
-		t, err := time.ParseInLocation(format, timestamp, tz)
+		timestamp, err := util.ConvertTimezone(timestamp, tz.String())
 		if err != nil {
 			return "", err
 		}
-		return t.UTC().Format(format), nil
+		return timestamp, nil
 	}
 	return value, nil
 }

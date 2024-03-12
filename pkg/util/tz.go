@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	tiTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/timeutil"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -80,4 +81,26 @@ func GetTimeZoneName(tz *time.Location) string {
 		return ""
 	}
 	return tz.String()
+}
+
+// ConvertTimezone converts the timestamp to the specified timezone
+func ConvertTimezone(timestamp string, location string) (string, error) {
+	t, err := tiTypes.ParseTimestamp(tiTypes.StrictContext, timestamp)
+	if err != nil {
+		return "", err
+	}
+
+	loc, err := time.LoadLocation(location)
+	if err != nil {
+		log.Info("cannot load timezone location",
+			zap.String("location", location), zap.Error(err))
+		return "", err
+	}
+
+	err = t.ConvertTimeZone(loc, time.UTC)
+	if err != nil {
+		return "", err
+	}
+
+	return t.String(), nil
 }
