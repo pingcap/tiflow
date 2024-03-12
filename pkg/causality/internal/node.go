@@ -147,6 +147,7 @@ func (n *Node) Remove() {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
 			stdatomic.AddInt32(&node.removedDependencies, 1)
+			//time.Sleep(5 * time.Millisecond)
 			node.maybeReadyToRun()
 			return true
 		})
@@ -195,9 +196,25 @@ func (n *Node) assignTo(workerID int64) bool {
 }
 
 func (n *Node) maybeReadyToRun() {
+	// check whether the node still exists.
+	// now there are two places may call maybeReadyToRun
+	// one is self.DependOn, the other is the prevNode's Remove.
+	// So here is a corner case:
+	//   A depends B, and when A calls the depend-on, and B call the removed
+	//   when b do the remove, it reduce a's removedDependencies to make a reach the checkReadiness condition
+	//   Besides, when B reduce a's removedDependencies but before call a's maybeReadyToRun
+	//   A run into the depend-on's maybyReadyToRun and do assign to -- sendToWorker -- remove -- Free
+	//   So now A is in `free`, but now B still call A's maybeReadyToRun, it will have data race or even panic
 	if ok := n.checkReadiness(); ok {
+		n.mu.Lock()
+		if n.id == invalidNodeID {
+			n.mu.Unlock()
+			return
+		}
+		id := n.RandWorkerID()
+		n.mu.Unlock()
 		// Assign the node to the worker directly.
-		n.assignTo(n.RandWorkerID())
+		n.assignTo(id)
 	}
 }
 

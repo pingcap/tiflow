@@ -27,8 +27,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker_build:
-    name: Docker Build
+  ut_run1:
+    name: ut_run1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+  ut_run2:
+    name: ut_run2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+
+  ut_run3:
+    name: ut_run3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+
+  ut_run4:
+    name: ut_run4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+  
+  ut_run5:
+    name: ut_run5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+  ut_run6:
+    name: ut_run6
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+
+  ut_run7:
+    name: ut_run7
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make unit_test
+        run : make unit_test_in_verify_ci
+
+  ut_run8:
+    name: ut_run8
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
