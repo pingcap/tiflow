@@ -83,9 +83,9 @@ credential_json=$(
 		        "client_id":"1234",
 		        "client_secret":"e0KVlA2EiBfjoN13olyZd2kv1KL",
 		        "audience":"cdc-api-uri",
-		        "grant_type":"client_credentials",
+		        "issuer_url":"http://localhost:9096",
 		        "type": "client_credentials"
-		      }
+		    }
 	EOF
 )
 
