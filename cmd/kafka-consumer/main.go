@@ -626,10 +626,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
-				if partition == 0 && ddl.Query != "" {
-					c.appendDDL(ddl)
-				}
 
 				if simple, ok := decoder.(*simple.Decoder); ok {
 					cachedEvents := simple.GetCachedEvents()
@@ -651,6 +647,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
+				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
+				if partition == 0 && ddl.Query != "" {
+					c.appendDDL(ddl)
+				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
@@ -660,7 +660,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-
+				// when using simple protocol, the row may be nil, since it's table info not received yet,
+				// it's cached in the decoder, so just continue here.
+				if row == nil {
+					continue
+				}
 				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
 				if err != nil {
 					return cerror.Trace(err)
