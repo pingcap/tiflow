@@ -52,9 +52,9 @@ function run() {
         auth-tls-private-key-path="${WORK_DIR}/broker_client.key-pk8.pem"
         auth-tls-certificate-path="${WORK_DIR}/broker_client.cert.pem"
 EOF
-		cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config=$WORK_DIR/pulsar_test.toml
+		cdc cli changefeed create --sink-uri="$SINK_URI" --config=$WORK_DIR/pulsar_test.toml
 	else
-		cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+		cdc cli changefeed create --sink-uri="$SINK_URI"
 	fi
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
