@@ -57,10 +57,10 @@ mtls_client_conf=$(
 oauth_client_conf=$(
 	cat <<-EOF
 
-    webServiceUrl=http://localhost:8080/
-    brokerServiceUrl=pulsar://localhost:6650/
-    authPlugin=org.apache.pulsar.client.impl.auth.oauth2.AuthenticationOAuth2
-    authParams={"privateKey":"${workdir}/credential.json","audience":"cdc-api-uri","issuerUrl":"http://localhost:9096"}
+		    webServiceUrl=http://localhost:8080/
+		    brokerServiceUrl=pulsar://localhost:6650/
+		    authPlugin=org.apache.pulsar.client.impl.auth.oauth2.AuthenticationOAuth2
+		    authParams={"privateKey":"${workdir}/credential.json","audience":"cdc-api-uri","issuerUrl":"http://localhost:9096"}
 	EOF
 )
 
@@ -72,21 +72,21 @@ oauth_conf=$(
 
 		brokerClientAuthenticationPlugin=org.apache.pulsar.client.impl.auth.oauth2.AuthenticationOAuth2
 		brokerClientAuthenticationParameters={"privateKey":"file://${workdir}/credential.json","audience":"cdc-api-uri","issuerUrl":"http://localhost:9096"}
-		tokenSecretKey=file://${workdir}/token-secret.key
+		tokenSecretKey=data:;base64,U0poWDM2X0thcFlTeWJCdEpxMzVseFhfQnJyNExSVVJTa203UW1YSkdteThwVUZXOUVJT2NWUVBzeWt6OS1qag==
 	EOF
 )
 
 credential_json=$(
-  	cat <<-EOF
+	cat <<-EOF
 
-  		{
-        "client_id":"1234",
-        "client_secret":"e0KVlA2EiBfjoN13olyZd2kv1KL",
-        "audience":"cdc-api-uri",
-        "grant_type":"client_credentials",
-        "type": "client_credentials"
-      }
-    EOF
+		    {
+		        "client_id":"1234",
+		        "client_secret":"e0KVlA2EiBfjoN13olyZd2kv1KL",
+		        "audience":"cdc-api-uri",
+		        "grant_type":"client_credentials",
+		        "type": "client_credentials"
+		      }
+	EOF
 )
 
 cert_server_conf=$(
@@ -130,8 +130,7 @@ function gen_mtls_config() {
 }
 
 function gen_oauth_config() {
-    echo "$credential_json" >${workdir}/credential.json
-    echo "SJhX36_KapYSybBtJq35lxX_Brr4LRURSkm7QmXJGmy8pUFW9EIOcVQPsykz9-jj" >${workdir}/token-secret.key
+	echo "$credential_json" >${workdir}/credential.json
 	echo "$oauth_conf" >>${workdir}/pulsar_standalone.conf
 	echo "$oauth_client_conf" >${pulsar_dir}/conf/client.conf
 }
@@ -144,18 +143,18 @@ if [ "$cluster_type" == "mtls" ]; then
 	pulsar_port=6651
 	gen_mtls_config
 elif [ "$cluster_type" == "oauth" ]; then
-    oauth2-server >>$workdir/oauth_server.log 2>&1 &
-    echo "Waiting for oauth2 server to be ready..."
-    i=0
-    while ! nc -z localhost "9096"; do
-    	i=$((i + 1))
-    	if [ "$i" -gt 10 ]; then
-    		cat $workdir/oauth_server.log
-    		echo 'Failed to start oauth2 server'
-    		exit 1
-    	fi
-    	sleep 2
-    done
+	oauth2-server >>$workdir/oauth_server.log 2>&1 &
+	echo "Waiting for oauth2 server to be ready..."
+	i=0
+	while ! nc -z localhost "9096"; do
+		i=$((i + 1))
+		if [ "$i" -gt 10 ]; then
+			cat $workdir/oauth_server.log
+			echo 'Failed to start oauth2 server'
+			exit 1
+		fi
+		sleep 2
+	done
 	gen_oauth_config
 else
 	echo "no cluster type specified, using default configuration."
