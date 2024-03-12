@@ -37,7 +37,7 @@ function run() {
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&max-message-bytes=2048"
 	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" --no-confirm
 	run_cdc_cli changefeed resume -c ${changefeed_id}
-	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?time_zone=utc" --config="$CUR/conf/changefeed.toml" 2>&1 &
+	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?time_zone=UTC" --config="$CUR/conf/changefeed.toml" 2>&1 &
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
