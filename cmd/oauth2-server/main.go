@@ -162,6 +162,6 @@ func run(_ *cobra.Command, _ []string) {
 func logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
-		log.Info("Executing middlewareOne", zap.String("path", r.URL.Path))
+		log.Info("oauth server api is called", zap.String("path", r.URL.Path))
 	})
 }
