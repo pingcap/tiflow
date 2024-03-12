@@ -2,20 +2,18 @@
 
 ### Run integration tests locally
 
-1. Run `make prepare_test_binaries` to generate TiCDC related binaries for integration test.
-If you are running tests on MacOS Silicon, run `make prepare_test_binaries os=darwin arch=arm64`.
-   
+1. Run `make prepare_test_binaries community=true` to generate TiCDC related binaries for integration test.
 
-2. These are programs/packages need be installed. 
+2. These are programs/packages need be installed.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
      currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
    * [s3cmd](https://s3tools.org/download)
    * unzip
    * psmisc
-   
+
    > You can install `unzip` and `psmisc` using `apt-get` (Ubuntu / Debian) or `yum` (RHEL).
-   
-   > Since the integration test cases will use port 3306 on localhost, please make sure in advance that port 3306 is 
+
+   > Since the integration test cases will use port 3306 on localhost, please make sure in advance that port 3306 is
    > not occupied. (You’d like to stop the local MySQL service on port 3306, if there is one)
 
 3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts
@@ -45,10 +43,10 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 > These scripts and files may not work under the arm architecture,
 > and we have not tested against it. We will try to resolve it as soon as possible.
 >
-> The script is designed to download necessary binaries from the PingCAP 
-> intranet by default, requiring access to the PingCAP intranet. However, 
-> if you want to download the community version, you can specify it through 
-> the `COMMUNITY` environment variable. For instance, you can use the following 
+> The script is designed to download necessary binaries from the PingCAP
+> intranet by default, requiring access to the PingCAP intranet. However,
+> if you want to download the community version, you can specify it through
+> the `COMMUNITY` environment variable. For instance, you can use the following
 > command as an example:
 > `BRANCH=master COMMUNITY=true VERSION=v7.0.0 START_AT="clustered_index" make kafka_docker_integration_test_with_build`
 
@@ -85,7 +83,7 @@ Some useful tips:
    2. Execute `tests/integration_tests/run.sh`
 
    > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
-   
+
    > If want to run integration test cases from the specified one, just pass the START_AT parameter, such as `make integration_test START_AT=simple` .
 
    > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).

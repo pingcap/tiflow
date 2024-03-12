@@ -25,7 +25,7 @@ branch=${1:-master}
 # Specify whether to download the community version of binaries, the following
 # four arguments are applicable only when utilizing the community version of
 # binaries.
-community=${2:-true}
+community=${2:-false}
 # Specify which version of the community binaries that will be utilized.
 ver=${3:-v6.5.2}
 # Specify which os that will be used to pack the binaries.
