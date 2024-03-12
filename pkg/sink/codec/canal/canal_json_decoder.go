@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -66,20 +65,9 @@ func NewBatchDecoder(
 		}
 	}
 
-	if codecConfig.LargeMessageHandle.HandleKeyOnly() {
-		if db == nil {
-			return nil, cerror.ErrCodecDecode.
-				GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
-		}
-		query := fmt.Sprintf("set global time_zone=%s", codecConfig.TimeZone.String())
-		conn, err := db.Conn(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		_, err = conn.ExecContext(ctx, query)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	if codecConfig.LargeMessageHandle.HandleKeyOnly() && db == nil {
+		return nil, cerror.ErrCodecDecode.
+			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
 	return &batchDecoder{
