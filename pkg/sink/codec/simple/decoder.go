@@ -154,7 +154,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		log.Warn("table info not found for the event, "+
+		log.Debug("table info not found for the event, "+
 			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
 			zap.String("schema", d.msg.Schema),
 			zap.String("table", d.msg.Table),

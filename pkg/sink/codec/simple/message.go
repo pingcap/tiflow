@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -851,7 +850,7 @@ func convertTimezone(timestamp string, location string) (string, error) {
 		return "", err
 	}
 
-	loc, err := util.GetTimezone(location)
+	loc, err := time.LoadLocation(location)
 	if err != nil {
 		log.Info("cannot load timezone location",
 			zap.String("location", location), zap.Error(err))

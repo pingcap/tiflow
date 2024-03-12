@@ -1155,8 +1155,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 					expectedValue := col.Value
 					if colInfo.GetType() == mysql.TypeTimestamp {
-						timezone := config.GetGlobalServerConfig().TZ
-						expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
 						require.NoError(t, err)
 					}
 					require.EqualValues(t, expectedValue, decoded.Value)
@@ -1174,8 +1173,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 					expectedValue := col.Value
 					if colInfo.GetType() == mysql.TypeTimestamp {
-						timezone := config.GetGlobalServerConfig().TZ
-						expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
 						require.NoError(t, err)
 					}
 					require.EqualValues(t, expectedValue, decoded.Value)
@@ -1299,8 +1297,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				expectedValue := col.Value
 				if colInfo.GetType() == mysql.TypeTimestamp {
-					timezone := config.GetGlobalServerConfig().TZ
-					expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
 					require.NoError(t, err)
 				}
 				require.EqualValues(t, expectedValue, decoded.Value)
@@ -1317,8 +1314,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				expectedValue := col.Value
 				if colInfo.GetType() == mysql.TypeTimestamp {
-					timezone := config.GetGlobalServerConfig().TZ
-					expectedValue, err = convertTimezone(expectedValue.(string), timezone)
+					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
 					require.NoError(t, err)
 				}
 				require.EqualValues(t, expectedValue, decoded.Value)
