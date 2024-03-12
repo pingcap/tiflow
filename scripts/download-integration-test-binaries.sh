@@ -101,7 +101,7 @@ function download_community_binaries() {
 	download "$minio_url" "minio" "third_bin/minio"
 
 	# jq
-	local os_system=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
+	local os_name=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
 	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_system}-${arch}"
 	wget -O third_bin/jq "$jq_url"
 
