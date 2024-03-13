@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -321,6 +322,15 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 	ticker := time.NewTicker(d.config.FlushInterval)
 
 	for {
+
+		// this failpoint is use to pass this ticker once
+		// to make writeEvent in the test case can write into the same file
+		failpoint.Inject("passTickerOnce", func() {
+			select {
+			case <-ticker.C:
+			}
+		})
+
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -328,6 +338,7 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 			if atomic.LoadUint64(&d.isClosed) == 1 {
 				return nil
 			}
+
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
