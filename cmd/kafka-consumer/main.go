@@ -869,7 +869,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if todoDDL.CommitTs < minPartitionResolvedTs {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
+					zap.String("DDL", todoDDL.Query))
 			}
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
