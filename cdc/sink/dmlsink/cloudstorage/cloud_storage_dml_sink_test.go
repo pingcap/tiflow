@@ -262,7 +262,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	}()
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	tableDir = path.Join(parentDir, "test/table1/33/2023-03-09")
 	fileNames = getTableFiles(t, tableDir)
