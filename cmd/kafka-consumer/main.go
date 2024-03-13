@@ -109,17 +109,14 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	if s != "" {
 		o.version = s
 	}
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-
 	o.address = strings.Split(upstreamURI.Host, ",")
 
-	saramaConfig := sarama.NewConfig()
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(o.address, o.topic, saramaConfig)
+		partition, err := getPartitionNum(o.address, o.topic)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", o.topic), zap.Error(err))
 		}
@@ -330,9 +327,10 @@ func main() {
 	}
 }
 
-func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+func getPartitionNum(address []string, topic string) (int32, error) {
+	saramaConfig := sarama.NewConfig()
 	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(address, cfg)
+	admin, err := sarama.NewClusterAdmin(address, saramaConfig)
 	if err != nil {
 		return 0, cerror.Trace(err)
 	}
