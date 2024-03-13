@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -462,10 +461,27 @@ func buildRowChangedEvent(
 			}
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 		}
+	}
 
+	for _, col := range result.Columns {
+		adjustChecksumValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
+	}
+	for _, col := range result.PreColumns {
+		adjustChecksumValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
 	}
 
 	return result, nil
+}
+
+func adjustChecksumValue(column *model.ColumnData, flag types.FieldType) {
+	if flag.GetType() != mysql.TypeTimestamp {
+		return
+	}
+	if column.Value == nil {
+		return
+	}
+	data := column.Value.(map[string]interface{})
+	column.Value = data["value"].(string)
 }
 
 func decodeColumns(
@@ -829,15 +845,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 				return nil
 			}
 		}
-	case mysql.TypeTimestamp:
-		data := value.(map[string]interface{})
-		ts := data["value"].(string)
-		location := data["location"].(string)
-		ts, err := util.ConvertTimezone(ts, location)
-		if err != nil {
-			return nil
-		}
-		value = ts
 	default:
 	}
 
