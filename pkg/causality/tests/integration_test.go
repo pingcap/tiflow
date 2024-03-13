@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -34,6 +35,41 @@ func TestConflictBasics(t *testing.T) {
 		batchSize      = 32
 		totalBatches   = 10000
 	)
+
+	conflictArray := make([]int, workingSetSize)
+	driver := newConflictTestDriver(
+		numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize, numSlots),
+	).WithExecFunc(
+		func(txn *txnForTest) error {
+			for _, key := range txn.GenSortedDedupKeysHash(numSlots) {
+				// Access a position in the array without synchronization,
+				// so that if causality check is buggy, the Go race detection would fail.
+				conflictArray[key]++
+			}
+			return nil
+		})
+
+	require.NoError(t, driver.Run(ctx, totalBatches))
+	require.NoError(t, driver.Wait(ctx))
+	driver.Close()
+}
+
+func TestConflictBasicsWithSleepFailPoint(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	const (
+		numWorkers     = 8
+		numSlots       = 4096
+		workingSetSize = 4096
+		batchSize      = 32
+		totalBatches   = 10000
+	)
+
+	// use to simulate call A's maybeReadyToRun after node A may be removed
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/pkg/causality/internal/SleepBeforeCallmaybeReadyToRun", ``))
+	//nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/pkg/causality/internal/SleepBeforeCallmaybeReadyToRun")
 
 	conflictArray := make([]int, workingSetSize)
 	driver := newConflictTestDriver(
