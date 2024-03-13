@@ -156,9 +156,15 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		data := value.(map[string]interface{})
-		ts := data["value"].(string)
-		location := data["location"].(string)
+		location := "Local"
+		var ts string
+		switch data := value.(type) {
+		case map[string]interface{}:
+			ts = data["value"].(string)
+			location = data["location"].(string)
+		case string:
+			ts = data
+		}
 		ts, err := util.ConvertTimezone(ts, location)
 		if err != nil {
 			log.Panic("convert timestamp to timezone failed",
