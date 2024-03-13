@@ -120,6 +120,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
+	// make flush-interval long enough, so we can ensure the data only write into one file
 	uri := fmt.Sprintf("file:///%s?flush-interval=8s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
