@@ -220,10 +220,11 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		SchemaVersion: m.SchemaVersion,
 	}
 
+	timezone := d.config.TimeZone.String()
 	ctx := context.Background()
 	switch m.Type {
 	case DMLTypeInsert:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -233,7 +234,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Data = data
 	case DMLTypeUpdate:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +244,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Data = data
 
-		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -253,7 +254,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Old = old
 	case DMLTypeDelete:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old, timezone)
 		if err != nil {
 			return nil, err
 		}
