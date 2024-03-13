@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -29,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -116,7 +114,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 
-	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete, d.config.TimeZone)
+	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -161,7 +159,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // valueMap hold all columns information
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
 func assembleEvent(
-	keyMap, valueMap, schema map[string]interface{}, isDelete bool, tz *time.Location,
+	keyMap, valueMap, schema map[string]interface{}, isDelete bool,
 ) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
@@ -214,7 +212,7 @@ func assembleEvent(
 		if !ok {
 			return nil, errors.New("value not found")
 		}
-		value, err := getColumnValue(value, holder, mysqlType, tz)
+		value, err := getColumnValue(value, holder, mysqlType)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -290,7 +288,7 @@ func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, err
 // value is an interface, need to convert it to the real value with the help of type info.
 // holder has the value's column info.
 func getColumnValue(
-	value interface{}, holder map[string]interface{}, mysqlType byte, tz *time.Location,
+	value interface{}, holder map[string]interface{}, mysqlType byte,
 ) (interface{}, error) {
 	switch t := value.(type) {
 	// for nullable columns, the value is encoded as a map with one pair.
@@ -323,13 +321,6 @@ func getColumnValue(
 			return nil, errors.Trace(err)
 		}
 		value = s.Value
-	case mysql.TypeTimestamp:
-		timestamp := value.(string)
-		timestamp, err := util.ConvertTimezone(timestamp, tz.String())
-		if err != nil {
-			return "", err
-		}
-		return timestamp, nil
 	}
 	return value, nil
 }
