@@ -56,6 +56,7 @@ func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
+// QueryTimezone query the timezone from the upstream database
 func QueryTimezone(ctx context.Context, db *sql.DB) (string, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
