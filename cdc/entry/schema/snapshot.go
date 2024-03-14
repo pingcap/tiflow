@@ -123,6 +123,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -134,11 +135,12 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
+	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -151,7 +153,8 @@ func NewSnapshotFromMeta(
 	}
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
-
+	// record all tables to be replicated for logging use
+	tables := make([]*model.TableInfo, 0, 1024)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
@@ -190,6 +193,8 @@ func NewSnapshotFromMeta(
 			ineligible := !tableInfo.IsEligible(forceReplicate)
 			if ineligible {
 				snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
+			} else {
+				tables = append(tables, tableInfo)
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
@@ -204,6 +209,15 @@ func NewSnapshotFromMeta(
 		}
 	}
 	snap.inner.currentTs = currentTs
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%d tables to be replicated: ", len(tables)))
+	for _, table := range tables {
+		sb.WriteString(fmt.Sprintf("%s.%s, ", table.TableName.Schema, table.TableName.Table))
+	}
+	log.Info("schema snapshot created",
+		zap.Stringer("changefeed", id),
+		zap.Uint64("currentTs", currentTs),
+		zap.String("tables", sb.String()))
 	return snap, nil
 }
 
@@ -468,11 +482,16 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-	case timodel.ActionTruncateTablePartition,
+	case timodel.ActionTruncateTablePartition:
+		err := s.inner.updatePartition(getWrapTableInfo(job), true, job.BinlogInfo.FinishedTS)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case
 		timodel.ActionAddTablePartition,
 		timodel.ActionDropTablePartition,
 		timodel.ActionReorganizePartition:
-		err := s.inner.updatePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
+		err := s.inner.updatePartition(getWrapTableInfo(job), false, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -863,7 +882,7 @@ func (s *snapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
 }
 
 // updatePartition updates partition info for `tbInfo`.
-func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) error {
+func (s *snapshot) updatePartition(tbInfo *model.TableInfo, isTruncate bool, currentTs uint64) error {
 	oldTbInfo, ok := s.physicalTableByID(tbInfo.ID)
 	if !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(tbInfo.ID)
@@ -888,12 +907,21 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 	for _, partition := range oldPi.Definitions {
 		s.partitions.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 	}
+	newPartitionIDMap := make(map[int64]struct{}, len(newPi.NewPartitionIDs))
 	for _, partition := range newPi.Definitions {
 		vid := newVersionedID(partition.ID, tag)
 		vid.target = tbInfo
 		s.partitions.ReplaceOrInsert(vid)
 		if ineligible {
 			s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		}
+		newPartitionIDMap[partition.ID] = struct{}{}
+	}
+	if isTruncate {
+		for _, partition := range oldPi.Definitions {
+			if _, ok := newPartitionIDMap[partition.ID]; !ok {
+				s.truncatedTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+			}
 		}
 	}
 	s.currentTs = currentTs
@@ -984,7 +1012,7 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 	// ref: https://github.com/pingcap/tidb/issues/43819
 	targetTable.SchemaID = oldTable.SchemaID
 	targetTable.TableName = oldTable.TableName
-	err = s.updatePartition(targetTable, currentTS)
+	err = s.updatePartition(targetTable, false, currentTS)
 	if err != nil {
 		return errors.Trace(err)
 	}

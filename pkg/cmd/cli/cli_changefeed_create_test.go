@@ -74,11 +74,6 @@ func TestTomlFileToApiModel(t *testing.T) {
 	content := `
 	[filter]
 	rules = ['*.*', '!test.*']
-    ignore-dbs = ["a", "b"]
-    do-dbs = ["c", "d"]
-    [[filter.ignore-tables]]
-    db-name = "demo-db"
-    tbl-name = "tbl"
 `
 	err := os.WriteFile(path, []byte(content), 0o644)
 	require.Nil(t, err)

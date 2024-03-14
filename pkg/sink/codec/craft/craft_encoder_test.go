@@ -31,14 +31,17 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
+	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
+		Name: "col1",
+		Type: mysql.TypeVarchar,
+	}}, nil)
 	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "col1",
-			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}},
+		}}, tableInfo),
 	}
 
 	for i := 0; i < 10000; i++ {
@@ -58,14 +61,17 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	cfg.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
+	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
+		Name: "col1",
+		Type: mysql.TypeVarchar,
+	}}, nil)
 	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "col1",
-			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}},
+		}}, tableInfo),
 	}
 
 	for i := 0; i < 10000; i++ {
@@ -112,7 +118,7 @@ func testBatchCodec(
 	encoderBuilder codec.RowEventEncoderBuilder,
 	newDecoder func(value []byte) (codec.RowEventDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*internal.RowTestData) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -123,7 +129,8 @@ func testBatchCodec(
 			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.Equal(t, cs[index], row)
+			srcRow := internal.CreateRowChangedEventFromTestData(cs[index])
+			require.Equal(t, srcRow, row)
 			index++
 		}
 	}
@@ -163,7 +170,8 @@ func testBatchCodec(
 
 	for _, cs := range s.RowCases {
 		events := 0
-		for _, row := range cs {
+		for _, data := range cs {
+			row := internal.CreateRowChangedEventFromTestData(data)
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			events++
 			require.Nil(t, err)
@@ -218,14 +226,17 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
+	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
+		Name: "col1",
+		Type: mysql.TypeVarchar,
+	}}, nil)
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "col1",
-			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}},
+		}}, tableInfo),
 	}
 
 	tests := []struct {

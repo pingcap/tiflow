@@ -113,7 +113,7 @@ var (
 
 	// codec related errors
 	ErrEncodeFailed = errors.Normalize(
-		"encode failed: %s",
+		"encode failed",
 		errors.RFCCodeText("CDC:ErrEncodeFailed"),
 	)
 	ErrDecodeFailed = errors.Normalize(
@@ -246,7 +246,7 @@ var (
 		errors.RFCCodeText("CDC:ErrPulsarInvalidVersion"),
 	)
 	ErrPulsarInvalidConfig = errors.Normalize(
-		"pulsar config invalid",
+		"pulsar config invalid %s",
 		errors.RFCCodeText("CDC:ErrPulsarInvalidConfig"),
 	)
 	ErrPulsarCreateTopic = errors.Normalize(
@@ -571,8 +571,7 @@ var (
 	)
 
 	ErrCorruptedDataMutation = errors.Normalize(
-		"Changefeed %s.%s stopped due to corrupted data mutation received. "+
-			"Corrupted mutation detail information %+v",
+		"Changefeed %s.%s stopped due to corrupted data mutation received",
 		errors.RFCCodeText("CDC:ErrCorruptedDataMutation"))
 
 	// server related errors
@@ -933,6 +932,10 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInternalCheckFailed = errors.Normalize(
+		"internal check failed, %s",
+		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
 		"handle ddl failed, query: %s, startTs: %d. "+
@@ -962,7 +965,7 @@ var (
 		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
 	)
 	ErrMetaOpFailed = errors.Normalize(
-		"meta operation %s is failed",
+		"unexpected meta operation failure: %s",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
 	)
 	ErrMetaInvalidState = errors.Normalize(
@@ -977,5 +980,15 @@ var (
 	ErrUnexpected = errors.Normalize(
 		"cdc met unexpected error: %s",
 		errors.RFCCodeText("CDC:ErrUnexpected"),
+	)
+
+	// credential related errors
+	ErrCredentialNotFound = errors.Normalize(
+		"credential not found: %s",
+		errors.RFCCodeText("CDC:ErrCredentialNotFound"),
+	)
+	ErrUnauthorized = errors.Normalize(
+		"user %s unauthorized, error: %s",
+		errors.RFCCodeText("CDC:ErrUnauthorized"),
 	)
 )

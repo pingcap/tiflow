@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 export TEST_DIR=/tmp/dm_test
 export TEST_NAME="upgrade-via-tiup"
@@ -270,10 +270,11 @@ function exec_incremental_stage4() {
 function patch_nightly_with_tiup_mirror() {
 	# clone packages for upgrade.
 	# FIXME: use nightly version of grafana and prometheus after https://github.com/pingcap/tiup/issues/1334 fixed.
+	tiup --version
 	tiup mirror clone tidb-dm-nightly-linux-amd64 --os=linux --arch=amd64 \
 		--alertmanager=v0.17.0 --grafana=v5.0.1 --prometheus=v5.0.1 \
 		--dm-master=$1 --dm-worker=$1 \
-		--tiup=v$(tiup --version | grep 'tiup' | awk -F ' ' '{print $1}') --dm=v$(tiup --version | grep 'tiup' | awk -F ' ' '{print $1}')
+		--tiup=v$(tiup --version | head -n1 | awk '{print $1}') --dm=v$(tiup --version | head -n1 | awk '{print $1}')
 
 	# change tiup mirror
 	tidb-dm-nightly-linux-amd64/local_install.sh

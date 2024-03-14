@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -110,6 +111,7 @@ type ddlManager struct {
 	redoMetaManager redo.MetaManager
 	// ddlSink is used to ddlSink DDL events to the downstream
 	ddlSink DDLSink
+	filter  filter.Filter
 
 	// pendingDDLs store the pending DDL events of all tables
 	// the DDL events in the same table are ordered by commitTs.
@@ -135,6 +137,7 @@ func newDDLManager(
 	startTs model.Ts,
 	checkpointTs model.Ts,
 	ddlSink DDLSink,
+	filter filter.Filter,
 	ddlPuller puller.DDLPuller,
 	schema entry.SchemaStorage,
 	redoManager redo.DDLManager,
@@ -151,6 +154,7 @@ func newDDLManager(
 	return &ddlManager{
 		changfeedID:     changefeedID,
 		ddlSink:         ddlSink,
+		filter:          filter,
 		ddlPuller:       ddlPuller,
 		schema:          schema,
 		redoDDLManager:  redoManager,
@@ -207,7 +211,7 @@ func (m *ddlManager) tick(
 
 		log.Info("handle a ddl job",
 			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("ID", m.changfeedID.ID),
+			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int64("tableID", job.TableID),
 			zap.Int64("jobID", job.ID),
 			zap.String("query", job.Query),
@@ -243,8 +247,14 @@ func (m *ddlManager) tick(
 		// Send DDL events to redo log.
 		if m.redoDDLManager.Enabled() {
 			for _, event := range events {
-				err := m.redoDDLManager.EmitDDLEvent(ctx, event)
+				skip, _, err := m.shouldSkipDDL(event)
 				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					continue
+				}
+				if err := m.redoDDLManager.EmitDDLEvent(ctx, event); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -326,26 +336,34 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
 }
 
+func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
+	ignored, err := m.filter.ShouldIgnoreDDLEvent(ddl)
+	if err != nil {
+		return false, "", errors.Trace(err)
+	}
+	if ignored {
+		return true, "ddl is ignored by event filter rule, skip it", nil
+	}
+
+	// In a BDR mode cluster, TiCDC can receive DDLs from all roles of TiDB.
+	// However, CDC only executes the DDLs from the TiDB that has BDRRolePrimary role.
+	if m.BDRMode && ddl.BDRRole != string(ast.BDRRolePrimary) {
+		return true, "changefeed is in BDRMode and the DDL is not executed by Primary Cluster, skip it", nil
+	}
+	return false, "", nil
+}
+
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
 		return nil
 	}
-
-	// If changefeed is in BDRMode, skip ddl.
-	if m.BDRMode {
-		log.Info("changefeed is in BDRMode, skip a ddl event",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("ID", m.changfeedID.ID),
-			zap.Any("ddlEvent", m.executingDDL))
-		tableName := m.executingDDL.TableInfo.TableName
-		// Set it to nil first to accelerate GC.
-		m.pendingDDLs[tableName][0] = nil
-		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.DoGC(m.executingDDL.CommitTs - 1)
-		m.justSentDDL = m.executingDDL
-		m.executingDDL = nil
-		m.cleanCache()
+	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if skip {
+		m.cleanCache(cleanMsg)
 		return nil
 	}
 
@@ -367,22 +385,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if done {
-		tableName := m.executingDDL.TableInfo.TableName
-		log.Info("execute a ddl event successfully",
-			zap.String("ddl", m.executingDDL.Query),
-			zap.Uint64("commitTs", m.executingDDL.CommitTs),
-			zap.Stringer("table", tableName),
-		)
-		// Set it to nil first to accelerate GC.
-		m.pendingDDLs[tableName][0] = nil
-		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.DoGC(m.executingDDL.CommitTs - 1)
-		m.justSentDDL = m.executingDDL
-		m.executingDDL = nil
-		m.cleanCache()
+		m.cleanCache("execute a ddl event successfully")
 	}
 	return nil
 }
@@ -450,7 +456,20 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
 			for _, id := range ids {
-				tableBarrierMap[id] = ddl.CommitTs
+				// The same physical table may have multiple related ddl events when calculating barrier.
+				// Example cases:
+				// 1. The logical id of the same partition table may change after change partition.
+				//	So the related ddls may be considered for different tables.
+				//  And they may be returned by `getAllTableNextDDL` at the same time.
+				// 2. The result of `getAllTableNextDDL` may influence the same physical tables as `ddlManager.justSentDDL`.
+				// So we always choose the min commitTs of all ddls related to the same physical table as the barrierTs.
+				if ts, ok := tableBarrierMap[id]; ok {
+					if ddl.CommitTs < ts {
+						tableBarrierMap[id] = ddl.CommitTs
+					}
+				} else {
+					tableBarrierMap[id] = ddl.CommitTs
+				}
 			}
 		}
 	}
@@ -526,12 +545,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 
 // getSnapshotTs returns the ts that we should use
 // to get the snapshot of the schema, the rules are:
-// 1. If the changefeed is just started, we use the startTs,
+// If the changefeed is just started, we use the startTs,
 // otherwise we use the checkpointTs.
-// 2. If the changefeed is in BDRMode, we use the ddlManager.ddlResolvedTs.
-// Since TiCDC ignore the DDLs in BDRMode, we don't need to care about whether
-// the DDLs are executed or not. We should use the ddlResolvedTs to get the up-to-date
-// schema.
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
@@ -549,18 +564,27 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 		return
 	}
 
-	if m.BDRMode {
-		ts = m.ddlResolvedTs
-	}
-
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
 }
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
-// It should be called after a DDL is applied to schema or a DDL
-// is sent to downstream successfully.
-func (m *ddlManager) cleanCache() {
+// It should be called after a DDL is skipped or sent to downstream successfully.
+func (m *ddlManager) cleanCache(msg string) {
+	tableName := m.executingDDL.TableInfo.TableName
+	log.Info(msg, zap.String("ddl", m.executingDDL.Query),
+		zap.String("namespace", m.changfeedID.Namespace),
+		zap.String("changefeed", m.changfeedID.ID),
+		zap.String("bdrRole", m.executingDDL.BDRRole),
+		zap.Any("ddlEvent", m.executingDDL))
+
+	// Set it to nil first to accelerate GC.
+	m.pendingDDLs[tableName][0] = nil
+	m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
+	m.schema.DoGC(m.executingDDL.CommitTs - 1)
+	m.justSentDDL = m.executingDDL
+	m.executingDDL = nil
+
 	m.tableInfoCache = nil
 	m.physicalTablesCache = nil
 }

@@ -45,6 +45,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		startTs,
 		checkpointTs,
 		ddlSink,
+		f,
 		ddlPuller,
 		schema,
 		redo.NewDisabledDDLManager(),
@@ -145,18 +146,18 @@ func TestGetSnapshotTs(t *testing.T) {
 	dm := createDDLManagerForTest(t)
 	dm.startTs = 0
 	dm.checkpointTs = 1
-	require.Equal(t, dm.getSnapshotTs(), dm.startTs)
+	require.Equal(t, dm.startTs, dm.getSnapshotTs())
 
 	dm.startTs = 1
 	dm.checkpointTs = 10
 	dm.BDRMode = true
 	dm.ddlResolvedTs = 15
-	require.Equal(t, dm.getSnapshotTs(), dm.ddlResolvedTs)
+	require.Equal(t, dm.checkpointTs, dm.getSnapshotTs())
 
 	dm.startTs = 1
 	dm.checkpointTs = 10
 	dm.BDRMode = false
-	require.Equal(t, dm.getSnapshotTs(), dm.checkpointTs)
+	require.Equal(t, dm.checkpointTs, dm.getSnapshotTs())
 }
 
 func TestExecRenameTablesDDL(t *testing.T) {

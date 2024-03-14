@@ -434,7 +434,7 @@ func TestHandleJob(t *testing.T) {
 		job = helper.DDL2Job("alter table test1.t1 add column c1 int")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
-		require.True(t, skip)
+		require.False(t, skip)
 
 		job = helper.DDL2Job("create table test1.testStartTs(id int)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
@@ -445,7 +445,7 @@ func TestHandleJob(t *testing.T) {
 		job.StartTS = 1
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
-		require.True(t, skip)
+		require.False(t, skip)
 
 		job = helper.DDL2Job("create table test1.t2(id int)")
 		skip, err = ddlJobPullerImpl.handleJob(job)

@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,19 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package main
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
+	prettyconsole "github.com/thessem/zap-prettyconsole"
+	"go.uber.org/zap"
 )
 
-func TestLagBucket(t *testing.T) {
-	buckets := lagBucket()
-	require.Equal(t, 40, len(buckets))
-	require.Equal(t, 0.5, buckets[0])
-	require.Equal(t, 1.0, buckets[1])
-	require.Equal(t, 21.0, buckets[30])
-	require.Equal(t, float64(10752), buckets[39])
+var logger *zap.Logger
+
+func init() {
+	logger = prettyconsole.NewLogger(zap.DebugLevel)
 }

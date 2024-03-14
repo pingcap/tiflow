@@ -16,8 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,6 +91,8 @@ type SharedClient struct {
 		sync.RWMutex
 		v map[SubscriptionID]*requestedTable
 	}
+
+	logRegionDetails func(msg string, fields ...zap.Field)
 }
 
 type resolveLockTask struct {
@@ -121,6 +121,8 @@ type requestedTable struct {
 	startTs   model.Ts
 	rangeLock *regionlock.RegionRangeLock
 	eventCh   chan<- MultiplexingEvent
+
+	lastAdvanceTime atomic.Int64
 
 	// To handle table removing.
 	stopped atomic.Bool
@@ -162,6 +164,12 @@ func NewSharedClient(
 		requestedStores: make(map[string]*requestedStore),
 	}
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
+	if cfg.Debug.Puller.LogRegionDetails {
+		s.logRegionDetails = log.Info
+	} else {
+		s.logRegionDetails = log.Debug
+	}
+
 	s.initMetrics()
 	return s
 }
@@ -410,7 +418,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
-	log.Info("event feed will request a region",
+	s.logRegionDetails("event feed will request a region",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("streamID", r.streams[offset].streamID),
@@ -578,7 +586,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	switch eerr := err.(type) {
 	case *eventError:
 		innerErr := eerr.err
-		log.Info("cdc region error",
+		s.logRegionDetails("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
@@ -663,7 +671,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -717,7 +725,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -740,15 +748,11 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.Holes) > 0 {
-				holes := make([]string, 0, len(attr.Holes))
-				for _, hole := range attr.Holes {
-					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
-				}
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.String("holes", strings.Join(holes, ", ")))
+					zap.Any("holes", attr.Holes))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -772,7 +776,7 @@ func (s *SharedClient) newRequestedTable(
 
 	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}
@@ -789,15 +793,7 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 }
 
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
-	for {
-		old := r.staleLocksVersion.Load()
-		if old >= maxVersion {
-			return
-		}
-		if r.staleLocksVersion.CompareAndSwap(old, maxVersion) {
-			break
-		}
-	}
+	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
 
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",

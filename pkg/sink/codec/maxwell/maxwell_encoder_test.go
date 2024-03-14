@@ -28,10 +28,16 @@ func TestMaxwellBatchCodec(t *testing.T) {
 	t.Parallel()
 	newEncoder := newBatchEncoder
 
+	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeLong}}, nil)
 	rowCases := [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "col1",
+				Value: 10,
+			},
+		}, tableInfo),
 	}}, {}}
 	for _, cs := range rowCases {
 		encoder := newEncoder(&common.Config{})
@@ -75,14 +81,14 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
+	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeVarchar}}, nil)
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{{
 			Name:  "col1",
-			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
-		}},
+		}}, tableInfo),
 	}
 
 	tests := []struct {

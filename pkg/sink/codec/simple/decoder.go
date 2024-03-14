@@ -14,11 +14,12 @@
 package simple
 
 import (
+	"container/list"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"path/filepath"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/types"
@@ -29,8 +30,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type decoder struct {
+// Decoder implement the RowEventDecoder interface
+type Decoder struct {
 	config *common.Config
+
+	marshaller marshaller
 
 	upstreamTiDB *sql.DB
 	storage      storage.ExternalStorage
@@ -38,10 +42,15 @@ type decoder struct {
 	value []byte
 	msg   *message
 	memo  TableInfoProvider
+
+	// cachedMessages is used to store the messages which does not have received corresponding table info yet.
+	cachedMessages *list.List
+	// CachedRowChangedEvents are events just decoded from the cachedMessages
+	CachedRowChangedEvents []*model.RowChangedEvent
 }
 
-// NewDecoder returns a new decoder
-func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decoder, error) {
+// NewDecoder returns a new Decoder
+func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decoder, error) {
 	var (
 		externalStorage storage.ExternalStorage
 		err             error
@@ -59,20 +68,28 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	return &decoder{
-		config:       config,
+	m, err := newMarshaller(config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &Decoder{
+		config:     config,
+		marshaller: m,
+
 		storage:      externalStorage,
 		upstreamTiDB: db,
 
-		memo: newMemoryTableInfoProvider(),
+		memo:           newMemoryTableInfoProvider(),
+		cachedMessages: list.New(),
 	}, nil
 }
 
-// AddKeyValue add the received key and values to the decoder,
-func (d *decoder) AddKeyValue(_, value []byte) error {
+// AddKeyValue add the received key and values to the Decoder,
+func (d *Decoder) AddKeyValue(_, value []byte) error {
 	if d.value != nil {
 		return cerror.ErrDecodeFailed.GenWithStack(
-			"decoder value already exists, not consumed yet")
+			"Decoder value already exists, not consumed yet")
 	}
 	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
@@ -83,35 +100,33 @@ func (d *decoder) AddKeyValue(_, value []byte) error {
 }
 
 // HasNext returns whether there is any event need to be consumed
-func (d *decoder) HasNext() (model.MessageType, bool, error) {
+func (d *Decoder) HasNext() (model.MessageType, bool, error) {
 	if d.value == nil {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	var m message
-	if err := json.Unmarshal(d.value, &m); err != nil {
+	m := new(message)
+	err := d.marshaller.Unmarshal(d.value, m)
+	if err != nil {
 		return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 	}
-	d.msg = &m
+	d.msg = m
 	d.value = nil
-
-	switch d.msg.Type {
-	case WatermarkType:
-		return model.MessageTypeResolved, true, nil
-	case DDLType, BootstrapType:
-		return model.MessageTypeDDL, true, nil
-	default:
-	}
 
 	if d.msg.Data != nil || d.msg.Old != nil {
 		return model.MessageTypeRow, true, nil
 	}
-	return model.MessageTypeUnknown, false, nil
+
+	if m.Type == MessageTypeWatermark {
+		return model.MessageTypeResolved, true, nil
+	}
+
+	return model.MessageTypeDDL, true, nil
 }
 
 // NextResolvedEvent returns the next resolved event if exists
-func (d *decoder) NextResolvedEvent() (uint64, error) {
-	if d.msg.Type != WatermarkType {
+func (d *Decoder) NextResolvedEvent() (uint64, error) {
+	if d.msg.Type != MessageTypeWatermark {
 		return 0, cerror.ErrCodecDecode.GenWithStack(
 			"not found resolved event message")
 	}
@@ -123,7 +138,7 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if d.msg == nil || (d.msg.Data == nil && d.msg.Old == nil) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"invalid row changed event message")
@@ -139,9 +154,14 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"cannot found the table info, schema: %s, table: %s, version: %d",
-			d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
+		log.Warn("table info not found for the event, "+
+			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+			zap.String("schema", d.msg.Schema),
+			zap.String("table", d.msg.Table),
+			zap.Uint64("version", d.msg.SchemaVersion))
+		d.cachedMessages.PushBack(d.msg)
+		d.msg = nil
+		return nil, nil
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
@@ -153,7 +173,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return event, nil
 }
 
-func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
+func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
 	_, claimCheckFileName := filepath.Split(claimCheckLocation)
 	data, err := d.storage.ReadFile(context.Background(), claimCheckFileName)
 	if err != nil {
@@ -169,17 +189,16 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 		return nil, err
 	}
 
-	var m message
-	err = json.Unmarshal(value, &m)
+	m := new(message)
+	err = d.marshaller.Unmarshal(value, m)
 	if err != nil {
 		return nil, err
 	}
-
-	d.msg = &m
+	d.msg = m
 	return d.NextRowChangedEvent()
 }
 
-func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
+func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
 	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
@@ -203,7 +222,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 	ctx := context.Background()
 	switch m.Type {
-	case InsertType:
+	case DMLTypeInsert:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
@@ -213,7 +232,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 			return nil, err
 		}
 		result.Data = data
-	case UpdateType:
+	case DMLTypeUpdate:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
@@ -233,7 +252,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 			return nil, err
 		}
 		result.Old = old
-	case DeleteType:
+	case DMLTypeDelete:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err
@@ -249,7 +268,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	return d.NextRowChangedEvent()
 }
 
-func (d *decoder) buildData(
+func (d *Decoder) buildData(
 	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType,
 ) (map[string]interface{}, error) {
 	columnsCount := holder.Length()
@@ -265,44 +284,68 @@ func (d *decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		value, err := encodeValue(value, fieldType)
-		if err != nil {
-			return nil, err
-		}
-		result[col.Name()] = value
+		result[col.Name()] = encodeValue(value, fieldType, d.config.TimeZone.String())
 	}
 	return result, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists
-func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if d.msg.Type != DDLType && d.msg.Type != BootstrapType {
+func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if d.msg == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"not found ddl event message")
+			"no message found when decode DDL event")
 	}
-
-	ddl := newDDLEvent(d.msg)
+	ddl, err := newDDLEvent(d.msg)
+	if err != nil {
+		return nil, err
+	}
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
 	d.memo.Write(ddl.PreTableInfo)
 
+	for ele := d.cachedMessages.Front(); ele != nil; {
+		d.msg = ele.Value.(*message)
+		event, err := d.NextRowChangedEvent()
+		if err != nil {
+			return nil, err
+		}
+		if event == nil {
+			ele = ele.Next()
+			continue
+		}
+		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
+
+		next := ele.Next()
+		d.cachedMessages.Remove(ele)
+		ele = next
+	}
 	return ddl, nil
 }
 
+// GetCachedEvents returns the cached events
+func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
+	result := d.CachedRowChangedEvents
+	d.CachedRowChangedEvents = nil
+	return result
+}
+
 // TableInfoProvider is used to store and read table info
+// It works like a schema cache when consuming simple protocol messages
+// It will store multiple versions of table info for a table
+// The table info which has the exact (schema, table, version) will be returned when reading
 type TableInfoProvider interface {
 	Write(info *model.TableInfo)
 	Read(schema, table string, version uint64) *model.TableInfo
 }
 
 type memoryTableInfoProvider struct {
-	memo map[cacheKey]*model.TableInfo
+	memo map[tableSchemaKey]*model.TableInfo
 }
 
 func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 	return &memoryTableInfoProvider{
-		memo: make(map[cacheKey]*model.TableInfo),
+		memo: make(map[tableSchemaKey]*model.TableInfo),
 	}
 }
 
@@ -310,41 +353,46 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 	if info == nil {
 		return
 	}
-	key := cacheKey{
-		schema: info.TableName.Schema,
-		table:  info.TableName.Table,
+	key := tableSchemaKey{
+		schema:  info.TableName.Schema,
+		table:   info.TableName.Table,
+		version: info.UpdateTS,
 	}
 
-	entry, ok := m.memo[key]
-	if ok && entry.UpdateTS >= info.UpdateTS {
-		log.Warn("table info not stored, since the updateTs is stale",
+	_, ok := m.memo[key]
+	if ok {
+		log.Warn("table info not stored, since it already exists",
 			zap.String("schema", info.TableName.Schema),
 			zap.String("table", info.TableName.Table),
-			zap.Uint64("oldUpdateTs", entry.UpdateTS),
-			zap.Uint64("updateTs", info.UpdateTS))
+			zap.Uint64("version", info.UpdateTS))
 		return
 	}
+
 	m.memo[key] = info
 	log.Info("table info stored",
 		zap.String("schema", info.TableName.Schema),
 		zap.String("table", info.TableName.Table),
-		zap.Uint64("updateTs", info.UpdateTS))
+		zap.Uint64("version", info.UpdateTS))
 }
 
+// Read returns the table info with the exact (schema, table, version)
+// Note: It's a blocking call, it will wait until the table info is stored
 func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *model.TableInfo {
-	key := cacheKey{
-		schema: schema,
-		table:  table,
+	key := tableSchemaKey{
+		schema:  schema,
+		table:   table,
+		version: version,
 	}
 
 	entry, ok := m.memo[key]
-	if ok && entry.UpdateTS == version {
+	if ok {
 		return entry
 	}
 	return nil
 }
 
-type cacheKey struct {
-	schema string
-	table  string
+type tableSchemaKey struct {
+	schema  string
+	table   string
+	version uint64
 }

@@ -15,6 +15,7 @@ package v2
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -51,17 +52,18 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	controllerMiddleware := middleware.ForwardToControllerMiddleware(api.capture)
 	changefeedOwnerMiddleware := middleware.
 		ForwardToChangefeedOwnerMiddleware(api.capture, getChangefeedFromRequest)
+	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.GET("/:changefeed_id", changefeedOwnerMiddleware, api.getChangeFeed)
-	changefeedGroup.POST("", controllerMiddleware, api.createChangefeed)
+	changefeedGroup.POST("", controllerMiddleware, authenticateMiddleware, api.createChangefeed)
 	changefeedGroup.GET("", controllerMiddleware, api.listChangeFeeds)
-	changefeedGroup.PUT("/:changefeed_id", changefeedOwnerMiddleware, api.updateChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", controllerMiddleware, api.deleteChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", changefeedOwnerMiddleware, authenticateMiddleware, api.updateChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", controllerMiddleware, authenticateMiddleware, api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", changefeedOwnerMiddleware, api.getChangeFeedMetaInfo)
-	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.resumeChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.pauseChangefeed)
+	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, authenticateMiddleware, api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, authenticateMiddleware, api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", changefeedOwnerMiddleware, api.status)
 	changefeedGroup.GET("/:changefeed_id/synced", changefeedOwnerMiddleware, api.synced)
 
@@ -82,9 +84,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
 	unsafeGroup.Use(controllerMiddleware)
-	unsafeGroup.GET("/metadata", api.CDCMetaData)
-	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
-	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+	unsafeGroup.GET("/metadata", authenticateMiddleware, api.CDCMetaData)
+	unsafeGroup.POST("/resolve_lock", authenticateMiddleware, api.ResolveLock)
+	unsafeGroup.DELETE("/service_gc_safepoint", authenticateMiddleware, api.DeleteServiceGcSafePoint)
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")
@@ -100,6 +102,6 @@ func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
 	namespace := getNamespaceValueWithDefault(ctx)
 	return model.ChangeFeedID{
 		Namespace: namespace,
-		ID:        ctx.Param(apiOpVarChangefeedID),
+		ID:        ctx.Param(api.APIOpVarChangefeedID),
 	}
 }

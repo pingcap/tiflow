@@ -29,7 +29,7 @@ checker:
   backoff-min: 1s
   backoff-jitter: true
   backoff-factor: 2
-server-id: 123456
+server-id: 111111111
 tracer: {}
 case-sensitive: false
 filters:

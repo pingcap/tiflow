@@ -203,12 +203,17 @@ failed to convert ddl '%s' to filter event type
 
 ["CDC:ErrCorruptedDataMutation"]
 error = '''
-Changefeed %s.%s stopped due to corrupted data mutation received. Corrupted mutation detail information %+v
+Changefeed %s.%s stopped due to corrupted data mutation received
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
+'''
+
+["CDC:ErrCredentialNotFound"]
+error = '''
+credential not found: %s
 '''
 
 ["CDC:ErrDDLSchemaNotFound"]
@@ -248,7 +253,7 @@ dispatcher failed
 
 ["CDC:ErrEncodeFailed"]
 error = '''
-encode failed: %s
+encode failed
 '''
 
 ["CDC:ErrEtcdIgnore"]
@@ -359,6 +364,11 @@ illegal parameter for sorter: %s
 ["CDC:ErrIncompatibleSinkConfig"]
 error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
+["CDC:ErrInternalCheckFailed"]
+error = '''
+internal check failed, %s
 '''
 
 ["CDC:ErrInternalServerError"]
@@ -753,7 +763,7 @@ invalid pulsar client ID '%s'
 
 ["CDC:ErrPulsarInvalidConfig"]
 error = '''
-pulsar config invalid
+pulsar config invalid %s
 '''
 
 ["CDC:ErrPulsarInvalidPartitionNum"]
@@ -999,6 +1009,11 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnauthorized"]
+error = '''
+user %s unauthorized, error: %s
 '''
 
 ["CDC:ErrUnexpected"]
@@ -1353,7 +1368,7 @@ meta operation fail
 
 ["DFLOW:ErrMetaOpFailed"]
 error = '''
-meta operation %s is failed
+unexpected meta operation failure: %s
 '''
 
 ["DFLOW:ErrMetaOptionConflict"]

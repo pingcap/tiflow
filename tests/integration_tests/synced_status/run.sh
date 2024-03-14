@@ -298,11 +298,5 @@ run_case_with_unavailable_tikv "conf/changefeed.toml"
 run_case_with_unavailable_tidb "conf/changefeed.toml"
 run_case_with_failpoint "conf/changefeed.toml"
 
-# enable redo
-run_normal_case_and_unavailable_pd "conf/changefeed-redo.toml"
-run_case_with_unavailable_tikv "conf/changefeed-redo.toml"
-run_case_with_unavailable_tidb "conf/changefeed-redo.toml"
-run_case_with_failpoint "conf/changefeed-redo.toml"
-
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

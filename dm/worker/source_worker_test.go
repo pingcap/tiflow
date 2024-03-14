@@ -832,7 +832,7 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 
 func TestMasterBinlogOff(t *testing.T) {
 	ctx := context.Background()
-	cfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	cfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t, err)
 	cfg.From.Password = "no need to connect"
 

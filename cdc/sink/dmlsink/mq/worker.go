@@ -44,7 +44,7 @@ const (
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
-	key      codec.TopicPartitionKey
+	key      model.TopicPartitionKey
 	rowEvent *dmlsink.RowChangeCallbackableEvent
 }
 
@@ -252,8 +252,8 @@ func (w *worker) batch(
 // group groups messages by its key.
 func (w *worker) group(
 	msgs []mqEvent,
-) map[codec.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent {
-	groupedMsgs := make(map[codec.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent)
+) map[model.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent {
+	groupedMsgs := make(map[model.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent)
 	for _, msg := range msgs {
 		// Skip this event when the table is stopping.
 		if msg.rowEvent.GetTableSinkState() != state.TableSinkSinking {

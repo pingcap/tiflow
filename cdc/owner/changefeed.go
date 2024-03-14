@@ -34,7 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
@@ -145,6 +145,9 @@ type changefeed struct {
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
 
+	metricsChangefeedCreateTimeGuage  prometheus.Gauge
+	metricsChangefeedRestartTimeGauge prometheus.Gauge
+
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
@@ -153,7 +156,7 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) puller.DDLPuller
 
 	newSink func(
@@ -230,7 +233,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) puller.DDLPuller,
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
@@ -436,12 +439,15 @@ func (c *changefeed) tick(ctx context.Context,
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
-	if c.lastSyncedTs < watermark.LastSyncedTs {
-		c.lastSyncedTs = watermark.LastSyncedTs
-	} else if c.lastSyncedTs > watermark.LastSyncedTs {
-		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
-			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
-			zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+
+	if watermark.LastSyncedTs != scheduler.CheckpointCannotProceed {
+		if c.lastSyncedTs < watermark.LastSyncedTs {
+			c.lastSyncedTs = watermark.LastSyncedTs
+		} else if c.lastSyncedTs > watermark.LastSyncedTs {
+			log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+				zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+				zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+		}
 	}
 
 	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
@@ -608,13 +614,13 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.latestInfo.GetTargetTs())
 
-	f, err := filter.NewFilter(c.latestInfo.Config, "")
+	filter, err := pfilter.NewFilter(c.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage, ddlStartTs,
-		c.latestInfo.Config.ForceReplicate, c.id, util.RoleOwner, f)
+		c.latestInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -641,7 +647,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, f)
+	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, filter)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -670,16 +676,17 @@ LOOP2:
 			defer c.wg.Done()
 			c.Throw(ctx)(c.redoMetaMgr.Run(cancelCtx))
 		}()
+		log.Info("owner creates redo manager",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
 	}
-	log.Info("owner creates redo manager",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID))
 
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
 		c.latestStatus.CheckpointTs,
 		c.ddlSink,
+		filter,
 		c.ddlPuller,
 		c.schema,
 		c.redoDDLMgr,
@@ -698,6 +705,8 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
@@ -729,10 +738,16 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedCreateTimeGuage = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "create")
+	c.metricsChangefeedRestartTimeGauge = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "restart")
 }
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx context.Context) {
+	c.cleanupMetrics()
 	if c.isReleased {
 		return
 	}
@@ -770,7 +785,6 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 		_ = c.downstreamObserver.Close()
 	}
 
-	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
 	c.resolvedTs = 0
@@ -808,6 +822,8 @@ func (c *changefeed) cleanupMetrics() {
 
 	if c.isRemoved {
 		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+		changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "create")
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "restart")
 	}
 }
 

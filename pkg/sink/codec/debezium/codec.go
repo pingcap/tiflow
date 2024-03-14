@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/hack"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -45,9 +44,10 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	writer *util.JSONWriter,
 	fieldName string,
 	cols []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	tableInfo *model.TableInfo,
 ) error {
 	var err error
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
 			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
@@ -538,8 +538,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
 				// snapshot field is a string of true,last,false,incremental
 				jWriter.WriteStringField("snapshot", "false")
-				jWriter.WriteStringField("db", e.Table.Schema)
-				jWriter.WriteStringField("table", e.Table.Table)
+				jWriter.WriteStringField("db", e.TableInfo.GetSchemaName())
+				jWriter.WriteStringField("table", e.TableInfo.GetTableName())
 				jWriter.WriteInt64Field("server_id", 0)
 				jWriter.WriteNullField("gtid")
 				jWriter.WriteStringField("file", "")
@@ -577,16 +577,16 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				// after: An optional field that specifies the state of the row after the event occurred.
 				// Optional field that specifies the state of the row after the event occurred.
 				// In a delete event value, the after field is null, signifying that the row no longer exists.
-				err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "after", e.GetColumns(), e.TableInfo)
 			} else if e.IsDelete() {
 				jWriter.WriteStringField("op", "d")
 				jWriter.WriteNullField("after")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 			} else if e.IsUpdate() {
 				jWriter.WriteStringField("op", "u")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 				if err == nil {
-					err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.ColInfos)
+					err = c.writeDebeziumFieldValues(jWriter, "after", e.GetColumns(), e.TableInfo)
 				}
 			}
 		})
@@ -595,7 +595,10 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 			jWriter.WriteObjectField("schema", func() {
 				jWriter.WriteStringField("type", "struct")
 				jWriter.WriteBoolField("optional", false)
-				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope", c.clusterID, e.Table.Schema, e.Table.Table))
+				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope",
+					c.clusterID,
+					e.TableInfo.GetSchemaName(),
+					e.TableInfo.GetTableName()))
 				jWriter.WriteIntField("version", 1)
 				jWriter.WriteArrayField("fields", func() {
 					// schema is the same for `before` and `after`. So we build a new buffer to
@@ -606,14 +609,15 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 						fieldsWriter := util.BorrowJSONWriter(fieldsBuf)
 						var validCols []*model.Column
 						if e.IsInsert() {
-							validCols = e.Columns
+							validCols = e.GetColumns()
 						} else if e.IsDelete() {
-							validCols = e.PreColumns
+							validCols = e.GetPreColumns()
 						} else if e.IsUpdate() {
-							validCols = e.Columns
+							validCols = e.GetColumns()
 						}
+						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
 						for i, col := range validCols {
-							c.writeDebeziumFieldSchema(fieldsWriter, col, e.ColInfos[i].Ft)
+							c.writeDebeziumFieldSchema(fieldsWriter, col, colInfos[i].Ft)
 						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()
@@ -621,7 +625,10 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, e.Table.Schema, e.Table.Table))
+						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
+							c.clusterID,
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "before")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)
@@ -630,7 +637,10 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, e.Table.Schema, e.Table.Table))
+						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
+							c.clusterID,
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "after")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)

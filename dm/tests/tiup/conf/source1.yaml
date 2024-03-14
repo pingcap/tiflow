@@ -1,7 +1,7 @@
 source-id: mysql-replica-01
 enable-gtid: true
 enable-relay: true
-server-id: 123456
+server-id: 111111111
 from:
   host: mysql1
   user: root

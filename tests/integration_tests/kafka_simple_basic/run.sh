@@ -29,17 +29,20 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple"
-	fi
-
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
+	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" -c "simple-basic"
 	sleep 5 # wait for changefeed to start
-	# determine the sink uri and run corresponding consumer
-	# currently only kafka and pulsar are supported
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR $SINK_URI
-	fi
+
+	run_kafka_consumer $WORK_DIR $SINK_URI
+
+	# pre execute some ddls
+	run_sql_file $CUR/data/pre_ddl.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_table_exists test.finish_mark_for_ddl ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
+
+	# pause and resume changefeed makes sure changefeed sending bootstrap events
+	# when it is resumed, so the data after pause can be decoded correctly
+	run_cdc_cli changefeed pause -c "simple-basic"
+	run_cdc_cli changefeed resume -c "simple-basic"
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 

@@ -101,26 +101,26 @@ func TestValidateSink(t *testing.T) {
 
 	// test sink uri error
 	sinkURI := "mysql://root:111@127.0.0.1:3306/"
-	err := Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig)
+	err := Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "fail to open MySQL connection")
 
 	// test sink uri right
 	sinkURI = "blackhole://"
-	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig)
+	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig, nil)
 	require.Nil(t, err)
 
 	// test bdr mode error
 	replicateConfig.BDRMode = util.AddressOf(true)
 	sinkURI = "blackhole://"
-	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig)
+	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
 
 	// test sink-scheme/syncpoint error
 	replicateConfig.EnableSyncPoint = util.AddressOf(true)
 	sinkURI = "kafka://"
-	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig)
+	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig, nil)
 	require.NotNil(t, err)
 	require.Contains(
 		t, err.Error(),

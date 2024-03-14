@@ -39,7 +39,7 @@ func NewPullerWrapperForTest(
 }
 
 func (d *dummyPullerWrapper) Start(ctx context.Context, up *upstream.Upstream,
-	eventSortEngine sorter.SortEngine, errCh chan<- error) {
+	eventSortEngine sorter.SortEngine, errCh chan<- error, enableTableMonitor bool) {
 }
 
 func (d *dummyPullerWrapper) GetStats() puller.Stats {

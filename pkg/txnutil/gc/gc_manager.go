@@ -103,6 +103,8 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	m.isTiCDCBlockGC.Store(actual == checkpointTs)
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
+	minServiceGCSafePointGauge.Set(float64(oracle.ExtractPhysical(actual)))
+	cdcGCSafePointGauge.Set(float64(oracle.ExtractPhysical(checkpointTs)))
 	return nil
 }
 

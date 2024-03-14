@@ -34,11 +34,6 @@ import (
 const (
 	defaultRPCTimeout = "10m"
 
-	// EncryptCmdName is special command.
-	EncryptCmdName = "encrypt"
-	// DecryptCmdName is special command.
-	DecryptCmdName = "decrypt"
-
 	// Master specifies member master type.
 	Master = "master"
 	// Worker specifies member worker type.
@@ -54,7 +49,7 @@ const (
 	DefaultWarnCnt = 10
 )
 
-var argsNeedAdjust = [...]string{"-version", "-config", "-master-addr", "-rpc-timeout", "-ssl-ca", "-ssl-cert", "-ssl-key", "-" + EncryptCmdName, "-" + DecryptCmdName}
+var argsNeedAdjust = [...]string{"-version", "-config", "-master-addr", "-rpc-timeout", "-ssl-ca", "-ssl-cert", "-ssl-key"}
 
 // NewConfig creates a new base config for dmctl.
 func NewConfig(fs *pflag.FlagSet) *Config {
@@ -72,10 +67,6 @@ func DefineConfigFlagSet(fs *pflag.FlagSet) {
 	fs.String("ssl-ca", "", "Path of file that contains list of trusted SSL CAs for connection.")
 	fs.String("ssl-cert", "", "Path of file that contains X509 certificate in PEM format for connection.")
 	fs.String("ssl-key", "", "Path of file that contains X509 key in PEM format for connection.")
-	fs.String(EncryptCmdName, "", "Encrypts plaintext to ciphertext.")
-	fs.String(DecryptCmdName, "", "Decrypts ciphertext to plaintext.")
-	_ = fs.MarkHidden(EncryptCmdName)
-	_ = fs.MarkHidden(DecryptCmdName)
 }
 
 // AdjustArgumentsForPflags adjust flag format args to pflags format.

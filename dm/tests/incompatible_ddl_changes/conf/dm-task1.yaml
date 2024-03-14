@@ -40,7 +40,7 @@ filters:
         "drop primary key",
         "drop unique key",
         "modify default value",
-        "modify constaints",
+        "modify constraint",
         "modify columns order",
         "modify charset",
         "modify collation",
