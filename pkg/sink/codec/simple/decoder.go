@@ -154,7 +154,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		log.Warn("table info not found for the event, "+
+		log.Debug("table info not found for the event, "+
 			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
 			zap.String("schema", d.msg.Schema),
 			zap.String("table", d.msg.Table),
@@ -221,13 +221,17 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	}
 
 	ctx := context.Background()
+	timezone, err := common.QueryTimezone(ctx, d.upstreamTiDB)
+	if err != nil {
+		return nil, err
+	}
 	switch m.Type {
 	case DMLTypeInsert:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +241,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +251,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		old, err := d.buildData(holder, fieldTypeMap)
+		old, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +261,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +273,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 }
 
 func (d *Decoder) buildData(
-	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType,
+	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
 ) (map[string]interface{}, error) {
 	columnsCount := holder.Length()
 	result := make(map[string]interface{}, columnsCount)
@@ -284,7 +288,7 @@ func (d *Decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		result[col.Name()] = encodeValue(value, fieldType, d.config.TimeZone.String())
+		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
 	return result, nil
 }
@@ -350,7 +354,7 @@ func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 }
 
 func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
-	if info == nil {
+	if info == nil || info.TableName.Schema == "" || info.TableName.Table == "" {
 		return
 	}
 	key := tableSchemaKey{
