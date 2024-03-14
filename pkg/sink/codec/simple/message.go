@@ -464,24 +464,30 @@ func buildRowChangedEvent(
 	}
 
 	for _, col := range result.Columns {
-		adjustChecksumValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
 	}
 	for _, col := range result.PreColumns {
-		adjustChecksumValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
 	}
 
 	return result, nil
 }
 
-func adjustChecksumValue(column *model.ColumnData, flag types.FieldType) {
+func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
 	if flag.GetType() != mysql.TypeTimestamp {
 		return
 	}
 	if column.Value == nil {
 		return
 	}
-	data := column.Value.(map[string]interface{})
-	column.Value = data["value"].(string)
+	var ts string
+	switch v := column.Value.(type) {
+	case map[string]string:
+		ts = v["value"]
+	case map[string]interface{}:
+		ts = v["value"].(string)
+	}
+	column.Value = ts
 }
 
 func decodeColumns(
@@ -696,13 +702,6 @@ func (a *avroMarshaller) encodeValue4Avro(
 	return value, ""
 }
 
-type timestamp struct {
-	// location specifies the location of the `timestamp` typed value,
-	// so that the consumer can convert it to any other timezone location.
-	Location string `json:"location"`
-	Value    string `json:"value"`
-}
-
 func encodeValue(
 	value interface{}, ft *types.FieldType, location string,
 ) interface{} {
@@ -726,9 +725,31 @@ func encodeValue(
 		case []uint8:
 			ts = string(v)
 		}
-		return timestamp{
-			Location: location,
-			Value:    ts,
+		return map[string]string{
+			"location": location,
+			"value":    ts,
+		}
+	case mysql.TypeEnum:
+		switch v := value.(type) {
+		case []uint8:
+			data := string(v)
+			enum, err := tiTypes.ParseEnumName(ft.GetElems(), data, ft.GetCollate())
+			if err != nil {
+				log.Panic("parse enum name failed",
+					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
+			}
+			return enum.Value
+		}
+	case mysql.TypeSet:
+		switch v := value.(type) {
+		case []uint8:
+			data := string(v)
+			set, err := tiTypes.ParseSetName(ft.GetElems(), data, ft.GetCollate())
+			if err != nil {
+				log.Panic("parse set name failed",
+					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
+			}
+			return set.Value
 		}
 	default:
 	}
