@@ -235,6 +235,17 @@ func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
 	delete(m.statesInternal, regionID)
 }
 
+func (m *syncRegionFeedStateMap) GetAllRegionID() []uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	regionIDList := []uint64{}
+	for regionID := range m.statesInternal {
+		regionIDList = append(regionIDList, regionID)
+	}
+	return regionIDList
+
+}
+
 func (m *syncRegionFeedStateMap) len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -299,4 +310,10 @@ func (rsm *regionStateManager) regionCount() (count int64) {
 		count += int64(bucket.len())
 	}
 	return
+}
+
+func (rsm *regionStateManager) getRegionIDList(regionID uint64) []uint64 {
+	bucket := rsm.getBucket(regionID)
+	return rsm.states[bucket].GetAllRegionID()
+
 }
