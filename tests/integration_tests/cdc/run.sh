@@ -37,7 +37,7 @@ function prepare() {
               oauth2-private-key="${WORK_DIR}/credential.json"
 EOF
 	else
-		cat "" >$WORK_DIR/pulsar_test.toml
+		echo "" >$WORK_DIR/pulsar_test.toml
 	fi
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config $WORK_DIR/pulsar_test.toml
 	case $SINK_TYPE in
