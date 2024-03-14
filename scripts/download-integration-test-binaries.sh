@@ -102,7 +102,7 @@ function download_community_binaries() {
 
 	# jq
 	local os_name=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
-	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_system}-${arch}"
+	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_name}-${arch}"
 	wget -O third_bin/jq "$jq_url"
 
 	chmod a+x third_bin/*
