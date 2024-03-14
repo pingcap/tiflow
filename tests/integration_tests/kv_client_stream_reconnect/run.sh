@@ -40,7 +40,7 @@ function run() {
           oauth2-private-key="${WORK_DIR}/credential.json"
 EOF
 	else
-		cat "" >$WORK_DIR/pulsar_test.toml
+		echo "" >$WORK_DIR/pulsar_test.toml
 	fi
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" --config $WORK_DIR/pulsar_test.toml 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 	case $SINK_TYPE in
