@@ -90,14 +90,20 @@ func ConvertTimezone(timestamp string, location string) (string, error) {
 		return "", err
 	}
 
-	loc, err := time.LoadLocation(location)
+	var tz *time.Location
+	switch strings.ToLower(location) {
+	case "", "system", "local":
+		tz, err = GetLocalTimezone()
+	default:
+		tz, err = time.LoadLocation(location)
+	}
 	if err != nil {
 		log.Info("cannot load timezone location",
 			zap.String("location", location), zap.Error(err))
 		return "", err
 	}
 
-	err = t.ConvertTimeZone(loc, time.UTC)
+	err = t.ConvertTimeZone(tz, time.UTC)
 	if err != nil {
 		return "", err
 	}

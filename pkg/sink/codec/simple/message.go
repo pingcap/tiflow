@@ -718,9 +718,17 @@ func encodeValue(
 		default:
 		}
 	case mysql.TypeTimestamp:
+		var ts string
+		switch v := value.(type) {
+		case string:
+			ts = v
+		// the timestamp value maybe []uint8 if it's queried from upstream TiDB.
+		case []uint8:
+			ts = string(v)
+		}
 		return timestamp{
 			Location: location,
-			Value:    value.(string),
+			Value:    ts,
 		}
 	default:
 	}
