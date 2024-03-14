@@ -510,7 +510,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 
 		g, ctx := errgroup.WithContext(ctx)
-		ctx, cancelOwner := context.WithCancel(ctx)
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 		g.Go(func() error {
 			return c.runEtcdWorker(ownerCtx, owner,
@@ -522,8 +521,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				globalState,
 				// todo: do not use owner flush interval
 				ownerFlushInterval, util.RoleController.String())
-			// controller is exited, cancel owner to exit the loop.
-			cancelOwner()
+			// controller is exited, tell owner to exit the loop.
+			c.owner.AsyncStop()
 			return er
 		})
 		err = g.Wait()
