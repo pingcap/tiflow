@@ -553,15 +553,15 @@ func (s *MockSchemaStorage) BuildDDLEvents(
 
 // AdvanceResolvedTs implements SchemaStorage.
 func (s *MockSchemaStorage) AdvanceResolvedTs(ts uint64) {
-	s.Resolved = ts
+	atomic.StoreUint64(&s.Resolved, ts)
 }
 
 // ResolvedTs implements SchemaStorage.
 func (s *MockSchemaStorage) ResolvedTs() uint64 {
-	return s.Resolved
+	return atomic.LoadUint64(&s.Resolved)
 }
 
 // DoGC implements SchemaStorage.
 func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
-	return s.Resolved
+	return atomic.LoadUint64(&s.Resolved)
 }

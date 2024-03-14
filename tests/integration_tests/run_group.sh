@@ -44,6 +44,7 @@ groups=(
 	["G10"]='default_value simple cdc_server_tips event_filter sql_mode'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
+	# pulsar mtls authentication enabled
 	["G13"]='tiflash region_merge common_1'
 	["G14"]='big_txn changefeed_finish force_replicate_table'
 	["G15"]='new_ci_collation batch_add_table multi_rocks'

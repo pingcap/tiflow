@@ -23,6 +23,7 @@ require (
 	github.com/cockroachdb/pebble v0.0.0-20220415182917-06c9d3be25b3
 	github.com/coreos/go-semver v0.3.1
 	github.com/deepmap/oapi-codegen v1.9.0
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
@@ -33,6 +34,7 @@ require (
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
 	github.com/go-mysql-org/go-mysql v1.7.1-0.20240314052020-034c7abd13cb
+	github.com/go-oauth2/oauth2/v4 v4.5.2
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/goccy/go-json v0.10.2
@@ -70,7 +72,7 @@ require (
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20240228123331-27ce02afd2e3
 	github.com/pingcap/tidb-dashboard v0.0.0-20240127080020-2171c6e6b9d7
-	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
+	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240228123331-27ce02afd2e3
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.6.0
@@ -170,6 +172,13 @@ require (
 	github.com/scalalang2/golang-fifo v0.1.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/tidwall/btree v1.7.0 // indirect
+	github.com/tidwall/buntdb v1.3.0 // indirect
+	github.com/tidwall/gjson v1.14.3 // indirect
+	github.com/tidwall/grect v0.1.4 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
+	github.com/tidwall/rtred v0.1.2 // indirect
+	github.com/tidwall/tinyqueue v0.1.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.47.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.22.0 // indirect
