@@ -2,8 +2,23 @@
 
 ### Run integration tests locally
 
-1. Run `make prepare_test_binaries community=true` to generate TiCDC related binaries for integration test.
-You can specify version and arch, for example: `make prepare_test_binaries community=true ver=v7.0.0 arch=amd64`
+1. Run `make prepare_test_binaries community=true` to download TiCDC related binaries for integration test.
+You can specify version and arch, for example: `make prepare_test_binaries community=true ver=v7.0.0 arch=amd64`.
+
+   You should find these executables in the `tiflow/bin` directory after downloading successfully.
+   * `tidb-server` # version >= 6.0.0-rc.1
+   * `tikv-server` # version >= 6.0.0-rc.1
+   * `pd-server`   # version >= 6.0.0-rc.1
+   * `pd-ctl`      # version >= 6.0.0-rc.1
+   * `tiflash`     # tiflash binary
+   * `libc++.so, libc++abi.so, libgmssl.so, libtiflash_proxy.so` # some necessary so files related to tiflash
+   * `sync_diff_inspector`
+   * [go-ycsb](https://github.com/pingcap/go-ycsb)
+   * [etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
+   * [jq](https://stedolan.github.io/jq/)
+   * [minio](https://github.com/minio/minio)
+
+   > You could download these binaries by yourself from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz) and [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz).
 
 2. These are programs/packages need be installed.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
