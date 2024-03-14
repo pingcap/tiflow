@@ -220,45 +220,48 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		SchemaVersion: m.SchemaVersion,
 	}
 
-	timezone := d.config.TimeZone.String()
 	ctx := context.Background()
+	timezone, err := common.QueryTimezone(ctx, d.upstreamTiDB)
+	if err != nil {
+		return nil, err
+	}
 	switch m.Type {
 	case DMLTypeInsert:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data, timezone)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
 		result.Data = data
 	case DMLTypeUpdate:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data, timezone)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
 		result.Data = data
 
-		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old, timezone)
+		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err
 		}
-		old, err := d.buildData(holder, fieldTypeMap)
+		old, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
 		result.Old = old
 	case DMLTypeDelete:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old, timezone)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +273,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 }
 
 func (d *Decoder) buildData(
-	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType,
+	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
 ) (map[string]interface{}, error) {
 	columnsCount := holder.Length()
 	result := make(map[string]interface{}, columnsCount)
@@ -285,7 +288,7 @@ func (d *Decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		result[col.Name()] = encodeValue(value, fieldType, d.config.TimeZone.String())
+		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
 	return result, nil
 }

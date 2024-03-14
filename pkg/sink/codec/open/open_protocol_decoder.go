@@ -259,7 +259,6 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		commitTs = handleKeyOnlyEvent.CommitTs
 	)
 
-	timezone := b.config.TimeZone.String()
 	tableInfo := handleKeyOnlyEvent.TableInfo
 	if handleKeyOnlyEvent.IsInsert() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
@@ -267,7 +266,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +280,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
@@ -295,7 +294,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +308,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions, timezone)
+		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		if err != nil {
 			return nil, err
 		}

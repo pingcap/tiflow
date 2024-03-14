@@ -56,10 +56,31 @@ func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
+func QueryTimezone(ctx context.Context, db *sql.DB) (string, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Error("establish connection to the upstream tidb failed", zap.Error(err))
+		return "", errors.Trace(err)
+	}
+	defer conn.Close()
+
+	var timezone string
+	query := "SELECT @@global.time_zone"
+	err = conn.QueryRowContext(ctx, query).Scan(&timezone)
+	if err != nil {
+		log.Error("query timezone failed", zap.Error(err))
+		return "", errors.Trace(err)
+	}
+
+	log.Info("query global timezone from the upstream tidb",
+		zap.Any("timezone", timezone))
+
+	return timezone, nil
+}
+
 // SnapshotQuery query the db by the snapshot read with the given commitTs
 func SnapshotQuery(
 	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
-	timezone string,
 ) (*ColumnsHolder, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -70,17 +91,8 @@ func SnapshotQuery(
 	}
 	defer conn.Close()
 
-	// 1. set the timezone, to make it the same as the decoder specified timezone.
-	query := fmt.Sprintf("set time_zone = %s", timezone)
-	if _, err = conn.ExecContext(ctx, query); err != nil {
-		log.Error("set time_zone failed",
-			zap.String("query", query),
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-	// 2. set snapshot read
-	query = fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
+	// 1. set snapshot read
+	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
 	_, err = conn.ExecContext(ctx, query)
 	if err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)

@@ -220,11 +220,9 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			CommitTs: commitTs,
 		},
 	}
-
-	timezone := b.config.TimeZone.String()
 	switch eventType {
 	case "INSERT":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +233,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 	case "UPDATE":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +244,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld(), timezone)
+		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +254,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		}
 		result.Old = []map[string]interface{}{old}
 	case "DELETE":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData, timezone)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
