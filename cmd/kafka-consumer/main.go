@@ -109,17 +109,14 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	if s != "" {
 		o.version = s
 	}
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-
 	o.address = strings.Split(upstreamURI.Host, ",")
 
-	saramaConfig := sarama.NewConfig()
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(o.address, o.topic, saramaConfig)
+		partition, err := getPartitionNum(o.address, o.topic)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", o.topic), zap.Error(err))
 		}
@@ -330,9 +327,10 @@ func main() {
 	}
 }
 
-func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+func getPartitionNum(address []string, topic string) (int32, error) {
+	saramaConfig := sarama.NewConfig()
 	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(address, cfg)
+	admin, err := sarama.NewClusterAdmin(address, saramaConfig)
 	if err != nil {
 		return 0, cerror.Trace(err)
 	}
@@ -433,8 +431,6 @@ type Consumer struct {
 
 	eventRouter *dispatcher.EventRouter
 
-	tz *time.Location
-
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
@@ -450,14 +446,14 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		return nil, cerror.Annotate(err, "can not load timezone")
 	}
 	config.GetGlobalServerConfig().TZ = o.timezone
-	c.tz = tz
+	o.codecConfig.TimeZone = tz
 
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
 
 	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
-		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
+		db, err := openDB(ctx, o.upstreamTiDBDSN)
 		if err != nil {
 			return nil, err
 		}
@@ -575,7 +571,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		if err != nil {
 			return cerror.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic, c.tz)
+		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	default:
@@ -628,10 +624,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
-				if partition == 0 && ddl.Query != "" {
-					c.appendDDL(ddl)
-				}
 
 				if simple, ok := decoder.(*simple.Decoder); ok {
 					cachedEvents := simple.GetCachedEvents()
@@ -653,6 +645,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
+				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
+				if partition == 0 && ddl.Query != "" {
+					c.appendDDL(ddl)
+				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
@@ -662,20 +658,22 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-
-				if c.eventRouter != nil {
-					target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
-					if err != nil {
-						return cerror.Trace(err)
-					}
-					if partition != target {
-						log.Panic("RowChangedEvent dispatched to wrong partition",
-							zap.Int32("obtained", partition),
-							zap.Int32("expected", target),
-							zap.Int32("partitionNum", c.option.partitionNum),
-							zap.Any("row", row),
-						)
-					}
+				// when using simple protocol, the row may be nil, since it's table info not received yet,
+				// it's cached in the decoder, so just continue here.
+				if row == nil {
+					continue
+				}
+				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
+				if err != nil {
+					return cerror.Trace(err)
+				}
+				if partition != target {
+					log.Panic("RowChangedEvent dispatched to wrong partition",
+						zap.Int32("obtained", partition),
+						zap.Int32("expected", target),
+						zap.Int32("partitionNum", c.option.partitionNum),
+						zap.Any("row", row),
+					)
 				}
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
@@ -871,7 +869,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if todoDDL.CommitTs < minPartitionResolvedTs {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
+					zap.String("DDL", todoDDL.Query))
 			}
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
@@ -961,7 +959,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.Error(err))
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
 		return nil, cerror.Trace(err)
 	}
 	log.Info("open db success", zap.String("dsn", dsn))

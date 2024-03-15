@@ -18,21 +18,24 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.Column, expected uint32) error {
-	checksum, err := calculateChecksum(columns)
+func VerifyChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo, expected uint32) error {
+	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
+	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
+	if expected == 0 {
+		return nil
+	}
+	checksum, err := calculateChecksum(columns, columnInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -48,17 +51,17 @@ func VerifyChecksum(columns []*model.Column, expected uint32) error {
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint32, error) {
+func calculateChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo) (uint32, error) {
 	var (
 		checksum uint32
 		err      error
 	)
 	buf := make([]byte, 0)
-	for _, col := range columns {
+	for idx, col := range columns {
 		if len(buf) > 0 {
 			buf = buf[:0]
 		}
-		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
+		buf, err = buildChecksumBytes(buf, col.Value, columnInfo[idx].GetType())
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -153,25 +156,22 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		location := config.GetDefaultServerConfig().TZ
-		timestamp := value.(string)
-		// if timestamp contains microseconds,
-		// keep it in the value to match the TiDB representation.
-		format := "2006-01-02 15:04:05"
-		if strings.Contains(timestamp, ".") {
-			format = "2006-01-02 15:04:05.999999"
+		location := "Local"
+		var ts string
+		switch data := value.(type) {
+		case map[string]interface{}:
+			ts = data["value"].(string)
+			location = data["location"].(string)
+		case string:
+			ts = data
 		}
-
-		loc, err := util.GetTimezone(location)
+		ts, err := util.ConvertTimezone(ts, location)
 		if err != nil {
-			return nil, errors.Trace(err)
+			log.Panic("convert timestamp to timezone failed",
+				zap.String("timestamp", ts), zap.String("location", location),
+				zap.Error(err))
 		}
-		t, err := time.ParseInLocation(format, timestamp, loc)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		timestamp = t.UTC().Format(format)
-		buf = appendLengthValue(buf, []byte(timestamp))
+		buf = appendLengthValue(buf, []byte(ts))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		buf = appendLengthValue(buf, []byte(value.(string)))
