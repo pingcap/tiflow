@@ -207,13 +207,15 @@ func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet)
 		}
-		if len(mariaGTIDs.Sets) != 1 {
-			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(mariaGTIDs.Sets), gSet)
-		}
+		gtidCount := 0
 		var mariaGTID *gmysql.MariadbGTID
 		for _, set := range mariaGTIDs.Sets {
+			gtidCount += len(set)
 			for _, mariaGTID = range set {
 			}
+		}
+		if gtidCount != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(gtidCount, gSet)
 		}
 		return mariaGTID, nil
 	default:
