@@ -368,6 +368,8 @@ github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre
 github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab/go.mod h1:/P9AEU963A2AYjv4d1V5eVL1CQbEJq6aCNHDDjibzu8=
 github.com/go-mysql-org/go-mysql v1.7.1-0.20240314052020-034c7abd13cb h1:L9S27ClBos7MqTH8ipVO/dtE8szMAOzOaOMaL82fPaU=
 github.com/go-mysql-org/go-mysql v1.7.1-0.20240314052020-034c7abd13cb/go.mod h1:kwbF156Z9Sy8amP3E1SZp7/s/0PuJj/xKaOWToQiq0Y=
+github.com/go-mysql-org/go-mysql v1.7.1-0.20240314115043-2199dfb0ba98 h1:ygai+7MZSkAPhRwRraWf1EsPTgrz4U2+x3NVWzJYQys=
+github.com/go-mysql-org/go-mysql v1.7.1-0.20240314115043-2199dfb0ba98/go.mod h1:kwbF156Z9Sy8amP3E1SZp7/s/0PuJj/xKaOWToQiq0Y=
 github.com/go-oauth2/oauth2/v4 v4.5.2 h1:CuZhD3lhGuI6aNLyUbRHXsgG2RwGRBOuCBfd4WQKqBQ=
 github.com/go-oauth2/oauth2/v4 v4.5.2/go.mod h1:wk/2uLImWIa9VVQDgxz99H2GDbhmfi/9/Xr+GvkSUSQ=
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=

@@ -44,7 +44,7 @@ function setup_replica() {
 	change_master_to_gtid $slave_port $master_port
 }
 
-function run_dm_components_and_create_sources() {
+function run_dm_components_and_create_source() {
 	echo "-------run_dm_components--------"
 
 	pkill -9 dm-master || true
@@ -59,9 +59,15 @@ function run_dm_components_and_create_sources() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member" \
 		"free" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-source create $CUR/conf/source1.yaml" \
-		"\"result\": true" 2
+	if [ "$1" = "relay" ]; then
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"operate-source create $CUR/conf/source1_relay.yaml" \
+			"\"result\": true" 2
+	else
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"operate-source create $CUR/conf/source1.yaml" \
+			"\"result\": true" 2
+	fi
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member" \
@@ -101,10 +107,10 @@ function clean_task() {
 function test_master_down_and_up() {
 	cleanup_process
 	clean_data
-	install_sync_diff
+	# install_sync_diff
 	setup_replica
 	gen_full_data
-	run_dm_components_and_create_sources
+	run_dm_components_and_create_source $1
 	start_task
 	verify_result
 	echo "-------start test--------"
@@ -131,13 +137,14 @@ function test_master_down_and_up() {
 	verify_result
 
 	clean_task
-	echo "CASE=test_master_down_and_up success"
+	echo "CASE=test_master_down_and_up $1 success"
 }
 
 function run() {
 	wait_mysql 3306 1
 	wait_mysql 3307 2
-	test_master_down_and_up
+	test_master_down_and_up no_relay
+	test_master_down_and_up relay
 }
 
 run
