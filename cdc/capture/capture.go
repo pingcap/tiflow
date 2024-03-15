@@ -537,7 +537,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				globalState,
 				// todo: do not use owner flush interval
 				ownerFlushInterval, util.RoleController.String())
-			// controller is exited, tell owner to exit the loop.
+			// controller has exited, stop owner. 
 			c.owner.AsyncStop()
 			return er
 		})
