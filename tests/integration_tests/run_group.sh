@@ -38,6 +38,7 @@ groups=(
 	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
+	# pulsar oauth2 authentication enabled
 	["G07"]='kv_client_stream_reconnect cdc split_region'
 	["G08"]='processor_err_chan changefeed_reconstruct multi_capture synced_status_with_redo'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint synced_status'
