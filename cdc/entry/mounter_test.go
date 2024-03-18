@@ -481,7 +481,6 @@ func getLastKeyValueInStore(t *testing.T, store tidbkv.Storage, tableID int64) (
 
 // We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
 // https://github.com/pingcap/tiflow/issues/4048
-// FIXME: OriginDefaultValue seems always to be string, and test more corner case
 // Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 func TestGetDefaultZeroValue(t *testing.T) {
 	// Check following MySQL type, ref to:

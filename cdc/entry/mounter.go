@@ -708,7 +708,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		d = types.NewDatum(col.GetOriginDefaultValue())
-		return d, d.GetValue(), sizeOfDatum(d), "", nil
+		d, err := d.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
+		return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
 	}
 
 	if !mysql.HasNotNullFlag(col.GetFlag()) {
