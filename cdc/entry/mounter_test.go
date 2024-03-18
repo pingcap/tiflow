@@ -620,6 +620,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	// mysql.TypeSet + notnull
 	ftTypeSetNotNull := types.NewFieldType(mysql.TypeSet)
 	ftTypeSetNotNull.SetFlag(mysql.NotNullFlag)
+	ftTypeSetNotNull.SetElems([]string{"1", "e"})
 
 	// mysql.TypeGeometry + notnull
 	ftTypeGeometryNotNull := types.NewFieldType(mysql.TypeGeometry)
@@ -750,14 +751,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			Res:     nil,
 		},
 		{
-			Name: "mysql.TypeNewDecimal + null + default",
-			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: "-3.14", // no float
-				FieldType:          *ftTypeNewDecimalNotNull,
-			},
-			Res: "-3.14",
-		},
-		{
 			Name:    "mysql.TypeNull",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeNull},
 			Res:     nil,
@@ -766,22 +759,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			Name:    "mysql.TypeTimestamp + notnull + nodefault",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeTimestampNotNull},
 			Res:     "0000-00-00 00:00:00",
-		},
-		{
-			Name: "mysql.TypeTimestamp + notnull + default",
-			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: "2020-11-19 12:12:12",
-				FieldType:          *ftTypeTimestampNotNull,
-			},
-			Res: "2020-11-19 12:12:12",
-		},
-		{
-			Name: "mysql.TypeTimestamp + null + default",
-			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: "2020-11-19 12:12:12",
-				FieldType:          *ftTypeTimestampNull,
-			},
-			Res: "2020-11-19 12:12:12",
 		},
 		{
 			Name:    "mysql.TypeDate, other testCases same as TypeTimestamp",
@@ -809,7 +786,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				OriginDefaultValue: "2021",
 				FieldType:          *ftTypeYearNotNull,
 			},
-			Res: "2021",
+			Res: int64(2021),
 		},
 		{
 			Name:    "mysql.TypeNewDate",
@@ -878,15 +855,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			Res: uint64(1),
 		},
 		{
-			Name: "mysql.TypeEnum + notnull + default",
-			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: "e1",
-				FieldType:          *ftTypeEnumNotNull,
-			},
-			// TypeEnum default value will be a string and then translate to []byte
-			Res: "e1",
-		},
-		{
 			Name: "mysql.TypeEnum + null",
 			ColInfo: timodel.ColumnInfo{
 				FieldType: *ftTypeEnumNull,
@@ -899,15 +867,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			Res:     uint64(0),
 		},
 		{
-			Name: "mysql.TypeSet + notnull + default",
-			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: "1,e",
-				FieldType:          *ftTypeSetNotNull,
-			},
-			// TypeSet default value will be a string and then translate to []byte
-			Res: "1,e",
-		},
-		{
 			Name:    "mysql.TypeGeometry",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeGeometryNotNull},
 			Res:     nil, // not support yet
@@ -918,6 +877,56 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
 	}
+
+	colInfo := timodel.ColumnInfo{
+		OriginDefaultValue: "-3.14", // no float
+		FieldType:          *ftTypeNewDecimalNotNull,
+	}
+	_, val, _, _, _ := getDefaultOrZeroValue(&colInfo)
+	decimal := new(types.MyDecimal)
+	err := decimal.FromString([]byte("-3.14"))
+	require.NoError(t, err)
+	require.Equal(t, decimal, val, "mysql.TypeNewDecimal + notnull + default")
+
+	colInfo = timodel.ColumnInfo{
+		OriginDefaultValue: "2020-11-19 12:12:12",
+		FieldType:          *ftTypeTimestampNotNull,
+	}
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	expected, err := types.ParseTimeFromFloatString(
+		types.DefaultStmtNoWarningContext,
+		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+	require.NoError(t, err)
+	require.Equal(t, expected, val, "mysql.TypeTimestamp + notnull + default")
+
+	colInfo = timodel.ColumnInfo{
+		OriginDefaultValue: "2020-11-19 12:12:12",
+		FieldType:          *ftTypeTimestampNull,
+	}
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	expected, err = types.ParseTimeFromFloatString(
+		types.DefaultStmtNoWarningContext,
+		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+	require.NoError(t, err)
+	require.Equal(t, expected, val, "mysql.TypeTimestamp + null + default")
+
+	colInfo = timodel.ColumnInfo{
+		OriginDefaultValue: "e1",
+		FieldType:          *ftTypeEnumNotNull,
+	}
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	expectedEnum, err := types.ParseEnumName(colInfo.FieldType.GetElems(), "e1", colInfo.FieldType.GetCollate())
+	require.NoError(t, err)
+	require.Equal(t, expectedEnum, val, "mysql.TypeEnum + notnull + default")
+
+	colInfo = timodel.ColumnInfo{
+		OriginDefaultValue: "1,e",
+		FieldType:          *ftTypeSetNotNull,
+	}
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	expectedSet, err := types.ParseSetName(colInfo.FieldType.GetElems(), "1,e", colInfo.FieldType.GetCollate())
+	require.NoError(t, err)
+	require.Equal(t, expectedSet, val, "mysql.TypeSet + notnull + default")
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
