@@ -50,7 +50,7 @@ endif
 # We need to add CGO_ENABLED=1 to make it work when build TiCDC in Darwin OS.
 # These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
 # ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
-# ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
+# ref: https://github.com/william-y-20230331/tidb/pull/39526#issuecomment-1407952955
 OS := "$(shell go env GOOS)"
 ifeq (${OS}, "linux")
 	CGO := 0
@@ -72,23 +72,23 @@ GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
-CDC_PKG := github.com/pingcap/tiflow
-DM_PKG := github.com/pingcap/tiflow/dm
-ENGINE_PKG := github.com/pingcap/tiflow/engine
+CDC_PKG := github.com/william-y-20230331/tiflow
+DM_PKG := github.com/william-y-20230331/tiflow/dm
+ENGINE_PKG := github.com/william-y-20230331/tiflow/engine
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow/tests|integration|testing_utils|pb|pbmock|tiflow/bin'
-PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/cmd|github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
-DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock'
+PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/william-y-20230331/tiflow/cmd|github.com/william-y-20230331/tiflow/dm|github.com/william-y-20230331/tiflow/engine'
+DM_PACKAGE_LIST := go list github.com/william-y-20230331/tiflow/dm/... | grep -vE 'pb|pbmock'
 PACKAGES := $$($(PACKAGE_LIST))
 PACKAGES_TICDC := $$($(PACKAGE_LIST_WITHOUT_DM_ENGINE))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
 # NOTE: ignore engine/framework because of a race in testify. See #9619
-# ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE 'pb|proto|engine/test/e2e'
-ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE "pb|proto|engine/test/e2e|engine/framework$$"
+# ENGINE_PACKAGE_LIST := go list github.com/william-y-20230331/tiflow/engine/... | grep -vE 'pb|proto|engine/test/e2e'
+ENGINE_PACKAGE_LIST := go list github.com/william-y-20230331/tiflow/engine/... | grep -vE "pb|proto|engine/test/e2e|engine/framework$$"
 ENGINE_PACKAGES := $$($(ENGINE_PACKAGE_LIST))
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|_gen|proto|pb\.go|pb\.gw\.go|_mock.go')
 TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 TEST_FILES_WITHOUT_DM := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils|^\./dm')
-FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
+FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/william-y-20230331/$(PROJECT)/"}|grep -v "github.com/william-y-20230331/$(PROJECT)"; done)
 FAILPOINT := tools/bin/failpoint-ctl
 
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
@@ -128,7 +128,7 @@ LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
-LDFLAGS += -X "github.com/pingcap/tidb/pkg/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "github.com/william-y-20230331/tidb/pkg/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
 
 include tools/Makefile
 include Makefile.engine
@@ -236,8 +236,8 @@ check_third_party_binary:
 integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/... \
-		-o bin/cdc.test github.com/pingcap/tiflow/cmd/cdc \
+		-coverpkg=github.com/william-y-20230331/tiflow/... \
+		-o bin/cdc.test github.com/william-y-20230331/tiflow/cmd/cdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
@@ -433,7 +433,7 @@ endef
 dm_unit_test: check_failpoint_ctl
 	$(call run_dm_unit_test,$(DM_PACKAGES))
 
-# run unit test for the specified pkg only, like `make dm_unit_test_pkg PKG=github.com/pingcap/tiflow/dm/master`
+# run unit test for the specified pkg only, like `make dm_unit_test_pkg PKG=github.com/william-y-20230331/tiflow/dm/master`
 dm_unit_test_pkg: check_failpoint_ctl
 	$(call run_dm_unit_test,$(PKG))
 
@@ -450,20 +450,20 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dm-worker.test github.com/pingcap/tiflow/cmd/dm-worker \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dm-worker.test github.com/william-y-20230331/tiflow/cmd/dm-worker \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dm-master.test github.com/pingcap/tiflow/cmd/dm-master \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dm-master.test github.com/william-y-20230331/tiflow/cmd/dm-master \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dmctl.test github.com/pingcap/tiflow/cmd/dm-ctl \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dmctl.test github.com/william-y-20230331/tiflow/cmd/dm-ctl \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dm-syncer.test github.com/pingcap/tiflow/cmd/dm-syncer \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dm-syncer.test github.com/william-y-20230331/tiflow/cmd/dm-syncer \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
@@ -471,8 +471,8 @@ dm_integration_test_build: check_failpoint_ctl
 dm_integration_test_build_worker: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dm-worker.test github.com/pingcap/tiflow/cmd/dm-worker \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dm-worker.test github.com/william-y-20230331/tiflow/cmd/dm-worker \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
@@ -480,8 +480,8 @@ dm_integration_test_build_worker: check_failpoint_ctl
 dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dm-master.test github.com/pingcap/tiflow/cmd/dm-master \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dm-master.test github.com/william-y-20230331/tiflow/cmd/dm-master \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
@@ -489,8 +489,8 @@ dm_integration_test_build_master: check_failpoint_ctl
 dm_integration_test_build_ctl: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
-		-coverpkg=github.com/pingcap/tiflow/dm/... \
-		-o bin/dmctl.test github.com/pingcap/tiflow/cmd/dm-ctl \
+		-coverpkg=github.com/william-y-20230331/tiflow/dm/... \
+		-o bin/dmctl.test github.com/william-y-20230331/tiflow/cmd/dm-ctl \
 		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
