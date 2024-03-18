@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -309,7 +310,9 @@ func (ra *RedoApplier) applyRow(
 			model.DefaultChangeFeedID(applierChangefeed),
 			spanz.TableIDToComparableSpan(tableID),
 			checkpointTs,
+			pdutil.NewClock4Test(),
 			prometheus.NewCounter(prometheus.CounterOpts{}),
+			prometheus.NewHistogram(prometheus.HistogramOpts{}),
 		)
 		ra.tableSinks[tableID] = tableSink
 	}
