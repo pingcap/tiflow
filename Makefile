@@ -7,7 +7,8 @@
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
-	format-makefiles check-makefiles prepare_test_binaries
+	format-makefiles check-makefiles oauth2_server prepare_test_binaries
+
 
 .DEFAULT_GOAL := default
 
@@ -51,11 +52,13 @@ endif
 # These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
 # ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
-OS    := "$(shell go env GOOS)"
+OS := "$(shell go env GOOS)"
 ifeq (${OS}, "linux")
 	CGO := 0
+	SED += -i
 else ifeq (${OS}, "darwin")
 	CGO := 1
+	SED += -i ''
 endif
 
 BUILD_FLAG =
@@ -150,7 +153,7 @@ check-makefiles: format-makefiles
 
 format-makefiles: ## Format all Makefiles.
 format-makefiles: $(MAKE_FILES)
-	$(SED) -i -e 's/^\(\t*\)  /\1\t/g' -e 's/^\(\t*\) /\1/' -- $?
+	$(SED) -e 's/^\(\t*\)  /\1\t/g' -e 's/^\(\t*\) /\1/' -- $?
 
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
@@ -172,6 +175,9 @@ storage_consumer:
 
 pulsar_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_pulsar_consumer ./cmd/pulsar-consumer/main.go
+
+oauth2_server:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/oauth2-server ./cmd/oauth2-server/main.go
 
 kafka_consumer_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
@@ -228,7 +234,7 @@ check_third_party_binary:
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -524,7 +530,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	# unify cover mode in coverage files, more details refer to dm/tests/_utils/run_dm_ctl
-	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec $(SED) -i "s/mode: count/mode: atomic/g" {} \;
+	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec $(SED) "s/mode: count/mode: atomic/g" {} \;
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
