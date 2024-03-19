@@ -440,7 +440,6 @@ func RemoveExpiredFiles(
 	storage storage.ExternalStorage,
 	cfg *Config,
 	checkpointTs model.Ts,
-	loc *time.Location,
 ) (uint64, error) {
 	if cfg.DateSeparator != config.DateSeparatorDay.String() {
 		return 0, nil
@@ -451,7 +450,9 @@ func RemoveExpiredFiles(
 
 	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
 	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
-	expiredDate := currTime.In(loc).Format("2006-01-02")
+	// TODO: currently the date part in file paths is formatted using local TZ,
+	// this may cause problem if the tz info is different between different cdc servers.
+	expiredDate := currTime.Format("2006-01-02")
 
 	cnt := uint64(0)
 	err := util.RemoveFilesIf(ctx, storage, func(path string) bool {
