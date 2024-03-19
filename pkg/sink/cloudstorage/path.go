@@ -276,7 +276,7 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	var dateStr string
 
 	currTime := f.pdClock.CurrentTime()
-	// FIXME: currently `dateStr` is formatted using local TZ,
+	// TODO: currently `dateStr` is formatted using local TZ,
 	// this may cause problem if the tz info is different between different cdc servers.
 	switch f.config.DateSeparator {
 	case config.DateSeparatorYear.String():
