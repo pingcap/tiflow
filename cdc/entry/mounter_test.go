@@ -804,7 +804,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				OriginDefaultValue: "e0",
 				FieldType:          *ftTypeVarcharNotNull,
 			},
-			Res: "e0",
+			Res: []byte("e0"),
 		},
 		{
 			Name:    "mysql.TypeTinyBlob",
@@ -886,7 +886,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	decimal := new(types.MyDecimal)
 	err := decimal.FromString([]byte("-3.14"))
 	require.NoError(t, err)
-	require.Equal(t, decimal, val, "mysql.TypeNewDecimal + notnull + default")
+	require.Equal(t, decimal.String(), val, "mysql.TypeNewDecimal + notnull + default")
 
 	colInfo = timodel.ColumnInfo{
 		OriginDefaultValue: "2020-11-19 12:12:12",
@@ -897,7 +897,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		types.DefaultStmtNoWarningContext,
 		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
-	require.Equal(t, expected, val, "mysql.TypeTimestamp + notnull + default")
+	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + notnull + default")
 
 	colInfo = timodel.ColumnInfo{
 		OriginDefaultValue: "2020-11-19 12:12:12",
@@ -908,7 +908,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		types.DefaultStmtNoWarningContext,
 		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
-	require.Equal(t, expected, val, "mysql.TypeTimestamp + null + default")
+	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + null + default")
 
 	colInfo = timodel.ColumnInfo{
 		OriginDefaultValue: "e1",
@@ -917,7 +917,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
 	expectedEnum, err := types.ParseEnumName(colInfo.FieldType.GetElems(), "e1", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
-	require.Equal(t, expectedEnum, val, "mysql.TypeEnum + notnull + default")
+	require.Equal(t, expectedEnum.Value, val, "mysql.TypeEnum + notnull + default")
 
 	colInfo = timodel.ColumnInfo{
 		OriginDefaultValue: "1,e",
@@ -926,7 +926,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
 	expectedSet, err := types.ParseSetName(colInfo.FieldType.GetElems(), "1,e", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
-	require.Equal(t, expectedSet, val, "mysql.TypeSet + notnull + default")
+	require.Equal(t, expectedSet.Value, val, "mysql.TypeSet + notnull + default")
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
