@@ -207,7 +207,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 				return true
 			})
 		}()
-		//make(map[SubscriptionID]*sharedconn.ConnAndClient)
 		s.tableExclusives = make(chan tableExclusive, 8)
 		g.Go(func() error {
 			for {
