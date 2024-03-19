@@ -250,7 +250,9 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 		defer isCleanupRunning.Store(false)
 		start := time.Now()
 		checkpointTs := d.lastCheckpointTs.Load()
-		cnt, err := cloudstorage.RemoveExpiredFiles(ctx, d.id, d.storage, d.cfg, checkpointTs)
+		// FIXME: currently the date part in file paths is formatted using local TZ,
+		// this may cause problem if the tz info is different between different cdc servers.
+		cnt, err := cloudstorage.RemoveExpiredFiles(ctx, d.id, d.storage, d.cfg, checkpointTs, time.Local)
 		if err != nil {
 			log.Error("failed to remove expired files",
 				zap.String("namespace", d.id.Namespace),

@@ -276,6 +276,8 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	var dateStr string
 
 	currTime := f.pdClock.CurrentTime()
+	// FIXME: currently `dateStr` is formatted using local TZ,
+	// this may cause problem if the tz info is different between different cdc servers.
 	switch f.config.DateSeparator {
 	case config.DateSeparatorYear.String():
 		dateStr = currTime.Format("2006")
@@ -438,6 +440,7 @@ func RemoveExpiredFiles(
 	storage storage.ExternalStorage,
 	cfg *Config,
 	checkpointTs model.Ts,
+	loc *time.Location,
 ) (uint64, error) {
 	if cfg.DateSeparator != config.DateSeparatorDay.String() {
 		return 0, nil
@@ -448,7 +451,7 @@ func RemoveExpiredFiles(
 
 	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
 	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
-	expiredDate := currTime.Format("2006-01-02")
+	expiredDate := currTime.In(loc).Format("2006-01-02")
 
 	cnt := uint64(0)
 	err := util.RemoveFilesIf(ctx, storage, func(path string) bool {
