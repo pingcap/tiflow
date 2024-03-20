@@ -181,6 +181,14 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 // doFlush flushes the backend.
 // It returns true only if it can no longer be flushed.
 func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
+	if w.ID == 1 {
+		t := os.Getenv("TICDC_FLUSH_WAIT")
+		cnt, err := strconv.Atoi(t)
+		if err != nil {
+			cnt = 10
+		}
+		time.Sleep(time.Duration(cnt) * time.Millisecond)
+	}
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
