@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
@@ -377,7 +378,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+	case mysql.TypeTimestamp:
+		location := "local"
+		timestamp := value.(string)
+		loc, err := time.LoadLocation(location)
+		if err != nil {
+			return nil, err
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		if err != nil {
+			return nil, err
+		}
+		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		buf = appendLengthValue(buf, []byte(timestamp))
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
 		buf = appendLengthValue(buf, []byte(v))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.

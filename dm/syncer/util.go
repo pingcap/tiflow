@@ -150,6 +150,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 			util.WithCAContent(cfg.From.Security.SSLCABytes),
 			util.WithCertAndKeyContent(cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(cfg.From.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)

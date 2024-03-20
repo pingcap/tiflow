@@ -171,9 +171,17 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	clusterAvail := uint64(0)
+	var (
+		clusterAvail uint64
+		avail        int64
+	)
 	for _, store := range storeInfo.Stores {
-		clusterAvail += uint64(store.Status.Available)
+		avail, err = units.RAMInBytes(store.Status.Available)
+		if err != nil {
+			markCheckError(result, err)
+			return result
+		}
+		clusterAvail += uint64(avail)
 	}
 	if clusterAvail < uint64(c.sourceDataSize) {
 		result.State = StateFailure
@@ -186,12 +194,12 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	replConfig, err := c.infoGetter.GetReplicationConfig(ctx)
+	maxReplicas, err := c.infoGetter.GetMaxReplica(ctx)
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	safeSize := uint64(c.sourceDataSize) * replConfig.MaxReplicas * 2
+	safeSize := uint64(c.sourceDataSize) * maxReplicas * 2
 	if clusterAvail < safeSize {
 		result.State = StateWarning
 		result.Errors = append(result.Errors, &Error{
