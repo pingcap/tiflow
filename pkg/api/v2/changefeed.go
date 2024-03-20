@@ -128,7 +128,7 @@ func (c *changefeeds) Pause(ctx context.Context,
 		Do(ctx).Error()
 }
 
-// Get gets a changefeed detaail info
+// Get gets a changefeed detail info
 func (c *changefeeds) Get(ctx context.Context,
 	namespace string, name string,
 ) (*v2.ChangeFeedInfo, error) {
