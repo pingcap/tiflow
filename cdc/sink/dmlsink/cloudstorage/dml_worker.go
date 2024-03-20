@@ -325,9 +325,7 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 		// this failpoint is use to pass this ticker once
 		// to make writeEvent in the test case can write into the same file
 		failpoint.Inject("passTickerOnce", func() {
-			select {
-			case <-ticker.C:
-			}
+			<-ticker.C
 		})
 
 		select {
