@@ -12,6 +12,6 @@ spec:
           command:
             - "/tiflow-chaos-case"
             - "--config-dir=/engine-conf"
-            - "--duration=20m"
+            - "--duration=30m"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
