@@ -699,7 +699,10 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // TODO: Check default expr support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, string, error) {
-	var d types.Datum
+	var (
+		d   types.Datum
+		err error
+	)
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
 	// FIXME: Too many corner cases may hit here, like type truncate, timezone
@@ -707,11 +710,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
-		d = types.NewDatum(col.GetOriginDefaultValue())
-		return d, d.GetValue(), sizeOfDatum(d), "", nil
-	}
-
-	if !mysql.HasNotNullFlag(col.GetFlag()) {
+		datum := types.NewDatum(col.GetOriginDefaultValue())
+		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
+		if err != nil {
+			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+		}
+	} else if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
 		// ref: https://github.com/pingcap/ticdc/issues/3929
 		// must use null if TiDB not write the column value when default value is null
