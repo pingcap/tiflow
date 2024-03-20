@@ -1,0 +1,73 @@
+{
+    "task": {
+        "name": "test",
+        "task_mode": "all",
+        "shard_mode": "pessimistic",
+        "meta_schema": "dm_meta",
+        "enhance_online_schema_change": true,
+        "on_duplicate": "error",
+        "ignore_checking_items": [
+            "version"
+        ],
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": ""
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": "mysql-replica-01",
+                    "schema": "lightning_mode",
+                    "table": ""
+                }
+            },
+            {
+                "source": {
+                    "source_name": "mysql-replica-02",
+                    "schema": "lightning_mode",
+                    "table": ""
+                }
+            }
+        ],
+        "source_config": {
+            "full_migrate_conf": {
+                "export_threads": 4,
+                "import_threads": 16,
+                "data_dir": "./exported_data",
+                "consistency": "auto",
+                "import_mode": "physical",
+                "sorting_dir": "./sort_dir",
+                "disk_quota": "80G",
+                "checksum": "required",
+                "analyze": "optional",
+                "range_concurrency": 0,
+                "compress-kv-pairs": "",
+                "pd_addr": "",
+                "on_duplicate_logical": "error",
+                "on_duplicate_physical": "manual"
+            },
+            "incr_migrate_conf": {
+                "repl_threads": 16,
+                "repl_batch": 100
+            },
+            "source_conf": [
+                {
+                    "source_name": "mysql-replica-01"
+                },
+                {
+                    "source_name": "mysql-replica-02"
+                }
+            ]
+        },
+        "binlog_filter_rule": {
+            "rule-1": {
+                "ignore_event": [
+                    "truncate table",
+                    "drop table"
+                ]
+            }
+        }
+    }
+}
