@@ -11,7 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD:cdc/owner/schema_test.go
 package owner
+=======
+//go:build intest
+// +build intest
+
+package entry
+>>>>>>> 99b3eb43e1 (mounter(ticdc): default value convert to the correct data type (#10804)):cdc/entry/schema_test.go
 
 import (
 	"context"
