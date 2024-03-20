@@ -5,10 +5,7 @@ definitions:
         description: encoding method of binary type
         type: string
       delimiter:
-        description: |-
-          delimiter between fields, it can be 1 character or at most 2 characters
-          It can not be CR or LF or contains CR or LF.
-          It should have exclusive characters with quote.
+        description: delimiter between fields
         type: string
       include-commit-ts:
         description: whether to include commit ts
@@ -16,12 +13,6 @@ definitions:
       "null":
         description: representation of null values
         type: string
-      output-handle-key:
-        description: output handle key
-        type: boolean
-      output-old-value:
-        description: output old value
-        type: boolean
       quote:
         description: quoting character
         type: string
@@ -53,8 +44,6 @@ definitions:
         type: boolean
       enable-tidb-extension:
         type: boolean
-      encoding-format:
-        type: string
       max-batch-size:
         type: integer
     type: object
@@ -333,18 +322,12 @@ definitions:
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
-      content-compatible:
-        description: ContentCompatible is only available when the downstream is MQ.
-        type: boolean
       csv:
         $ref: '#/definitions/config.CSVConfig'
         description: CSVConfig is only available when the downstream is Storage.
       date-separator:
         description: DateSeparator is only available when the downstream is Storage.
         type: string
-      debezium-disable-schema:
-        description: Debezium only. Whether schema should be excluded in the output.
-        type: boolean
       delete-only-output-handle-key-columns:
         description: DeleteOnlyOutputHandleKeyColumns is only available when the downstream
           is MQ.
@@ -389,23 +372,6 @@ definitions:
         description: SchemaRegistry is only available when the downstream is MQ using
           avro protocol.
         type: string
-      send-bootstrap-in-msg-count:
-        description: SendBootstrapInMsgCount means bootstrap messages are being sent
-          every SendBootstrapInMsgCount row change messages.
-        type: integer
-      send-bootstrap-interval-in-sec:
-        description: |-
-          Simple Protocol only config, use to control the behavior of sending bootstrap message.
-          Note: When one of the following conditions is set to negative value,
-          bootstrap sending function will be disabled.
-          SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
-        type: integer
-      send-bootstrap-to-all-partition:
-        description: |-
-          SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
-          If set to false, bootstrap message will only be sent to the first partition of each topic.
-          Default value is true.
-        type: boolean
       terminator:
         description: Terminator is NOT available when the downstream is DB.
         type: string
@@ -613,10 +579,6 @@ definitions:
         type: boolean
       "null":
         type: string
-      output_handle_key:
-        type: boolean
-      output_old_value:
-        type: boolean
       quote:
         type: string
     type: object
@@ -761,8 +723,6 @@ definitions:
         type: boolean
       enable_tidb_extension:
         type: boolean
-      encoding_format:
-        type: string
       max_batch_size:
         type: integer
     type: object
@@ -804,6 +764,8 @@ definitions:
     type: object
   v2.ConsistentMemoryUsage:
     properties:
+      event_cache_percentage:
+        type: integer
       memory_quota_percentage:
         type: integer
     type: object
@@ -853,9 +815,29 @@ definitions:
     type: object
   v2.FilterConfig:
     properties:
+      do_dbs:
+        description: DoDBs is an allowlist of schemas.
+        items:
+          type: string
+        type: array
+      do_tables:
+        description: DoTables is an allowlist of tables.
+        items:
+          $ref: '#/definitions/v2.Table'
+        type: array
       event_filters:
         items:
           $ref: '#/definitions/v2.EventFilterRule'
+        type: array
+      ignore_dbs:
+        description: IgnoreDBs is a blocklist of schemas.
+        items:
+          type: string
+        type: array
+      ignore_tables:
+        description: IgnoreTables is a blocklist of tables.
+        items:
+          $ref: '#/definitions/v2.Table'
         type: array
       ignore_txn_start_ts:
         items:
@@ -1104,8 +1086,6 @@ definitions:
         $ref: '#/definitions/v2.ConsistentConfig'
       enable_sync_point:
         type: boolean
-      enable_table_monitor:
-        type: boolean
       filter:
         $ref: '#/definitions/v2.FilterConfig'
       force_replicate:
@@ -1123,7 +1103,6 @@ definitions:
       sink:
         $ref: '#/definitions/v2.SinkConfig'
       sql_mode:
-        description: 'Deprecated: we don''t use this field since v8.0.0.'
         type: string
       sync_point_interval:
         type: string
@@ -1189,14 +1168,10 @@ definitions:
         items:
           $ref: '#/definitions/v2.ColumnSelector'
         type: array
-      content_compatible:
-        type: boolean
       csv:
         $ref: '#/definitions/v2.CSVConfig'
       date_separator:
         type: string
-      debezium_disable_schema:
-        type: boolean
       delete_only_output_handle_key_columns:
         type: boolean
       dispatchers:
@@ -1225,12 +1200,6 @@ definitions:
         type: boolean
       schema_registry:
         type: string
-      send_bootstrap_in_msg_count:
-        type: integer
-      send_bootstrap_interval_in_sec:
-        type: integer
-      send_bootstrap_to_all_partition:
-        type: boolean
       terminator:
         type: string
       transaction_atomicity:
@@ -1262,6 +1231,15 @@ definitions:
         description: The minimum interval between the latest synced ts and now required
           to reach synced state
         type: integer
+    type: object
+  v2.Table:
+    properties:
+      database_name:
+        description: Schema is the name of the schema (database) containing this table.
+        type: string
+      table_name:
+        description: Name is the unqualified table name.
+        type: string
     type: object
 info:
   contact: {}
