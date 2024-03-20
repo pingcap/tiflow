@@ -27,7 +27,14 @@ import (
 
 // isSysSchema returns true if the given schema is a system schema
 func isSysSchema(db string) bool {
-	return tifilter.IsSystemSchema(db)
+	switch db {
+	// TiCDCSystemSchema is used by TiCDC only.
+	// Tables in TiCDCSystemSchema should not be replicated by cdc.
+	case TiCDCSystemSchema:
+		return true
+	default:
+		return tifilter.IsSystemSchema(db)
+	}
 }
 
 // VerifyTableRules checks the table filter rules in the configuration

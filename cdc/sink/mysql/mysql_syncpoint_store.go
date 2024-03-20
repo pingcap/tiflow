@@ -30,15 +30,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+<<<<<<< HEAD:cdc/sink/mysql/mysql_syncpoint_store.go
 	"github.com/pingcap/tiflow/pkg/security"
+=======
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
+>>>>>>> ba8e2aa6f3 (filter (ticdc): fix synpoint table is replicated in BDR mode (#10587)):cdc/syncpointstore/mysql_syncpoint_store.go
 	"go.uber.org/zap"
-)
-
-const (
-	// syncPointTableName is the name of table where all syncpoint maps sit
-	syncPointTableName string = "syncpoint_v1"
-	// schemaName is the name of database where syncPoint maps sit
-	schemaName = "tidb_cdc"
 )
 
 type mysqlSyncPointStore struct {
@@ -155,7 +153,7 @@ func newMySQLSyncPointStore(
 }
 
 func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
-	database := schemaName
+	database := filter.TiCDCSystemSchema
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -187,7 +185,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		INDEX (created_at),
 		PRIMARY KEY (changefeed, primary_ts)
 	);`
-	query = fmt.Sprintf(query, syncPointTableName)
+	query = fmt.Sprintf(query, filter.SyncPointTable)
 	_, err = tx.Exec(query)
 	if err != nil {
 		err2 := tx.Rollback()
@@ -221,7 +219,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	// insert ts map
-	query := "insert ignore into " + schemaName + "." + syncPointTableName +
+	query := "insert ignore into " + filter.TiCDCSystemSchema + "." + filter.SyncPointTable +
 		"(ticdc_cluster_id, changefeed, primary_ts, secondary_ts) VALUES (?,?,?,?)"
 	_, err = tx.Exec(query, s.clusterID, id.ID, checkpointTs, secondaryTs)
 	if err != nil {
@@ -253,8 +251,8 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	if time.Since(s.lastCleanSyncPointTime) >= s.syncPointRetention {
 		query = fmt.Sprintf(
 			"DELETE IGNORE FROM "+
-				schemaName+"."+
-				syncPointTableName+
+				filter.TiCDCSystemSchema+"."+
+				filter.SyncPointTable+
 				" WHERE ticdc_cluster_id = '%s' and changefeed = '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
 			s.clusterID,
 			id.ID,
