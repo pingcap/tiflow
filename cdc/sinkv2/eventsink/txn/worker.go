@@ -16,6 +16,8 @@ package txn
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/log"
@@ -83,8 +85,17 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 // The postTxnExecuted will remove the txn related Node in the conflict detector's
 // dependency graph and resolve related dependencies for these transacitons
 // which depend on this executed txn.
-func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) {
+func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) bool {
+	t := os.Getenv("TICDC_FLUSH_BOUND")
+	cnt, err := strconv.Atoi(t)
+	if err != nil {
+		cnt = 64
+	}
+	if len(w.txnCh.In()) >= cnt {
+		return false
+	}
 	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
+	return true
 }
 
 func (w *worker) close() {

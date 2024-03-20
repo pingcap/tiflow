@@ -25,5 +25,5 @@ type txnEvent interface {
 }
 
 type worker[Txn txnEvent] interface {
-	Add(txn Txn, unlock func())
+	Add(txn Txn, unlock func()) bool
 }

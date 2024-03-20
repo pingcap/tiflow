@@ -49,7 +49,7 @@ type Node struct {
 	id int64
 
 	// Called when all dependencies are resolved.
-	OnResolved func(id workerID)
+	TryResolved func(id workerID) bool
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
 	// Set the callback that the node is notified.
@@ -85,7 +85,7 @@ type Node struct {
 func NewNode() (ret *Node) {
 	defer func() {
 		ret.id = genNextNodeID()
-		ret.OnResolved = nil
+		ret.TryResolved = nil
 		ret.RandWorkerID = nil
 		ret.totalDependencies = 0
 		ret.resolvedDependencies = 0
@@ -197,7 +197,7 @@ func (n *Node) Free() {
 	}
 
 	n.id = invalidNodeID
-	n.OnResolved = nil
+	n.TryResolved = nil
 	n.RandWorkerID = nil
 
 	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
@@ -206,8 +206,8 @@ func (n *Node) Free() {
 	// or not.
 }
 
-// assignTo assigns a node to a worker. Returns `true` on success.
-func (n *Node) assignTo(workerID int64) bool {
+// tryAssignTo assigns a node to a worker. Returns `true` on success.
+func (n *Node) tryAssignTo(workerID int64) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -216,11 +216,14 @@ func (n *Node) assignTo(workerID int64) bool {
 		return false
 	}
 
-	n.assignedTo = workerID
-	if n.OnResolved != nil {
-		n.OnResolved(workerID)
-		n.OnResolved = nil
+	if n.TryResolved != nil {
+		ok := n.TryResolved(workerID)
+		if !ok {
+			return false
+		}
+		n.TryResolved = nil
 	}
+	n.assignedTo = workerID
 
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
@@ -242,10 +245,10 @@ func (n *Node) maybeResolve(resolvedDependencies, removedDependencies int32) {
 		}
 		if n.OnNotified != nil {
 			// Notify the conflict detector background worker to assign the node to the worker asynchronously.
-			n.OnNotified(func() { n.assignTo(workerNum) })
+			n.OnNotified(func() { n.tryAssignTo(workerNum) })
 		} else {
 			// Assign the node to the worker directly.
-			n.assignTo(workerNum)
+			n.tryAssignTo(workerNum)
 		}
 	}
 }
