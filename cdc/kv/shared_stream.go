@@ -200,15 +200,14 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("addr", rs.storeAddr))
 		cc.Release()
 
-		var connAndClients sync.Map
-		defer func() {
-			connAndClients.Range(func(_, v interface{}) bool {
-				v.(*sharedconn.ConnAndClient).Release()
-				return true
-			})
-		}()
 		s.tableExclusives = make(chan tableExclusive, 8)
 		g.Go(func() error {
+			connAndClientsCache := make(map[SubscriptionID]*sharedconn.ConnAndClient)
+			defer func() {
+				for _, cc := range connAndClientsCache {
+					cc.Release()
+				}
+			}()
 			for {
 				select {
 				case <-gctx.Done():
@@ -216,7 +215,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 				case tableExclusive := <-s.tableExclusives:
 					subscriptionID := tableExclusive.subscriptionID
 					cc := tableExclusive.cc
-					connAndClients.Store(subscriptionID, cc)
+					connAndClientsCache[subscriptionID] = cc
 					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
 				}
 			}
