@@ -90,7 +90,9 @@ type processor struct {
 
 	sinkManager component[*sinkmanager.SinkManager]
 
-	initialized bool
+	initialized  bool
+	initializing bool
+	initError    error
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
@@ -550,8 +552,22 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
-	if err := p.lazyInit(ctx); err != nil {
-		return errors.Trace(err)
+
+	if !p.initializing && !p.initialized {
+		p.initializing = true
+		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
+			p.initError = p.lazyInit(ctx)
+			p.initializing = false
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	if p.initializing {
+		return nil
+	}
+	if p.initError != nil {
+		return errors.Trace(p.initError)
 	}
 
 	barrier, err := p.agent.Tick(ctx)
@@ -564,6 +580,13 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	}
 	p.doGCSchemaStorage()
 
+	return nil
+}
+
+func (p *processor) asyncInit(etcdCtx cdcContext.Context) (err error) {
+	if p.initialized {
+		return nil
+	}
 	return nil
 }
 

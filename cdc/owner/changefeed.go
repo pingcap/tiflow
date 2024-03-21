@@ -175,6 +175,9 @@ type changefeed struct {
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
+
+	initializing bool
+	initError    error
 }
 
 func (c *changefeed) GetScheduler() scheduler.Scheduler {
@@ -376,9 +379,22 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	if adminJobPending {
 		return 0, 0, nil
 	}
+	if !c.initializing && !c.initialized {
+		c.initializing = true
+		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
+			c.initError = c.initialize(ctx)
+			c.initializing = false
+		})
+		if err != nil {
+			return 0, 0, errors.Trace(err)
+		}
+	}
+	if c.initializing {
+		return 0, 0, nil
+	}
 
-	if err := c.initialize(ctx); err != nil {
-		return 0, 0, errors.Trace(err)
+	if c.initError != nil {
+		return 0, 0, errors.Trace(c.initError)
 	}
 
 	select {

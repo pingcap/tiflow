@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -43,6 +44,8 @@ type GlobalVars struct {
 	// MessageServer and MessageRouter are for peer-messaging
 	MessageServer *p2p.MessageServer
 	MessageRouter p2p.MessageRouter
+
+	IOThreadPool workerpool.AsyncPool
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

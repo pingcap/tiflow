@@ -31,6 +31,8 @@ type DebugConfig struct {
 
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`
+
+	IOThreadPoolSize int `toml:"io-thread-pool-size" json:"io-thread-pool-size"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -357,6 +358,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	stdCtx, cancel := context.WithCancel(stdCtx)
+	pool := workerpool.NewDefaultAsyncPool(c.config.Debug.IOThreadPoolSize)
 
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
@@ -364,6 +366,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageServer:     c.MessageServer,
 		MessageRouter:     c.MessageRouter,
 		SortEngineFactory: c.sortEngineFactory,
+		IOThreadPool:      pool,
 	})
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
@@ -415,6 +418,14 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
 	})
 
+	poolCtx, cancelPool := context.WithCancel(ctx)
+	defer func() {
+		cancelPool()
+		log.Info("workerpool exited", zap.Error(err))
+	}()
+	g.Go(func() error {
+		return pool.Run(poolCtx)
+	})
 	return errors.Trace(g.Wait())
 }
 
