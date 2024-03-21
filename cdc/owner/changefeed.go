@@ -115,7 +115,10 @@ type changefeed struct {
 	wg sync.WaitGroup
 
 	// state related fields
-	initialized bool
+	initialized  *atomic.Bool
+	initializing *atomic.Bool
+	initError    *atomic.Error
+
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
@@ -175,9 +178,6 @@ type changefeed struct {
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
-
-	initializing bool
-	initError    error
 }
 
 func (c *changefeed) GetScheduler() scheduler.Scheduler {
@@ -210,6 +210,10 @@ func NewChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
+
+		initializing: atomic.NewBool(false),
+		initialized:  atomic.NewBool(false),
+		initError:    atomic.NewError(nil),
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
@@ -287,7 +291,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context,
 	checkpointTs, minTableBarrierTs, err := c.tick(ctx, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
-	if c.initialized {
+	if c.initialized.Load() {
 		costTime := time.Since(startTime)
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long",
@@ -379,22 +383,24 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	if adminJobPending {
 		return 0, 0, nil
 	}
-	if !c.initializing && !c.initialized {
-		c.initializing = true
+	if !c.initializing.Load() && !c.initialized.Load() {
+		c.initializing.Store(true)
 		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
-			c.initError = c.initialize(ctx)
-			c.initializing = false
+			if err := c.initialize(ctx); err != nil {
+				c.initError.Store(errors.Trace(err))
+			}
+			c.initializing.Store(false)
 		})
 		if err != nil {
 			return 0, 0, errors.Trace(err)
 		}
 	}
-	if c.initializing {
+	if c.initializing.Load() {
 		return 0, 0, nil
 	}
 
-	if c.initError != nil {
-		return 0, 0, errors.Trace(c.initError)
+	if c.initError.Load() != nil {
+		return 0, 0, errors.Trace(c.initError.Load())
 	}
 
 	select {
@@ -514,7 +520,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
-	if c.initialized || c.latestStatus == nil {
+	if c.initialized.Load() || c.latestStatus == nil {
 		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
@@ -706,7 +712,7 @@ LOOP2:
 
 	c.initMetrics()
 
-	c.initialized = true
+	c.initialized.Store(true)
 	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
@@ -790,7 +796,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.schema = nil
 	c.barriers = nil
 	c.resolvedTs = 0
-	c.initialized = false
+	c.initialized.Store(false)
+	c.initializing.Store(false)
+	c.initError.Store(nil)
 	c.isReleased = true
 
 	log.Info("changefeed closed",

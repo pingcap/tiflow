@@ -44,6 +44,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -90,9 +91,9 @@ type processor struct {
 
 	sinkManager component[*sinkmanager.SinkManager]
 
-	initialized  bool
-	initializing bool
-	initError    error
+	initialized  *atomic.Bool
+	initializing *atomic.Bool
+	initError    *atomic.Error
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
@@ -435,6 +436,10 @@ func NewProcessor(
 		latestInfo:      info,
 		latestStatus:    status,
 
+		initError:    atomic.NewError(nil),
+		initialized:  atomic.NewBool(false),
+		initializing: atomic.NewBool(false),
+
 		ownerCaptureInfoClient: ownerCaptureInfoClient,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
@@ -553,21 +558,23 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	if !p.initializing && !p.initialized {
-		p.initializing = true
+	if !p.initializing.Load() && !p.initialized.Load() {
+		p.initializing.Store(true)
 		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
-			p.initError = p.lazyInit(ctx)
-			p.initializing = false
+			if err := p.lazyInit(ctx); err != nil {
+				p.initError.Store(err)
+			}
+			p.initializing.Store(false)
 		})
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-	if p.initializing {
+	if p.initializing.Load() {
 		return nil
 	}
-	if p.initError != nil {
-		return errors.Trace(p.initError)
+	if p.initError.Load() != nil {
+		return errors.Trace(p.initError.Load())
 	}
 
 	barrier, err := p.agent.Tick(ctx)
@@ -583,16 +590,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) asyncInit(etcdCtx cdcContext.Context) (err error) {
-	if p.initialized {
-		return nil
-	}
-	return nil
-}
-
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
-	if p.initialized {
+	if p.initialized.Load() {
 		return nil
 	}
 
@@ -669,7 +669,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return err
 	}
 
-	p.initialized = true
+	p.initialized.Store(true)
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -842,7 +842,7 @@ func (p *processor) doGCSchemaStorage() {
 func (p *processor) refreshMetrics() {
 	// Before the processor is initialized, we should not refresh metrics.
 	// Otherwise, it will cause panic.
-	if !p.initialized {
+	if !p.initialized.Load() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
