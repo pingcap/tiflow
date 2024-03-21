@@ -214,6 +214,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 					return gctx.Err()
 				case tableExclusive := <-s.tableExclusives:
 					subscriptionID := tableExclusive.subscriptionID
+					if cached := connAndClientsCache[subscriptionID]; cached != nil {
+						cached.Release()
+					}
 					cc := tableExclusive.cc
 					connAndClientsCache[subscriptionID] = cc
 					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
@@ -352,7 +355,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				}
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
 				delete(tableExclusives, subscriptionID)
-				cc.Release()
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests
