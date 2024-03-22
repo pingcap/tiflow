@@ -356,8 +356,8 @@ func TestTxn(t *testing.T) {
 		"`meta_key`=VALUES(`meta_key`),`meta_value`=VALUES(`meta_value`),`job_id`=VALUES(`job_id`)")).
 		WithArgs(anyT, anyT, []byte("key1"), []byte("value1"), fakeJob, anyT).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-		WithArgs(fakeJob, []byte("key2")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+		WithArgs(fakeJob, []byte("key2%")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -407,6 +407,7 @@ func testInner(t *testing.T, m sqlmock.Sqlmock, cli *sqlKVClientImpl, c tCase) {
 			require.Equal(t, c.output, result[0].Interface())
 		}
 	}
+	require.NoError(t, m.ExpectationsWereMet())
 }
 
 func TestSQLImplWithoutNamespace(t *testing.T) {
@@ -501,4 +502,5 @@ func TestInitializeError(t *testing.T) {
 		WillReturnError(errors.New("other error"))
 	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other error", err.Error())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
