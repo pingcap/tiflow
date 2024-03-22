@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -349,8 +348,7 @@ func (c *consumer) emitDMLEvents(
 				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					spanz.TableIDToComparableSpan(tableID),
-					row.CommitTs,
-					prometheus.NewCounter(prometheus.CounterOpts{}))
+					row.CommitTs)
 			}
 
 			_, ok := c.tableTsMap[tableID]

@@ -155,6 +155,9 @@ type replicaConfig struct {
 	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
+
+	// Deprecated: we don't use this field since v8.0.0.
+	SQLMode string `toml:"sql-mode" json:"sql-mode"`
 }
 
 // Value implements the driver.Valuer interface

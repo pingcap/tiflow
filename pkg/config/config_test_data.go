@@ -122,7 +122,12 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 0,
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
   },
   "security": {
     "ca-path": "",
@@ -188,7 +193,9 @@ const (
     }
   },
   "cluster-id": "default",
-  "gc-tuner-memory-threshold": 0
+  "gc-tuner-memory-threshold": 0,
+  "per-table-memory-quota": 0,
+  "max-memory-percentage": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -355,7 +362,8 @@ const (
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -520,6 +528,7 @@ const (
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 )

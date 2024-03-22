@@ -170,6 +170,11 @@ type ServerConfig struct {
 	Debug                  *DebugConfig         `toml:"debug" json:"debug"`
 	ClusterID              string               `toml:"cluster-id" json:"cluster-id"`
 	GcTunerMemoryThreshold uint64               `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
+
+	// Deprecated: we don't use this field anymore.
+	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	// Deprecated: we don't use this field anymore.
+	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -246,15 +251,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 
 	if c.Security != nil {
-		if c.Security.ClientUserRequired {
-			if len(c.Security.ClientAllowedUser) == 0 {
-				log.Error("client-allowed-user should not be empty when client-user-required is true")
-				return cerror.ErrInvalidServerOption.GenWithStack("client-allowed-user should not be empty when client-user-required is true")
-			}
-			if !c.Security.IsTLSEnabled() {
-				log.Error("client user required but TLS is not enabled")
-				return cerror.ErrInvalidServerOption.GenWithStack("TLS should be enabled when client-user-required is true")
-			}
+		if c.Security.ClientUserRequired || len(c.Security.ClientAllowedUser) > 0 {
+			// if len(c.Security.ClientAllowedUser) == 0 {
+			// 	log.Error("client-allowed-user should not be empty when client-user-required is true")
+			// 	return cerror.ErrInvalidServerOption.GenWithStack("client-allowed-user should not be empty when client-user-required is true")
+			// }
+			// if !c.Security.IsTLSEnabled() {
+			// 	log.Error("client user required but TLS is not enabled")
+			// 	return cerror.ErrInvalidServerOption.GenWithStack("TLS should be enabled when client-user-required is true")
+			// }
+			return cerror.ErrInvalidServerOption.GenWithStack("client user required is not supported yet")
 		}
 		if c.Security.IsTLSEnabled() {
 			var err error

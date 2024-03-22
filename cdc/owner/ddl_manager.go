@@ -456,7 +456,20 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
 			for _, id := range ids {
-				tableBarrierMap[id] = ddl.CommitTs
+				// The same physical table may have multiple related ddl events when calculating barrier.
+				// Example cases:
+				// 1. The logical id of the same partition table may change after change partition.
+				//	So the related ddls may be considered for different tables.
+				//  And they may be returned by `getAllTableNextDDL` at the same time.
+				// 2. The result of `getAllTableNextDDL` may influence the same physical tables as `ddlManager.justSentDDL`.
+				// So we always choose the min commitTs of all ddls related to the same physical table as the barrierTs.
+				if ts, ok := tableBarrierMap[id]; ok {
+					if ddl.CommitTs < ts {
+						tableBarrierMap[id] = ddl.CommitTs
+					}
+				} else {
+					tableBarrierMap[id] = ddl.CommitTs
+				}
 			}
 		}
 	}

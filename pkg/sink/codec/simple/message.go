@@ -402,26 +402,23 @@ func buildRowChangedEvent(
 		TableInfo:       tableInfo,
 	}
 
-	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
-	if err != nil {
-		return nil, err
-	}
-	result.Columns = model.Columns2ColumnDatas(columns, tableInfo)
-
-	preColumns, err := decodeColumns(msg.Old, tableInfo.Columns)
-	if err != nil {
-		return nil, err
-	}
-	result.PreColumns = model.Columns2ColumnDatas(preColumns, tableInfo)
+	result.Columns = decodeColumns(msg.Data, tableInfo)
+	result.PreColumns = decodeColumns(msg.Old, tableInfo)
 
 	if enableRowChecksum && msg.Checksum != nil {
-		err = common.VerifyChecksum(preColumns, msg.Checksum.Previous)
+		var (
+			previousCorrupted bool
+			currentCorrupted  bool
+		)
+		err := common.VerifyChecksum(result.PreColumns, tableInfo.Columns, msg.Checksum.Previous)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
+			previousCorrupted = true
 		}
-		err = common.VerifyChecksum(columns, msg.Checksum.Current)
+		err = common.VerifyChecksum(result.Columns, tableInfo.Columns, msg.Checksum.Current)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			log.Info("checksum corrupted on the current columns", zap.Any("message", msg))
+			currentCorrupted = true
 		}
 
 		result.Checksum = &integrity.Checksum{
@@ -431,54 +428,90 @@ func buildRowChangedEvent(
 			Version:   msg.Checksum.Version,
 		}
 
-		if msg.Checksum.Corrupted {
-			log.Warn("cdc detect checksum corrupted",
+		if msg.Checksum.Corrupted || previousCorrupted {
+			log.Warn("consumer detect previous checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
-			for _, col := range preColumns {
+			for _, col := range result.PreColumns {
+				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each previous column for debugging",
-					zap.String("name", col.Name),
-					zap.Any("type", col.Type),
-					zap.Any("charset", col.Charset),
-					zap.Any("flag", col.Flag),
+					zap.String("name", colInfo.Name.O),
+					zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()),
+					zap.Any("flag", colInfo.GetFlag()),
 					zap.Any("value", col.Value),
-					zap.Any("default", col.Default))
+					zap.Any("default", colInfo.GetDefaultValue()))
 			}
-			for _, col := range columns {
-				log.Info("data corrupted, print each column for debugging",
-					zap.String("name", col.Name),
-					zap.Any("type", col.Type),
-					zap.Any("charset", col.Charset),
-					zap.Any("flag", col.Flag),
-					zap.Any("value", col.Value),
-					zap.Any("default", col.Default))
-			}
+			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 		}
+
+		if msg.Checksum.Corrupted || currentCorrupted {
+			log.Warn("consumer detect checksum corrupted",
+				zap.String("schema", msg.Schema),
+				zap.String("table", msg.Table))
+			for _, col := range result.Columns {
+				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O),
+					zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()),
+					zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value),
+					zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
+		}
+	}
+
+	for _, col := range result.Columns {
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
+	}
+	for _, col := range result.PreColumns {
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
 	}
 
 	return result, nil
 }
 
-func decodeColumns(
-	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo,
-) ([]*model.Column, error) {
-	if rawData == nil {
-		return nil, nil
+func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
+	if flag.GetType() != mysql.TypeTimestamp {
+		return
 	}
-	var result []*model.Column
-	for _, info := range columnInfos {
+	if column.Value == nil {
+		return
+	}
+	var ts string
+	switch v := column.Value.(type) {
+	case map[string]string:
+		ts = v["value"]
+	case map[string]interface{}:
+		ts = v["value"].(string)
+	}
+	column.Value = ts
+}
+
+func decodeColumns(
+	rawData map[string]interface{}, tableInfo *model.TableInfo,
+) []*model.ColumnData {
+	if rawData == nil {
+		return nil
+	}
+	var result []*model.ColumnData
+	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the value for the column",
+			log.Panic("cannot found the value for the column",
 				zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
-		if err != nil {
-			return nil, err
+		columnID := tableInfo.ForceGetColumnIDByName(info.Name.O)
+		col := decodeColumn(value, columnID, &info.FieldType)
+		if col == nil {
+			log.Panic("cannot decode column",
+				zap.String("name", info.Name.O), zap.Any("data", value))
 		}
 		result = append(result, col)
 	}
-	return result, nil
+	return result
 }
 
 type checksum struct {
@@ -669,13 +702,6 @@ func (a *avroMarshaller) encodeValue4Avro(
 	return value, ""
 }
 
-type timestamp struct {
-	// location specifies the location of the `timestamp` typed value,
-	// so that the consumer can convert it to any other timezone location.
-	Location string `json:"location"`
-	Value    string `json:"value"`
-}
-
 func encodeValue(
 	value interface{}, ft *types.FieldType, location string,
 ) interface{} {
@@ -691,9 +717,39 @@ func encodeValue(
 		default:
 		}
 	case mysql.TypeTimestamp:
-		return timestamp{
-			Location: location,
-			Value:    value.(string),
+		var ts string
+		switch v := value.(type) {
+		case string:
+			ts = v
+		// the timestamp value maybe []uint8 if it's queried from upstream TiDB.
+		case []uint8:
+			ts = string(v)
+		}
+		return map[string]string{
+			"location": location,
+			"value":    ts,
+		}
+	case mysql.TypeEnum:
+		switch v := value.(type) {
+		case []uint8:
+			data := string(v)
+			enum, err := tiTypes.ParseEnumName(ft.GetElems(), data, ft.GetCollate())
+			if err != nil {
+				log.Panic("parse enum name failed",
+					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
+			}
+			return enum.Value
+		}
+	case mysql.TypeSet:
+		switch v := value.(type) {
+		case []uint8:
+			data := string(v)
+			set, err := tiTypes.ParseSetName(ft.GetElems(), data, ft.GetCollate())
+			if err != nil {
+				log.Panic("parse set name failed",
+					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
+			}
+			return set.Value
 		}
 	default:
 	}
@@ -723,16 +779,13 @@ func encodeValue(
 	return result
 }
 
-func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
-	result := &model.Column{
-		Type:      fieldType.GetType(),
-		Charset:   fieldType.GetCharset(),
-		Collation: fieldType.GetCollate(),
-		Name:      name,
-		Value:     value,
+func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *model.ColumnData {
+	result := &model.ColumnData{
+		ColumnID: id,
+		Value:    value,
 	}
 	if value == nil {
-		return result, nil
+		return result
 	}
 
 	var err error
@@ -741,12 +794,12 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = base64.StdEncoding.DecodeString(v)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		default:
 		}
 		result.Value = value
-		return result, nil
+		return result
 	}
 
 	switch fieldType.GetType() {
@@ -757,10 +810,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				log.Error("invalid column value for bit / set",
-					zap.String("name", name), zap.Any("data", v),
-					zap.Any("type", fieldType.GetType()), zap.Error(err))
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		case []uint8:
 			value = common.MustBinaryLiteralToInt(v)
@@ -774,7 +824,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		default:
 			value = v
@@ -786,7 +836,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 			if err != nil {
 				value, err = strconv.ParseUint(v, 10, 64)
 				if err != nil {
-					return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+					return nil
 				}
 			}
 		case map[string]interface{}:
@@ -799,7 +849,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = strconv.ParseFloat(v, 32)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		default:
 			value = v
@@ -809,7 +859,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = strconv.ParseFloat(v, 64)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		default:
 			value = v
@@ -821,15 +871,12 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				return nil
 			}
 		}
-	case mysql.TypeTimestamp:
-		v := value.(map[string]interface{})
-		value = v["value"].(string)
 	default:
 	}
 
 	result.Value = value
-	return result, nil
+	return result
 }

@@ -204,6 +204,9 @@ type ReplicaConfig struct {
 	Integrity                    *IntegrityConfig           `json:"integrity"`
 	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
+
+	// Deprecated: we don't use this field since v8.0.0.
+	SQLMode string `json:"sql_mode,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
