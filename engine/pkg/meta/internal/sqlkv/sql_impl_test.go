@@ -240,8 +240,8 @@ func TestGet(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-					WithArgs(fakeJob, []byte("key0")).
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+					WithArgs(fakeJob, []byte("key0%")).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}).
 						AddRow("key0", "value0"))
 			},
@@ -319,8 +319,8 @@ func TestDelete(t *testing.T) {
 				Header: &metaModel.ResponseHeader{},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-					WithArgs(fakeJob, []byte("key0")).
+				mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+					WithArgs(fakeJob, []byte("key0%")).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},

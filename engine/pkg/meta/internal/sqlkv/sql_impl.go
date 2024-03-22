@@ -180,7 +180,10 @@ func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.
 	case op.IsOptsWithRange():
 		err = db.Where(WhereClauseWithKeyRange, key, op.RangeBytes()).Find(&metaKvs).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where(WhereClauseWithKeyPrefix, key).Find(&metaKvs).Error
+		keyPrefix := make([]byte, len(key)+1)
+		copy(keyPrefix, key)
+		keyPrefix[len(key)] = '%'
+		err = db.Where(WhereClauseWithKeyPrefix, keyPrefix).Find(&metaKvs).Error
 	case op.IsOptsWithFromKey():
 		err = db.Where(WhereClauseWithFromKey, key).Find(&metaKvs).Error
 	default:
