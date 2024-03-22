@@ -697,6 +697,8 @@ func (r *Manager) AdvanceCheckpoint(
 		if watermark.CheckpointTs != watermark.ResolvedTs || currentTables.Len() != 0 {
 			log.Panic("schedulerv3: newCheckpointTs and newResolvedTs should be both maxUint64 "+
 				"if currentTables is empty",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID),
 				zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 				zap.Uint64("newResolvedTs", watermark.ResolvedTs),
 				zap.Any("currentTables", currentTables))
