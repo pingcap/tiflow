@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
@@ -118,8 +119,23 @@ func TestStreamCloseClient(t *testing.T) {
 	require.NoError(t, err)
 
 	cluster.AddStore(1, address)
-	cluster.Bootstrap(11, []uint64{1}, []uint64{1}, 1)
+	regionID := uint64(11)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{1}, 1)
 
+	startKey := []byte{}
+	endKey := spanz.UpperBoundKey
+	span := spanz.ToSpan(startKey, endKey)
+
+	regionVersionID := tikv.NewRegionVerID(regionID, 0, 0)
+	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+	_, err = regionCache.BatchLoadRegionsWithKeyRange(bo, span.StartKey, span.EndKey, 10)
+	require.NoError(t, err)
+
+	rpcCtx, err := regionCache.GetTiKVRPCContext(bo, regionVersionID, kv.ReplicaReadLeader, 0)
+	require.NoError(t, err)
+	require.NotNil(t, rpcCtx)
+
+	pdClock := pdutil.NewClock4Test()
 	changefeedID := model.DefaultChangeFeedID("test")
 	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeedID)
 	sharedClient := NewSharedClient(
@@ -132,8 +148,15 @@ func TestStreamCloseClient(t *testing.T) {
 			},
 			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
 		},
-		false, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(), lockResolver,
+		false, pdClient, grpcPool, regionCache, pdClock, lockResolver,
 	)
+	subID := sharedClient.AllocSubscriptionID()
+	sri := newSingleRegionInfo(regionVersionID, span, rpcCtx)
+	sri.requestedTable = &requestedTable{
+		span:           span,
+		subscriptionID: subID,
+	}
+	sri.lockedRange = &regionlock.LockedRange{}
 
 	stream := newRequestedStream(100)
 	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
@@ -150,12 +173,6 @@ func TestStreamCloseClient(t *testing.T) {
 		wg.Wait()
 	}()
 
-	span := spanz.ToSpan([]byte{}, spanz.UpperBoundKey)
-	sri := newSingleRegionInfo(tikv.RegionVerID{}, span, &tikv.RPCContext{})
-	sri.requestedTable = &requestedTable{
-		span:           span,
-		subscriptionID: sharedClient.AllocSubscriptionID(),
-	}
 	stream.preFetchForConnecting = &sri
 	rs := &requestedStore{
 		storeID:   1,
@@ -234,25 +251,13 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	eventCh := make(chan MultiplexingEvent, 50)
 	client.Subscribe(subID, span, 1, eventCh)
 
-	makeTsEvent := func(regionID, ts, requestID uint64) *cdcpb.ChangeDataEvent {
-		return &cdcpb.ChangeDataEvent{
-			Events: []*cdcpb.Event{
-				{
-					RegionId:  regionID,
-					RequestId: requestID,
-					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
-				},
-			},
-		}
-	}
-
 	checkTsEvent := func(event model.RegionFeedEvent, ts uint64) {
 		require.Equal(t, ts, event.Resolved.ResolvedTs)
 	}
 
 	events1 <- mockInitializedEvent(11, uint64(subID))
 	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
-	events1 <- makeTsEvent(11, ts, uint64(subID))
+	events1 <- mockResolvedTsEvent(11, ts, uint64(subID))
 	// After trying to receive something from the invalid store,
 	// it should auto switch to other stores and fetch events finally.
 	select {
@@ -267,7 +272,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 	events2 <- mockInitializedEvent(11, uint64(subID))
 	ts = oracle.GoTimeToTS(pdClock.CurrentTime())
-	events2 <- makeTsEvent(11, ts, uint64(subID))
+	events2 <- mockResolvedTsEvent(11, ts, uint64(subID))
 	// After trying to receive something from a failed store,
 	// it should auto switch to other stores and fetch events finally.
 	select {
