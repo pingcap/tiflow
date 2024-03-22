@@ -207,6 +207,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 				for _, cc := range connAndClientsCache {
 					cc.Release()
 				}
+				for tableExclusive := range s.tableExclusives {
+					tableExclusive.cc.Release()
+				}
 			}()
 			for {
 				select {
