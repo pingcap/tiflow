@@ -214,7 +214,6 @@ func (p *pulsarProducers) Close() {
 	for _, topic := range keys {
 		p.producers.Remove(topic) // callback func will be called
 	}
-
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic
