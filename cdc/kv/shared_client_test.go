@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -96,6 +98,71 @@ func TestRequestedTable(t *testing.T) {
 	}
 
 	s.resolveLockCh.CloseAndDrain()
+}
+
+func TestStreamCloseClient(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	eventCh := make(chan *cdcpb.ChangeDataEvent, 10)
+	server := newMockChangeDataServer(eventCh)
+
+	wg := &sync.WaitGroup{}
+	service, address := newMockService(ctx, t, server, wg)
+	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{}, nil)
+
+	rpcClient, cluster, pdClient, _ := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	regionCache := tikv.NewRegionCache(pdClient)
+
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	require.NoError(t, err)
+
+	cluster.AddStore(1, address)
+	cluster.Bootstrap(11, []uint64{1}, []uint64{1}, 1)
+
+	changefeedID := model.DefaultChangeFeedID("test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeedID)
+	sharedClient := NewSharedClient(
+		changefeedID,
+		&config.ServerConfig{
+			KVClient: &config.KVClientConfig{
+				WorkerConcurrent:     1,
+				GrpcStreamConcurrent: 1,
+				AdvanceIntervalInMs:  10,
+			},
+			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
+		},
+		false, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(), lockResolver,
+	)
+
+	stream := newRequestedStream(100)
+	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
+	stream.logRegionDetails = log.Info
+	defer func() {
+		cancel()
+		sharedClient.Close()
+		_ = kvStorage.Close()
+		regionCache.Close()
+		pdClient.Close()
+		server.wg.Wait()
+		service.Stop()
+		stream.requests.CloseAndDrain()
+		wg.Wait()
+	}()
+
+	span := spanz.ToSpan([]byte{}, spanz.UpperBoundKey)
+	sri := newSingleRegionInfo(tikv.RegionVerID{}, span, &tikv.RPCContext{})
+	sri.requestedTable = &requestedTable{
+		span:           span,
+		subscriptionID: sharedClient.AllocSubscriptionID(),
+	}
+	stream.preFetchForConnecting = &sri
+	rs := &requestedStore{
+		storeID:   1,
+		storeAddr: address,
+	}
+	cancelled := stream.run(ctx, sharedClient, rs)
+	require.False(t, cancelled)
 }
 
 func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
