@@ -448,8 +448,8 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 		"`meta_key`=VALUES(`meta_key`),`meta_value`=VALUES(`meta_value`),`job_id`=VALUES(`job_id`)")).
 		WithArgs(anyT, anyT, []byte("key1"), []byte("value1"), "", anyT).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `meta_kvs` WHERE job_id = ? AND meta_key like ?%")).
-		WithArgs("", []byte("key2")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `meta_kvs` WHERE job_id = ? AND meta_key like ?")).
+		WithArgs("", []byte("key2%")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	txn := cli.Txn(context.Background())
@@ -457,6 +457,7 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	txn.Do(metaModel.OpPut("key1", "value1"))
 	txn.Do(metaModel.OpDelete("key2", metaModel.WithPrefix()))
 	txn.Commit()
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestInitializeError(t *testing.T) {

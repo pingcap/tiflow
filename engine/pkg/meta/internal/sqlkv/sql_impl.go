@@ -37,7 +37,7 @@ import (
 const (
 	WhereClauseWithJobID     = "job_id = ?"
 	WhereClauseWithKeyRange  = "meta_key >= ? AND meta_key < ?"
-	WhereClauseWithKeyPrefix = "meta_key like ?%"
+	WhereClauseWithKeyPrefix = "meta_key like ?"
 	WhereClauseWithFromKey   = "meta_key >= ?"
 	WhereClauseWithKey       = "meta_key = ?"
 )
@@ -241,7 +241,10 @@ func (c *sqlKVClientImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaMod
 		err = db.Where(WhereClauseWithKeyRange, key,
 			op.RangeBytes()).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where(WhereClauseWithKeyPrefix, key).Delete(&sqlkvModel.MetaKV{}).Error
+		keyPrefix := make([]byte, len(key)+1)
+		copy(keyPrefix, key)
+		keyPrefix[len(key)] = '%'
+		err = db.Where(WhereClauseWithKeyPrefix, keyPrefix).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithFromKey():
 		err = db.Where(WhereClauseWithFromKey, key).Delete(&sqlkvModel.MetaKV{}).Error
 	default:
