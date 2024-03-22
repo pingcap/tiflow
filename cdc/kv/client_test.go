@@ -2404,7 +2404,6 @@ func testEventAfterFeedStop(t *testing.T) {
 }
 
 func TestOutOfRegionRangeEvent(t *testing.T) {
-	InitWorkerPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 

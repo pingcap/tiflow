@@ -228,9 +228,5 @@ func (s *srv) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
 	if !s.v2 {
 		return grpcstatus.Error(grpccodes.Unimplemented, "srv")
 	}
-	for {
-		if _, err := server.Recv(); err != nil {
-			return err
-		}
-	}
+	return s.EventFeed(server)
 }
