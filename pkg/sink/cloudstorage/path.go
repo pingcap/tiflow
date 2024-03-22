@@ -449,7 +449,7 @@ func RemoveExpiredFiles(
 
 	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
 	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
-	// Note: `dateStr` is formatted using local TZ.
+	// Note: `expiredDate` is formatted using local TZ.
 	expiredDate := currTime.Format("2006-01-02")
 
 	cnt := uint64(0)
