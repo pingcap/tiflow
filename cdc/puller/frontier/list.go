@@ -93,9 +93,6 @@ func (l *skipList) randomHeight() int {
 	return h
 }
 
-//go:linkname fastrand runtime.fastrand
-func fastrand() uint32
-
 // Seek returns the seek seekTempResult
 // the seek seekTempResult is a slice of nodes,
 // Each element in the slice represents the nearest(left) node to the target value at each level of the skip list.
