@@ -111,7 +111,7 @@ func (b *basicScheduler) Schedule(
 	// Fast path for check whether two sets are identical:
 	// If the length of currentTables and replications are equal,
 	// and for all tables in currentTables have a record in replications.
-	if !(tablesLenEqual && tablesAllFind) {
+	if !tablesLenEqual || !tablesAllFind {
 		// The two sets are not identical. We need to find removed tables.
 		intersectionTable := spanz.NewBtreeMap[struct{}]()
 		for _, span := range currentSpans {
