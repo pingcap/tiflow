@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -122,10 +122,10 @@ type captureImpl struct {
 		upstreamManager *upstream.Manager,
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
-		globalVars *cdcContext.GlobalVars,
+		globalVars *vars.GlobalVars,
 	) processor.Manager
 	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig,
-		globalVars *cdcContext.GlobalVars) owner.Owner
+		globalVars *vars.GlobalVars) owner.Owner
 	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo, client etcd.CDCEtcdClient) controller.Controller
 }
 
@@ -214,7 +214,7 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 }
 
 // reset the capture before run it.
-func (c *captureImpl) reset(ctx context.Context, globalVars *cdcContext.GlobalVars) error {
+func (c *captureImpl) reset(ctx context.Context, globalVars *vars.GlobalVars) error {
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -332,7 +332,7 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-	globalVars := &cdcContext.GlobalVars{
+	globalVars := &vars.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
 		MessageServer:     c.MessageServer,
@@ -431,7 +431,7 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *cdcContext.GlobalVars) error {
+func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *vars.GlobalVars) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
 	ownerFlushInterval := time.Duration(c.config.OwnerFlushInterval)
@@ -528,19 +528,18 @@ func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *cdcContext.
 		})
 
 		g, ctx := errgroup.WithContext(ctx)
-		ownerCtx, cancelOwner := context.WithCancel(ctx)
 		g.Go(func() error {
-			return c.runEtcdWorker(ownerCtx, owner.(orchestrator.Reactor),
+			return c.runEtcdWorker(ctx, owner.(orchestrator.Reactor),
 				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
 				ownerFlushInterval, util.RoleOwner.String())
 		})
 		g.Go(func() error {
-			er := c.runEtcdWorker(ownerCtx, controller.(orchestrator.Reactor),
+			er := c.runEtcdWorker(ctx, controller.(orchestrator.Reactor),
 				globalState,
 				// todo: do not use owner flush interval
 				ownerFlushInterval, util.RoleController.String())
-			// controller is exited, cancel owner to exit the loop.
-			cancelOwner()
+			// controller has exited, stop owner.
+			c.owner.AsyncStop()
 			return er
 		})
 		err = g.Wait()

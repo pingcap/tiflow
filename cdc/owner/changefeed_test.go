@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -189,8 +189,8 @@ func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
-func createChangefeed4Test(globalVars *cdcContext.GlobalVars,
-	changefeedVars *cdcContext.ChangefeedVars,
+func createChangefeed4Test(globalVars *vars.GlobalVars,
+	changefeedVars *vars.ChangefeedVars,
 	t *testing.T,
 ) (
 	*changefeed, map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState,
@@ -233,7 +233,7 @@ func createChangefeed4Test(globalVars *cdcContext.GlobalVars,
 		func(
 			ctx context.Context, id model.ChangeFeedID, up *upstream.Upstream, epoch uint64,
 			cfg *config.SchedulerConfig, redoMetaManager credo.MetaManager,
-			globalVars *cdcContext.GlobalVars,
+			globalVars *vars.GlobalVars,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},
@@ -259,7 +259,7 @@ func createChangefeed4Test(globalVars *cdcContext.GlobalVars,
 }
 
 func TestPreCheck(t *testing.T) {
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	_, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	state.CheckCaptureAlive(globalvars.CaptureInfo.ID)
 	preflightCheck(state, captures)
@@ -281,7 +281,7 @@ func TestPreCheck(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
@@ -298,7 +298,7 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestChangefeedHandleError(t *testing.T) {
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
@@ -328,7 +328,7 @@ func TestExecDDL(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	changefeedVars.Info.StartTs = startTs
 	ctx := context.Background()
 	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
@@ -413,7 +413,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	changefeedVars.Info.StartTs = startTs
 	ctx := context.Background()
 	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
@@ -477,7 +477,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 }
 
 func TestSyncPoint(t *testing.T) {
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	changefeedVars.Info.Config.EnableSyncPoint = util.AddressOf(true)
 	changefeedVars.Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
@@ -513,7 +513,7 @@ func TestSyncPoint(t *testing.T) {
 }
 
 func TestFinished(t *testing.T) {
-	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	changefeedVars.Info.TargetTs = changefeedVars.Info.StartTs + 1000
 	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
@@ -543,7 +543,7 @@ func TestFinished(t *testing.T) {
 }
 
 func TestRemoveChangefeed(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	info := changefeedVars.Info
@@ -561,7 +561,7 @@ func TestRemoveChangefeed(t *testing.T) {
 }
 
 func TestRemovePausedChangefeed(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	info := changefeedVars.Info
@@ -581,8 +581,8 @@ func TestRemovePausedChangefeed(t *testing.T) {
 func testChangefeedReleaseResource(
 	ctx context.Context,
 	t *testing.T,
-	globalVars *cdcContext.GlobalVars,
-	changefeedVars *cdcContext.ChangefeedVars,
+	globalVars *vars.GlobalVars,
+	changefeedVars *vars.ChangefeedVars,
 	cancel context.CancelFunc,
 	redoLogDir string,
 	expectedInitialized bool,
@@ -624,7 +624,7 @@ func testChangefeedReleaseResource(
 
 func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
-		globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+		globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 		ctx := context.Background()
 		if i == 1 {
 			changefeedVars.Info.Config.EnableSyncPoint = util.AddressOf(true)

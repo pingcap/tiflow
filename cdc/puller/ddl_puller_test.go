@@ -32,11 +32,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -593,7 +593,7 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(changefeedVars.Info.Config, "")
@@ -718,7 +718,7 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")

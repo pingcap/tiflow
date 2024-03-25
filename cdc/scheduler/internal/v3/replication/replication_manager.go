@@ -278,6 +278,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
+				zap.Any("from", from),
 				zap.Any("message", status))
 			continue
 		}
@@ -289,6 +290,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: table has removed",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
+				zap.Any("from", from),
 				zap.Int64("tableID", status.Span.TableID))
 			r.spans.Delete(status.Span)
 		}

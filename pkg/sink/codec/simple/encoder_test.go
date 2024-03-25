@@ -786,9 +786,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			decodedRow, err = dec.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.Equal(t, decodedRow.CommitTs, insertEvent2.CommitTs)
-			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), insertEvent2.TableInfo.GetSchemaName())
-			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent2.TableInfo.GetTableName())
+			require.Equal(t, insertEvent2.CommitTs, decodedRow.CommitTs)
+			require.Equal(t, insertEvent2.TableInfo.GetSchemaName(), decodedRow.TableInfo.GetSchemaName())
+			require.Equal(t, insertEvent2.TableInfo.GetTableName(), decodedRow.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
 			helper.Tk().MustExec("drop table test.abc")

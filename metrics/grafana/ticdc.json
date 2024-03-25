@@ -2768,7 +2768,7 @@
               "expr": "ticdc_server_go_max_procs{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-MaxProcs",
+              "legendFormat": "quota-{{instance}}",
               "refId": "B"
             }
           ],
@@ -2800,11 +2800,11 @@
               "show": true
             },
             {
-              "format": "short",
+              "format": "percentunit",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": "0",
+              "min": null,
               "show": true
             }
           ],

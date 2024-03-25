@@ -24,11 +24,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -76,10 +76,10 @@ type managerImpl struct {
 		uint64,
 		*config.SchedulerConfig,
 		etcd.OwnerCaptureInfoClient,
-		*cdcContext.GlobalVars,
+		*vars.GlobalVars,
 	) *processor
 	cfg        *config.SchedulerConfig
-	globalVars *cdcContext.GlobalVars
+	globalVars *vars.GlobalVars
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -90,7 +90,7 @@ func NewManager(
 	upstreamManager *upstream.Manager,
 	liveness *model.Liveness,
 	cfg *config.SchedulerConfig,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) Manager {
 	return &managerImpl{
 		captureInfo:                  captureInfo,

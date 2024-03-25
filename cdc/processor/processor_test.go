@@ -32,13 +32,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	redoPkg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +51,7 @@ func newProcessor4Test(
 	cfg *config.SchedulerConfig,
 	enableRedo bool,
 	client etcd.OwnerCaptureInfoClient,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) *processor {
 	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
 	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
@@ -114,7 +114,7 @@ func newProcessor4Test(
 
 // nolint
 func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
-	globalVars *cdcContext.GlobalVars, changefeedVars *cdcContext.ChangefeedVars,
+	globalVars *vars.GlobalVars, changefeedVars *vars.ChangefeedVars,
 ) (*processor, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState) {
 	changefeedInfo := `
 {
@@ -217,7 +217,7 @@ func (a *mockAgent) Close() error {
 }
 
 func TestTableExecutorAddingTableIndirectly(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -306,7 +306,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 }
 
 func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -405,7 +405,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 }
 
 func TestProcessorError(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -454,7 +454,7 @@ func TestProcessorError(t *testing.T) {
 }
 
 func TestProcessorExit(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// var err error
@@ -479,7 +479,7 @@ func TestProcessorExit(t *testing.T) {
 }
 
 func TestProcessorClose(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -564,7 +564,7 @@ func TestProcessorClose(t *testing.T) {
 }
 
 func TestPositionDeleted(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -608,7 +608,7 @@ func TestPositionDeleted(t *testing.T) {
 }
 
 func TestSchemaGC(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -671,7 +671,7 @@ func TestIgnorableError(t *testing.T) {
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -725,7 +725,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 }
 
 func TestProcessorLiveness(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -761,7 +761,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 			Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError")
 	}()
 
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)

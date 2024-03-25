@@ -24,9 +24,9 @@ import (
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -66,7 +66,7 @@ func TestReset(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		globalVars := cdcContext.NewGlobalVars4Test()
+		globalVars := vars.NewGlobalVars4Test()
 		err = cp.reset(ctx, globalVars)
 		require.Regexp(t, ".*context canceled.*", err)
 		wg.Done()
@@ -221,7 +221,7 @@ func TestCampaignLiveness(t *testing.T) {
 		info:     &model.CaptureInfo{ID: "test"},
 		election: me,
 	}
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	cp.liveness.Store(model.LivenessCaptureStopping)
 	err := cp.campaignOwner(ctx, globalVars)

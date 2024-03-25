@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -41,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/atomic"
@@ -76,7 +76,7 @@ func newScheduler(
 	up *upstream.Upstream, epoch uint64,
 	cfg *config.SchedulerConfig,
 	redoMetaManager redo.MetaManager,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) (scheduler.Scheduler, error) {
 	messageServer := globalVars.MessageServer
 	messageRouter := globalVars.MessageRouter
@@ -93,7 +93,7 @@ type changefeed struct {
 	upstream   *upstream.Upstream
 	cfg        *config.SchedulerConfig
 	scheduler  scheduler.Scheduler
-	globalVars *cdcContext.GlobalVars
+	globalVars *vars.GlobalVars
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
@@ -167,7 +167,7 @@ type changefeed struct {
 	newScheduler func(
 		ctx context.Context, changefeedID model.ChangeFeedID,
 		up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
-		redoMetaManager redo.MetaManager, globalVars *cdcContext.GlobalVars,
+		redoMetaManager redo.MetaManager, globalVars *vars.GlobalVars,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
@@ -196,7 +196,7 @@ func NewChangefeed(
 	feedStateManager FeedStateManager,
 	up *upstream.Upstream,
 	cfg *config.SchedulerConfig,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) *changefeed {
 	c := &changefeed{
 		id:           id,
@@ -241,7 +241,7 @@ func newChangefeed4Test(
 	) DDLSink,
 	newScheduler func(ctx context.Context, id model.ChangeFeedID,
 		up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
-		globalVars *cdcContext.GlobalVars,
+		globalVars *vars.GlobalVars,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context,
@@ -249,7 +249,7 @@ func newChangefeed4Test(
 		sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := NewChangefeed(id, cfInfo, cfStatus, cfstateManager, up, cfg, globalVars)

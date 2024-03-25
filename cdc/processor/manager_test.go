@@ -23,10 +23,10 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +42,7 @@ type managerTester struct {
 func NewManager4Test(
 	t *testing.T,
 	liveness *model.Liveness,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
@@ -57,7 +57,7 @@ func NewManager4Test(
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 		client etcd.OwnerCaptureInfoClient,
-		globalVars *cdcContext.GlobalVars,
+		globalVars *vars.GlobalVars,
 	) *processor {
 		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client, globalVars)
 	}
@@ -65,7 +65,7 @@ func NewManager4Test(
 }
 
 //nolint:unused
-func (s *managerTester) resetSuit(globalVars *cdcContext.GlobalVars,
+func (s *managerTester) resetSuit(globalVars *vars.GlobalVars,
 	t *testing.T,
 ) {
 	s.manager = NewManager4Test(t, &s.liveness, globalVars)
@@ -80,7 +80,7 @@ func (s *managerTester) resetSuit(globalVars *cdcContext.GlobalVars,
 }
 
 func TestChangefeed(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
 	s.resetSuit(globalVars, t)
@@ -134,7 +134,7 @@ func TestChangefeed(t *testing.T) {
 }
 
 func TestDebugInfo(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
 	s.resetSuit(globalVars, t)
@@ -201,7 +201,7 @@ func TestDebugInfo(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
 	s.resetSuit(globalVars, t)
@@ -240,7 +240,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	liveness := model.LivenessCaptureAlive
 	cfg := config.NewDefaultSchedulerConfig()
 	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg, globalVars).(*managerImpl)
@@ -259,7 +259,7 @@ func TestSendCommandError(t *testing.T) {
 }
 
 func TestManagerLiveness(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
 	s.resetSuit(globalVars, t)

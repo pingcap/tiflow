@@ -22,12 +22,12 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -70,7 +70,7 @@ func newFeedStateManager4Test(
 }
 
 func TestHandleJob(t *testing.T) {
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -148,7 +148,7 @@ func TestHandleJob(t *testing.T) {
 }
 
 func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -229,7 +229,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 }
 
 func TestMarkFinished(t *testing.T) {
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -259,7 +259,7 @@ func TestMarkFinished(t *testing.T) {
 }
 
 func TestCleanUpInfos(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -294,7 +294,7 @@ func TestCleanUpInfos(t *testing.T) {
 }
 
 func TestHandleError(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -373,7 +373,7 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestHandleFastFailError(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(0, 0, 0, 0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -407,7 +407,7 @@ func TestHandleFastFailError(t *testing.T) {
 }
 
 func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(0, 0, 0, 0)
 	manager.state = orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -464,7 +464,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
     "creator-version": "v5.0.0-master-dirty"
 }
 `
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -499,7 +499,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 }
 
 func TestChangefeedNotRetry(t *testing.T) {
-	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -586,7 +586,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 }
 
 func TestBackoffStopsUnexpectedly(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	// after 4000ms, the backoff will stop
 	manager := newFeedStateManager4Test(500, 500, 4000, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
@@ -649,7 +649,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 }
 
 func TestBackoffNeverStops(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	// the backoff will never stop
 	manager := newFeedStateManager4Test(100, 100, 0, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
@@ -700,7 +700,7 @@ func TestBackoffNeverStops(t *testing.T) {
 }
 
 func TestUpdateChangefeedEpoch(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	// Set a long backoff time
 	manager := newFeedStateManager4Test(int(time.Hour), int(time.Hour), 0, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
@@ -755,7 +755,7 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 }
 
 func TestHandleWarning(t *testing.T) {
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	manager.changefeedErrorStuckDuration = 100 * time.Millisecond
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
@@ -869,7 +869,7 @@ func TestErrorAfterWarning(t *testing.T) {
 	t.Parallel()
 
 	maxElapsedTimeInMs := 2000
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, maxElapsedTimeInMs, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)
@@ -957,7 +957,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	maxElapsedTimeInMs := 2000
-	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	manager := newFeedStateManager4Test(200, 1600, maxElapsedTimeInMs, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		changefeedVars.ID)

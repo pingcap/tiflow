@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -42,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -72,7 +72,7 @@ var _ Processor = (*processor)(nil)
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
-	globalVars   *cdcContext.GlobalVars
+	globalVars   *vars.GlobalVars
 
 	upstream     *upstream.Upstream
 	lastSchemaTs model.Ts
@@ -423,7 +423,7 @@ func NewProcessor(
 	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 	ownerCaptureInfoClient etcd.OwnerCaptureInfoClient,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) *processor {
 	p := &processor{
 		upstream:        up,
@@ -872,7 +872,7 @@ func (p *processor) Close() error {
 		p.agent = nil
 	}
 
-	// mark tables share the same cdcContext with its original table, don't need to cancel
+	// mark tables share the same ctx with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
 	log.Info("processor closed",

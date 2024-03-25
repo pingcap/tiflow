@@ -26,11 +26,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -126,11 +126,11 @@ type ownerImpl struct {
 		feedStateManager FeedStateManager,
 		up *upstream.Upstream,
 		cfg *config.SchedulerConfig,
-		globalVars *cdcContext.GlobalVars,
+		globalVars *vars.GlobalVars,
 	) *changefeed
 	cfg *config.SchedulerConfig
 
-	globalVars *cdcContext.GlobalVars
+	globalVars *vars.GlobalVars
 }
 
 var (
@@ -142,7 +142,7 @@ var (
 func NewOwner(
 	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
-	globalVars *cdcContext.GlobalVars,
+	globalVars *vars.GlobalVars,
 ) Owner {
 	return &ownerImpl{
 		upstreamManager: upstreamManager,

@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -31,11 +30,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/vars"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-func createController4Test(globalVars *cdcContext.GlobalVars,
+func createController4Test(globalVars *vars.GlobalVars,
 	t *testing.T) (*controllerImpl, *orchestrator.GlobalReactorState,
 	*orchestrator.ReactorStateTester,
 ) {
@@ -263,7 +263,7 @@ func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
 }
 
 func TestFixChangefeedState(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	ctx := context.Background()
 	controller4Test, state, tester := createController4Test(globalVars, t)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
@@ -297,7 +297,7 @@ func TestFixChangefeedState(t *testing.T) {
 }
 
 func TestCheckClusterVersion(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	controller4Test, state, tester := createController4Test(globalVars, t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -341,7 +341,7 @@ func TestCheckClusterVersion(t *testing.T) {
 }
 
 func TestFixChangefeedSinkProtocol(t *testing.T) {
-	globalVars := cdcContext.NewGlobalVars4Test()
+	globalVars := vars.NewGlobalVars4Test()
 	controller4Test, state, tester := createController4Test(globalVars, t)
 	ctx := context.Background()
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
