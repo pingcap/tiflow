@@ -358,7 +358,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	stdCtx, cancel := context.WithCancel(stdCtx)
-	pool := workerpool.NewDefaultAsyncPool(c.config.Debug.IOThreadPoolSize)
+	pool := workerpool.NewDefaultAsyncPool(c.config.Debug.ChangefeedThreadPoolSize)
 
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
