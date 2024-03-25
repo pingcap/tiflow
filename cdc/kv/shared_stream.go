@@ -209,6 +209,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 						cc := tableExclusive.cc
 						cc.Release()
 					default:
+						return
 					}
 				}
 			}()
