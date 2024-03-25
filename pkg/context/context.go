@@ -197,6 +197,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
+		IOThreadPool: &nonAsyncPool{},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
@@ -214,4 +215,16 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 // context.Background() as the parent context
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
+}
+
+type nonAsyncPool struct {
+}
+
+func (f *nonAsyncPool) Go(_ context.Context, fn func()) error {
+	fn()
+	return nil
+}
+
+func (f *nonAsyncPool) Run(_ context.Context) error {
+	return nil
 }

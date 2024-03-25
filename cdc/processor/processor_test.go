@@ -221,6 +221,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -309,6 +310,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -406,6 +408,7 @@ func TestProcessorError(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	// init tick
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -430,6 +433,7 @@ func TestProcessorError(t *testing.T) {
 
 	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -452,9 +456,10 @@ func TestProcessorExit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
-	// var err error
+
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -479,6 +484,7 @@ func TestProcessorClose(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -518,6 +524,7 @@ func TestProcessorClose(t *testing.T) {
 	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -563,6 +570,7 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
@@ -608,6 +616,7 @@ func TestSchemaGC(t *testing.T) {
 	var err error
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -674,6 +683,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
@@ -721,6 +731,7 @@ func TestProcessorLiveness(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	// First tick for creating position.
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -754,6 +765,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
+	require.Nil(t, p.lazyInit(ctx))
 
 	// First tick for creating position.
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
