@@ -197,6 +197,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 
 		s.tableExclusives = make(chan tableExclusive, 8)
 		g.Go(func() error {
+			// cache all clients, only used to release the clients.
 			connAndClientsCache := make(map[SubscriptionID]*sharedconn.ConnAndClient)
 			defer func() {
 				for subID, cc := range connAndClientsCache {
