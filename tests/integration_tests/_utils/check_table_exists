@@ -15,16 +15,16 @@ while [ $i -lt $check_time ]; do
 	mysql -h$2 -P$3 -uroot -e "show create table $1" >/dev/null 2>&1
 	ret=$?
 	if [ "$ret" == 0 ]; then
-		echo "$(date +%Y-%m-%d" "%H:%M:%S") table $1 exists"
+		echo "$(date +%Y-%m-%d" "%H:%M:%S) table $1 exists"
 		break
 	fi
 	((i++))
-	echo "$(date +%Y-%m-%d" "%H:%M:%S") table $1 not exists for $i-th check, retry later"
+	echo "$(date +%Y-%m-%d" "%H:%M:%S) table $1 not exists for $i-th check, retry later"
 	sleep 2
 done
 
 if [ $i -ge $check_time ]; then
-	echo "$(date +%Y-%m-%d" "%H:%M:%S") table $1 not exists at last check"
+	echo "$(date +%Y-%m-%d" "%H:%M:%S) table $1 not exists at last check"
 	exit 1
 fi
 

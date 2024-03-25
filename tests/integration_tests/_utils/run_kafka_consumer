@@ -14,7 +14,7 @@ schema_registry_uri=$4
 log_suffix=$5
 pwd=$pwd
 
-echo "[$(date +%Y-%m-%d" "%H:%M:%S")] <<<<<< START kafka consumer in $TEST_NAME case >>>>>>"
+echo "[$(date +%Y-%m-%d" "%H:%M:%S)] <<<<<< START kafka consumer in $TEST_NAME case >>>>>>"
 cd $workdir
 
 # Because there is no transaction concept in Kafka,
