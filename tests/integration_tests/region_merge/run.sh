@@ -74,7 +74,7 @@ EOF
 	run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "create table region_merge.finish_mark (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-c
+
 	check_table_exists region_merge.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
