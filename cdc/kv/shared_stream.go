@@ -199,8 +199,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		g.Go(func() error {
 			connAndClientsCache := make(map[SubscriptionID]*sharedconn.ConnAndClient)
 			defer func() {
-				for _, cc := range connAndClientsCache {
+				for subID, cc := range connAndClientsCache {
 					cc.Release()
+					delete(connAndClientsCache, subID)
 				}
 				for {
 					select {
