@@ -62,7 +62,7 @@ func newProcessor4Test(
 	// Some cases want to send errors to the processor without initializing it.
 	p.sinkManager.errors = make(chan error, 16)
 	p.lazyInit = func(ctx cdcContext.Context) error {
-		if p.initialized {
+		if p.initialized.Load() {
 			return nil
 		}
 
@@ -101,7 +101,7 @@ func newProcessor4Test(
 		// otherwise the sinkManager will not receive the resolvedTs.
 		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
 
-		p.initialized = true
+		p.initialized.Store(true)
 		return nil
 	}
 
