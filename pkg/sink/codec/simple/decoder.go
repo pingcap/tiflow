@@ -14,10 +14,10 @@
 package simple
 
 import (
+	"container/list"
 	"context"
 	"database/sql"
 	"path/filepath"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -30,7 +30,8 @@ import (
 	"go.uber.org/zap"
 )
 
-type decoder struct {
+// Decoder implement the RowEventDecoder interface
+type Decoder struct {
 	config *common.Config
 
 	marshaller marshaller
@@ -41,10 +42,15 @@ type decoder struct {
 	value []byte
 	msg   *message
 	memo  TableInfoProvider
+
+	// cachedMessages is used to store the messages which does not have received corresponding table info yet.
+	cachedMessages *list.List
+	// CachedRowChangedEvents are events just decoded from the cachedMessages
+	CachedRowChangedEvents []*model.RowChangedEvent
 }
 
-// NewDecoder returns a new decoder
-func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decoder, error) {
+// NewDecoder returns a new Decoder
+func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decoder, error) {
 	var (
 		externalStorage storage.ExternalStorage
 		err             error
@@ -67,22 +73,23 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 		return nil, errors.Trace(err)
 	}
 
-	return &decoder{
+	return &Decoder{
 		config:     config,
 		marshaller: m,
 
 		storage:      externalStorage,
 		upstreamTiDB: db,
 
-		memo: newMemoryTableInfoProvider(),
+		memo:           newMemoryTableInfoProvider(),
+		cachedMessages: list.New(),
 	}, nil
 }
 
-// AddKeyValue add the received key and values to the decoder,
-func (d *decoder) AddKeyValue(_, value []byte) error {
+// AddKeyValue add the received key and values to the Decoder,
+func (d *Decoder) AddKeyValue(_, value []byte) error {
 	if d.value != nil {
 		return cerror.ErrDecodeFailed.GenWithStack(
-			"decoder value already exists, not consumed yet")
+			"Decoder value already exists, not consumed yet")
 	}
 	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
@@ -93,7 +100,7 @@ func (d *decoder) AddKeyValue(_, value []byte) error {
 }
 
 // HasNext returns whether there is any event need to be consumed
-func (d *decoder) HasNext() (model.MessageType, bool, error) {
+func (d *Decoder) HasNext() (model.MessageType, bool, error) {
 	if d.value == nil {
 		return model.MessageTypeUnknown, false, nil
 	}
@@ -118,7 +125,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 }
 
 // NextResolvedEvent returns the next resolved event if exists
-func (d *decoder) NextResolvedEvent() (uint64, error) {
+func (d *Decoder) NextResolvedEvent() (uint64, error) {
 	if d.msg.Type != MessageTypeWatermark {
 		return 0, cerror.ErrCodecDecode.GenWithStack(
 			"not found resolved event message")
@@ -131,7 +138,7 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if d.msg == nil || (d.msg.Data == nil && d.msg.Old == nil) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"invalid row changed event message")
@@ -147,9 +154,14 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"cannot found the table info, schema: %s, table: %s, version: %d",
-			d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
+		log.Debug("table info not found for the event, "+
+			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+			zap.String("schema", d.msg.Schema),
+			zap.String("table", d.msg.Table),
+			zap.Uint64("version", d.msg.SchemaVersion))
+		d.cachedMessages.PushBack(d.msg)
+		d.msg = nil
+		return nil, nil
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
@@ -161,7 +173,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return event, nil
 }
 
-func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
+func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
 	_, claimCheckFileName := filepath.Split(claimCheckLocation)
 	data, err := d.storage.ReadFile(context.Background(), claimCheckFileName)
 	if err != nil {
@@ -186,7 +198,7 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 	return d.NextRowChangedEvent()
 }
 
-func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
+func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
 	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
@@ -209,13 +221,17 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	}
 
 	ctx := context.Background()
+	timezone, err := common.QueryTimezone(ctx, d.upstreamTiDB)
+	if err != nil {
+		return nil, err
+	}
 	switch m.Type {
 	case DMLTypeInsert:
 		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -225,7 +241,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +251,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		old, err := d.buildData(holder, fieldTypeMap)
+		old, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +261,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		if err != nil {
 			return nil, err
 		}
-		data, err := d.buildData(holder, fieldTypeMap)
+		data, err := d.buildData(holder, fieldTypeMap, timezone)
 		if err != nil {
 			return nil, err
 		}
@@ -256,8 +272,8 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	return d.NextRowChangedEvent()
 }
 
-func (d *decoder) buildData(
-	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType,
+func (d *Decoder) buildData(
+	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
 ) (map[string]interface{}, error) {
 	columnsCount := holder.Length()
 	result := make(map[string]interface{}, columnsCount)
@@ -272,17 +288,13 @@ func (d *decoder) buildData(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
 				d.msg.Schema, d.msg.Table, col.Name())
 		}
-		value, err := encodeValue(value, fieldType, d.config.TimeZone.String())
-		if err != nil {
-			return nil, err
-		}
-		result[col.Name()] = value
+		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
 	return result, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists
-func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if d.msg == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"no message found when decode DDL event")
@@ -296,7 +308,30 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	d.memo.Write(ddl.TableInfo)
 	d.memo.Write(ddl.PreTableInfo)
 
+	for ele := d.cachedMessages.Front(); ele != nil; {
+		d.msg = ele.Value.(*message)
+		event, err := d.NextRowChangedEvent()
+		if err != nil {
+			return nil, err
+		}
+		if event == nil {
+			ele = ele.Next()
+			continue
+		}
+		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
+
+		next := ele.Next()
+		d.cachedMessages.Remove(ele)
+		ele = next
+	}
 	return ddl, nil
+}
+
+// GetCachedEvents returns the cached events
+func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
+	result := d.CachedRowChangedEvents
+	d.CachedRowChangedEvents = nil
+	return result
 }
 
 // TableInfoProvider is used to store and read table info
@@ -319,7 +354,7 @@ func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 }
 
 func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
-	if info == nil {
+	if info == nil || info.TableName.Schema == "" || info.TableName.Table == "" {
 		return
 	}
 	key := tableSchemaKey{
@@ -353,33 +388,11 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 		version: version,
 	}
 
-	// Note(dongmen): Since the decoder is only use in unit test for now,
-	// we don't need to consider the performance
-	// Just use a ticker to check if the table info is stored every second.
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	for {
-		entry, ok := m.memo[key]
-		if ok {
-			return entry
-		}
-		select {
-		case <-ticker.C:
-			entry, ok = m.memo[key]
-			if ok {
-				return entry
-			}
-		case <-ctx.Done():
-			log.Panic("table info read timeout",
-				zap.String("schema", schema),
-				zap.String("table", table),
-				zap.Uint64("version", version))
-			return nil
-		}
+	entry, ok := m.memo[key]
+	if ok {
+		return entry
 	}
+	return nil
 }
 
 type tableSchemaKey struct {

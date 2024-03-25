@@ -95,7 +95,6 @@ const (
     "corruption-handle-level": "warn"
  },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
@@ -123,7 +122,12 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 0,
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
   },
   "security": {
     "ca-path": "",
@@ -189,7 +193,9 @@ const (
     }
   },
   "cluster-id": "default",
-  "gc-tuner-memory-threshold": 0
+  "gc-tuner-memory-threshold": 0,
+  "per-table-memory-quota": 0,
+  "max-memory-percentage": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -353,11 +359,11 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -519,10 +525,10 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 )

@@ -57,7 +57,7 @@ func BenchmarkSkipDML(b *testing.B) {
 	sessCtx := utils.NewSessionCtx(map[string]string{
 		"time_zone": "UTC",
 	})
-	f, err := newExprFilter("", cfg, config.GetDefaultReplicaConfig().SQLMode)
+	f, err := newExprFilter("", cfg)
 	require.Nil(b, err)
 
 	type innerCase struct {

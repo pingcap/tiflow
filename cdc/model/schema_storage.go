@@ -64,9 +64,6 @@ type TableInfo struct {
 
 	ColumnsFlag map[int64]ColumnFlagType
 
-	// only for new row format decoder
-	handleColID []int64
-
 	// the mounter will choose this index to output delete events
 	// special value:
 	// HandleIndexPKIsHandle(-1) : pk is handle
@@ -86,10 +83,14 @@ type TableInfo struct {
 	// index2: a, c
 	// indexColumnsOffset: [[0], [0, 1], [0, 2]]
 	IndexColumnsOffset [][]int
+
+	// The following 3 fields, should only be used to decode datum from the raw value bytes, do not abuse those field.
 	// rowColInfos extend the model.ColumnInfo with some extra information
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+	// only for new row format decoder
+	handleColID []int64
 
 	// number of virtual columns
 	virtualColumnCount int

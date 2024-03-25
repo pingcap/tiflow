@@ -180,10 +180,7 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 			}
 			value = string(rawValue)
 		} else if strings.Contains(mysqlType, "bit") || strings.Contains(mysqlType, "set") {
-			bitValue, err := common.BinaryLiteralToInt(rawValue)
-			if err != nil {
-				return nil, nil, errors.Trace(err)
-			}
+			bitValue := common.MustBinaryLiteralToInt(rawValue)
 			value = strconv.FormatUint(bitValue, 10)
 		} else {
 			value = string(rawValue)
@@ -223,7 +220,6 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			CommitTs: commitTs,
 		},
 	}
-
 	switch eventType {
 	case "INSERT":
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)

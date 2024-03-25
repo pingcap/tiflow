@@ -1,4 +1,5 @@
 [sink]
 dispatchers = [
+    {matcher = ['verify.t'], partition = "index-value"},
     {matcher = ['dispatcher.index'], partition = "index-value", index = "idx_a"}
 ]

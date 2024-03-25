@@ -56,22 +56,44 @@ func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
+// QueryTimezone query the timezone from the upstream database
+func QueryTimezone(ctx context.Context, db *sql.DB) (string, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Error("establish connection to the upstream tidb failed", zap.Error(err))
+		return "", errors.Trace(err)
+	}
+	defer conn.Close()
+
+	var timezone string
+	query := "SELECT @@global.time_zone"
+	err = conn.QueryRowContext(ctx, query).Scan(&timezone)
+	if err != nil {
+		log.Error("query timezone failed", zap.Error(err))
+		return "", errors.Trace(err)
+	}
+
+	log.Info("query global timezone from the upstream tidb",
+		zap.Any("timezone", timezone))
+
+	return timezone, nil
+}
+
 // SnapshotQuery query the db by the snapshot read with the given commitTs
 func SnapshotQuery(
 	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
 ) (*ColumnsHolder, error) {
-	// 1. set snapshot read
-	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Error("establish connection to the upstream tidb failed",
-			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	defer conn.Close()
 
+	// 1. set snapshot read
+	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
 	_, err = conn.ExecContext(ctx, query)
 	if err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
@@ -132,19 +154,19 @@ func SnapshotQuery(
 	return holder, nil
 }
 
-// BinaryLiteralToInt convert bytes into uint64,
+// MustBinaryLiteralToInt convert bytes into uint64,
 // by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
-func BinaryLiteralToInt(bytes []byte) (uint64, error) {
+func MustBinaryLiteralToInt(bytes []byte) uint64 {
 	bytes = trimLeadingZeroBytes(bytes)
 	length := len(bytes)
 
 	if length > 8 {
-		log.Error("invalid bit value found", zap.ByteString("value", bytes))
-		return math.MaxUint64, errors.New("invalid bit value")
+		log.Panic("invalid bit value found", zap.ByteString("value", bytes))
+		return math.MaxUint64
 	}
 
 	if length == 0 {
-		return 0, nil
+		return 0
 	}
 
 	// Note: the byte-order is BigEndian.
@@ -152,7 +174,7 @@ func BinaryLiteralToInt(bytes []byte) (uint64, error) {
 	for i := 1; i < length; i++ {
 		val = (val << 8) | uint64(bytes[i])
 	}
-	return val, nil
+	return val
 }
 
 func trimLeadingZeroBytes(bytes []byte) []byte {

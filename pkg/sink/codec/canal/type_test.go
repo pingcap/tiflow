@@ -36,9 +36,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[0].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
 
 	mysqlType := utils.GetMySQLType(columnInfo, false)
@@ -47,38 +45,38 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "int(11)", mysqlType)
 
-	flag := tableInfo.ColumnsFlag[colInfos[0].ID]
+	flag := tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
 	javaType, err := getJavaSQLType(int64(2147483647), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "tinyint(4)", mysqlType)
 
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	javaType, err = getJavaSQLType(int64(127), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeTINYINT, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "smallint(6)", mysqlType)
 
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	javaType, err = getJavaSQLType(int64(32767), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeSMALLINT, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -87,9 +85,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -107,11 +105,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[0].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[0].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "int unsigned", mysqlType)
 	// mysql type with the default type length
@@ -131,9 +127,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -152,9 +148,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeTINYINT, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -172,9 +168,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeSMALLINT, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -192,9 +188,9 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -221,37 +217,35 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[0].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "int", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "int(10)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "tinyint(3)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "smallint(5)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "mediumint(8)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint", mysqlType)
@@ -267,37 +261,35 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[0].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "int unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "int(10) unsigned", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "tinyint(3) unsigned", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "smallint(5) unsigned", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "mediumint(8) unsigned", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint unsigned", mysqlType)
@@ -313,37 +305,35 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[0].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "int unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "int(10) unsigned zerofill", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "tinyint(3) unsigned zerofill", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "smallint(5) unsigned zerofill", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "mediumint(8) unsigned zerofill", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint unsigned zerofill", mysqlType)
@@ -358,18 +348,16 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bit", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "bit(1)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bit", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -379,7 +367,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeBIT, javaType)
 
 	// bool is identical to tinyint in the TiDB.
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint", mysqlType)
@@ -398,11 +386,10 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID := tableInfo.Columns[1].ID
+	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -411,9 +398,10 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeREAL, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -426,16 +414,16 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID = tableInfo.Columns[1].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "float(10,3)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float", mysqlType)
@@ -446,9 +434,8 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID = tableInfo.Columns[1].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double", mysqlType)
@@ -464,11 +451,10 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID = tableInfo.Columns[1].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -477,9 +463,10 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeREAL, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -488,14 +475,16 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeDOUBLE, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnID = tableInfo.Columns[3].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "float unsigned zerofill", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnID = tableInfo.Columns[4].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double unsigned zerofill", mysqlType)
@@ -511,16 +500,14 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "decimal(10,0)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal", mysqlType)
@@ -531,18 +518,17 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "decimal(5,0)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID := tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -555,18 +541,17 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "decimal(10,0) unsigned", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -584,18 +569,17 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "time", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "time", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID := tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "time", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -608,18 +592,17 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "datetime", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "datetime", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "datetime", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -632,18 +615,17 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "timestamp", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "timestamp", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "timestamp", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -655,11 +637,11 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	sql = `create table test.t4(a int primary key, b date)`
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
-	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID = tableInfo.Columns[1].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "date", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -672,18 +654,17 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "year", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "year(4)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "year", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -701,18 +682,17 @@ func TestGetMySQLType4Char(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "char", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "char(1)", mysqlType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID := tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "char", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -725,11 +705,10 @@ func TestGetMySQLType4Char(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID = tableInfo.Columns[1].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "varchar", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -747,11 +726,10 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID := tableInfo.Columns[1].ID
+	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "text", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -760,9 +738,10 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinytext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -771,9 +750,10 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnID = tableInfo.Columns[3].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumtext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -782,9 +762,10 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnID = tableInfo.Columns[4].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "longtext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -802,11 +783,9 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "binary", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -815,7 +794,7 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "binary", mysqlType)
@@ -826,11 +805,9 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos = tableInfo.GetRowColInfos()
-
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "varbinary", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -848,11 +825,9 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "blob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -861,9 +836,9 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -872,9 +847,9 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -883,9 +858,9 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "longblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -903,11 +878,10 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID := tableInfo.Columns[1].ID
+	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "enum", mysqlType)
@@ -918,9 +892,10 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
-	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[2].ID)
+	columnID = tableInfo.Columns[2].ID
+	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	flag = tableInfo.ColumnsFlag[columnID]
 
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "set", mysqlType)
@@ -940,11 +915,10 @@ func TestGetMySQLType4JSON(t *testing.T) {
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
-
-	columnInfo, ok := tableInfo.GetColumnInfo(colInfos[1].ID)
+	columnID := tableInfo.Columns[1].ID
+	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	flag := tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "json", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)

@@ -100,7 +100,7 @@ func NewSchemaStorage(
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
 		meta := kv.GetSnapshotMeta(storage, startTs)
-		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
+		snap, err = schema.NewSnapshotFromMeta(id, meta, startTs, forceReplicate, filter)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -553,15 +553,15 @@ func (s *MockSchemaStorage) BuildDDLEvents(
 
 // AdvanceResolvedTs implements SchemaStorage.
 func (s *MockSchemaStorage) AdvanceResolvedTs(ts uint64) {
-	s.Resolved = ts
+	atomic.StoreUint64(&s.Resolved, ts)
 }
 
 // ResolvedTs implements SchemaStorage.
 func (s *MockSchemaStorage) ResolvedTs() uint64 {
-	return s.Resolved
+	return atomic.LoadUint64(&s.Resolved)
 }
 
 // DoGC implements SchemaStorage.
 func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
-	return s.Resolved
+	return atomic.LoadUint64(&s.Resolved)
 }

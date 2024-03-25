@@ -18,20 +18,24 @@ import (
 	"hash/crc32"
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.Column, expected uint32) error {
-	checksum, err := calculateChecksum(columns)
+func VerifyChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo, expected uint32) error {
+	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
+	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
+	if expected == 0 {
+		return nil
+	}
+	checksum, err := calculateChecksum(columns, columnInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -47,17 +51,17 @@ func VerifyChecksum(columns []*model.Column, expected uint32) error {
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint32, error) {
+func calculateChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo) (uint32, error) {
 	var (
 		checksum uint32
 		err      error
 	)
 	buf := make([]byte, 0)
-	for _, col := range columns {
+	for idx, col := range columns {
 		if len(buf) > 0 {
 			buf = buf[:0]
 		}
-		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
+		buf, err = buildChecksumBytes(buf, col.Value, columnInfo[idx].GetType())
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -121,19 +125,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeEnum, TypeSet encoded as string
 	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case int64:
+			number = uint64(v)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, number)
 	case mysql.TypeBit:
-		var (
-			number uint64
-			err    error
-		)
+		var number uint64
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			number = MustBinaryLiteralToInt(v)
 		// TypeBit encoded as uint64 for the simple protocol
 		case uint64:
 			number = v
@@ -151,19 +156,22 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		location := config.GetDefaultServerConfig().TZ
-		timestamp := value.(string)
-
-		loc, err := util.GetTimezone(location)
-		if err != nil {
-			return nil, errors.Trace(err)
+		location := "Local"
+		var ts string
+		switch data := value.(type) {
+		case map[string]interface{}:
+			ts = data["value"].(string)
+			location = data["location"].(string)
+		case string:
+			ts = data
 		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		ts, err := util.ConvertTimezone(ts, location)
 		if err != nil {
-			return nil, errors.Trace(err)
+			log.Panic("convert timestamp to timezone failed",
+				zap.String("timestamp", ts), zap.String("location", location),
+				zap.Error(err))
 		}
-		timestamp = t.UTC().Format("2006-01-02 15:04:05")
-		buf = appendLengthValue(buf, []byte(timestamp))
+		buf = appendLengthValue(buf, []byte(ts))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		buf = appendLengthValue(buf, []byte(value.(string)))
