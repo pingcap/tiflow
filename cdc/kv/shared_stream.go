@@ -162,6 +162,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("addr", rs.storeAddr),
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
+			s.multiplexing.Release()
 			s.multiplexing = nil
 		} else if s.tableExclusives != nil {
 			close(s.tableExclusives)
@@ -184,12 +185,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 	g, gctx := errgroup.WithContext(ctx)
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		defer func() {
-			if s.multiplexing != nil {
-				s.multiplexing.Release()
-				s.multiplexing = nil
-			}
-		}()
 		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
@@ -207,8 +202,13 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 				for _, cc := range connAndClientsCache {
 					cc.Release()
 				}
-				for tableExclusive := range s.tableExclusives {
-					tableExclusive.cc.Release()
+				for {
+					select {
+					case tableExclusive := <-s.tableExclusives:
+						cc := tableExclusive.cc
+						cc.Release()
+					default:
+					}
 				}
 			}()
 			for {
