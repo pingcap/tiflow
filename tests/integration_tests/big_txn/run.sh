@@ -49,7 +49,7 @@ function run() {
 	check_table_exists "big_txn.usertable1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
-	sleep 240
+	sleep 120
 	check_table_exists "big_txn.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
