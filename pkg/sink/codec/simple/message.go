@@ -500,8 +500,10 @@ func decodeColumns(
 	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Panic("cannot found the value for the column",
+			log.Warn("cannot found the value for the column, "+
+				"it may be a generated column",
 				zap.String("column", info.Name.O))
+			continue
 		}
 		columnID := tableInfo.ForceGetColumnIDByName(info.Name.O)
 		col := decodeColumn(value, columnID, &info.FieldType)
