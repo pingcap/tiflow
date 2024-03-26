@@ -81,18 +81,15 @@ type Node struct {
 
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
-	defer func() {
-		ret.id = genNextNodeID()
-		ret.SendToWorker = nil
-		ret.RandWorkerID = nil
-		ret.totalDependencies = 0
-		ret.removedDependencies = 0
-		ret.assignedTo = unassigned
-		ret.removed = false
-	}()
-
-	ret = new(Node)
-	return
+	return &Node{
+		id:                  genNextNodeID(),
+		SendToWorker:        nil,
+		RandWorkerID:        nil,
+		totalDependencies:   0,
+		removedDependencies: 0,
+		assignedTo:          unassigned,
+		removed:             false,
+	}
 }
 
 // NodeID implements interface internal.SlotNode.
