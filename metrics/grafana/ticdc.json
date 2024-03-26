@@ -24466,9 +24466,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 51
-=======
-  "version": 57
->>>>>>> 0424aba6e4 (gc(ticdc):  add min service gc safe point metrics (#10553))
+  "version": 52
 }
