@@ -132,7 +132,8 @@ func (c *coordinator) Tick(
 		if costTime > tickLogsWarnDuration {
 			log.Warn("scheduler tick took too long",
 				zap.String("namespace", c.changefeedID.Namespace),
-				zap.String("changefeed", c.changefeedID.ID), zap.Duration("duration", costTime))
+				zap.String("changefeed", c.changefeedID.ID),
+				zap.Duration("duration", costTime))
 		}
 	}()
 
@@ -187,9 +188,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"since not all captures initialized",
-			zap.String("target", target),
 			zap.String("namespace", c.changefeedID.Namespace),
-			zap.String("changefeed", c.changefeedID.ID))
+			zap.String("changefeed", c.changefeedID.ID),
+			zap.String("target", target))
 		// return count 1 to let client retry.
 		return 1, nil
 	}
@@ -257,9 +258,9 @@ func (c *coordinator) Close(ctx context.Context) {
 	c.schedulerM.CleanMetrics()
 
 	log.Info("schedulerv3: coordinator closed",
-		zap.Any("ownerRev", c.captureM.OwnerRev),
 		zap.String("namespace", c.changefeedID.Namespace),
-		zap.String("changefeed", c.changefeedID.ID))
+		zap.String("changefeed", c.changefeedID.ID),
+		zap.Any("ownerRev", c.captureM.OwnerRev))
 }
 
 // ===========
@@ -275,6 +276,8 @@ func (c *coordinator) poll(
 	if c.compat.UpdateCaptureInfo(aliveCaptures) {
 		spanReplicationEnabled := c.compat.CheckSpanReplicationEnabled()
 		log.Info("schedulerv3: compat update capture info",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.Any("captures", aliveCaptures),
 			zap.Bool("spanReplicationEnabled", spanReplicationEnabled))
 	}
