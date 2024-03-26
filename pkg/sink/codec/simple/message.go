@@ -501,7 +501,7 @@ func decodeColumns(
 		value, ok := rawData[info.Name.O]
 		if !ok {
 			log.Warn("cannot found the value for the column, "+
-				"it may be a generated column",
+				"it must be a generated column and TiCDC does not replicate generated column value",
 				zap.String("column", info.Name.O))
 			continue
 		}
