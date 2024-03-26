@@ -48,7 +48,7 @@ function run() {
 	sleep 120
 	check_table_exists "big_txn.usertable1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
+	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 240
 	check_table_exists "big_txn.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 
