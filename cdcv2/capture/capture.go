@@ -33,7 +33,6 @@ import (
 	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	ownerv2 "github.com/pingcap/tiflow/cdcv2/owner"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -159,21 +158,12 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
-
-	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
+	g.Go(func() error {
+		return c.MessageServer.Run(stdCtx, c.MessageRouter.GetLocalChannel())
 	})
 
 	g.Go(func() error {
-		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
-	})
-
-	g.Go(func() error {
-		return c.captureObservation.Run(ctx,
+		return c.captureObservation.Run(stdCtx,
 			func(ctx context.Context,
 				controllerObserver metadata.ControllerObservation,
 			) error {
@@ -186,7 +176,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 			})
 	})
 	g.Go(func() error {
-		return c.owner.Run(ctx)
+		return c.owner.Run(stdCtx)
 	})
 	return errors.Trace(g.Wait())
 }

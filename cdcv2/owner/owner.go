@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -161,7 +160,7 @@ func NewOwner(
 }
 
 // Run runs the owner.
-func (o *Owner) Run(ctx cdcContext.Context) error {
+func (o *Owner) Run(ctx context.Context) error {
 	tick := time.NewTicker(time.Millisecond * 100)
 	for {
 		select {

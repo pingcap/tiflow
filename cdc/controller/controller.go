@@ -139,7 +139,6 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 	}
 
 	// Tick all changefeeds.
-	// ctx := stdCtx.(cdcContext.Context)
 	for _, changefeed := range state.Changefeeds {
 		o.changefeeds[changefeed.ID] = changefeed
 	}
