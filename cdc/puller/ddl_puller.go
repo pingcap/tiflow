@@ -72,7 +72,6 @@ func NewDDLJobPuller(
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
 ) DDLJobPuller {
-
 	pdCli := up.PDClient
 	regionCache := up.RegionCache
 	kvStorage := up.KVStorage
