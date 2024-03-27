@@ -143,7 +143,7 @@ func (n *Node) Remove() {
 
 	n.removed = true
 	if n.dependers != nil {
-		// `mu` must be holded during accessing dependers.
+		// `mu` must be held during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
 			stdatomic.AddInt32(&node.removedDependencies, 1)
 			// use to simulate call A's maybeReadyToRun after node A may be removed
