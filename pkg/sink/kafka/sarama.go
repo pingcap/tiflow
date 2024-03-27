@@ -206,7 +206,7 @@ func GetKafkaVersion(ctx context.Context, config *sarama.Config, o *Options) (sa
 		defer func() {
 			broker.Close()
 		}()
-		api_response, err := broker.ApiVersions(&sarama.ApiVersionsRequest{})
+		apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{})
 		if err != nil {
 			log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addrs[i]))
 			continue
@@ -214,7 +214,7 @@ func GetKafkaVersion(ctx context.Context, config *sarama.Config, o *Options) (sa
 		// ApiKey method
 		// 0      Produce
 		// 3      Metadata (default)
-		version := api_response.ApiKeys[3].MaxVersion
+		version := apiResponse.ApiKeys[3].MaxVersion
 		kafkaVersion := requiredVersion(version)
 		return kafkaVersion, nil
 	}
