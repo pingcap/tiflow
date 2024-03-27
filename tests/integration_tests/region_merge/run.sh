@@ -75,6 +75,8 @@ EOF
 
 	run_sql "create table region_merge.finish_mark (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+	sleep 120
+
 	check_table_exists region_merge.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
