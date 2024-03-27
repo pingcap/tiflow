@@ -217,8 +217,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
 }
 
-type nonAsyncPool struct {
-}
+type nonAsyncPool struct{}
 
 func (f *nonAsyncPool) Go(_ context.Context, fn func()) error {
 	fn()
