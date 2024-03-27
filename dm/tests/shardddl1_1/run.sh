@@ -498,10 +498,35 @@ function DM_SAME_DDL_TWICE() {
 	run_case SAME_DDL_TWICE "double-source-pessimistic" "init_table 111 211 212" "clean_table" "pessimistic"
 }
 
+function DM_BINARY_COLUMN_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,0xBF500C00A2034521B819D6EB7065D200)"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_source1 "update ${shardddl1}.${tb1} set a=2 where b=0xBF500C00A2034521B819D6EB7065D200"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_source1 "delete from ${shardddl1}.${tb1} where b=0xBF500C00A2034521B819D6EB7065D200"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# padding by mysql
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,0xBF500C00A2034521B819D6EB7065D2)"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_source1 "update ${shardddl1}.${tb1} set a=2 where b=0xBF500C00A2034521B819D6EB7065D200"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_source1 "delete from ${shardddl1}.${tb1} where b=0xBF500C00A2034521B819D6EB7065D200"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb};" "count(1): 0"
+}
+
+function DM_BINARY_COLUMN() {
+	run_case BINARY_COLUMN "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int, b binary(16) primary key);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
 	DM_SAME_DDL_TWICE
+	DM_BINARY_COLUMN
 	start=6
 	end=35
 	except=(024 025 029)
