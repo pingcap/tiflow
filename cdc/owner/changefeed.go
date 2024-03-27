@@ -760,6 +760,9 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	if c.cancelInitialize != nil {
+		c.cancelInitialize()
+	}
 	c.cleanupMetrics()
 	if c.isReleased {
 		return
@@ -769,9 +772,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
-	if c.cancelInitialize != nil {
-		c.cancelInitialize()
-	}
 	if c.cancel != nil {
 		c.cancel()
 	}
