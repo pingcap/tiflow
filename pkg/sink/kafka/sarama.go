@@ -120,7 +120,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	kafkaVersion, err := GetKafkaVersion(ctx, config, o)
 	if err != nil {
 		log.Warn("Can't get Kafka version by broker. ticdc will use default version",
-			zap.String("default-version", kafkaVersion.String()))
+			zap.String("defaultVersion", kafkaVersion.String()))
 	}
 
 	version, err := sarama.ParseKafkaVersion(o.Version)
@@ -132,8 +132,8 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 		if version.String() != kafkaVersion.String() {
 			log.Warn("The Kafka version you assigned may not be correct. "+
 				"Please assign a version equal to or less than the specified version",
-				zap.String("assigned-version", version.String()),
-				zap.String("desired-version", kafkaVersion.String()))
+				zap.String("assignedVersion", version.String()),
+				zap.String("desiredVersion", kafkaVersion.String()))
 		}
 	} else {
 		config.Version = kafkaVersion
