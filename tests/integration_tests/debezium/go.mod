@@ -3,16 +3,20 @@ module github.com/breezewish/checker
 go 1.21.0
 
 require (
+	github.com/alecthomas/chroma v0.10.0
+	github.com/fatih/color v1.16.0
 	github.com/go-sql-driver/mysql v1.7.1
+	github.com/google/go-cmp v0.6.0
+	github.com/google/uuid v1.3.1
 	github.com/pingcap/tidb v1.1.0-beta.0.20231117065153-a4f85c356873
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20231116213047-1f7c1e02bcd4
+	github.com/segmentio/kafka-go v0.4.45
 	github.com/thessem/zap-prettyconsole v0.3.0
 	go.uber.org/zap v1.26.0
 )
 
 require (
 	github.com/Code-Hex/dd v1.1.0 // indirect
-	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudfoundry/gosigar v1.3.6 // indirect
@@ -25,13 +29,10 @@ require (
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
-	github.com/fatih/color v1.16.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/btree v1.1.2 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/google/uuid v1.3.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/klauspost/compress v1.17.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -55,7 +56,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
-	github.com/segmentio/kafka-go v0.4.45 // indirect
 	github.com/shirou/gopsutil/v3 v3.23.10 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a // indirect
