@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"golang.org/x/sync/errgroup"
 )
 
 type mockPuller struct {
@@ -79,10 +80,6 @@ func (m *mockPuller) Output() <-chan *model.RawKVEntry {
 	return m.outCh
 }
 
-func (m *mockPuller) Stats() Stats {
-	return Stats{}
-}
-
 func (m *mockPuller) append(e *model.RawKVEntry) {
 	m.inCh <- e
 }
@@ -113,15 +110,15 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 
 func newMockDDLJobPuller(
 	t *testing.T,
-	puller *MultiplexingPuller,
+	puller *mockPuller,
 	needSchemaStorage bool,
 ) (DDLJobPuller, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
 		outputCh: make(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
+		inputCh: puller.outCh,
 	}
-	res.multiplexingPuller.MultiplexingPuller = puller
 
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {
@@ -147,6 +144,14 @@ func newMockDDLJobPuller(
 func TestHandleRenameTable(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
+	ctx, cancel := context.WithCancel(context.Background())
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return mockPuller.Run(ctx)
+	})
+	defer eg.Wait()
+	defer cancel()
+
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
 	defer helper.Close()
 
@@ -171,7 +176,7 @@ func TestHandleRenameTable(t *testing.T) {
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
 	go ddlJobPuller.Run(ctx)
@@ -373,6 +378,15 @@ func TestHandleRenameTable(t *testing.T) {
 func TestHandleJob(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return mockPuller.Run(ctx)
+	})
+	defer eg.Wait()
+	defer cancel()
+
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
 	defer helper.Close()
 
@@ -592,19 +606,28 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return mockPuller.Run(ctx)
+	})
+	defer eg.Wait()
+	defer cancel()
+
+	cctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
+	f, err := filter.NewFilter(cctx.ChangefeedVars().Info.Config, "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		cctx.ChangefeedVars().Info.Config.ForceReplicate,
+		cctx.ChangefeedVars().ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, cctx.ChangefeedVars().ID, schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
 	var wg sync.WaitGroup
@@ -716,19 +739,28 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return mockPuller.Run(ctx)
+	})
+	defer eg.Wait()
+	defer cancel()
+
+	cctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		cctx.ChangefeedVars().Info.Config.ForceReplicate,
+		cctx.ChangefeedVars().ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, cctx.ChangefeedVars().ID, schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 	var wg sync.WaitGroup
