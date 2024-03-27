@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"crypto/tls"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -31,13 +32,7 @@ import (
 func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 	config.ClientID = o.ClientID
-
-	version, err := sarama.ParseKafkaVersion(o.Version)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
-	}
-	config.Version = version
-
+	var err error
 	// Admin client would refresh metadata periodically,
 	// if metadata cannot be refreshed easily, this would indicate the network condition between the
 	// capture server and kafka broker is not good.
@@ -122,6 +117,28 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	kafkaVersion, err := GetKafkaVersion(ctx, config, o)
+	if err != nil {
+		log.Warn("Can't get Kafka version by broker. ticdc will use default version",
+			zap.String("default-version", kafkaVersion.String()))
+	}
+
+	version, err := sarama.ParseKafkaVersion(o.Version)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
+	}
+	if o.IsAssignedVersion {
+		config.Version = version
+		if version.String() != kafkaVersion.String() {
+			log.Warn("The Kafka version you assigned may not be correct. "+
+				"Please assign a version equal to or less than the specified version",
+				zap.String("assigned-version", version.String()),
+				zap.String("desired-version", kafkaVersion.String()))
+		}
+	} else {
+		config.Version = kafkaVersion
+	}
+
 	return config, nil
 }
 
@@ -166,4 +183,67 @@ func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Opt
 	}
 
 	return nil
+}
+
+func GetKafkaVersion(ctx context.Context, config *sarama.Config, o *Options) (sarama.KafkaVersion, error) {
+	var err error
+	addrs := o.BrokerEndpoints
+	if len(addrs) > 1 {
+		// Shuffle the list of addresses to randomize the order in which
+		// connections are attempted. This prevents routing all connections
+		// to the first broker (which will usually succeed).
+		rand.Shuffle(len(addrs), func(i, j int) {
+			addrs[i], addrs[j] = addrs[j], addrs[i]
+		})
+	}
+	for i := range addrs {
+		broker := sarama.NewBroker(addrs[i])
+		err = broker.Open(config)
+		if err != nil {
+			log.Warn("Kafka fail to open broker", zap.String("addr", addrs[i]))
+			continue
+		}
+		defer func() {
+			broker.Close()
+		}()
+		api_response, err := broker.ApiVersions(&sarama.ApiVersionsRequest{})
+		if err != nil {
+			log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addrs[i]))
+			continue
+		}
+		// ApiKey method
+		// 0      Produce
+		// 3      Metadata (default)
+		version := api_response.ApiKeys[3].MaxVersion
+		kafkaVersion := requiredVersion(version)
+		return kafkaVersion, nil
+	}
+	return sarama.V2_0_0_0, err
+}
+
+func requiredVersion(version int16) sarama.KafkaVersion {
+	switch version {
+	case 10:
+		return sarama.V2_8_0_0
+	case 9:
+		return sarama.V2_4_0_0
+	case 8:
+		return sarama.V2_3_0_0
+	case 7:
+		return sarama.V2_1_0_0
+	case 6:
+		return sarama.V2_0_0_0
+	case 5:
+		return sarama.V1_0_0_0
+	case 3, 4:
+		return sarama.V0_11_0_0
+	case 2:
+		return sarama.V0_10_1_0
+	case 1:
+		return sarama.V0_10_0_0
+	case 0:
+		return sarama.V0_8_2_0
+	default:
+		return sarama.V2_0_0_0
+	}
 }
