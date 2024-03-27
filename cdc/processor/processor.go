@@ -95,6 +95,10 @@ type processor struct {
 	initializing *atomic.Bool
 	initError    *atomic.Error
 
+	// func to cancel the processor initialization
+	cancelInitialize context.CancelFunc
+	initialWaitGroup sync.WaitGroup
+
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
 		context.Context, *model.Liveness, uint64, *config.SchedulerConfig,
@@ -559,9 +563,11 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	}
 
 	if !p.initializing.Load() && !p.initialized.Load() {
+		initCtx, cancelInitialize := cdcContext.WithCancel(ctx)
 		p.initializing.Store(true)
-		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
-			if err := p.lazyInit(ctx); err != nil {
+		err := ctx.GlobalVars().IOThreadPool.Go(initCtx, func() {
+			defer p.initialWaitGroup.Done()
+			if err := p.lazyInit(initCtx); err != nil {
 				p.initError.Store(err)
 			}
 			p.initializing.Store(false)
@@ -569,6 +575,8 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		p.cancelInitialize = cancelInitialize
+		p.initialWaitGroup.Add(1)
 	}
 	if p.initializing.Load() {
 		return nil
@@ -853,7 +861,12 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
-
+	if p.initializing.Load() {
+		if p.cancelInitialize != nil {
+			p.cancelInitialize()
+		}
+		p.initialWaitGroup.Wait()
+	}
 	// clean up metrics first to avoid some metrics are not cleaned up
 	// when error occurs during closing the processor
 	p.cleanupMetrics()

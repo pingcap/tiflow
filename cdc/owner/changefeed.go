@@ -121,6 +121,7 @@ type changefeed struct {
 
 	// func to cancel the changefeed initialization
 	cancelInitialize context.CancelFunc
+	initialWaitGroup sync.WaitGroup
 
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
@@ -390,15 +391,17 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		c.initializing.Store(true)
 		initialCtx, cancelInitialize := cdcContext.WithCancel(ctx)
 		err := ctx.GlobalVars().IOThreadPool.Go(initialCtx, func() {
+			defer c.initialWaitGroup.Done()
 			if err := c.initialize(initialCtx); err != nil {
 				c.initError.Store(errors.Trace(err))
 			}
 			c.initializing.Store(false)
 		})
-		c.cancelInitialize = cancelInitialize
 		if err != nil {
 			return 0, 0, errors.Trace(err)
 		}
+		c.initialWaitGroup.Add(1)
+		c.cancelInitialize = cancelInitialize
 	}
 	if c.initializing.Load() {
 		return 0, 0, nil
@@ -760,8 +763,11 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
-	if c.cancelInitialize != nil {
-		c.cancelInitialize()
+	if c.initializing.Load() {
+		if c.cancelInitialize != nil {
+			c.cancelInitialize()
+		}
+		c.initialWaitGroup.Wait()
 	}
 	c.cleanupMetrics()
 	if c.isReleased {
