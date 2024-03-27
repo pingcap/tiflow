@@ -208,6 +208,7 @@ func TestParseCfg(t *testing.T) {
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
+			ChangefeedThreadPoolSize: 4,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -355,6 +356,7 @@ check-balance-interval = "10s"
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
+			ChangefeedThreadPoolSize: 4,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -494,6 +496,7 @@ cert-allowed-cn = ["dd","ee"]
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
+			ChangefeedThreadPoolSize: 4,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -559,5 +562,6 @@ unknown3 = 3
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 		},
+		ChangefeedThreadPoolSize: 4,
 	}, o.serverConfig.Debug)
 }
