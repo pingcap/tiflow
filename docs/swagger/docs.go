@@ -1103,6 +1103,57 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/changefeeds/{changefeed_id}/synced": {
+            "get": {
+                "description": "get the synced status of a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Get synced status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SyncedStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/health": {
             "get": {
                 "description": "Check the health status of a TiCDC cluster",
@@ -1370,7 +1421,16 @@ var doc = `{
         "config.CloudStorageConfig": {
             "type": "object",
             "properties": {
+                "file-cleanup-cron-spec": {
+                    "type": "string"
+                },
+                "file-expiration-days": {
+                    "type": "integer"
+                },
                 "file-size": {
+                    "type": "integer"
+                },
+                "flush-concurrency": {
                     "type": "integer"
                 },
                 "flush-interval": {
@@ -1742,10 +1802,10 @@ var doc = `{
                     "description": "SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.\nSend and SendAsync returns an error after timeout.\ndefault: 30s",
                     "type": "integer"
                 },
-                "tls-certificate-path": {
+                "tls-certificate-file": {
                     "type": "string"
                 },
-                "tls-private-key-path": {
+                "tls-key-file-path": {
                     "type": "string"
                 },
                 "tls-trust-certs-file-path": {
@@ -1768,7 +1828,6 @@ var doc = `{
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
                 "column-selectors": {
-                    "description": "ColumnSelectors is Deprecated.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.ColumnSelector"
@@ -2314,7 +2373,16 @@ var doc = `{
         "v2.CloudStorageConfig": {
             "type": "object",
             "properties": {
+                "file_cleanup_cron_spec": {
+                    "type": "string"
+                },
+                "file_expiration_days": {
+                    "type": "integer"
+                },
                 "file_size": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
                     "type": "integer"
                 },
                 "flush_interval": {
@@ -2368,7 +2436,19 @@ var doc = `{
         "v2.ConsistentConfig": {
             "type": "object",
             "properties": {
+                "compression": {
+                    "type": "string"
+                },
+                "encoding_worker_num": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
+                    "type": "integer"
+                },
                 "flush_interval": {
+                    "type": "integer"
+                },
+                "flush_worker_num": {
                     "type": "integer"
                 },
                 "level": {
@@ -2377,11 +2457,28 @@ var doc = `{
                 "max_log_size": {
                     "type": "integer"
                 },
+                "memory_usage": {
+                    "$ref": "#/definitions/v2.ConsistentMemoryUsage"
+                },
+                "meta_flush_interval": {
+                    "type": "integer"
+                },
                 "storage": {
                     "type": "string"
                 },
                 "use_file_backend": {
                     "type": "boolean"
+                }
+            }
+        },
+        "v2.ConsistentMemoryUsage": {
+            "type": "object",
+            "properties": {
+                "event_cache_percentage": {
+                    "type": "integer"
+                },
+                "memory_quota_percentage": {
+                    "type": "integer"
                 }
             }
         },
@@ -2536,6 +2633,9 @@ var doc = `{
                     "type": "string"
                 }
             }
+        },
+        "v2.JSONDuration": {
+            "type": "object"
         },
         "v2.KafkaConfig": {
             "type": "object",
@@ -2847,6 +2947,9 @@ var doc = `{
                 "case_sensitive": {
                     "type": "boolean"
                 },
+                "changefeed_error_stuck_duration": {
+                    "$ref": "#/definitions/v2.JSONDuration"
+                },
                 "check_gc_safe_point": {
                     "type": "boolean"
                 },
@@ -2880,11 +2983,17 @@ var doc = `{
                 "sink": {
                     "$ref": "#/definitions/v2.SinkConfig"
                 },
+                "sql_mode": {
+                    "type": "string"
+                },
                 "sync_point_interval": {
                     "type": "string"
                 },
                 "sync_point_retention": {
                     "type": "string"
+                },
+                "synced_status": {
+                    "$ref": "#/definitions/v2.SyncedStatusConfig"
                 }
             }
         },
@@ -3028,6 +3137,42 @@ var doc = `{
                 },
                 "transaction_atomicity": {
                     "type": "string"
+                }
+            }
+        },
+        "v2.SyncedStatus": {
+            "type": "object",
+            "properties": {
+                "info": {
+                    "type": "string"
+                },
+                "last_synced_ts": {
+                    "type": "string"
+                },
+                "now_ts": {
+                    "type": "string"
+                },
+                "puller_resolved_ts": {
+                    "type": "string"
+                },
+                "sink_checkpoint_ts": {
+                    "type": "string"
+                },
+                "synced": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "v2.SyncedStatusConfig": {
+            "type": "object",
+            "properties": {
+                "checkpoint_interval": {
+                    "description": "The maximum interval between latest checkpoint ts and now or\nbetween latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state",
+                    "type": "integer"
+                },
+                "synced_check_interval": {
+                    "description": "The minimum interval between the latest synced ts and now required to reach synced state",
+                    "type": "integer"
                 }
             }
         },

@@ -19,7 +19,13 @@ definitions:
     type: object
   config.CloudStorageConfig:
     properties:
+      file-cleanup-cron-spec:
+        type: string
+      file-expiration-days:
+        type: integer
       file-size:
+        type: integer
+      flush-concurrency:
         type: integer
       flush-interval:
         type: string
@@ -291,9 +297,9 @@ definitions:
           Send and SendAsync returns an error after timeout.
           default: 30s
         type: integer
-      tls-certificate-path:
+      tls-certificate-file:
         type: string
-      tls-private-key-path:
+      tls-key-file-path:
         type: string
       tls-trust-certs-file-path:
         type: string
@@ -313,7 +319,6 @@ definitions:
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
       column-selectors:
-        description: ColumnSelectors is Deprecated.
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
@@ -693,7 +698,13 @@ definitions:
     type: object
   v2.CloudStorageConfig:
     properties:
+      file_cleanup_cron_spec:
+        type: string
+      file_expiration_days:
+        type: integer
       file_size:
+        type: integer
+      flush_concurrency:
         type: integer
       flush_interval:
         type: string
@@ -728,16 +739,35 @@ definitions:
     type: object
   v2.ConsistentConfig:
     properties:
+      compression:
+        type: string
+      encoding_worker_num:
+        type: integer
+      flush_concurrency:
+        type: integer
       flush_interval:
+        type: integer
+      flush_worker_num:
         type: integer
       level:
         type: string
       max_log_size:
         type: integer
+      memory_usage:
+        $ref: '#/definitions/v2.ConsistentMemoryUsage'
+      meta_flush_interval:
+        type: integer
       storage:
         type: string
       use_file_backend:
         type: boolean
+    type: object
+  v2.ConsistentMemoryUsage:
+    properties:
+      event_cache_percentage:
+        type: integer
+      memory_quota_percentage:
+        type: integer
     type: object
   v2.DispatchRule:
     properties:
@@ -841,6 +871,8 @@ definitions:
         type: string
       integrity_check_level:
         type: string
+    type: object
+  v2.JSONDuration:
     type: object
   v2.KafkaConfig:
     properties:
@@ -1046,6 +1078,8 @@ definitions:
         type: boolean
       case_sensitive:
         type: boolean
+      changefeed_error_stuck_duration:
+        $ref: '#/definitions/v2.JSONDuration'
       check_gc_safe_point:
         type: boolean
       consistent:
@@ -1068,10 +1102,14 @@ definitions:
         $ref: '#/definitions/v2.ChangefeedSchedulerConfig'
       sink:
         $ref: '#/definitions/v2.SinkConfig'
+      sql_mode:
+        type: string
       sync_point_interval:
         type: string
       sync_point_retention:
         type: string
+      synced_status:
+        $ref: '#/definitions/v2.SyncedStatusConfig'
     type: object
   v2.ResumeChangefeedConfig:
     properties:
@@ -1166,6 +1204,33 @@ definitions:
         type: string
       transaction_atomicity:
         type: string
+    type: object
+  v2.SyncedStatus:
+    properties:
+      info:
+        type: string
+      last_synced_ts:
+        type: string
+      now_ts:
+        type: string
+      puller_resolved_ts:
+        type: string
+      sink_checkpoint_ts:
+        type: string
+      synced:
+        type: boolean
+    type: object
+  v2.SyncedStatusConfig:
+    properties:
+      checkpoint_interval:
+        description: |-
+          The maximum interval between latest checkpoint ts and now or
+          between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+        type: integer
+      synced_check_interval:
+        description: The minimum interval between the latest synced ts and now required
+          to reach synced state
+        type: integer
     type: object
   v2.Table:
     properties:
@@ -1891,6 +1956,40 @@ paths:
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/changefeeds/{changefeed_id}/synced:
+    get:
+      consumes:
+      - application/json
+      description: get the synced status of a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SyncedStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get synced status
       tags:
       - changefeed
       - v2
