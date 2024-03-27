@@ -1,9 +1,9 @@
 ARG version
-FROM --platform=linux/amd64 mysql:${version}-debian
+FROM mariadb:${version}
 
 # https://github.com/docker-library/mysql/issues/1016#issuecomment-1857280082
-RUN rm /etc/apt/sources.list.d/mysql.list
-RUN apt-get update && apt-get -y install keepalived net-tools
+RUN rm /etc/apt/sources.list.d/mariadb.list
+RUN apt update && apt-get -y install keepalived net-tools
 
 ADD init.sh /init.sh
 ADD chk_mysql.sh /chk_mysql.sh
