@@ -119,6 +119,9 @@ type changefeed struct {
 	initializing *atomic.Bool
 	initError    *atomic.Error
 
+	// func to cancel the changefeed initialization
+	cancelInitialize context.CancelFunc
+
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
@@ -385,12 +388,14 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	}
 	if !c.initializing.Load() && !c.initialized.Load() {
 		c.initializing.Store(true)
-		err := ctx.GlobalVars().IOThreadPool.Go(ctx, func() {
-			if err := c.initialize(ctx); err != nil {
+		initialCtx, cancelInitialize := cdcContext.WithCancel(ctx)
+		err := ctx.GlobalVars().IOThreadPool.Go(initialCtx, func() {
+			if err := c.initialize(initialCtx); err != nil {
 				c.initError.Store(errors.Trace(err))
 			}
 			c.initializing.Store(false)
 		})
+		c.cancelInitialize = cancelInitialize
 		if err != nil {
 			return 0, 0, errors.Trace(err)
 		}
@@ -764,7 +769,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
-	c.cancel()
+	if c.cancelInitialize != nil {
+		c.cancelInitialize()
+	}
+	if c.cancel != nil {
+		c.cancel()
+	}
 	c.cancel = func() {}
 
 	if c.ddlPuller != nil {
