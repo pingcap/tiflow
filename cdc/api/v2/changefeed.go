@@ -441,7 +441,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	updateCfConfig := &ChangefeedConfig{}
+	updateCfConfig := &ChangefeedConfig{
+		ReplicaConfig: ToAPIReplicaConfig(oldCfInfo.Config),
+	}
 	if err = c.BindJSON(updateCfConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
