@@ -65,3 +65,15 @@ func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 	}
 	return initialized
 }
+
+func mockResolvedTsEvent(regionID, ts, requestID uint64) *cdcpb.ChangeDataEvent {
+	return &cdcpb.ChangeDataEvent{
+		Events: []*cdcpb.Event{
+			{
+				RegionId:  regionID,
+				RequestId: requestID,
+				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
+			},
+		},
+	}
+}

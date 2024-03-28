@@ -169,7 +169,8 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}()
 
-	cc, err := c.grpcPool.Connect(ctx, rs.storeAddr)
+	g, gctx := errgroup.WithContext(ctx)
+	cc, err := c.grpcPool.Connect(gctx, rs.storeAddr)
 	if err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -181,10 +182,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		return isCanceled()
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
+		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing.Client(), invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -203,7 +203,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 				case tableExclusive := <-s.tableExclusives:
 					subscriptionID := tableExclusive.subscriptionID
 					cc := tableExclusive.cc
-					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
+					g.Go(func() error { return s.receive(gctx, c, rs, cc.Client(), subscriptionID) })
 				}
 			}
 		})
@@ -217,10 +217,9 @@ func (s *requestedStream) receive(
 	ctx context.Context,
 	c *SharedClient,
 	rs *requestedStore,
-	cc *sharedconn.ConnAndClient,
+	client cdcpb.ChangeData_EventFeedV2Client,
 	subscriptionID SubscriptionID,
 ) error {
-	client := cc.Client()
 	for {
 		cevent, err := client.Recv()
 		if err != nil {
@@ -238,13 +237,13 @@ func (s *requestedStream) receive(
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
+			if err = s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+			if err = s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
 				return err
 			}
 		}
@@ -253,7 +252,7 @@ func (s *requestedStream) receive(
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
 	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
-		if err := cc.Client().Send(req); err != nil {
+		if err = cc.Client().Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
@@ -314,6 +313,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 		return
 	}
+
 	defer func() {
 		if s.multiplexing != nil {
 			s.multiplexing.Release()
@@ -346,8 +346,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					return err
 				}
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
-				delete(tableExclusives, subscriptionID)
 				cc.Release()
+				delete(tableExclusives, subscriptionID)
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests

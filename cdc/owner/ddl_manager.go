@@ -572,11 +572,13 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 // It should be called after a DDL is skipped or sent to downstream successfully.
 func (m *ddlManager) cleanCache(msg string) {
 	tableName := m.executingDDL.TableInfo.TableName
-	log.Info(msg, zap.String("ddl", m.executingDDL.Query),
+	log.Info(msg,
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
 		zap.String("bdrRole", m.executingDDL.BDRRole),
-		zap.Any("ddlEvent", m.executingDDL))
+		zap.String("ddl", m.executingDDL.Query),
+		zap.Uint64("startTs", m.executingDDL.StartTs),
+		zap.Uint64("commitTs", m.executingDDL.CommitTs))
 
 	// Set it to nil first to accelerate GC.
 	m.pendingDDLs[tableName][0] = nil
