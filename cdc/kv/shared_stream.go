@@ -171,7 +171,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 	}()
 
 	g, gctx := errgroup.WithContext(ctx)
-	cc, err := c.grpcPool.Connect(ctx, rs.storeAddr)
+	cc, err := c.grpcPool.Connect(gctx, rs.storeAddr)
 	if err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", c.changefeed.Namespace),
