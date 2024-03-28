@@ -314,14 +314,14 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 		return
 	}
-	defer func() {
-		if s.multiplexing != nil {
-			s.multiplexing.Release()
-		}
-		for _, cc := range tableExclusives {
-			cc.Release()
-		}
-	}()
+	//defer func() {
+	//	if s.multiplexing != nil {
+	//		s.multiplexing.Release()
+	//	}
+	//	for _, cc := range tableExclusives {
+	//		cc.Release()
+	//	}
+	//}()
 
 	sri := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
