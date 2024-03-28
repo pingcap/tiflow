@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -152,42 +153,30 @@ type cacheEvents struct {
 }
 
 type statefulRts struct {
-	flushed   model.Ts
-	unflushed model.Ts
+	flushed   atomic.Uint64
+	unflushed atomic.Uint64
+}
+
+func newStatefulRts(ts model.Ts) (ret statefulRts) {
+	ret.unflushed.Store(ts)
+	ret.flushed.Store(ts)
+	return
 }
 
 func (s *statefulRts) getFlushed() model.Ts {
-	return atomic.LoadUint64(&s.flushed)
+	return s.flushed.Load()
 }
 
 func (s *statefulRts) getUnflushed() model.Ts {
-	return atomic.LoadUint64(&s.unflushed)
+	return s.unflushed.Load()
 }
 
-func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
-	for {
-		old := atomic.LoadUint64(&s.unflushed)
-		if old > unflushed {
-			return false
-		}
-		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
-			break
-		}
-	}
-	return true
+func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (ok bool) {
+	return util.CompareAndIncrease(&s.unflushed, unflushed)
 }
 
-func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (changed bool) {
-	for {
-		old := atomic.LoadUint64(&s.flushed)
-		if old > flushed {
-			return false
-		}
-		if atomic.CompareAndSwapUint64(&s.flushed, old, flushed) {
-			break
-		}
-	}
-	return true
+func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (ok bool) {
+	return util.CompareAndIncrease(&s.flushed, flushed)
 }
 
 // logManager manages redo log writer, buffers un-persistent redo logs, calculates
@@ -360,7 +349,8 @@ func (m *logManager) GetResolvedTs(tableID model.TableID) model.Ts {
 
 // AddTable adds a new table in redo log manager
 func (m *logManager) AddTable(tableID model.TableID, startTs uint64) {
-	_, loaded := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: startTs, unflushed: startTs})
+	rts := newStatefulRts(startTs)
+	_, loaded := m.rtsMap.LoadOrStore(tableID, &rts)
 	if loaded {
 		log.Warn("add duplicated table in redo log manager",
 			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
