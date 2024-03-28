@@ -182,7 +182,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Error(err))
 		return isCanceled()
 	}
-	
+
 	if cc.Multiplexing() {
 		s.multiplexing = cc
 		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
