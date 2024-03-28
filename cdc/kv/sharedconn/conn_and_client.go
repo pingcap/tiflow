@@ -163,7 +163,6 @@ func (c *ConnAndClient) Multiplexing() bool {
 func (c *ConnAndClient) Release() {
 	if c.client != nil {
 		_ = c.client.CloseSend()
-		c.client = nil
 	}
 	if c.conn != nil && c.array != nil {
 		c.array.release(c.conn, false)

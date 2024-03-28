@@ -162,7 +162,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("addr", rs.storeAddr),
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
-			s.multiplexing.Release()
 			s.multiplexing = nil
 		} else if s.tableExclusives != nil {
 			close(s.tableExclusives)
@@ -185,7 +184,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
+		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing.Client(), invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -197,35 +196,14 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 
 		s.tableExclusives = make(chan tableExclusive, 8)
 		g.Go(func() error {
-			// cache all clients, only used to release the clients.
-			connAndClientsCache := make(map[SubscriptionID]*sharedconn.ConnAndClient)
-			defer func() {
-				for subID, cc := range connAndClientsCache {
-					cc.Release()
-					delete(connAndClientsCache, subID)
-				}
-				for {
-					select {
-					case tableExclusive := <-s.tableExclusives:
-						cc := tableExclusive.cc
-						cc.Release()
-					default:
-						return
-					}
-				}
-			}()
 			for {
 				select {
 				case <-gctx.Done():
 					return gctx.Err()
 				case tableExclusive := <-s.tableExclusives:
 					subscriptionID := tableExclusive.subscriptionID
-					if cached := connAndClientsCache[subscriptionID]; cached != nil {
-						cached.Release()
-					}
 					cc := tableExclusive.cc
-					connAndClientsCache[subscriptionID] = cc
-					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
+					g.Go(func() error { return s.receive(gctx, c, rs, cc.Client(), subscriptionID) })
 				}
 			}
 		})
@@ -239,10 +217,9 @@ func (s *requestedStream) receive(
 	ctx context.Context,
 	c *SharedClient,
 	rs *requestedStore,
-	cc *sharedconn.ConnAndClient,
+	client cdcpb.ChangeData_EventFeedV2Client,
 	subscriptionID SubscriptionID,
 ) error {
-	client := cc.Client()
 	for {
 		cevent, err := client.Recv()
 		if err != nil {
@@ -337,6 +314,15 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		return
 	}
 
+	defer func() {
+		if s.multiplexing != nil {
+			s.multiplexing.Release()
+		}
+		for _, cc := range tableExclusives {
+			cc.Release()
+		}
+	}()
+
 	sri := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
 	for {
@@ -360,6 +346,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					return err
 				}
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
+				cc.Release()
 				delete(tableExclusives, subscriptionID)
 			}
 			// NOTE: some principles to help understand deregistering a table:
