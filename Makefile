@@ -7,7 +7,8 @@
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
-	format-makefiles check-makefiles oauth2_server
+	format-makefiles check-makefiles oauth2_server prepare_test_binaries
+
 
 .DEFAULT_GOAL := default
 
@@ -609,5 +610,5 @@ engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin
 	$(FAILPOINT_DISABLE)
 
 prepare_test_binaries:
-	cd scripts && ./download-integration-test-binaries.sh master && cd ..
+	./scripts/download-integration-test-binaries.sh "$(branch)" "$(community)" "$(ver)" "$(os)" "$(arch)"
 	touch prepare_test_binaries
