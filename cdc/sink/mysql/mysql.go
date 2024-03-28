@@ -771,7 +771,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 				values = append(values, args)
 				rowCount++
 			}
-			approximateSize += row.ApproximateDataSize
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 			continue
 		}
 
@@ -817,8 +817,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 					rowCount++
 				}
 			}
-			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
+		approximateSize += int64(len(query)) + row.ApproximateDataSize
 	}
 	flushCacheDMLs()
 
