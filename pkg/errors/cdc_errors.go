@@ -42,6 +42,10 @@ var (
 		"scheduler request failed, %s",
 		errors.RFCCodeText("CDC:ErrSchedulerRequestFailed"),
 	)
+	ErrSchedulerNotAllCaptureInitialized = errors.Normalize(
+		"scheduler request failed, %s",
+		errors.RFCCodeText("CDC:ErrSchedulerRequestFailed"),
+	)
 	ErrGetAllStoresFailed = errors.Normalize(
 		"get stores from pd failed",
 		errors.RFCCodeText("CDC:ErrGetAllStoresFailed"),
