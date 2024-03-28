@@ -81,18 +81,15 @@ type Node struct {
 
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
-	defer func() {
-		ret.id = genNextNodeID()
-		ret.SendToWorker = nil
-		ret.RandWorkerID = nil
-		ret.totalDependencies = 0
-		ret.removedDependencies = 0
-		ret.assignedTo = unassigned
-		ret.removed = false
-	}()
-
-	ret = new(Node)
-	return
+	return &Node{
+		id:                  genNextNodeID(),
+		SendToWorker:        nil,
+		RandWorkerID:        nil,
+		totalDependencies:   0,
+		removedDependencies: 0,
+		assignedTo:          unassigned,
+		removed:             false,
+	}
 }
 
 // NodeID implements interface internal.SlotNode.
@@ -146,7 +143,7 @@ func (n *Node) Remove() {
 
 	n.removed = true
 	if n.dependers != nil {
-		// `mu` must be holded during accessing dependers.
+		// `mu` must be held during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
 			stdatomic.AddInt32(&node.removedDependencies, 1)
 			// use to simulate call A's maybeReadyToRun after node A may be removed

@@ -63,7 +63,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	ret.wg.Add(1)
 	go func() {
 		defer ret.wg.Done()
-		ret.runBackgroundTasks()
+		ret.garbageCollection()
 	}()
 
 	return ret
@@ -81,7 +81,7 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 		// This callback is called after the transaction is executed.
 		postTxnExecuted := func() {
 			// After this transaction is executed, we can remove the node from the graph,
-			// and remove related dependencies for these transacitons which depend on this
+			// and remove related dependencies for these transactions which depend on this
 			// executed transaction.
 			node.Remove()
 
@@ -102,7 +102,7 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 	d.wg.Wait()
 }
 
-func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+func (d *ConflictDetector[Worker, Txn]) garbageCollection() {
 	defer func() {
 		d.garbageNodes.CloseAndDrain()
 	}()
