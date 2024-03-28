@@ -154,7 +154,7 @@ func NewReplicationSet(
 			ResolvedTs:   checkpoint,
 		},
 		// We need to initialize the stats with the checkpoint ts.
-		// Only when the table into ReplicationSetStateReplicating state, we can update the stats
+		// Only when the table into ReplicationSetStateReplicating state, owner will update the table's stats
 		// In advanceCheckpoint, it will first check table.Stats.StageCheckpoints["puller-egress"] whether it is nil,
 		// Only when it's not nil, then consider it join to calculate the slowest puller resolved ts.
 		// If we don't initialize the stats here, when the new table is stuck in incremental scan
