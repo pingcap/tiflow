@@ -695,10 +695,10 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
 
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
@@ -710,12 +710,12 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
 					fallbackToSeqWay = true
-					return 0, err
+					return 0, 0, err
 				}
 			} else {
 				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
-					return 0, err
+					return 0, 0, err
 				}
 			}
 
@@ -733,15 +733,15 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
 					}
 				}
-				return 0, err
+				return 0, 0, err
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-			return dmls.rowCount, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)

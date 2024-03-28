@@ -43,7 +43,16 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// LargeRowSizeHistogram records the row size of events.
+	// TotalWriteBytesCounter records the total number of bytes written by sink.
+	TotalWriteBytesCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "write_bytes_total",
+			Help:      "Total number of bytes written by sink",
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+
+	// LargeRowSizeHistogram records size of large rows.
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -133,6 +142,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
+	registry.MustRegister(TotalWriteBytesCounter)
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)

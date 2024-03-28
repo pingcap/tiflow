@@ -662,10 +662,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
@@ -684,7 +684,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 						}
 					}
 					cancelFunc()
-					return 0, logDMLTxnErr(
+					return 0, 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
 				}
@@ -692,11 +692,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-			return dmls.rowCount, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -714,10 +714,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 }
 
 type preparedDMLs struct {
-	startTs  []model.Ts
-	sqls     []string
-	values   [][]interface{}
-	rowCount int
+	startTs         []model.Ts
+	sqls            []string
+	values          [][]interface{}
+	rowCount        int
+	approximateSize int64
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
@@ -727,6 +728,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
+	approximateSize := int64(0)
+
 	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 	for _, row := range rows {
@@ -768,6 +771,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 				values = append(values, args)
 				rowCount++
 			}
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 			continue
 		}
 
@@ -814,14 +818,16 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 				}
 			}
 		}
+		approximateSize += int64(len(query)) + row.ApproximateDataSize
 	}
 	flushCacheDMLs()
 
 	dmls := &preparedDMLs{
-		startTs:  startTs,
-		sqls:     sqls,
-		values:   values,
-		rowCount: rowCount,
+		startTs:         startTs,
+		sqls:            sqls,
+		values:          values,
+		rowCount:        rowCount,
+		approximateSize: approximateSize,
 	}
 	return dmls
 }
