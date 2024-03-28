@@ -43,24 +43,24 @@ fi
 "$MOCKGEN" -source pkg/sink/kafka/v2/gssapi.go -destination pkg/sink/kafka/v2/mock/gssapi_mock.go
 "$MOCKGEN" -source pkg/sink/kafka/v2/writer.go -destination pkg/sink/kafka/v2/mock/writer_mock.go
 
-# DM mock
-"$MOCKGEN" -package pbmock -destination dm/pbmock/dmmaster.go github.com/pingcap/tiflow/dm/pb MasterClient,MasterServer
-"$MOCKGEN" -package pbmock -destination dm/pbmock/dmworker.go github.com/pingcap/tiflow/dm/pb WorkerClient,WorkerServer
+# # DM mock
+# "$MOCKGEN" -package pbmock -destination dm/pbmock/dmmaster.go github.com/pingcap/tiflow/dm/pb MasterClient,MasterServer
+# "$MOCKGEN" -package pbmock -destination dm/pbmock/dmworker.go github.com/pingcap/tiflow/dm/pb WorkerClient,WorkerServer
 
-# Engine mock
-"$MOCKGEN" -package mock -destination engine/pkg/meta/mock/client_mock.go github.com/pingcap/tiflow/engine/pkg/meta/model KVClient
-"$MOCKGEN" -package mock -destination engine/executor/server/mock/metastore_mock.go github.com/pingcap/tiflow/engine/executor/server MetastoreCreator
-"$MOCKGEN" -package mock -destination engine/enginepb/mock/executor_mock.go github.com/pingcap/tiflow/engine/enginepb ExecutorServiceClient
-"$MOCKGEN" -package mock -destination engine/enginepb/mock/broker_mock.go github.com/pingcap/tiflow/engine/enginepb BrokerServiceClient
-"$MOCKGEN" -package mock -destination engine/enginepb/mock/resource_mock.go github.com/pingcap/tiflow/engine/enginepb ResourceManagerClient
-"$MOCKGEN" -package mock -destination engine/pkg/httputil/mock/jobhttpclient_mock.go github.com/pingcap/tiflow/engine/pkg/httputil JobHTTPClient
-"$MOCKGEN" -package mock -destination engine/servermaster/jobop/mock/joboperator_mock.go github.com/pingcap/tiflow/engine/servermaster/jobop JobOperator
-"$MOCKGEN" -package mock -destination engine/pkg/orm/mock/client_mock.go github.com/pingcap/tiflow/engine/pkg/orm Client
-"$MOCKGEN" -package mock -destination engine/servermaster/jobop/mock/backoffmanager_mock.go github.com/pingcap/tiflow/engine/servermaster/jobop BackoffManager
-"$MOCKGEN" -package mock -source engine/pkg/rpcutil/checker.go -destination engine/pkg/rpcutil/mock/checker_mock.go
-"$MOCKGEN" -package client -self_package github.com/pingcap/tiflow/engine/pkg/client \
-	-destination engine/pkg/client/client_mock.go github.com/pingcap/tiflow/engine/pkg/client ExecutorClient,ServerMasterClient
+# # Engine mock
+# "$MOCKGEN" -package mock -destination engine/pkg/meta/mock/client_mock.go github.com/pingcap/tiflow/engine/pkg/meta/model KVClient
+# "$MOCKGEN" -package mock -destination engine/executor/server/mock/metastore_mock.go github.com/pingcap/tiflow/engine/executor/server MetastoreCreator
+# "$MOCKGEN" -package mock -destination engine/enginepb/mock/executor_mock.go github.com/pingcap/tiflow/engine/enginepb ExecutorServiceClient
+# "$MOCKGEN" -package mock -destination engine/enginepb/mock/broker_mock.go github.com/pingcap/tiflow/engine/enginepb BrokerServiceClient
+# "$MOCKGEN" -package mock -destination engine/enginepb/mock/resource_mock.go github.com/pingcap/tiflow/engine/enginepb ResourceManagerClient
+# "$MOCKGEN" -package mock -destination engine/pkg/httputil/mock/jobhttpclient_mock.go github.com/pingcap/tiflow/engine/pkg/httputil JobHTTPClient
+# "$MOCKGEN" -package mock -destination engine/servermaster/jobop/mock/joboperator_mock.go github.com/pingcap/tiflow/engine/servermaster/jobop JobOperator
+# "$MOCKGEN" -package mock -destination engine/pkg/orm/mock/client_mock.go github.com/pingcap/tiflow/engine/pkg/orm Client
+# "$MOCKGEN" -package mock -destination engine/servermaster/jobop/mock/backoffmanager_mock.go github.com/pingcap/tiflow/engine/servermaster/jobop BackoffManager
+# "$MOCKGEN" -package mock -source engine/pkg/rpcutil/checker.go -destination engine/pkg/rpcutil/mock/checker_mock.go
+# "$MOCKGEN" -package client -self_package github.com/pingcap/tiflow/engine/pkg/client \
+# 	-destination engine/pkg/client/client_mock.go github.com/pingcap/tiflow/engine/pkg/client ExecutorClient,ServerMasterClient
 
-# PKG mock
-"$MOCKGEN" -package mock -destination pkg/election/mock/storage_mock.go github.com/pingcap/tiflow/pkg/election Storage
-"$MOCKGEN" -package mock -destination pkg/election/mock/elector_mock.go github.com/pingcap/tiflow/pkg/election Elector
+# # PKG mock
+# "$MOCKGEN" -package mock -destination pkg/election/mock/storage_mock.go github.com/pingcap/tiflow/pkg/election Storage
+# "$MOCKGEN" -package mock -destination pkg/election/mock/elector_mock.go github.com/pingcap/tiflow/pkg/election Elector
