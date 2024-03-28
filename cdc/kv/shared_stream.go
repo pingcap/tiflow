@@ -170,6 +170,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}()
 
+	g, gctx := errgroup.WithContext(ctx)
 	cc, err := c.grpcPool.Connect(ctx, rs.storeAddr)
 	if err != nil {
 		log.Warn("event feed create grpc stream failed",
@@ -181,8 +182,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Error(err))
 		return isCanceled()
 	}
-
-	g, gctx := errgroup.WithContext(ctx)
+	
 	if cc.Multiplexing() {
 		s.multiplexing = cc
 		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
