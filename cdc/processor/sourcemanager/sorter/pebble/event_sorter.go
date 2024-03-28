@@ -318,14 +318,16 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished sorter.Po
 	// If the current event is the last one, we need to set txnFinished
 	// Thus, we need to fetch the next event and compare the commitTs and startTs with it
 	for valid {
-		nextStart := time.Now()
-		value, valid = s.iter.Value(), s.iter.Next()
-		s.nextDuration.Observe(time.Since(nextStart).Seconds())
-
+		value = s.iter.Value()
 		nextEvent = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(nextEvent, value); err != nil {
 			return
 		}
+
+		nextStart := time.Now()
+		valid = s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		if s.currentEvent != nil {
 			break
 		}

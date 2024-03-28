@@ -162,6 +162,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("addr", rs.storeAddr),
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
+			s.multiplexing.Release()
 			s.multiplexing = nil
 		} else if s.tableExclusives != nil {
 			close(s.tableExclusives)
@@ -314,14 +315,14 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 		return
 	}
-	//defer func() {
-	//	if s.multiplexing != nil {
-	//		s.multiplexing.Release()
-	//	}
-	//	for _, cc := range tableExclusives {
-	//		cc.Release()
-	//	}
-	//}()
+	defer func() {
+		//if s.multiplexing != nil {
+		//	s.multiplexing.Release()
+		//}
+		for _, cc := range tableExclusives {
+			cc.Release()
+		}
+	}()
 
 	sri := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
