@@ -189,6 +189,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errCh,
+		nil,
 	)
 	if err != nil {
 		log.Error("failed to create event sink factory", zap.Error(err))

@@ -170,7 +170,7 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	if err := sink.Validate(ctx, info.SinkURI, info.Config); err != nil {
+	if err := sink.Validate(ctx, info.SinkURI, info.Config, up.PDClock); err != nil {
 		return nil, err
 	}
 
@@ -228,7 +228,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

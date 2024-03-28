@@ -878,7 +878,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			log.Info("Try to create sinkV2")
 			sinkV2Factory, err := factory.New(stdCtx, p.changefeed.Info.SinkURI,
 				p.changefeed.Info.Config,
-				errCh)
+				errCh, p.upstream.PDClock)
 			if err != nil {
 				log.Error("processor creates sink failed",
 					zap.String("namespace", p.changefeedID.Namespace),

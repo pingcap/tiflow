@@ -64,6 +64,7 @@ func New(ctx context.Context,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
+	pdClock pdutil.Clock,
 ) (*SinkFactory, error) {
 	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
@@ -91,7 +92,7 @@ func New(ctx context.Context,
 		s.sinkType = sink.TxnSink
 		s.category = CategoryMQ
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
-		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
+		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, pdClock, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}
