@@ -15,13 +15,85 @@ package kv
 
 import (
 	"context"
+	"encoding/hex"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
+
+var (
+	// The magic number here is keep the same with some magic numbers in some
+	// other components in TiCDC, including worker pool task chan size, mounter
+	// chan size etc.
+	// TODO: unified channel buffer mechanism
+	regionWorkerInputChanSize = 32
+	// From benchmark, batch size ranges from 1 to 64(where 64 is in the extreme
+	// incremental scan scenario or single region hotspot).
+	// `batchEventsFactor * regionWorkerInputChanSize` equals to the count of
+	// events that are hold in channel.
+	batchEventsFactor = 8
+)
+
+type regionWorkerMetrics struct {
+	metricReceivedEventSize prometheus.Observer
+	metricDroppedEventSize  prometheus.Observer
+
+	metricPullEventInitializedCounter prometheus.Counter
+	metricPullEventCommittedCounter   prometheus.Counter
+	metricPullEventPrewriteCounter    prometheus.Counter
+	metricPullEventCommitCounter      prometheus.Counter
+	metricPullEventRollbackCounter    prometheus.Counter
+
+	metricSendEventResolvedCounter  prometheus.Counter
+	metricSendEventCommitCounter    prometheus.Counter
+	metricSendEventCommittedCounter prometheus.Counter
+
+	metricQueueDuration prometheus.Observer
+
+	metricWorkerBusyRatio   prometheus.Gauge
+	metricWorkerChannelSize prometheus.Gauge
+}
+
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string) *regionWorkerMetrics {
+	metrics := &regionWorkerMetrics{}
+	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
+	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
+
+	metrics.metricPullEventInitializedCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_INITIALIZED.String(), changefeedID.Namespace, changefeedID.ID)
+	metrics.metricPullEventCommittedCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_COMMITTED.String(), changefeedID.Namespace, changefeedID.ID)
+	metrics.metricPullEventPrewriteCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_PREWRITE.String(), changefeedID.Namespace, changefeedID.ID)
+	metrics.metricPullEventCommitCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID.Namespace, changefeedID.ID)
+	metrics.metricPullEventRollbackCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_ROLLBACK.String(), changefeedID.Namespace, changefeedID.ID)
+
+	metrics.metricSendEventResolvedCounter = sendEventCounter.
+		WithLabelValues("native-resolved", changefeedID.Namespace, changefeedID.ID)
+	metrics.metricSendEventCommitCounter = sendEventCounter.
+		WithLabelValues("commit", changefeedID.Namespace, changefeedID.ID)
+	metrics.metricSendEventCommittedCounter = sendEventCounter.
+		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
+
+	metrics.metricQueueDuration = regionWorkerQueueDuration.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+
+	metrics.metricWorkerBusyRatio = workerBusyRatio.WithLabelValues(
+		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "event-handler")
+	metrics.metricWorkerChannelSize = workerChannelSize.WithLabelValues(
+		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "input")
+
+	return metrics
+}
 
 // NOTE:
 //  1. all contents come from one same TiKV store stream;
@@ -172,6 +244,150 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 		zap.Int64("tableID", tableID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
 	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
+}
+
+func handleEventEntry(
+	x *cdcpb.Event_Entries_,
+	startTs uint64,
+	state *regionFeedState,
+	metrics *regionWorkerMetrics,
+	emit func(assembled model.RegionFeedEvent) bool,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	logRegionDetails func(msg string, fields ...zap.Field),
+) error {
+	regionID, regionSpan, _ := state.getRegionMeta()
+	for _, entry := range x.Entries.GetEntries() {
+		// NOTE: from TiKV 7.0.0, entries are already filtered out in TiKV side.
+		// We can remove the check in future.
+		comparableKey := spanz.ToComparableKey(entry.GetKey())
+		if entry.Type != cdcpb.Event_INITIALIZED &&
+			!spanz.KeyInSpan(comparableKey, regionSpan) {
+			metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
+			continue
+		}
+		switch entry.Type {
+		case cdcpb.Event_INITIALIZED:
+			metrics.metricPullEventInitializedCounter.Inc()
+			state.setInitialized()
+			logRegionDetails("region is initialized",
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("requestID", state.requestID),
+				zap.Stringer("span", &state.sri.span))
+
+			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
+				revent, err := assembleRowEvent(regionID, cachedEvent)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if !emit(revent) {
+					return nil
+				}
+				metrics.metricSendEventCommitCounter.Inc()
+			}
+			state.matcher.matchCachedRollbackRow(true)
+		case cdcpb.Event_COMMITTED:
+			resolvedTs := state.getLastResolvedTs()
+			if entry.CommitTs <= resolvedTs {
+				logPanic("The CommitTs must be greater than the resolvedTs",
+					zap.String("EventType", "COMMITTED"),
+					zap.Uint64("CommitTs", entry.CommitTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("regionID", regionID))
+				return errUnreachable
+			}
+
+			metrics.metricPullEventCommittedCounter.Inc()
+			revent, err := assembleRowEvent(regionID, entry)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !emit(revent) {
+				return nil
+			}
+			metrics.metricSendEventCommittedCounter.Inc()
+		case cdcpb.Event_PREWRITE:
+			metrics.metricPullEventPrewriteCounter.Inc()
+			state.matcher.putPrewriteRow(entry)
+		case cdcpb.Event_COMMIT:
+			metrics.metricPullEventCommitCounter.Inc()
+			// NOTE: matchRow should always be called even if the event is stale.
+			if !state.matcher.matchRow(entry, state.isInitialized()) {
+				if !state.isInitialized() {
+					state.matcher.cacheCommitRow(entry)
+					continue
+				}
+				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
+					hex.EncodeToString(entry.GetKey()),
+					entry.GetStartTs(), entry.GetCommitTs(),
+					entry.GetType(), entry.GetOpType())
+			}
+
+			// TiKV can send events with StartTs/CommitTs less than startTs.
+			isStaleEvent := entry.CommitTs <= startTs
+			if isStaleEvent {
+				continue
+			}
+
+			// NOTE: state.getLastResolvedTs() will never less than startTs.
+			resolvedTs := state.getLastResolvedTs()
+			if entry.CommitTs <= resolvedTs {
+				logPanic("The CommitTs must be greater than the resolvedTs",
+					zap.String("EventType", "COMMIT"),
+					zap.Uint64("CommitTs", entry.CommitTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("regionID", regionID))
+				return errUnreachable
+			}
+
+			revent, err := assembleRowEvent(regionID, entry)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !emit(revent) {
+				return nil
+			}
+			metrics.metricSendEventCommitCounter.Inc()
+		case cdcpb.Event_ROLLBACK:
+			metrics.metricPullEventRollbackCounter.Inc()
+			if !state.isInitialized() {
+				state.matcher.cacheRollbackRow(entry)
+				continue
+			}
+			state.matcher.rollbackRow(entry)
+		}
+	}
+	return nil
+}
+
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeedEvent, error) {
+	var opType model.OpType
+	switch entry.GetOpType() {
+	case cdcpb.Event_Row_DELETE:
+		opType = model.OpTypeDelete
+	case cdcpb.Event_Row_PUT:
+		opType = model.OpTypePut
+	default:
+		return model.RegionFeedEvent{}, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
+	}
+
+	revent := model.RegionFeedEvent{
+		RegionID: regionID,
+		Val: &model.RawKVEntry{
+			OpType:   opType,
+			Key:      entry.Key,
+			Value:    entry.GetValue(),
+			StartTs:  entry.StartTs,
+			CRTs:     entry.CommitTs,
+			RegionID: regionID,
+			OldValue: entry.GetOldValue(),
+		},
+	}
+
+	return revent, nil
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {

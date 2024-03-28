@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -35,7 +36,54 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
+
+func newMockService(
+	ctx context.Context,
+	t *testing.T,
+	srv cdcpb.ChangeDataServer,
+	wg *sync.WaitGroup,
+) (grpcServer *grpc.Server, addr string) {
+	return newMockServiceSpecificAddr(ctx, t, srv, "127.0.0.1:0", wg)
+}
+
+func newMockServiceSpecificAddr(
+	ctx context.Context,
+	t *testing.T,
+	srv cdcpb.ChangeDataServer,
+	listenAddr string,
+	wg *sync.WaitGroup,
+) (grpcServer *grpc.Server, addr string) {
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", listenAddr)
+	require.Nil(t, err)
+	addr = lis.Addr().String()
+	kaep := keepalive.EnforcementPolicy{
+		// force minimum ping interval
+		MinTime:             3 * time.Second,
+		PermitWithoutStream: true,
+	}
+	// Some tests rely on connect timeout and ping test, so we use a smaller num
+	kasp := keepalive.ServerParameters{
+		MaxConnectionIdle:     10 * time.Second, // If a client is idle for 20 seconds, send a GOAWAY
+		MaxConnectionAge:      10 * time.Second, // If any connection is alive for more than 20 seconds, send a GOAWAY
+		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
+		Time:                  3 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
+		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
+	}
+	grpcServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
+	// grpcServer is the server, srv is the service
+	cdcpb.RegisterChangeDataServer(grpcServer, srv)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := grpcServer.Serve(lis)
+		require.Nil(t, err)
+	}()
+	return
+}
 
 func TestRequestedStreamRequestedRegions(t *testing.T) {
 	stream := newRequestedStream(100)

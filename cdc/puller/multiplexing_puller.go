@@ -39,6 +39,8 @@ const (
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
 	tableResolvedTsBufferSize int = 256
+
+	defaultPullerOutputChanSize = 128
 )
 
 type tableProgress struct {
@@ -70,6 +72,14 @@ type tableProgressWithSubID struct {
 	*tableProgress
 	subID kv.SubscriptionID
 }
+
+// Puller pull data from tikv and push changes into a buffer.
+// type Puller interface {
+// 	// Run the puller, continually fetch event from TiKV and add event into buffer.
+// 	Run(ctx context.Context) error
+// 	Output() <-chan *model.RawKVEntry
+// 	Stats() Stats
+// }
 
 // MultiplexingPuller works with `kv.SharedClient`. All tables share resources.
 type MultiplexingPuller struct {
@@ -436,6 +446,15 @@ func (p *tableProgress) resolveLock(currentTime time.Time) {
 	for _, subID := range p.subIDs {
 		p.client.ResolveLock(subID, maxVersion)
 	}
+}
+
+// Stats of a puller.
+type Stats struct {
+	RegionCount         uint64
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
+	CheckpointTsEgress  model.Ts
+	ResolvedTsEgress    model.Ts
 }
 
 // Stats returns Stats.
