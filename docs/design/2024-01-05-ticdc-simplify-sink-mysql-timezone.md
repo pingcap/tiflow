@@ -1,6 +1,6 @@
 # Simplify Sink to MySQL Timezone Handling
 
-- Author(s): [zhangjinpeng1987](https://github.com/zhangjinpeng1987)
+- Author(s): [zhangjinpeng87](https://github.com/zhangjinpeng87)
 - Tracking Issue(s):
 
 ## Goals
