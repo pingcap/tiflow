@@ -71,6 +71,8 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.
 		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID)
+	statistics.metricTotalWriteBytesCnt = TotalWriteBytesCounter.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID
@@ -117,8 +119,9 @@ type Statistics struct {
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
-
-	metricRowSizesHis prometheus.Observer
+	// Counter for total bytes of DML.
+	metricTotalWriteBytesCnt prometheus.Counter
+	metricRowSizesHis        prometheus.Observer
 }
 
 // AddRowsCount records total number of rows needs to flush
@@ -153,15 +156,16 @@ func (b *Statistics) AddDDLCount() {
 }
 
 // RecordBatchExecution records the cost time of batch execution and batch size
-func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
+func (b *Statistics) RecordBatchExecution(executor func() (int, int64, error)) error {
 	startTime := time.Now()
-	batchSize, err := executor()
+	batchSize, batchWriteBytes, err := executor()
 	if err != nil {
 		b.metricExecErrCnt.Inc()
 		return err
 	}
 	b.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
 	b.metricExecBatchHis.Observe(float64(batchSize))
+	b.metricTotalWriteBytesCnt.Add(float64(batchWriteBytes))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
 	return nil
 }
