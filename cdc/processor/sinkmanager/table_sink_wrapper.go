@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -161,12 +162,10 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	for {
-		old := t.receivedSorterResolvedTs.Load()
-		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
-			break
-		}
-	}
+	util.MustCompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, startTs)
+	// the barrierTs should always larger than or equal to the checkpointTs, so we need to update
+	// barrierTs before the checkpointTs is updated.
+	t.updateBarrierTs(startTs)
 	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
 		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
 		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
@@ -188,26 +187,14 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
-	for {
-		old := t.barrierTs.Load()
-		if ts <= old || t.barrierTs.CompareAndSwap(old, ts) {
-			break
-		}
-	}
+	util.MustCompareAndMonotonicIncrease(&t.barrierTs, ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	for {
-		old := t.receivedSorterResolvedTs.Load()
-		if ts <= old {
-			return
-		}
-		if t.receivedSorterResolvedTs.CompareAndSwap(old, ts) {
-			if t.state.Load() == tablepb.TableStatePreparing {
-				t.state.Store(tablepb.TableStatePrepared)
-			}
-			return
-		}
+	increased := util.CompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, ts)
+	if increased && t.state.Load() == tablepb.TableStatePreparing {
+		// Update the state to `Prepared` when the receivedSorterResolvedTs is updated for the first time.
+		t.state.Store(tablepb.TableStatePrepared)
 	}
 }
 
