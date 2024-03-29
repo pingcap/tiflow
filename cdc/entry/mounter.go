@@ -469,6 +469,9 @@ func verifyColumnChecksum(
 
 // todo: do we really need this? how about the datum.ConvertTo ?
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
+	if value == nil {
+		return types.NewDatum(nil), nil
+	}
 	switch ft.GetType() {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
@@ -552,7 +555,6 @@ func verifyRawBytesChecksum(
 	)
 	for _, col := range columns {
 		columnID := col.ColumnID
-		columnIDs = append(columnIDs, columnID)
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
@@ -564,6 +566,7 @@ func verifyRawBytesChecksum(
 			continue
 		}
 		datums = append(datums, datum)
+		columnIDs = append(columnIDs, columnID)
 	}
 	// todo: make this encoder reusable, by set it as a field of the mounter.
 	encoder := &rowcodec.Encoder{}

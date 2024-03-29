@@ -1102,6 +1102,28 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyChecksumHasNullFields(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event(`CREATE table t (a int primary key, b int, c int)`)
+	event := helper.DML2Event(`INSERT INTO t VALUES (1, NULL, NULL)`, "test", "t")
+	require.NotNil(t, event)
+
+	event = helper.DML2Event(`INSERT INTO t VALUES (2, 2, NULL)`, "test", "t")
+	require.NotNil(t, event)
+
+	event = helper.DML2Event(`INSERT INTO t VALUES (3, NULL, 3)`, "test", "t")
+	require.NotNil(t, event)
+}
+
 func TestVerifyChecksumNonIntegerPrimaryKey(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
