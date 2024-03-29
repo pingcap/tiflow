@@ -198,7 +198,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		g.Go(func() error {
 			for {
 				select {
-				
 				case <-gctx.Done():
 					return gctx.Err()
 				case tableExclusive := <-s.tableExclusives:
