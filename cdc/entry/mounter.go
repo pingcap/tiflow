@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"time"
 	"unsafe"
@@ -30,6 +31,7 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -519,7 +521,14 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		return types.NewMysqlBitDatum(binaryLiteral), nil
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		return types.NewStringDatum(value.(string)), nil
+		switch v := value.(type) {
+		case []byte:
+			return types.NewBytesDatum(v), nil
+		case string:
+			return types.NewBytesDatum([]byte(v)), nil
+		}
+		log.Panic("unknown data type when build datum",
+			zap.Any("type", ft.GetType()), zap.Any("value", value), zap.Reflect("type", reflect.TypeOf(value)))
 	case mysql.TypeFloat:
 		return types.NewFloat32Datum(float32(value.(float64))), nil
 	case mysql.TypeDouble:
@@ -541,23 +550,18 @@ func verifyRawBytesChecksum(
 		columnIDs []int64
 		datums    []types.Datum
 	)
-
-	// todo: this part can be optimized, keep it as a part of the tableInfo.
-	handleColID, _, _ := tableInfo.GetRowColInfos()
-	handleColIDMap := make(map[int64]struct{}, len(handleColID))
-	for _, colID := range handleColID {
-		handleColIDMap[colID] = struct{}{}
-	}
 	for _, col := range columns {
 		columnID := col.ColumnID
-		if _, ok := handleColIDMap[columnID]; ok {
-			continue
-		}
 		columnIDs = append(columnIDs, columnID)
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
 			return 0, false, errors.Trace(err)
+		}
+		if skip := tables.CanSkip(tableInfo.TableInfo, &table.Column{
+			ColumnInfo: columnInfo,
+		}, &datum); skip {
+			continue
 		}
 		datums = append(datums, datum)
 	}
