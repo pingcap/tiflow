@@ -723,6 +723,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
+		slowInitializeRegion := 0
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
@@ -735,6 +736,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 						zap.Any("slowRegion", attr.SlowestRegion))
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+				slowInitializeRegion += 1
 				log.Info("event feed initializes a region too slow",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
@@ -756,6 +758,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			}
 		}
 		s.totalSpans.RUnlock()
+		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegion))
 	}
 }
 
@@ -810,6 +813,7 @@ type sharedClientMetrics struct {
 	batchResolvedSize       prometheus.Observer
 	lockResolveWaitDuration prometheus.Observer
 	lockResolveRunDuration  prometheus.Observer
+	slowInitializeRegion    prometheus.Gauge
 }
 
 func (s *SharedClient) initMetrics() {
@@ -828,6 +832,9 @@ func (s *SharedClient) initMetrics() {
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "run")
 
 	s.metrics.batchResolvedSize = batchResolvedEventSize.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
+
+	s.metrics.slowInitializeRegion = slowInitializeRegion.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
 }
 
