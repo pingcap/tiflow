@@ -133,6 +133,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
+	// checksumKey is only used to calculate raw checksum if necessary.
+	checksumKey := raw.Key
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, err
@@ -184,7 +186,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			if rowKV == nil {
 				return nil, nil
 			}
-			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, checksumKey, raw.ApproximateDataSize())
 			if err != nil {
 				return nil, err
 			}
@@ -283,7 +285,7 @@ func (m *mounter) decodeRow(
 	//}
 	//var encoder rowcodec.Encoder
 	//encoder.Encode(m.tz, colIDs, columns, nil, tablecodec.EncodeRecordKey(recordPrefix, recordID))
-
+	// todo: when encode datum back to raw bytes, handle key datums should not be included.
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
@@ -466,9 +468,14 @@ func verifyColumnChecksum(
 // todo: do we really need this? how about the datum.ConvertTo ?
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	switch ft.GetType() {
-	// todo: what is `TypeNewDate` and when it used.
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
+		if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			return types.NewUintDatum(value.(uint64)), nil
+		}
+		return types.NewIntDatum(value.(int64)), nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		t, err := types.ParseTime(types.StrictContext, value.(string), ft.GetType(), ft.GetDecimal())
+		// todo: DefaultStmtNoWarningContext timezone is set to UTC, is it correct?
+		t, err := types.ParseTime(types.DefaultStmtNoWarningContext, value.(string), ft.GetType(), ft.GetDecimal())
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
@@ -524,7 +531,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 }
 
 func verifyRawBytesChecksum(
-	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, tz *time.Location,
+	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, key kv.Key, tz *time.Location,
 ) (uint32, bool, error) {
 	expectedRawChecksum, ok := decoder.GetChecksum()
 	if !ok {
@@ -533,13 +540,19 @@ func verifyRawBytesChecksum(
 	var (
 		columnIDs []int64
 		datums    []types.Datum
-		//
-		//handleColData []*model.ColumnData
 	)
-	//_, fieldTypes, _ := tableInfo.GetRowColInfos()
-	//tableInfo.GetColumnInfo(col.column)
+
+	// todo: this part can be optimized, keep it as a part of the tableInfo.
+	handleColID, _, _ := tableInfo.GetRowColInfos()
+	handleColIDMap := make(map[int64]struct{}, len(handleColID))
+	for _, colID := range handleColID {
+		handleColIDMap[colID] = struct{}{}
+	}
 	for _, col := range columns {
 		columnID := col.ColumnID
+		if _, ok := handleColIDMap[columnID]; ok {
+			continue
+		}
 		columnIDs = append(columnIDs, columnID)
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
@@ -548,15 +561,28 @@ func verifyRawBytesChecksum(
 		}
 		datums = append(datums, datum)
 	}
+	// todo: make this encoder reusable, by set it as a field of the mounter.
+	encoder := &rowcodec.Encoder{}
+	obtained, err := encoder.CalculateRawChecksum(tz, columnIDs, datums, nil, key)
+	if err != nil {
+		return 0, false, errors.Trace(err)
+	}
+	if obtained == expectedRawChecksum {
+		return expectedRawChecksum, true, nil
+	}
 
-	return expectedRawChecksum, true, nil
+	log.Error("raw bytes checksum mismatch",
+		zap.Uint32("expected", expectedRawChecksum), zap.Uint32("obtained", obtained))
+
+	return expectedRawChecksum, false, nil
 }
 
 // return error when calculate the checksum.
 // return false if the checksum is not matched
 func (m *mounter) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
-	columns []*model.ColumnData, rawColumns []types.Datum, isPreRow bool,
+	columns []*model.ColumnData, rawColumns []types.Datum,
+	key kv.Key, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
@@ -574,13 +600,27 @@ func (m *mounter) verifyChecksum(
 	case 0:
 		return verifyColumnChecksum(columnInfos, rawColumns, decoder, m.tz)
 	case 1:
-		return verifyRawBytesChecksum(tableInfo, columns, decoder, m.tz)
+		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
+		if err != nil {
+			return 0, false, errors.Trace(err)
+		}
+		if !matched {
+			return expected, matched, err
+		}
+		columnChecksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
+		if err != nil {
+			log.Error("failed to calculate column-level checksum, after raw checksum verification passed", zap.Error(err))
+			return 0, false, errors.Trace(err)
+		}
+		return columnChecksum, true, nil
 	default:
 	}
 	return 0, false, errors.Errorf("unknown checksum version %d", version)
 }
 
-func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
+func (m *mounter) mountRowKVEntry(
+	tableInfo *model.TableInfo, row *rowKVEntry, key kv.Key, dataSize int64,
+) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
 		rawRow      model.RowChangedDatums
 		columnInfos []*timodel.ColumnInfo
@@ -613,7 +653,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, true)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
@@ -645,7 +685,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, false)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
