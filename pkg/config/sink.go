@@ -89,6 +89,12 @@ const (
 	// DefaultSendBootstrapToAllPartition is the default value of
 	// whether to send bootstrap message to all partitions.
 	DefaultSendBootstrapToAllPartition = true
+
+	// DefaultMaxReconnectToPulsarBroker is the default max reconnect times to pulsar broker.
+	// The pulsar client uses an exponential backoff with jitter to reconnect to the broker.
+	// Based on test, when the max reconnect times is 3,
+	// the total time of reconnecting to brokers is about 30 seconds.
+	DefaultMaxReconnectToPulsarBroker = 3
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.

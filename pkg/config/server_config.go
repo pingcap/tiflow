@@ -251,7 +251,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 
 	if c.Security != nil {
-		if c.Security.ClientUserRequired {
+		if c.Security.ClientUserRequired || len(c.Security.ClientAllowedUser) > 0 {
 			if len(c.Security.ClientAllowedUser) == 0 {
 				log.Error("client-allowed-user should not be empty when client-user-required is true")
 				return cerror.ErrInvalidServerOption.GenWithStack("client-allowed-user should not be empty when client-user-required is true")

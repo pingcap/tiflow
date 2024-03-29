@@ -17,6 +17,7 @@ ${PKILL} tikv-server || true
 ${PKILL} tiflash || true
 ${PKILL} flash_cluster_manager || true
 ${PKILL} pd-server || true
+${PKILL} oauth_server || true
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -45,3 +46,6 @@ kill -9 $(lsof -i tcp:${DOWN_TIKV_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_TIKV_STATUS_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:9500 -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:17000 -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:6650 -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:6651 -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:9096 -t 2>/dev/null) &>/dev/null || true

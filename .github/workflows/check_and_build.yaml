@@ -65,6 +65,9 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Check
+        run: make check
+
   arm_build:
     runs-on: [ARM64]
     name: Arm Build
