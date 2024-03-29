@@ -15286,7 +15286,7 @@
             "align": false,
             "alignLevel": null
           },
-          "description": "The count of regions that initialize slow",
+          "description": "The count of regions that initialize slow. You can search the log [event feed initializes a region too slow] to get slow region id",
           "bars": false,
           "dashes": false,
           "fillGradient": 0,
