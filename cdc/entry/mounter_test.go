@@ -1102,6 +1102,23 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyChecksumNonIntegerPrimaryKey(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	// primary key is not integer type, so all column encoded into value bytes
+	_ = helper.DDL2Event(`CREATE table t (a varchar(10) primary key, b int)`)
+	event := helper.DML2Event(`INSERT INTO t VALUES ("abc", 3)`, "test", "t")
+	require.NotNil(t, event)
+}
+
 func TestVerifyChecksumTime(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
