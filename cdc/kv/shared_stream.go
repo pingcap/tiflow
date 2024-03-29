@@ -220,8 +220,9 @@ func (s *requestedStream) receive(
 	cc *sharedconn.ConnAndClient,
 	subscriptionID SubscriptionID,
 ) error {
+	client := cc.Client()
 	for {
-		cevent, err := cc.Client().Recv()
+		cevent, err := client.Recv()
 		if err != nil {
 			s.logRegionDetails("event feed receive from grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
@@ -313,7 +314,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 		return
 	}
-
 	defer func() {
 		if s.multiplexing != nil {
 			s.multiplexing.Release()
@@ -346,8 +346,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					return err
 				}
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
-				cc.Release()
 				delete(tableExclusives, subscriptionID)
+				cc.Release()
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests
