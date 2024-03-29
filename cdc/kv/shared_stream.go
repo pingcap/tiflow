@@ -184,7 +184,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing.Client(), invalidSubscriptionID) })
+		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -198,12 +198,13 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		g.Go(func() error {
 			for {
 				select {
+				
 				case <-gctx.Done():
 					return gctx.Err()
 				case tableExclusive := <-s.tableExclusives:
 					subscriptionID := tableExclusive.subscriptionID
 					cc := tableExclusive.cc
-					g.Go(func() error { return s.receive(gctx, c, rs, cc.Client(), subscriptionID) })
+					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
 				}
 			}
 		})
@@ -217,11 +218,11 @@ func (s *requestedStream) receive(
 	ctx context.Context,
 	c *SharedClient,
 	rs *requestedStore,
-	client cdcpb.ChangeData_EventFeedV2Client,
+	cc *sharedconn.ConnAndClient,
 	subscriptionID SubscriptionID,
 ) error {
 	for {
-		cevent, err := client.Recv()
+		cevent, err := cc.Client().Recv()
 		if err != nil {
 			s.logRegionDetails("event feed receive from grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
