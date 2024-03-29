@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
@@ -86,11 +85,6 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
-
-	// encoder is used to calculate the checksum.
-	encoder *rowcodec.Encoder
-	// sctx hold some information can be used by the encoder to calculate the checksum.
-	sctx *stmtctx.StatementContext
 }
 
 // NewMounter creates a mounter
@@ -110,9 +104,6 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz:        tz,
 		integrity: integrity,
-
-		encoder: &rowcodec.Encoder{},
-		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -472,6 +463,7 @@ func verifyColumnChecksum(
 	return checksum, false, nil
 }
 
+// todo: do we really need this? how about the datum.ConvertTo ?
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	switch ft.GetType() {
 	// todo: what is `TypeNewDate` and when it used.
@@ -513,7 +505,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		}
 		return types.NewMysqlSetDatum(set, ft.GetCollate()), nil
 	case mysql.TypeBit:
-		binaryLiteral, err := types.ParseBitStr()
+		binaryLiteral, err := types.ParseBitStr(value.(string))
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
