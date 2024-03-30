@@ -174,7 +174,8 @@ func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 func (p *ddlJobPullerImpl) Input(
 	ctx context.Context,
 	rawDDL *model.RawKVEntry,
-	_ []tablepb.Span) error {
+	_ []tablepb.Span,
+) error {
 	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
 	return nil
 }

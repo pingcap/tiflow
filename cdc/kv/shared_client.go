@@ -62,43 +62,13 @@ const (
 	// 256 MB The maximum message size the client can receive
 	grpcMaxCallRecvMsgSize = 1 << 28
 
-	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
-	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
-
 	// TiCDC always interacts with region leader, every time something goes wrong,
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
 
 	scanRegionsConcurrency = 1024
-
-	tableMonitorInterval = 2 * time.Second
 )
-
-// time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 60 * time.Minute
-
-// streamAlterInterval is the interval to limit the frequency of creating/deleting streams.
-// Make it a variable so that we can change it in unit test.
-var streamAlterInterval = 1 * time.Second
-
-type regionStatefulEvent struct {
-	changeEvent     *cdcpb.Event
-	resolvedTsEvent *resolvedTsEvent
-	state           *regionFeedState
-
-	// regionID is used for load balancer, we don't use fields in state to reduce lock usage
-	regionID uint64
-
-	// finishedCallbackCh is used to mark events that are sent from a give region
-	// worker to this worker(one of the workers in worker pool) are all processed.
-	finishedCallbackCh chan struct{}
-}
-
-type resolvedTsEvent struct {
-	resolvedTs uint64
-	regions    []*regionFeedState
-}
 
 var (
 	metricFeedNotLeaderCounter        = eventFeedErrorCounter.WithLabelValues("NotLeader")
@@ -108,16 +78,13 @@ var (
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
-	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
 	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
 )
 
 var (
 	// unreachable error, only used in unit test
 	errUnreachable = errors.New("kv client unreachable error")
-	// internal error, force the gPRC stream terminate and reconnect
-	errReconnect = errors.New("internal error, reconnect all regions")
-	logPanic     = log.Panic
+	logPanic       = log.Panic
 )
 
 type regionErrorInfo struct {
@@ -149,10 +116,6 @@ func (e *rpcCtxUnavailableErr) Error() string {
 	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
 }
-
-type connectToStoreErr struct{}
-
-func (e *connectToStoreErr) Error() string { return "connect to store error" }
 
 type sendRequestToStoreErr struct{}
 

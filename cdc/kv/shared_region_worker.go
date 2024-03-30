@@ -28,18 +28,11 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	// The magic number here is keep the same with some magic numbers in some
-	// other components in TiCDC, including worker pool task chan size, mounter
-	// chan size etc.
-	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 32
-	// From benchmark, batch size ranges from 1 to 64(where 64 is in the extreme
-	// incremental scan scenario or single region hotspot).
-	// `batchEventsFactor * regionWorkerInputChanSize` equals to the count of
-	// events that are hold in channel.
-	batchEventsFactor = 8
-)
+// The magic number here is keep the same with some magic numbers in some
+// other components in TiCDC, including worker pool task chan size, mounter
+// chan size etc.
+// TODO: unified channel buffer mechanism
+var regionWorkerInputChanSize = 32
 
 type regionWorkerMetrics struct {
 	metricReceivedEventSize prometheus.Observer

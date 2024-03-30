@@ -348,7 +348,6 @@ func TestHandleRenameTable(t *testing.T) {
 }
 
 func TestHandleJob(t *testing.T) {
-
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
 	startTs := uint64(10)

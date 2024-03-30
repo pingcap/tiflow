@@ -196,26 +196,6 @@ func (m *syncRegionFeedStateMap) setByRequestID(requestID uint64, state *regionF
 	m.statesInternal[requestID] = state
 }
 
-func (m *syncRegionFeedStateMap) takeByRequestID(requestID uint64) (*regionFeedState, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	state, ok := m.statesInternal[requestID]
-	if ok {
-		delete(m.statesInternal, requestID)
-	}
-	return state, ok
-}
-
-func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	state := m.statesInternal
-	m.statesInternal = make(map[uint64]*regionFeedState)
-	return state
-}
-
 func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -233,12 +213,6 @@ func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.statesInternal, regionID)
-}
-
-func (m *syncRegionFeedStateMap) len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.statesInternal)
 }
 
 type regionStateManagerInterface interface {
@@ -292,11 +266,4 @@ func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState)
 func (rsm *regionStateManager) delState(regionID uint64) {
 	bucket := rsm.getBucket(regionID)
 	rsm.states[bucket].delByRegionID(regionID)
-}
-
-func (rsm *regionStateManager) regionCount() (count int64) {
-	for _, bucket := range rsm.states {
-		count += int64(bucket.len())
-	}
-	return
 }
