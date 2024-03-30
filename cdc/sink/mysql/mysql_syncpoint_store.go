@@ -30,12 +30,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
-<<<<<<< HEAD:cdc/sink/mysql/mysql_syncpoint_store.go
-	"github.com/pingcap/tiflow/pkg/security"
-=======
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/sink/mysql"
->>>>>>> ba8e2aa6f3 (filter (ticdc): fix synpoint table is replicated in BDR mode (#10587)):cdc/syncpointstore/mysql_syncpoint_store.go
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
