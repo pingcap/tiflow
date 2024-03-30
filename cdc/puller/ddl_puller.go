@@ -61,6 +61,27 @@ type DDLJobPuller interface {
 	Output() <-chan *model.DDLJobEntry
 }
 
+// Note: All unexported methods of `ddlJobPullerImpl` should
+// be called in the same one goroutine.
+type ddlJobPullerImpl struct {
+	changefeedID model.ChangeFeedID
+	mp           *MultiplexingPuller
+	// memorysorter is used to sort the DDL events.
+	sorter        *memorysorter.EntrySorter
+	kvStorage     tidbkv.Storage
+	schemaStorage entry.SchemaStorage
+	resolvedTs    uint64
+	schemaVersion int64
+	filter        filter.Filter
+	// ddlJobsTable is initialized when receive the first concurrent DDL job.
+	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
+	ddlJobsTable *model.TableInfo
+	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
+	jobMetaColumnID int64
+	// outputCh sends the DDL job entries to the caller.
+	outputCh chan *model.DDLJobEntry
+}
+
 // NewDDLJobPuller creates a new NewDDLJobPuller,
 // which fetches ddl events starting from checkpointTs.
 func NewDDLJobPuller(
@@ -88,9 +109,9 @@ func NewDDLJobPuller(
 		schemaStorage: schemaStorage,
 		kvStorage:     kvStorage,
 		filter:        filter,
-		inputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 	}
+	ddlJobPuller.sorter = memorysorter.NewEntrySorter(changefeed)
 
 	grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 	client := kv.NewSharedClient(
@@ -99,49 +120,17 @@ func NewDDLJobPuller(
 		txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
 	)
 
-	// consume is the callback function to consume the raw kv entries.
-	// It sends the raw kv entries to the input channel of ddlJobPuller.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ddlJobPuller.inputCh <- raw:
-			return nil
-		}
-	}
-
 	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
-	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, consume, slots, hasher, 1)
+	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, ddlJobPuller.Input, slots, hasher, 1)
 	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName)
 
 	return ddlJobPuller
 }
 
-// Note: All unexported methods of `ddlJobPullerImpl` should
-// be called in the same one goroutine.
-type ddlJobPullerImpl struct {
-	changefeedID  model.ChangeFeedID
-	mp            *MultiplexingPuller
-	kvStorage     tidbkv.Storage
-	schemaStorage entry.SchemaStorage
-	resolvedTs    uint64
-	schemaVersion int64
-	filter        filter.Filter
-	// ddlJobsTable is initialized when receive the first concurrent DDL job.
-	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
-	ddlJobsTable *model.TableInfo
-	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	jobMetaColumnID int64
-	// inpuCh receives the raw kv entries from kv client.
-	inputCh chan *model.RawKVEntry
-	// outputCh sends the DDL job entries to the caller.
-	outputCh chan *model.DDLJobEntry
-}
-
 // Run implements util.Runnable.
 func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	eg, ctx := errgroup.WithContext(ctx)
-	sortedDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.inputCh)
+
 	// Only nil in unit test.
 	if p.mp != nil {
 		eg.Go(func() error {
@@ -150,18 +139,23 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	}
 
 	eg.Go(func() error {
+		return p.sorter.Run(ctx)
+	})
+
+	eg.Go(func() error {
 		for {
-			var ddlRawKV *model.RawKVEntry
+			var sortedDDLEvent *model.PolymorphicEvent
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ddlRawKV = <-sortedDDLCh:
+			case sortedDDLEvent = <-p.sorter.Output():
 			}
-			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
+			if err := p.handleRawKVEntry(ctx, sortedDDLEvent.RawKV); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	})
+
 	return eg.Wait()
 }
 
@@ -174,6 +168,15 @@ func (p *ddlJobPullerImpl) Close() {}
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
+}
+
+// Input receives the raw kv entry and put it into the input channel.
+func (p *ddlJobPullerImpl) Input(
+	ctx context.Context,
+	rawDDL *model.RawKVEntry,
+	_ []tablepb.Span) error {
+	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
+	return nil
 }
 
 // handleRawKVEntry converts the raw kv entry to DDL job and sends it to the output channel.
@@ -190,7 +193,6 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		if ddlRawKV.CRTs > p.getResolvedTs() {
 			p.setResolvedTs(ddlRawKV.CRTs)
 		}
-		return nil
 	}
 
 	job, err := p.unmarshalDDL(ddlRawKV)
