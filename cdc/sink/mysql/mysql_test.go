@@ -89,9 +89,10 @@ func TestPrepareDML(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
-				values:   [][]interface{}{{1, 1}},
-				rowCount: 1,
+				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+				values:          [][]interface{}{{1, 1}},
+				rowCount:        1,
+				approximateSize: 75,
 			},
 		}, {
 			input: []*model.RowChangedEvent{
@@ -114,9 +115,10 @@ func TestPrepareDML(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
-				values:   [][]interface{}{{2, 2}},
-				rowCount: 1,
+				sqls:            []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+				values:          [][]interface{}{{2, 2}},
+				rowCount:        1,
+				approximateSize: 64,
 			},
 		},
 	}
@@ -2310,8 +2312,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				sqls: []string{
 					"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);",
 				},
-				values:   [][]interface{}{{1, 1}},
-				rowCount: 1,
+				values:          [][]interface{}{{1, 1}},
+				rowCount:        1,
+				approximateSize: 63,
 			},
 		}, {
 			name: "insert with PK",
@@ -2335,9 +2338,10 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);"},
-				values:   [][]interface{}{{1, 1}},
-				rowCount: 1,
+				sqls:            []string{"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);"},
+				values:          [][]interface{}{{1, 1}},
+				rowCount:        1,
+				approximateSize: 52,
 			},
 		}, {
 			name: "update without PK",
@@ -2376,8 +2380,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
 						"WHERE `a1`=? AND `a3`=? LIMIT 1;",
 				},
-				values:   [][]interface{}{{3, 3, 2, 2}},
-				rowCount: 1,
+				values:          [][]interface{}{{3, 3, 2, 2}},
+				rowCount:        1,
+				approximateSize: 84,
 			},
 		}, {
 			name: "update with PK",
@@ -2414,8 +2419,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
 					"WHERE `a1`=? AND `a3`=? LIMIT 1;"},
-				values:   [][]interface{}{{3, 3, 2, 2}},
-				rowCount: 1,
+				values:          [][]interface{}{{3, 3, 2, 2}},
+				rowCount:        1,
+				approximateSize: 73,
 			},
 		}, {
 			name: "batch insert with PK",
@@ -2460,8 +2466,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 				},
-				values:   [][]interface{}{{3, 3}, {5, 5}},
-				rowCount: 2,
+				values:          [][]interface{}{{3, 3}, {5, 5}},
+				rowCount:        2,
+				approximateSize: 104,
 			},
 		}, {
 			name: "safe mode on commit ts < replicating ts",
@@ -2488,8 +2495,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 				},
-				values:   [][]interface{}{{3, 3}},
-				rowCount: 1,
+				values:          [][]interface{}{{3, 3}},
+				rowCount:        1,
+				approximateSize: 53,
 			},
 		}, {
 			name: "safe mode on one row commit ts < replicating ts",
@@ -2534,8 +2542,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 				},
-				values:   [][]interface{}{{3, 3}, {5, 5}},
-				rowCount: 2,
+				values:          [][]interface{}{{3, 3}, {5, 5}},
+				rowCount:        2,
+				approximateSize: 106,
 			},
 		},
 	}
@@ -2611,9 +2620,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
-				values:   [][]interface{}{{1, "你好", 2, "世界"}},
-				rowCount: 2,
+				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
+				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				rowCount:        2,
+				approximateSize: 73,
 			},
 		},
 		{ // insert event
@@ -2657,9 +2667,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
-				values:   [][]interface{}{{1, "你好", 2, "世界"}},
-				rowCount: 2,
+				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
+				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				rowCount:        2,
+				approximateSize: 69,
 			},
 		},
 		// update event
@@ -2737,8 +2748,9 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
 						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
-				values:   [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
-				rowCount: 2,
+				values:          [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
+				rowCount:        2,
+				approximateSize: 184,
 			},
 		},
 		// mixed event
@@ -2808,8 +2820,9 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:   [][]interface{}{{1, "世界", 2, "你好"}, {2, "你好"}},
-				rowCount: 3,
+				values:          [][]interface{}{{1, "世界", 2, "你好"}, {2, "你好"}},
+				rowCount:        3,
+				approximateSize: 136,
 			},
 		},
 	}

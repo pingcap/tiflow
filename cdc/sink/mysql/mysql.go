@@ -689,10 +689,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "BEGIN", dmls.rowCount)
 			}
@@ -709,7 +709,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 							start, s.params.changefeedID, query, dmls.rowCount)
 					}
 					cancelFunc()
-					return 0, logDMLTxnErr(
+					return 0, 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount)
 				}
@@ -724,7 +724,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
 					cancelFunc()
-					return 0, logDMLTxnErr(
+					return 0, 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
@@ -732,11 +732,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "COMMIT", dmls.rowCount)
 			}
-			return dmls.rowCount, nil
+			return dmls.rowCount, dmls.approximateSize, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -974,10 +974,11 @@ func hasHandleKey(cols []*model.Column) bool {
 }
 
 type preparedDMLs struct {
-	sqls     []string
-	values   [][]interface{}
-	markSQL  string
-	rowCount int
+	sqls            []string
+	values          [][]interface{}
+	markSQL         string
+	rowCount        int
+	approximateSize int64
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
@@ -992,7 +993,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 	replaces := make(map[string][][]interface{})
 
 	rowCount := 0
-
+	approximateSize := int64(0)
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
 		if s.params.batchReplaceEnabled && len(replaces) > 0 {
@@ -1039,6 +1040,13 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 				sql, value := s.batchSingleTxnDmls(txn.Rows, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+
+				for _, stmt := range sql {
+					approximateSize += int64(len(stmt))
+				}
+				for _, row := range txn.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -1057,6 +1065,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 					values = append(values, args)
 					rowCount++
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
@@ -1103,6 +1112,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 					}
 				}
 			}
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 	flushCacheDMLs()
@@ -1121,6 +1131,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
+	dmls.approximateSize = approximateSize
 	return dmls
 }
 

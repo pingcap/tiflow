@@ -318,11 +318,11 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 			}
 
 			for _, message := range future.Messages {
-				if err := w.statistics.RecordBatchExecution(func() (int, error) {
+				if err := w.statistics.RecordBatchExecution(func() (int, int64, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
-						return 0, err
+						return 0, 0, err
 					}
-					return message.GetRowsCount(), nil
+					return message.GetRowsCount(), int64(message.Length()), nil
 				}); err != nil {
 					return err
 				}
