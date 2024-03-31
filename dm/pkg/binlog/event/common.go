@@ -19,7 +19,10 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+<<<<<<< HEAD
 
+=======
+>>>>>>> 955296da89 (dm: reduce gSet.String() usage by using zeroGSet for checking empty (#9944))
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -176,8 +179,13 @@ func GTIDIncrease(flavor string, gSet gtid.Set) (gtid.Set, error) {
 }
 
 // verifySingleGTID verifies gSet whether only containing a single valid GTID.
+<<<<<<< HEAD
 func verifySingleGTID(flavor string, gSet gtid.Set) (interface{}, error) {
 	if gSet == nil || len(gSet.String()) == 0 {
+=======
+func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
+	if gtid.CheckGTIDSetEmpty(gSet) {
+>>>>>>> 955296da89 (dm: reduce gSet.String() usage by using zeroGSet for checking empty (#9944))
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
 	}
 	origin := gSet.Origin()
