@@ -45,7 +45,7 @@ type GlobalVars struct {
 	MessageServer *p2p.MessageServer
 	MessageRouter p2p.MessageRouter
 
-	IOThreadPool workerpool.AsyncPool
+	ChangefeedThreadPool workerpool.AsyncPool
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
@@ -197,7 +197,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
-		IOThreadPool: &nonAsyncPool{},
+		ChangefeedThreadPool: &nonAsyncPool{},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

@@ -565,7 +565,7 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.initializing.Load() && !p.initialized.Load() {
 		initCtx, cancelInitialize := cdcContext.WithCancel(ctx)
 		p.initializing.Store(true)
-		err := ctx.GlobalVars().IOThreadPool.Go(initCtx, func() {
+		err := ctx.GlobalVars().ChangefeedThreadPool.Go(initCtx, func() {
 			defer p.initialWaitGroup.Done()
 			if err := p.lazyInit(initCtx); err != nil {
 				p.initError.Store(err)

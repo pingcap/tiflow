@@ -140,7 +140,6 @@ var defaultServerConfig = &ServerConfig{
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
 			LogRegionDetails:               false,
 		},
-		ChangefeedThreadPoolSize: 4,
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

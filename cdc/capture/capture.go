@@ -50,7 +50,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const cleanMetaDuration = 10 * time.Second
+const (
+	cleanMetaDuration = 10 * time.Second
+	// changefeedAsyncInitWorkerCount is the size of the worker pool for changefeed initialization processing.
+	changefeedAsyncInitWorkerCount = 8
+)
 
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
@@ -358,15 +362,15 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	stdCtx, cancel := context.WithCancel(stdCtx)
-	pool := workerpool.NewDefaultAsyncPool(c.config.Debug.ChangefeedThreadPoolSize)
+	pool := workerpool.NewDefaultAsyncPool(changefeedAsyncInitWorkerCount)
 
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
-		IOThreadPool:      pool,
+		CaptureInfo:          c.info,
+		EtcdClient:           c.EtcdClient,
+		MessageServer:        c.MessageServer,
+		MessageRouter:        c.MessageRouter,
+		SortEngineFactory:    c.sortEngineFactory,
+		ChangefeedThreadPool: pool,
 	})
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws

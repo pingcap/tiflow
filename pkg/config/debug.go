@@ -31,9 +31,6 @@ type DebugConfig struct {
 
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`
-
-	// ChangefeedThreadPoolSize is the thread pool size for changefeed async logic
-	ChangefeedThreadPoolSize int `toml:"changefeed-thread-pool-size" json:"changefeed-thread-pool-size"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

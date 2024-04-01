@@ -190,8 +190,7 @@ const (
       "enable-resolved-ts-stuck-detection": false,
       "resolved-ts-stuck-interval": 300000000000,
       "log-region-details": false
-    },
-    "changefeed-thread-pool-size": 4
+    }
   },
   "cluster-id": "default",
   "gc-tuner-memory-threshold": 0,
