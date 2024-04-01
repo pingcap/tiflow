@@ -387,12 +387,7 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 		table:   table,
 		version: version,
 	}
-
-	entry, ok := m.memo[key]
-	if ok {
-		return entry
-	}
-	return nil
+	return m.memo[key]
 }
 
 type tableSchemaKey struct {

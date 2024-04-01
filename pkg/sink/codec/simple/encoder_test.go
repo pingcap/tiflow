@@ -971,6 +971,67 @@ func TestEncoderOtherTypes(t *testing.T) {
 	}
 }
 
+func TestEncodeDMLBeforeDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a int primary key, b int)`
+	ddlEvent := helper.DDL2Event(sql)
+
+	sql = `insert into test.t values (1, 2)`
+	row := helper.DML2Event(sql, "test", "t")
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+
+	b, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := b.Build()
+
+	err = enc.AppendRowChangedEvent(ctx, "", row, func() {})
+	require.NoError(t, err)
+
+	messages := enc.Build()
+	require.Len(t, messages, 1)
+
+	dec, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decodedRow, err := dec.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Nil(t, decodedRow)
+
+	m, err := enc.EncodeDDLEvent(ddlEvent)
+	require.NoError(t, err)
+
+	err = dec.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+
+	event, err := dec.NextDDLEvent()
+	require.NoError(t, err)
+	require.NotNil(t, event)
+
+	cachedEvents := dec.GetCachedEvents()
+	for _, decodedRow = range cachedEvents {
+		require.NotNil(t, decodedRow)
+		require.NotNil(t, decodedRow.TableInfo)
+		require.Equal(t, decodedRow.TableInfo.ID, event.TableInfo.ID)
+	}
+}
+
 func TestEncodeBootstrapEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
