@@ -238,13 +238,13 @@ func (s *requestedStream) receive(
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err = s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
+			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err = s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
 				return err
 			}
 		}
@@ -253,7 +253,7 @@ func (s *requestedStream) receive(
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
 	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
-		if err = cc.Client().Send(req); err != nil {
+		if err := cc.Client().Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
