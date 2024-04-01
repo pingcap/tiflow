@@ -208,7 +208,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		fieldTypeMap[col.Name.L] = &col.FieldType
+		fieldTypeMap[col.Name.O] = &col.FieldType
 	}
 
 	result := &message{

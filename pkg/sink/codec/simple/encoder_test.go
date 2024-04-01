@@ -15,13 +15,15 @@ package simple
 
 import (
 	"context"
-	"database/sql"
+	"database/sql/driver"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -1361,11 +1363,13 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 }
 
 func TestLargeMessageHandleKeyOnly(t *testing.T) {
-	_, _, updateEvent, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	mock.MatchExpectationsInOrder(false)
+	require.NoError(t, err)
 
+	ddlEvent, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.MaxMessageBytes = 500
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatJSON,
@@ -1377,71 +1381,162 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			compression.Snappy,
 			compression.LZ4,
 		} {
+			codecConfig.MaxMessageBytes = config.DefaultMaxMessageBytes
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
 			b, err := NewBuilder(ctx, codecConfig)
 			require.NoError(t, err)
 			enc := b.Build()
 
-			err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
+			dec, err := NewDecoder(ctx, codecConfig, db)
 			require.NoError(t, err)
 
-			messages := enc.Build()
-			require.Len(t, messages, 1)
-
-			dec, err := NewDecoder(ctx, codecConfig, &sql.DB{})
+			m, err := enc.EncodeDDLEvent(ddlEvent)
 			require.NoError(t, err)
 
-			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			err = dec.AddKeyValue(m.Key, m.Value)
 			require.NoError(t, err)
 
 			messageType, hasNext, err := dec.HasNext()
 			require.NoError(t, err)
 			require.True(t, hasNext)
-			require.Equal(t, model.MessageTypeRow, messageType)
-			require.True(t, dec.msg.HandleKeyOnly)
+			require.Equal(t, model.MessageTypeDDL, messageType)
 
-			obtainedValues := make(map[string]interface{}, len(dec.msg.Data))
-			for name, value := range dec.msg.Data {
-				obtainedValues[name] = value
-			}
-			for _, col := range updateEvent.Columns {
-				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-				if colFlag.IsHandleKey() {
-					require.Contains(t, dec.msg.Data, colName)
-					obtained := obtainedValues[colName]
-					switch v := obtained.(type) {
-					case string:
-						var err error
-						obtained, err = strconv.ParseInt(v, 10, 64)
-						require.NoError(t, err)
-					}
-					require.EqualValues(t, col.Value, obtained)
-				} else {
-					require.NotContains(t, dec.msg.Data, colName)
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			enc.(*encoder).config.MaxMessageBytes = 500
+			dec.config.MaxMessageBytes = 500
+			for _, event := range []*model.RowChangedEvent{
+				insertEvent,
+				updateEvent,
+				deleteEvent,
+			} {
+				err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
+				require.NoError(t, err)
+
+				messages := enc.Build()
+				require.Len(t, messages, 1)
+
+				err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+				require.NoError(t, err)
+
+				messageType, hasNext, err := dec.HasNext()
+				require.NoError(t, err)
+				require.True(t, hasNext)
+				require.Equal(t, model.MessageTypeRow, messageType)
+				require.True(t, dec.msg.HandleKeyOnly)
+
+				obtainedValues := make(map[string]interface{}, len(dec.msg.Data))
+				for name, value := range dec.msg.Data {
+					obtainedValues[name] = value
 				}
-			}
-
-			obtainedValues = make(map[string]interface{}, len(dec.msg.Old))
-			for name, value := range dec.msg.Old {
-				obtainedValues[name] = value
-			}
-			for _, col := range updateEvent.PreColumns {
-				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-				colFlag := updateEvent.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-				if colFlag.IsHandleKey() {
-					require.Contains(t, dec.msg.Old, colName)
-					obtained := obtainedValues[colName]
-					switch v := obtained.(type) {
-					case string:
-						var err error
-						obtained, err = strconv.ParseInt(v, 10, 64)
-						require.NoError(t, err)
+				for _, col := range event.Columns {
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+					if colFlag.IsHandleKey() {
+						require.Contains(t, dec.msg.Data, colName)
+						obtained := obtainedValues[colName]
+						switch v := obtained.(type) {
+						case string:
+							var err error
+							obtained, err = strconv.ParseInt(v, 10, 64)
+							require.NoError(t, err)
+						}
+						require.EqualValues(t, col.Value, obtained)
+					} else {
+						require.NotContains(t, dec.msg.Data, colName)
 					}
-					require.Equal(t, col.Value, obtained)
-				} else {
-					require.NotContains(t, dec.msg.Old, colName)
+				}
+
+				clear(obtainedValues)
+				for name, value := range dec.msg.Old {
+					obtainedValues[name] = value
+				}
+				for _, col := range event.PreColumns {
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+					if colFlag.IsHandleKey() {
+						require.Contains(t, dec.msg.Old, colName)
+						obtained := obtainedValues[colName]
+						switch v := obtained.(type) {
+						case string:
+							var err error
+							obtained, err = strconv.ParseInt(v, 10, 64)
+							require.NoError(t, err)
+						}
+						require.EqualValues(t, col.Value, obtained)
+					} else {
+						require.NotContains(t, dec.msg.Data, colName)
+					}
+				}
+
+				mock.ExpectQuery("SELECT @@global.time_zone").
+					WillReturnRows(mock.NewRows([]string{""}).AddRow("SYSTEM"))
+
+				query := fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs)
+				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
+
+				query = fmt.Sprintf("set @@tidb_snapshot= %v", event.CommitTs-1)
+				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
+
+				names, values := utils.LargeColumnKeyValues()
+				mock.ExpectQuery("select * from test.t where t = 127").
+					WillReturnRows(mock.NewRows(names).AddRow(values...))
+
+				mock.ExpectQuery("select * from test.t where t = 127").
+					WillReturnRows(mock.NewRows(names).AddRow(values...))
+
+				decodedRow, err := dec.NextRowChangedEvent()
+				require.NoError(t, err)
+				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
+				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
+				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
+
+				decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+				for _, column := range decodedRow.Columns {
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedColumns[colName] = column
+				}
+				for _, col := range event.Columns {
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedColumns[colName]
+					require.True(t, ok)
+					colInfo := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+					if colInfo.IsBinary() {
+						switch v := col.Value.(type) {
+						case []byte:
+							length := len(decoded.Value.([]uint8))
+							require.Equal(t, v[:length], decoded.Value, colName)
+						default:
+							require.EqualValues(t, col.Value, decoded.Value, colName)
+						}
+					} else {
+						require.EqualValues(t, col.Value, decoded.Value, colName)
+					}
+				}
+
+				clear(decodedColumns)
+				for _, column := range decodedRow.PreColumns {
+					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
+					decodedColumns[colName] = column
+				}
+				for _, col := range event.PreColumns {
+					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+					decoded, ok := decodedColumns[colName]
+					require.True(t, ok)
+					colInfo := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
+					if colInfo.IsBinary() {
+						switch v := col.Value.(type) {
+						case []byte:
+							length := len(decoded.Value.([]uint8))
+							require.Equal(t, v[:length], decoded.Value, colName)
+						default:
+							require.EqualValues(t, col.Value, decoded.Value, colName)
+						}
+					} else {
+						require.EqualValues(t, col.Value, decoded.Value, colName)
+					}
 				}
 			}
 		}

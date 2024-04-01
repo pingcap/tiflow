@@ -112,13 +112,13 @@ func SnapshotQuery(
 	}
 
 	// 2. query the whole row
-	query = fmt.Sprintf("select * from `%s`.`%s` where ", schema, table)
+	query = fmt.Sprintf("select * from %s.%s where ", schema, table)
 	var whereClause string
 	for name, value := range conditions {
 		if whereClause != "" {
 			whereClause += " and "
 		}
-		whereClause += fmt.Sprintf("`%s` = '%v'", name, value)
+		whereClause += fmt.Sprintf("%s = %v", name, value)
 	}
 	query += whereClause
 
