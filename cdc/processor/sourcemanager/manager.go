@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -35,10 +34,6 @@ import (
 )
 
 const defaultMaxBatchSize = 256
-
-type multiplexingPuller struct {
-	puller *pullerwrapper.MultiplexingWrapper
-}
 
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
@@ -57,7 +52,7 @@ type SourceManager struct {
 	bdrMode bool
 
 	enableTableMonitor bool
-	multiplexingPuller multiplexingPuller
+	puller             *puller.MultiplexingPuller
 }
 
 // New creates a new source manager.
@@ -80,7 +75,14 @@ func NewForTest(
 	engine sorter.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false)
+	return &SourceManager{
+		ready:        make(chan struct{}),
+		changefeedID: changefeedID,
+		up:           up,
+		mg:           mg,
+		engine:       engine,
+		bdrMode:      bdrMode,
+	}
 }
 
 func newSourceManager(
@@ -100,6 +102,36 @@ func newSourceManager(
 		bdrMode:            bdrMode,
 		enableTableMonitor: enableTableMonitor,
 	}
+
+	serverConfig := config.GetGlobalServerConfig()
+	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	client := kv.NewSharedClient(
+		mgr.changefeedID, serverConfig, mgr.bdrMode,
+		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
+		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
+	)
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+		if len(spans) > 1 {
+			log.Panic("DML puller subscribes multiple spans",
+				zap.String("namespace", mgr.changefeedID.Namespace),
+				zap.String("changefeed", mgr.changefeedID.ID))
+		}
+		if raw != nil {
+			pEvent := model.NewPolymorphicEvent(raw)
+			mgr.engine.Add(spans[0], pEvent)
+		}
+		return nil
+	}
+	slots, hasher := mgr.engine.SlotsAndHasher()
+
+	mgr.puller = puller.NewMultiplexingPuller(
+		mgr.changefeedID,
+		client,
+		consume,
+		slots,
+		hasher,
+		int(serverConfig.KVClient.FrontierConcurrent))
+
 	return mgr
 }
 
@@ -108,12 +140,15 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
-	m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+	// Only nil in unit tests.
+	if m.puller != nil {
+		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+	}
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
 func (m *SourceManager) RemoveTable(span tablepb.Span) {
-	m.multiplexingPuller.puller.Unsubscribe([]tablepb.Span{span})
+	m.puller.Unsubscribe([]tablepb.Span{span})
 	m.engine.RemoveTable(span)
 }
 
@@ -138,7 +173,7 @@ func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound sorter.Positi
 
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
-	return m.multiplexingPuller.puller.MultiplexingPuller.Stats(span)
+	return m.puller.Stats(span)
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
@@ -148,20 +183,12 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) sorter.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-	serverConfig := config.GetGlobalServerConfig()
-	grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-	client := kv.NewSharedClient(
-		m.changefeedID, serverConfig, m.bdrMode,
-		m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
-		txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
-	)
-	m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-		m.changefeedID, client, m.engine,
-		int(serverConfig.KVClient.FrontierConcurrent),
-	)
-
 	close(m.ready)
-	return m.multiplexingPuller.puller.Run(ctx)
+	// Only nil in unit tests.
+	if m.puller == nil {
+		return nil
+	}
+	return m.puller.Run(ctx)
 }
 
 // WaitForReady implements util.Runnable.
