@@ -578,11 +578,11 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 		p.cancelInitialize = cancelInitialize
 		p.initialWaitGroup.Add(1)
 	}
-	if p.initializing.Load() {
-		return nil
-	}
 	if p.initError.Load() != nil {
 		return errors.Trace(p.initError.Load())
+	}
+	if p.initializing.Load() {
+		return nil
 	}
 
 	barrier, err := p.agent.Tick(ctx)

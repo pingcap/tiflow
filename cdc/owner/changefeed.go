@@ -403,12 +403,11 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		c.initialWaitGroup.Add(1)
 		c.cancelInitialize = cancelInitialize
 	}
-	if c.initializing.Load() {
-		return 0, 0, nil
-	}
-
 	if c.initError.Load() != nil {
 		return 0, 0, errors.Trace(c.initError.Load())
+	}
+	if c.initializing.Load() {
+		return 0, 0, nil
 	}
 
 	select {
