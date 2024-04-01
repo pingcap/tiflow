@@ -122,7 +122,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	kafkaVersion, err := getKafkaVersion(ctx, config, o)
+	kafkaVersion, err := getKafkaVersion(config, o)
 	if err != nil {
 		log.Warn("Can't get Kafka version by broker. ticdc will use default version",
 			zap.String("defaultVersion", kafkaVersion.String()))
@@ -189,7 +189,7 @@ func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Opt
 	return nil
 }
 
-func getKafkaVersion(ctx context.Context, config *sarama.Config, o *Options) (sarama.KafkaVersion, error) {
+func getKafkaVersion(config *sarama.Config, o *Options) (sarama.KafkaVersion, error) {
 	var err error
 	version := defaultKafkaVersion
 	addrs := o.BrokerEndpoints
