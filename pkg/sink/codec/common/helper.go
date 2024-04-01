@@ -56,12 +56,11 @@ func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
-// QueryTimezone query the timezone from the upstream database
-func QueryTimezone(ctx context.Context, db *sql.DB) (string, error) {
+// MustQueryTimezone query the timezone from the upstream database
+func MustQueryTimezone(ctx context.Context, db *sql.DB) string {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		log.Error("establish connection to the upstream tidb failed", zap.Error(err))
-		return "", errors.Trace(err)
+		log.Panic("establish connection to the upstream tidb failed", zap.Error(err))
 	}
 	defer conn.Close()
 
@@ -69,26 +68,23 @@ func QueryTimezone(ctx context.Context, db *sql.DB) (string, error) {
 	query := "SELECT @@global.time_zone"
 	err = conn.QueryRowContext(ctx, query).Scan(&timezone)
 	if err != nil {
-		log.Error("query timezone failed", zap.Error(err))
-		return "", errors.Trace(err)
+		log.Panic("query timezone failed", zap.Error(err))
 	}
 
 	log.Info("query global timezone from the upstream tidb",
 		zap.Any("timezone", timezone))
-
-	return timezone, nil
+	return timezone
 }
 
-// SnapshotQuery query the db by the snapshot read with the given commitTs
-func SnapshotQuery(
+// MustSnapshotQuery query the db by the snapshot read with the given commitTs
+func MustSnapshotQuery(
 	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
-) (*ColumnsHolder, error) {
+) *ColumnsHolder {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		log.Error("establish connection to the upstream tidb failed",
+		log.Panic("establish connection to the upstream tidb failed",
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
 	}
 	defer conn.Close()
 
@@ -104,11 +100,10 @@ func SnapshotQuery(
 			}
 		}
 
-		log.Error("set snapshot read failed",
+		log.Panic("set snapshot read failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
 	}
 
 	// 2. query the whole row
@@ -124,34 +119,30 @@ func SnapshotQuery(
 
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
-		log.Error("query row failed",
+		log.Panic("query row failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
 
 	holder, err := newColumnHolder(rows)
 	if err != nil {
-		log.Error("obtain the columns holder failed",
+		log.Panic("obtain the columns holder failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, err
 	}
 	for rows.Next() {
 		err = rows.Scan(holder.ValuePointers...)
 		if err != nil {
-			log.Error("scan row failed",
+			log.Panic("scan row failed",
 				zap.String("query", query),
 				zap.String("schema", schema), zap.String("table", table),
 				zap.Uint64("commitTs", commitTs), zap.Error(err))
-			return nil, errors.Trace(err)
 		}
 	}
-
-	return holder, nil
+	return holder
 }
 
 // MustBinaryLiteralToInt convert bytes into uint64,

@@ -266,10 +266,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		columns := b.buildColumns(holder, conditions)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
@@ -280,10 +277,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		preColumns := b.buildColumns(holder, conditions)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preColumns)
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, preColumns, indexColumns)
@@ -294,10 +288,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		columns := b.buildColumns(holder, conditions)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
@@ -308,10 +299,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
 		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
 	}

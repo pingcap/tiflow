@@ -1477,7 +1477,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				query := fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
-				query = fmt.Sprintf("set @@tidb_snapshot= %v", event.CommitTs-1)
+				query = fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs-1)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
 				names, values := utils.LargeColumnKeyValues()
