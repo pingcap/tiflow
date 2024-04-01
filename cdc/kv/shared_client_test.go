@@ -167,13 +167,25 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	eventCh := make(chan MultiplexingEvent, 50)
 	client.Subscribe(subID, span, 1, eventCh)
 
+	makeTsEvent := func(regionID, ts, requestID uint64) *cdcpb.ChangeDataEvent {
+		return &cdcpb.ChangeDataEvent{
+			Events: []*cdcpb.Event{
+				{
+					RegionId:  regionID,
+					RequestId: requestID,
+					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
+				},
+			},
+		}
+	}
+
 	checkTsEvent := func(event model.RegionFeedEvent, ts uint64) {
 		require.Equal(t, ts, event.Resolved.ResolvedTs)
 	}
 
 	events1 <- mockInitializedEvent(11, uint64(subID))
 	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
-	events1 <- mockResolvedTsEvent(11, ts, uint64(subID))
+	events1 <- makeTsEvent(11, ts, uint64(subID))
 	// After trying to receive something from the invalid store,
 	// it should auto switch to other stores and fetch events finally.
 	select {
@@ -188,7 +200,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 	events2 <- mockInitializedEvent(11, uint64(subID))
 	ts = oracle.GoTimeToTS(pdClock.CurrentTime())
-	events2 <- mockResolvedTsEvent(11, ts, uint64(subID))
+	events2 <- makeTsEvent(11, ts, uint64(subID))
 	// After trying to receive something from a failed store,
 	// it should auto switch to other stores and fetch events finally.
 	select {
