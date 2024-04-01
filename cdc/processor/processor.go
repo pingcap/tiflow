@@ -565,6 +565,8 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.initializing.Load() && !p.initialized.Load() {
 		initCtx, cancelInitialize := cdcContext.WithCancel(ctx)
 		p.initializing.Store(true)
+		p.cancelInitialize = cancelInitialize
+		p.initialWaitGroup.Add(1)
 		err := ctx.GlobalVars().ChangefeedThreadPool.Go(initCtx, func() {
 			defer p.initialWaitGroup.Done()
 			if err := p.lazyInit(initCtx); err != nil {
@@ -573,10 +575,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 			p.initializing.Store(false)
 		})
 		if err != nil {
+			p.initialWaitGroup.Done()
 			return errors.Trace(err)
 		}
-		p.cancelInitialize = cancelInitialize
-		p.initialWaitGroup.Add(1)
 	}
 	if p.initError.Load() != nil {
 		return errors.Trace(p.initError.Load())

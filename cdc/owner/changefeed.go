@@ -390,6 +390,8 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	if !c.initializing.Load() && !c.initialized.Load() {
 		c.initializing.Store(true)
 		initialCtx, cancelInitialize := cdcContext.WithCancel(ctx)
+		c.initialWaitGroup.Add(1)
+		c.cancelInitialize = cancelInitialize
 		err := ctx.GlobalVars().ChangefeedThreadPool.Go(initialCtx, func() {
 			defer c.initialWaitGroup.Done()
 			if err := c.initialize(initialCtx); err != nil {
@@ -398,10 +400,9 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 			c.initializing.Store(false)
 		})
 		if err != nil {
+			c.initialWaitGroup.Done()
 			return 0, 0, errors.Trace(err)
 		}
-		c.initialWaitGroup.Add(1)
-		c.cancelInitialize = cancelInitialize
 	}
 	if c.initError.Load() != nil {
 		return 0, 0, errors.Trace(c.initError.Load())
