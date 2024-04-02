@@ -473,7 +473,7 @@ func buildRowChangedEvent(
 	return result, nil
 }
 
-func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
+func adjustTimestampValue(column *model.Column, flag types.FieldType) {
 	if flag.GetType() != mysql.TypeTimestamp {
 		return
 	}
@@ -492,11 +492,11 @@ func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
 
 func decodeColumns(
 	rawData map[string]interface{}, tableInfo *model.TableInfo,
-) []*model.ColumnData {
+) []*model.Column {
 	if rawData == nil {
 		return nil
 	}
-	var result []*model.ColumnData
+	var result []*model.Column
 	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
@@ -643,7 +643,7 @@ func (a *jsonMarshaller) newDMLMessage(
 }
 
 func (a *jsonMarshaller) formatColumns(
-	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
+	columns []*model.Column, tableInfo *model.TableInfo, onlyHandleKey bool,
 ) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
@@ -782,8 +782,8 @@ func encodeValue(
 	return result
 }
 
-func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *model.ColumnData {
-	result := &model.ColumnData{
+func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *model.Column {
+	result := &model.Column{
 		ColumnID: id,
 		Value:    value,
 	}

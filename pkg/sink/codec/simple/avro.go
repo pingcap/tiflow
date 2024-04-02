@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -269,17 +270,17 @@ func (a *avroMarshaller) newDMLMessageMap(
 	}
 
 	if event.IsInsert() {
-		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		data := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		m["data"] = data
 		m["type"] = string(DMLTypeInsert)
 	} else if event.IsDelete() {
-		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		old := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		m["old"] = old
 		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
-		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
+		data := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		m["data"] = data
-		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
+		old := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		m["old"] = old
 		m["type"] = string(DMLTypeUpdate)
 	} else {
@@ -338,23 +339,20 @@ func recycleMap(m map[string]interface{}) {
 }
 
 func (a *avroMarshaller) collectColumns(
-	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
-	for _, col := range columns {
+	for idx, col := range columns {
 		if col == nil {
 			continue
 		}
-		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		colName := tableInfo.ForceGetColumnName(col.ColumnID)
-		if onlyHandleKey && !colFlag.IsHandleKey() {
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
 			continue
 		}
-		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
+		value, avroType := a.encodeValue4Avro(col.Value, columnInfos[idx].Ft)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
-		result[colName] = holder
+		result[col.Name] = holder
 	}
 
 	return map[string]interface{}{

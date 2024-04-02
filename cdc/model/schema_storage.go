@@ -16,11 +16,14 @@ package model
 import (
 	"fmt"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
+	tiTypes "github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"go.uber.org/zap"
 )
 
 const (
@@ -385,4 +388,60 @@ func (ti *TableInfo) GetPrimaryKeyColumnNames() map[string]struct{} {
 		}
 	}
 	return result
+}
+
+// GetSchemaName returns the schema name of the table
+func (ti *TableInfo) GetSchemaName() string {
+	return ti.TableName.Schema
+}
+
+// GetTableName returns the table name of the table
+func (ti *TableInfo) GetTableName() string {
+	return ti.TableName.Table
+}
+
+// GetSchemaNamePtr returns the pointer to the schema name of the table
+func (ti *TableInfo) GetSchemaNamePtr() *string {
+	return &ti.TableName.Schema
+}
+
+// GetTableNamePtr returns the pointer to the table name of the table
+func (ti *TableInfo) GetTableNamePtr() *string {
+	return &ti.TableName.Table
+}
+
+// ForceGetColumnInfo return the column info by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnInfo(colID int64) *model.ColumnInfo {
+	colInfo, ok := ti.GetColumnInfo(colID)
+	if !ok {
+		log.Panic("invalid column id", zap.Int64("columnID", colID))
+	}
+	return colInfo
+}
+
+// ForceGetColumnFlagType return the column flag type by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnFlagType(colID int64) *ColumnFlagType {
+	flag, ok := ti.ColumnsFlag[colID]
+	if !ok {
+		log.Panic("invalid column id", zap.Int64("columnID", colID))
+	}
+	return &flag
+}
+
+// ForceGetColumnName return the column name by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnName(colID int64) string {
+	return ti.ForceGetColumnInfo(colID).Name.O
+}
+
+// GetColumnDefaultValue returns the default definition of a column.
+func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
+	defaultValue := col.GetDefaultValue()
+	if defaultValue == nil {
+		defaultValue = col.GetOriginDefaultValue()
+	}
+	defaultDatum := tiTypes.NewDatum(defaultValue)
+	return defaultDatum.GetValue()
 }

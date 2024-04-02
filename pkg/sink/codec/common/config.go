@@ -70,7 +70,20 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	// for the simple protocol, can be "json" and "avro", default to "json"
+	EncodingFormat EncodingFormatType
 }
+
+// EncodingFormatType is the type of encoding format
+type EncodingFormatType string
+
+const (
+	// EncodingFormatJSON is the json format
+	EncodingFormatJSON EncodingFormatType = "json"
+	// EncodingFormatAvro is the avro format
+	EncodingFormatAvro EncodingFormatType = "avro"
+)
 
 // NewConfig return a Config for codec
 func NewConfig(protocol config.Protocol) *Config {
@@ -91,6 +104,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		EncodingFormat: EncodingFormatJSON,
 	}
 }
 

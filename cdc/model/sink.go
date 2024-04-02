@@ -683,6 +683,7 @@ type DDLEvent struct {
 	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
 	Collate      string           `msg:"-"`
+	IsBootstrap  bool             `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
