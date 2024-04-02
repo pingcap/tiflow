@@ -511,7 +511,7 @@ func decodeColumns(
 			log.Panic("cannot decode column",
 				zap.String("name", info.Name.O), zap.Any("data", value))
 		}
-		
+
 		result = append(result, col)
 	}
 	return result
