@@ -16,6 +16,7 @@ package common
 import (
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -71,6 +72,7 @@ type Config struct {
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
+	TimeZone *time.Location
 	// for the simple protocol, can be "json" and "avro", default to "json"
 	EncodingFormat EncodingFormatType
 }
@@ -106,6 +108,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
 
 		EncodingFormat: EncodingFormatJSON,
+		TimeZone:       time.Local,
 	}
 }
 

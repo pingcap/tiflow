@@ -880,15 +880,13 @@ func TestEncodeIntegerTypes(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 
-			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-				decodedColumns[colName] = column
+				decodedColumns[column.Name] = column
 			}
 
 			for _, expected := range event.Columns {
-				colName := event.TableInfo.ForceGetColumnName(expected.ColumnID)
-				decoded, ok := decodedColumns[colName]
+				decoded, ok := decodedColumns[expected.Name]
 				require.True(t, ok)
 				require.EqualValues(t, expected.Value, decoded.Value)
 			}
@@ -959,14 +957,12 @@ func TestEncoderOtherTypes(t *testing.T) {
 		decodedRow, err := dec.NextRowChangedEvent()
 		require.NoError(t, err)
 
-		decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 		for _, column := range decodedRow.Columns {
-			colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-			decodedColumns[colName] = column
+			decodedColumns[column.Name] = column
 		}
 		for _, expected := range row.Columns {
-			colName := row.TableInfo.ForceGetColumnName(expected.ColumnID)
-			decoded, ok := decodedColumns[colName]
+			decoded, ok := decodedColumns[expected.Name]
 			require.True(t, ok)
 			require.EqualValues(t, expected.Value, decoded.Value)
 		}
@@ -1204,28 +1200,23 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
-				require.Equal(t, decodedRow.PhysicalTableID, event.PhysicalTableID)
 
-				decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {
-					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-					decodedColumns[colName] = column
+					decodedColumns[column.Name] = column
 				}
 				for _, col := range event.Columns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					decoded, ok := decodedColumns[colName]
+					decoded, ok := decodedColumns[col.Name]
 					require.True(t, ok)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
 
-				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
+				decodedPreviousColumns := make(map[string]*model.Column, len(decodedRow.PreColumns))
 				for _, column := range decodedRow.PreColumns {
-					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-					decodedPreviousColumns[colName] = column
+					decodedPreviousColumns[column.Name] = column
 				}
 				for _, col := range event.PreColumns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					decoded, ok := decodedPreviousColumns[colName]
+					decoded, ok := decodedPreviousColumns[col.Name]
 					require.True(t, ok)
 					require.EqualValues(t, col.Value, decoded.Value)
 				}
@@ -1336,25 +1327,21 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), updateEvent.TableInfo.GetSchemaName())
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), updateEvent.TableInfo.GetTableName())
 
-			decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {
-				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-				decodedColumns[colName] = column
+				decodedColumns[column.Name] = column
 			}
 			for _, col := range updateEvent.Columns {
-				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-				decoded, ok := decodedColumns[colName]
+				decoded, ok := decodedColumns[col.Name]
 				require.True(t, ok)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
-				colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-				decodedColumns[colName] = column
+				decodedColumns[column.Name] = column
 			}
 			for _, col := range updateEvent.PreColumns {
-				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-				decoded, ok := decodedColumns[colName]
+				decoded, ok := decodedColumns[col.Name]
 				require.True(t, ok)
 				require.EqualValues(t, col.Value, decoded.Value)
 			}
@@ -1432,11 +1419,9 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					obtainedValues[name] = value
 				}
 				for _, col := range event.Columns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-					if colFlag.IsHandleKey() {
-						require.Contains(t, dec.msg.Data, colName)
-						obtained := obtainedValues[colName]
+					if col.Flag.IsHandleKey() {
+						require.Contains(t, dec.msg.Data, col.Name)
+						obtained := obtainedValues[col.Name]
 						switch v := obtained.(type) {
 						case string:
 							var err error
@@ -1445,7 +1430,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 						}
 						require.EqualValues(t, col.Value, obtained)
 					} else {
-						require.NotContains(t, dec.msg.Data, colName)
+						require.NotContains(t, dec.msg.Data, col.Name)
 					}
 				}
 
@@ -1454,11 +1439,9 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					obtainedValues[name] = value
 				}
 				for _, col := range event.PreColumns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-					if colFlag.IsHandleKey() {
-						require.Contains(t, dec.msg.Old, colName)
-						obtained := obtainedValues[colName]
+					if col.Flag.IsHandleKey() {
+						require.Contains(t, dec.msg.Old, col.Name)
+						obtained := obtainedValues[col.Name]
 						switch v := obtained.(type) {
 						case string:
 							var err error
@@ -1467,7 +1450,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 						}
 						require.EqualValues(t, col.Value, obtained)
 					} else {
-						require.NotContains(t, dec.msg.Data, colName)
+						require.NotContains(t, dec.msg.Data, col.Name)
 					}
 				}
 
@@ -1493,49 +1476,43 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
 
-				decodedColumns := make(map[string]*model.ColumnData, len(decodedRow.Columns))
+				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {
-					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-					decodedColumns[colName] = column
+					decodedColumns[column.Name] = column
 				}
 				for _, col := range event.Columns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					decoded, ok := decodedColumns[colName]
+					decoded, ok := decodedColumns[col.Name]
 					require.True(t, ok)
-					colInfo := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-					if colInfo.IsBinary() {
+					if col.Flag.IsBinary() {
 						switch v := col.Value.(type) {
 						case []byte:
 							length := len(decoded.Value.([]uint8))
-							require.Equal(t, v[:length], decoded.Value, colName)
+							require.Equal(t, v[:length], decoded.Value, col.Name)
 						default:
-							require.EqualValues(t, col.Value, decoded.Value, colName)
+							require.EqualValues(t, col.Value, decoded.Value, col.Name)
 						}
 					} else {
-						require.EqualValues(t, col.Value, decoded.Value, colName)
+						require.EqualValues(t, col.Value, decoded.Value, col.Name)
 					}
 				}
 
 				clear(decodedColumns)
 				for _, column := range decodedRow.PreColumns {
-					colName := decodedRow.TableInfo.ForceGetColumnName(column.ColumnID)
-					decodedColumns[colName] = column
+					decodedColumns[column.Name] = column
 				}
 				for _, col := range event.PreColumns {
-					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
-					decoded, ok := decodedColumns[colName]
+					decoded, ok := decodedColumns[col.Name]
 					require.True(t, ok)
-					colInfo := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
-					if colInfo.IsBinary() {
+					if col.Flag.IsBinary() {
 						switch v := col.Value.(type) {
 						case []byte:
 							length := len(decoded.Value.([]uint8))
-							require.Equal(t, v[:length], decoded.Value, colName)
+							require.Equal(t, v[:length], decoded.Value, col.Name)
 						default:
-							require.EqualValues(t, col.Value, decoded.Value, colName)
+							require.EqualValues(t, col.Value, decoded.Value, col.Name)
 						}
 					} else {
-						require.EqualValues(t, col.Value, decoded.Value, colName)
+						require.EqualValues(t, col.Value, decoded.Value, col.Name)
 					}
 				}
 			}
