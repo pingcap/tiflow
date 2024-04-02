@@ -166,6 +166,8 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}()
 
+	// grpc stream can be canceled by this context when any goroutine meet error,
+	// the underline established grpc connections is unaffected.
 	g, gctx := errgroup.WithContext(ctx)
 	cc, err := c.grpcPool.Connect(gctx, rs.storeAddr)
 	if err != nil {
