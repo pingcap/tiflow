@@ -757,6 +757,10 @@ func (d *DDLEvent) FromJobWithArgs(
 		d.Query = fmt.Sprintf("ALTER TABLE `%s`.`%s` EXCHANGE PARTITION `%s` WITH TABLE `%s`.`%s`",
 			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
 			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
+
+		if strings.HasSuffix(upperQuery, "WITHOUT VALIDATION") {
+			d.Query += " WITHOUT VALIDATION"
+		}
 	default:
 		d.Query = job.Query
 	}
