@@ -56,6 +56,7 @@ type ConnAndClient struct {
 	conn   *Conn
 	array  *connArray
 	client cdcpb.ChangeData_EventFeedV2Client
+	closed atomic.Bool
 }
 
 // Conn is a connection.
@@ -161,8 +162,9 @@ func (c *ConnAndClient) Multiplexing() bool {
 
 // Release releases a ConnAndClient object.
 func (c *ConnAndClient) Release() {
-	if c.client != nil {
+	if c.client != nil && !c.closed.Load() {
 		_ = c.client.CloseSend()
+		c.closed.Store(true)
 	}
 	if c.conn != nil && c.array != nil {
 		c.array.release(c.conn, false)
