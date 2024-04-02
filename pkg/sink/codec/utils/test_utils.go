@@ -151,6 +151,7 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 	return ddlEvent, insert, &update, &deleteE
 }
 
+// LargeColumnKeyValues returns the key values of large columns
 func LargeColumnKeyValues() ([]string, []driver.Value) {
 	names := make([]string, 0, len(LargeTableColumns))
 	values := make([]driver.Value, 0, len(LargeTableColumns))
@@ -161,6 +162,7 @@ func LargeColumnKeyValues() ([]string, []driver.Value) {
 	return names, values
 }
 
+// LargeTableColumns is the columns of large table
 var LargeTableColumns = map[string]interface{}{
 	"t":           []uint8("127"),
 	"tu1":         []uint8("127"),
