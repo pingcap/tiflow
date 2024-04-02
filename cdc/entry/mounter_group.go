@@ -114,7 +114,7 @@ func (m *mounterGroup) runWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case pEvent := <-m.inputCh:
-			if pEvent.RawKV.OpType == model.OpTypeResolved {
+			if pEvent.RawKV.OpType == model.OpTypeWatermark {
 				pEvent.MarkFinished()
 				continue
 			}

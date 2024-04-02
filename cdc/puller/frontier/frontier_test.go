@@ -198,7 +198,7 @@ func TestSpanFrontierFallback(t *testing.T) {
 	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ Max] `, f.String())
 	checkFrontier(t, f)
 
-	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
+	// Bump, here we meet watermark fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
 }
@@ -522,7 +522,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 			selected := rand.Intn(totalLockedRanges)
 			count := 0
 			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
-				ts := state.ResolvedTs.Load()
+				ts := state.Watermark.Load()
 				startKey := span.StartKey
 				endKey := span.EndKey
 				if count == selected {
@@ -547,7 +547,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 			selected := rand.Intn(totalLockedRanges - 1)
 			count := 0
 			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
-				ts := state.ResolvedTs.Load()
+				ts := state.Watermark.Load()
 				startKey := span.StartKey
 				endKey := span.EndKey
 				if count == selected {

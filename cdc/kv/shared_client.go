@@ -202,8 +202,8 @@ type requestedTable struct {
 	stopped atomic.Bool
 
 	// To handle lock resolvings.
-	postUpdateRegionResolvedTs func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span)
-	staleLocksVersion          atomic.Uint64
+	postUpdateRegionWatermark func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span)
+	staleLocksVersion         atomic.Uint64
 }
 
 // NewSharedClient creates a client.
@@ -482,7 +482,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 		RegionId:     sri.verID.GetID(),
 		RequestId:    uint64(sri.requestedTable.subscriptionID),
 		RegionEpoch:  sri.rpcCtx.Meta.RegionEpoch,
-		CheckpointTs: sri.resolvedTs(),
+		CheckpointTs: sri.watermark(),
 		StartKey:     sri.span.StartKey,
 		EndKey:       sri.span.EndKey,
 		ExtraOp:      kvrpcpb.ExtraOp_ReadOldValue,
@@ -651,7 +651,7 @@ func (s *SharedClient) handleErrors(ctx context.Context) error {
 func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
 	if errInfo.requestedTable.rangeLock.UnlockRange(
 		errInfo.span.StartKey, errInfo.span.EndKey,
-		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs()) {
+		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.watermark()) {
 		s.onTableDrained(errInfo.requestedTable)
 		return nil
 	}
@@ -745,7 +745,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state.Watermark.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -802,7 +802,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		slowInitializeRegion := 0
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.Watermark)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -853,9 +853,9 @@ func (s *SharedClient) newRequestedTable(
 		eventCh:        eventCh,
 	}
 
-	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
+	rt.postUpdateRegionWatermark = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.Watermark.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}
@@ -874,7 +874,7 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
 
-	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
+	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionWatermark)
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),

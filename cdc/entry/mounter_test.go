@@ -311,7 +311,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	scheamStorage.AdvanceResolvedTs(ver.Ver)
+	scheamStorage.AdvanceWatermark(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
 	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
@@ -1016,7 +1016,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	schemaStorage.AdvanceWatermark(ver.Ver)
 
 	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
@@ -1152,7 +1152,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	schemaStorage.AdvanceWatermark(ver.Ver)
 
 	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
@@ -1282,7 +1282,7 @@ func TestDecodeRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	schemaStorage.AdvanceWatermark(ver.Ver)
 
 	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
 
@@ -1362,7 +1362,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	}
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	schemaStorage.AdvanceWatermark(ver.Ver)
 	mounter := NewMounter(schemaStorage, cfID, time.Local, f, cfg.Integrity).(*mounter)
 
 	type testCase struct {

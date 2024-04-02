@@ -525,7 +525,7 @@ type checksum struct {
 
 type message struct {
 	Version int `json:"version"`
-	// Schema and Table is empty for the resolved ts event.
+	// Schema and Table is empty for the watermark event.
 	Schema  string      `json:"database,omitempty"`
 	Table   string      `json:"table,omitempty"`
 	TableID int64       `json:"tableID,omitempty"`

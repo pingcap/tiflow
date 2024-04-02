@@ -107,7 +107,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
 		) puller.DDLPuller {
-			return &mockDDLPuller{resolvedTs: startTs - 1}
+			return &mockDDLPuller{watermark: startTs - 1}
 		},
 		// new ddl sink
 		func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink {

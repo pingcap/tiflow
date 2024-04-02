@@ -57,7 +57,7 @@ const (
 // TableStats of a table sink.
 type TableStats struct {
 	CheckpointTs model.Ts
-	ResolvedTs   model.Ts
+	Watermark    model.Ts
 	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
@@ -79,7 +79,7 @@ type SinkManager struct {
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
 
-	// redoDMLMgr is used to report the resolved ts of the table if redo log is enabled.
+	// redoDMLMgr is used to report the watermark of the table if redo log is enabled.
 	redoDMLMgr redo.DMLManager
 	// sourceManager is used by the sink manager to fetch data.
 	sourceManager *sourcemanager.SourceManager
@@ -480,7 +480,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 }
 
 func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) sorter.Position {
-	schemaTs := m.schemaStorage.ResolvedTs()
+	schemaTs := m.schemaStorage.Watermark()
 	if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
 		// schemaTs == math.MaxUint64 means it's in tests.
 		tableSinkUpperBoundTs = schemaTs + 1
@@ -710,7 +710,7 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := m.getUpperBound(tableSink.getReceivedSorterResolvedTs())
+			upperBound := m.getUpperBound(tableSink.getReceivedSorterWatermark())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -795,20 +795,20 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 	}
 }
 
-// UpdateReceivedSorterResolvedTs updates the received sorter resolved ts for the table.
+// UpdateReceivedSorterWatermark updates the received sorter watermark for the table.
 // NOTE: it's still possible to be called during m.Close is in calling, so Close should
 // take care of this.
-func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model.Ts) {
+func (m *SinkManager) UpdateReceivedSorterWatermark(span tablepb.Span, ts model.Ts) {
 	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		// It's possible that the table is in removing.
-		log.Debug("Table sink not found when updating resolved ts",
+		log.Debug("Table sink not found when updating watermark",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 		return
 	}
-	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
+	tableSink.(*tableSinkWrapper).updateReceivedSorterWatermark(ts)
 }
 
 // UpdateBarrierTs update all tableSink's barrierTs in the SinkManager
@@ -1025,12 +1025,12 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 		}
 	}
 
-	var resolvedTs model.Ts
-	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
+	var watermark model.Ts
+	// If redo log is enabled, we have to use redo log's watermark to calculate processor's min watermark.
 	if m.redoDMLMgr != nil {
-		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
+		watermark = m.redoDMLMgr.GetWatermark(span)
 	} else {
-		resolvedTs = tableSink.getReceivedSorterResolvedTs()
+		watermark = tableSink.getReceivedSorterWatermark()
 	}
 
 	sinkUpperBound := tableSink.getUpperBoundTs()
@@ -1044,7 +1044,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
-		ResolvedTs:   resolvedTs,
+		Watermark:    watermark,
 		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}

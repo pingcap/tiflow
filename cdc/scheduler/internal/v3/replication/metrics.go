@@ -60,12 +60,12 @@ var (
 			Name:      "slow_table_checkpoint_ts",
 			Help:      "The checkpoint ts of the slowest table",
 		}, []string{"namespace", "changefeed"})
-	slowestTableResolvedTsGauge = prometheus.NewGaugeVec(
+	slowestTableWatermarkGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_resolved_ts",
-			Help:      "The resolved ts of the slowest table",
+			Help:      "The watermark of the slowest table",
 		}, []string{"namespace", "changefeed"})
 	slowestTableStateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -81,12 +81,12 @@ var (
 			Name:      "slow_table_stage_checkpoint_ts",
 			Help:      "Checkpoint ts of each stage of the slowest table",
 		}, []string{"namespace", "changefeed", "stage"})
-	slowestTableStageResolvedTsGaugeVec = prometheus.NewGaugeVec(
+	slowestTableStageWatermarkGaugeVec = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_stage_resolved_ts",
-			Help:      "Resolved ts of each stage of the slowest table",
+			Help:      "Watermark of each stage of the slowest table",
 		}, []string{"namespace", "changefeed", "stage"})
 	slowestTableStageCheckpointTsLagGaugeVec = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -95,12 +95,12 @@ var (
 			Name:      "slow_table_stage_checkpoint_ts_lag",
 			Help:      "Checkpoint ts lag of each stage of the slowest table",
 		}, []string{"namespace", "changefeed", "stage"})
-	slowestTableStageResolvedTsLagGaugeVec = prometheus.NewGaugeVec(
+	slowestTableStageWatermarkLagGaugeVec = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_stage_resolved_ts_lag",
-			Help:      "Resolved ts lag of each stage of the slowest table",
+			Help:      "Watermark lag of each stage of the slowest table",
 		}, []string{"namespace", "changefeed", "stage"})
 	slowestTableStageCheckpointTsLagHistogramVec = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -110,12 +110,12 @@ var (
 			Help:      "Histogram of the slowest table checkpoint ts lag of each stage",
 			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
 		}, []string{"namespace", "changefeed", "stage"})
-	slowestTableStageResolvedTsLagHistogramVec = prometheus.NewHistogramVec(
+	slowestTableStageWatermarkLagHistogramVec = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_stage_resolved_ts_lag_histogram",
-			Help:      "Histogram of the slowest table resolved ts lag of each stage",
+			Help:      "Histogram of the slowest table watermark lag of each stage",
 			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
 		}, []string{"namespace", "changefeed", "stage"})
 	slowestTableRegionGaugeVec = prometheus.NewGaugeVec(
@@ -126,19 +126,19 @@ var (
 			Help:      "The number of regions captured by the slowest table",
 		}, []string{"namespace", "changefeed"})
 
-	slowestTablePullerResolvedTs = prometheus.NewGaugeVec(
+	slowestTablePullerWatermark = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_puller_resolved_ts",
-			Help:      "Puller Slowest ResolvedTs",
+			Help:      "Puller Slowest Watermark",
 		}, []string{"namespace", "changefeed"})
-	slowestTablePullerResolvedTsLag = prometheus.NewGaugeVec(
+	slowestTablePullerWatermarkLag = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "scheduler",
 			Name:      "slow_table_puller_resolved_ts_lag",
-			Help:      "Puller Slowest ResolvedTs lag",
+			Help:      "Puller Slowest Watermark lag",
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -150,16 +150,16 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(runningScheduleTaskGauge)
 	registry.MustRegister(slowestTableIDGauge)
 	registry.MustRegister(slowestTableCheckpointTsGauge)
-	registry.MustRegister(slowestTableResolvedTsGauge)
+	registry.MustRegister(slowestTableWatermarkGauge)
 	registry.MustRegister(slowestTableStateGauge)
 	registry.MustRegister(slowestTableStageCheckpointTsGaugeVec)
-	registry.MustRegister(slowestTableStageResolvedTsGaugeVec)
+	registry.MustRegister(slowestTableStageWatermarkGaugeVec)
 	registry.MustRegister(slowestTableStageCheckpointTsLagGaugeVec)
-	registry.MustRegister(slowestTableStageResolvedTsLagGaugeVec)
+	registry.MustRegister(slowestTableStageWatermarkLagGaugeVec)
 	registry.MustRegister(slowestTableStageCheckpointTsLagHistogramVec)
-	registry.MustRegister(slowestTableStageResolvedTsLagHistogramVec)
+	registry.MustRegister(slowestTableStageWatermarkLagHistogramVec)
 	registry.MustRegister(slowestTableRegionGaugeVec)
 
-	registry.MustRegister(slowestTablePullerResolvedTs)
-	registry.MustRegister(slowestTablePullerResolvedTsLag)
+	registry.MustRegister(slowestTablePullerWatermark)
+	registry.MustRegister(slowestTablePullerWatermarkLag)
 }

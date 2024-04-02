@@ -98,15 +98,15 @@ func newProcessor4Test(
 		p.sourceManager.spawn(ctx)
 
 		// NOTICE: we have to bind the sourceManager to the sinkManager
-		// otherwise the sinkManager will not receive the resolvedTs.
-		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+		// otherwise the sinkManager will not receive the watermark.
+		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterWatermark)
 
 		p.initialized = true
 		return nil
 	}
 
 	p.ddlHandler.r = &ddlHandler{
-		schemaStorage: &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64},
+		schemaStorage: &mockSchemaStorage{t: t, watermark: math.MaxUint64},
 	}
 	return p
 }
@@ -174,16 +174,16 @@ func initProcessor4Test(
 
 type mockSchemaStorage struct {
 	// dummy to provide default versions of unimplemented interface methods,
-	// as we only need ResolvedTs() and DoGC() in unit tests.
+	// as we only need Watermark() and DoGC() in unit tests.
 	entry.SchemaStorage
 
-	t          *testing.T
-	lastGcTs   uint64
-	resolvedTs uint64
+	t         *testing.T
+	lastGcTs  uint64
+	watermark uint64
 }
 
-func (s *mockSchemaStorage) ResolvedTs() uint64 {
-	return s.resolvedTs
+func (s *mockSchemaStorage) Watermark() uint64 {
+	return s.watermark
 }
 
 func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
@@ -242,7 +242,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
 	stats := p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
-	require.Equal(t, model.Ts(20), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.Watermark)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 	require.Len(t, p.sinkManager.r.GetAllCurrentTableSpans(), 1)
 	require.Equal(t, 1, p.sinkManager.r.GetAllCurrentTableSpansCount())
@@ -253,13 +253,13 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePreparing, state)
 
-	// Push the resolved ts, mock that sorterNode receive first resolved event.
+	// Push the watermark, mock that sorterNode receive first resolved event.
 	p.sourceManager.r.Add(
 		span,
 		[]*model.PolymorphicEvent{{
 			CRTs: 101,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 				CRTs:   101,
 			},
 		}}...,
@@ -280,7 +280,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
-	require.Equal(t, model.Ts(101), stats.ResolvedTs)
+	require.Equal(t, model.Ts(101), stats.Watermark)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 
 	// Start to replicate table-1.
@@ -330,7 +330,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
 	stats := p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
-	require.Equal(t, model.Ts(20), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.Watermark)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 	require.Len(t, p.sinkManager.r.GetAllCurrentTableSpans(), 1)
 	require.Equal(t, 1, p.sinkManager.r.GetAllCurrentTableSpansCount())
@@ -341,13 +341,13 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePreparing, state)
 
-	// Push the resolved ts, mock that sorterNode receive first resolved event.
+	// Push the watermark, mock that sorterNode receive first resolved event.
 	p.sourceManager.r.Add(
 		span,
 		[]*model.PolymorphicEvent{{
 			CRTs: 101,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 				CRTs:   101,
 			},
 		}}...,
@@ -369,21 +369,21 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
-	require.Equal(t, model.Ts(20), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.Watermark)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 
 	p.sinkManager.r.UpdateBarrierTs(50, nil)
 	stats = p.sinkManager.r.GetTableStats(span)
-	require.Equal(t, model.Ts(20), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.Watermark)
 	require.Equal(t, model.Ts(50), stats.BarrierTs)
 
 	// Start to replicate table-1.
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30, ResolvedTs: 60}, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30, Watermark: 60}, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	stats = p.sinkManager.r.GetTableStats(span)
-	require.Equal(t, model.Ts(60), stats.ResolvedTs)
+	require.Equal(t, model.Ts(60), stats.Watermark)
 	require.Equal(t, model.Ts(50), stats.BarrierTs)
 
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
@@ -499,7 +499,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// push the resolvedTs and checkpointTs
+	// push the watermark and checkpointTs
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return status, true, nil
 	})
@@ -670,7 +670,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 		status.CheckpointTs = 5
 		return status, true, nil
 	})
-	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
+	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).watermark = 10
 
 	// init tick
 	checkChangefeedNormal(changefeed)
@@ -691,7 +691,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// Global resolved ts has advanced while schema storage stalls.
+	// Global watermark has advanced while schema storage stalls.
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return status, true, nil
 	})
@@ -703,7 +703,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	require.Equal(t, uint64(10), status.BarrierTs)
 
 	// Schema storage has advanced too.
-	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
+	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).watermark = 15
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()

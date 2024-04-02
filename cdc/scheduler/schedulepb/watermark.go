@@ -17,8 +17,8 @@ import "github.com/pingcap/tiflow/cdc/model"
 
 // Watermark contains various ts variables to make code easier
 type Watermark struct {
-	CheckpointTs     model.Ts
-	ResolvedTs       model.Ts
-	LastSyncedTs     model.Ts
-	PullerResolvedTs model.Ts
+	CheckpointTs    model.Ts
+	Watermark       model.Ts
+	LastSyncedTs    model.Ts
+	PullerWatermark model.Ts
 }

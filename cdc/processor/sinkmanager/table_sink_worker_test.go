@@ -55,12 +55,12 @@ func genPolymorphicEventWithNilRow(startTs,
 	}
 }
 
-func genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
+func genPolymorphicResolvedEvent(watermark uint64) *model.PolymorphicEvent {
 	return &model.PolymorphicEvent{
-		CRTs: resolvedTs,
+		CRTs: watermark,
 		RawKV: &model.RawKVEntry{
-			OpType: model.OpTypeResolved,
-			CRTs:   resolvedTs,
+			OpType: model.OpTypeWatermark,
+			CRTs:   watermark,
 		},
 	}
 }

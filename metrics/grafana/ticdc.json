@@ -254,7 +254,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The lag between changefeed resolved ts and the latest ts of upstream TiDB.",
+          "description": "The lag between changefeed watermark and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -306,7 +306,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-resolvedts",
+              "legendFormat": "{{namespace}}-{{changefeed}}-watermark",
               "refId": "A"
             }
           ],
@@ -314,7 +314,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Changefeed resolved ts lag",
+          "title": "Changefeed watermark lag",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -668,7 +668,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The min resolved ts lag of each TiKV",
+          "description": "The min watermark lag of each TiKV",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -755,7 +755,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "TiKV min resolved ts lag",
+          "title": "TiKV min watermark lag",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -1455,7 +1455,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The rate of TiKV advancing resolved ts.",
+          "description": "The rate of TiKV advancing watermark.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1891,7 +1891,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The number of failed count of advancing resolved ts.",
+          "description": "The number of failed count of advancing watermark.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1953,7 +1953,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "TiKV advance resolved ts fail/m",
+          "title": "TiKV advance watermark fail/m",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -3593,7 +3593,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The resolved ts of changefeeds.",
+          "description": "The watermark of changefeeds.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -3674,7 +3674,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Changefeed resolved ts",
+          "title": "Changefeed watermark",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -3821,7 +3821,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The lag between changefeed resolved ts and the latest ts of upstream TiDB.",
+          "description": "The lag between changefeed watermark and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -3889,7 +3889,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Changefeed resolved ts lag",
+          "title": "Changefeed watermark lag",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -3932,7 +3932,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The difference between changefeed resolved ts and changefeed checkpointTs.",
+          "description": "The difference between changefeed watermark and changefeed checkpointTs.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -3992,7 +3992,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Difference of resolvedTs and checkpointTs",
+          "title": "Difference of watermark and checkpointTs",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -9398,7 +9398,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The lag between changefeed resolved ts and the latest ts of upstream TiDB.",
+          "description": "The lag between changefeed watermark and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -9450,7 +9450,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-resolvedts",
+              "legendFormat": "{{namespace}}-{{changefeed}}-watermark",
               "refId": "C"
             }
           ],
@@ -9458,7 +9458,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Changefeed resolved ts lag",
+          "title": "Changefeed watermark lag",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -10516,7 +10516,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The resolved ts of the slowest table.",
+          "description": "The watermark of the slowest table.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -10590,7 +10590,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Slowest table resolved ts",
+          "title": "Slowest table watermark",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -11092,7 +11092,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Resolved ts of the slowest table each stage.",
+          "description": "Watermark of the slowest table each stage.",
           "fieldConfig": {
             "defaults": {
               "unit": "dateTimeAsIso"
@@ -11160,7 +11160,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Slow table resolved ts",
+          "title": "Slow table watermark",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -11203,7 +11203,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The details of changefeed lag including resolved ts and checkpoint ts in different stages.",
+          "description": "The details of changefeed lag including watermark and checkpoint ts in different stages.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -16840,7 +16840,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The min resolved ts of each TiKV",
+          "description": "The min watermark of each TiKV",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -16936,7 +16936,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Min resolved ts",
+          "title": "Min watermark",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -17153,7 +17153,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Resolved ts lag duration percentile",
+          "title": "Watermark lag duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,

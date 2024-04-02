@@ -114,7 +114,7 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 		uniqueID: genUniqueID(),
 		ch:       s.channs[getDB(span, len(s.dbs))],
 	}
-	state.maxReceivedResolvedTs.Store(startTs)
+	state.maxReceivedWatermark.Store(startTs)
 	s.tables.ReplaceOrInsert(span, state)
 	s.mu.Unlock()
 }
@@ -150,12 +150,12 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 	}
 
 	maxCommitTs := state.maxReceivedCommitTs.Load()
-	maxResolvedTs := state.maxReceivedResolvedTs.Load()
+	maxWatermark := state.maxReceivedWatermark.Load()
 	for _, event := range events {
 		if event.IsResolved() {
-			if event.CRTs > maxResolvedTs {
-				maxResolvedTs = event.CRTs
-				state.maxReceivedResolvedTs.Store(maxResolvedTs)
+			if event.CRTs > maxWatermark {
+				maxWatermark = event.CRTs
+				state.maxReceivedWatermark.Store(maxWatermark)
 			}
 		} else {
 			if event.CRTs > maxCommitTs {
@@ -257,15 +257,15 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) sorter.TableStats {
 	}
 
 	maxCommitTs := state.maxReceivedCommitTs.Load()
-	maxResolvedTs := state.maxReceivedResolvedTs.Load()
-	if maxCommitTs < maxResolvedTs {
+	maxWatermark := state.maxReceivedWatermark.Load()
+	if maxCommitTs < maxWatermark {
 		// In case, there is no write for the table,
-		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
-		maxCommitTs = maxResolvedTs
+		// we use maxWatermark as maxCommitTs to make the stats meaningful.
+		maxCommitTs = maxWatermark
 	}
 	return sorter.TableStats{
-		ReceivedMaxCommitTs:   maxCommitTs,
-		ReceivedMaxResolvedTs: maxResolvedTs,
+		ReceivedMaxCommitTs:  maxCommitTs,
+		ReceivedMaxWatermark: maxWatermark,
 	}
 }
 
@@ -361,22 +361,22 @@ type tableState struct {
 	ch             *chann.DrainableChann[eventWithTableID]
 	sortedResolved atomic.Uint64 // indicates events are ready for fetching.
 	// For statistics.
-	maxReceivedCommitTs   atomic.Uint64
-	maxReceivedResolvedTs atomic.Uint64
+	maxReceivedCommitTs  atomic.Uint64
+	maxReceivedWatermark atomic.Uint64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
 	cleaned sorter.Position
 }
 
-// DBBatchEvent is used to contains a batch of events and the corresponding resolvedTs info.
+// DBBatchEvent is used to contains a batch of events and the corresponding watermark info.
 type DBBatchEvent struct {
 	batch         *pebble.Batch
 	batchResolved *spanz.HashMap[model.Ts]
 }
 
-// batchCommitAndUpdateResolvedTs commits the batch and updates the resolved ts of the table.
-func (s *EventSorter) batchCommitAndUpdateResolvedTs(
+// batchCommitAndUpdateWatermark commits the batch and updates the watermark of the table.
+func (s *EventSorter) batchCommitAndUpdateWatermark(
 	batchCh chan *DBBatchEvent,
 	id int,
 ) {
@@ -403,7 +403,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 				writeDuration.Observe(time.Since(start).Seconds())
 			}
 
-			// update resolved ts after commit successfully
+			// update watermark after commit successfully
 			batchResolved := batchEvent.batchResolved
 			batchResolved.Range(func(span tablepb.Span, resolved uint64) bool {
 				s.mu.RLock()
@@ -430,9 +430,9 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 // handleEvents encode events from channel and try to write them into pebble.
 // It will commit the batch when the size of the batch is larger than batchCommitSize or
 // the time since the last commit is larger than batchCommitInterval.
-// It will also update the resolved ts of the table when the batch is committed.
+// It will also update the watermark of the table when the batch is committed.
 // Considering commit is a heavy operation, we make [fetch and decode event] and
-// [do commit and update resolved ts] as two separate goroutines to make pipeline.
+// [do commit and update watermark] as two separate goroutines to make pipeline.
 func (s *EventSorter) handleEvents(
 	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
 ) {
@@ -440,7 +440,7 @@ func (s *EventSorter) handleEvents(
 	// The number of channels will not affect the performance of commit consumption currently.
 	batchCh := make(chan *DBBatchEvent, 8)
 	s.wg.Add(1)
-	go s.batchCommitAndUpdateResolvedTs(batchCh, id)
+	go s.batchCommitAndUpdateWatermark(batchCh, id)
 
 	ticker := time.NewTicker(batchCommitInterval / 2)
 	defer ticker.Stop()

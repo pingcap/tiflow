@@ -30,10 +30,10 @@ func (z *LogMeta) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "CheckpointTs")
 				return
 			}
-		case "resolvedTs":
-			z.ResolvedTs, err = dc.ReadUint64()
+		case "watermark":
+			z.Watermark, err = dc.ReadUint64()
 			if err != nil {
-				err = msgp.WrapError(err, "ResolvedTs")
+				err = msgp.WrapError(err, "Watermark")
 				return
 			}
 		default:
@@ -60,14 +60,14 @@ func (z LogMeta) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "CheckpointTs")
 		return
 	}
-	// write "resolvedTs"
+	// write "watermark"
 	err = en.Append(0xaa, 0x72, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x64, 0x54, 0x73)
 	if err != nil {
 		return
 	}
-	err = en.WriteUint64(z.ResolvedTs)
+	err = en.WriteUint64(z.Watermark)
 	if err != nil {
-		err = msgp.WrapError(err, "ResolvedTs")
+		err = msgp.WrapError(err, "Watermark")
 		return
 	}
 	return
@@ -80,9 +80,9 @@ func (z LogMeta) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "checkpointTs"
 	o = append(o, 0x82, 0xac, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x73)
 	o = msgp.AppendUint64(o, z.CheckpointTs)
-	// string "resolvedTs"
+	// string "watermark"
 	o = append(o, 0xaa, 0x72, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x64, 0x54, 0x73)
-	o = msgp.AppendUint64(o, z.ResolvedTs)
+	o = msgp.AppendUint64(o, z.Watermark)
 	return
 }
 
@@ -110,10 +110,10 @@ func (z *LogMeta) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "CheckpointTs")
 				return
 			}
-		case "resolvedTs":
-			z.ResolvedTs, bts, err = msgp.ReadUint64Bytes(bts)
+		case "watermark":
+			z.Watermark, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "ResolvedTs")
+				err = msgp.WrapError(err, "Watermark")
 				return
 			}
 		default:

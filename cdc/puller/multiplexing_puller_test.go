@@ -62,21 +62,21 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
 					Span: spanz.ToSpan([]byte("t_a"), []byte("t_c")),
-				}}, ResolvedTs: uint64(1001),
+				}}, Watermark: uint64(1001),
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
 					Span: spanz.ToSpan([]byte("t_c"), []byte("t_d")),
-				}}, ResolvedTs: uint64(1002),
+				}}, Watermark: uint64(1002),
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
 					Span: spanz.ToSpan([]byte("t_d"), []byte("t_e")),
-				}}, ResolvedTs: uint64(1000),
+				}}, Watermark: uint64(1000),
 			},
 		},
 	}
@@ -90,7 +90,7 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 
 	select {
 	case ev := <-outputCh:
-		require.Equal(t, model.OpTypeResolved, ev.OpType)
+		require.Equal(t, model.OpTypeWatermark, ev.OpType)
 		require.Equal(t, uint64(1000), ev.CRTs)
 	case <-time.NewTimer(100 * time.Millisecond).C:
 		require.True(t, false, "must get an event")

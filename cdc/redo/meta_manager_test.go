@@ -46,9 +46,9 @@ func TestInitAndWriteMeta(t *testing.T) {
 
 	// write some meta and log files
 	metas := []common.LogMeta{
-		{CheckpointTs: 1, ResolvedTs: 2},
-		{CheckpointTs: 8, ResolvedTs: 9},
-		{CheckpointTs: 9, ResolvedTs: 11},
+		{CheckpointTs: 1, Watermark: 2},
+		{CheckpointTs: 8, Watermark: 9},
+		{CheckpointTs: 9, Watermark: 11},
 	}
 
 	var toRemoveFiles []string
@@ -92,7 +92,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 	}, time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return uint64(11) == m.metaResolvedTs.getFlushed()
+		return uint64(11) == m.metaWatermark.getFlushed()
 	}, time.Second, 50*time.Millisecond)
 
 	for _, fileName := range toRemoveFiles {
@@ -127,10 +127,10 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 
 	// write some meta and log files
 	metas := []common.LogMeta{
-		{CheckpointTs: 1, ResolvedTs: 2},
-		{CheckpointTs: 8, ResolvedTs: 9},
-		{CheckpointTs: 9, ResolvedTs: 11},
-		{CheckpointTs: 11, ResolvedTs: 12},
+		{CheckpointTs: 1, Watermark: 2},
+		{CheckpointTs: 8, Watermark: 9},
+		{CheckpointTs: 9, Watermark: 11},
+		{CheckpointTs: 11, Watermark: 12},
 	}
 	var toRemoveFiles []string
 	for _, meta := range metas {
@@ -173,7 +173,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 	}, time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return startTs == m.metaResolvedTs.getFlushed()
+		return startTs == m.metaWatermark.getFlushed()
 	}, time.Second, 50*time.Millisecond)
 
 	for _, fileName := range toRemoveFiles {
@@ -188,8 +188,8 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 }
 
 func testWriteMeta(ctx context.Context, t *testing.T, m *metaManager) {
-	checkMeta := func(targetCheckpointTs, targetResolvedTs uint64) {
-		var checkpointTs, resolvedTs uint64
+	checkMeta := func(targetCheckpointTs, targetWatermark uint64) {
+		var checkpointTs, watermark uint64
 		var metas []*common.LogMeta
 		cnt := 0
 		m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
@@ -206,20 +206,20 @@ func testWriteMeta(ctx context.Context, t *testing.T, m *metaManager) {
 			return nil
 		})
 		require.Equal(t, 1, cnt)
-		common.ParseMeta(metas, &checkpointTs, &resolvedTs)
+		common.ParseMeta(metas, &checkpointTs, &watermark)
 		require.Equal(t, targetCheckpointTs, checkpointTs)
-		require.Equal(t, targetResolvedTs, resolvedTs)
+		require.Equal(t, targetWatermark, watermark)
 	}
 
 	// test both regressed
 	meta := m.GetFlushedMeta()
 	m.UpdateMeta(1, 2)
-	checkMeta(meta.CheckpointTs, meta.ResolvedTs)
+	checkMeta(meta.CheckpointTs, meta.Watermark)
 
 	// test checkpoint regressed
 	m.UpdateMeta(3, 20)
 	require.Eventually(t, func() bool {
-		return m.metaResolvedTs.getFlushed() == 20
+		return m.metaWatermark.getFlushed() == 20
 	}, time.Second, 50*time.Millisecond)
 	checkMeta(meta.CheckpointTs, 20)
 
@@ -306,7 +306,7 @@ func TestGCAndCleanup(t *testing.T) {
 	}, time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return startTs == m.metaResolvedTs.getFlushed()
+		return startTs == m.metaWatermark.getFlushed()
 	}, time.Second, 50*time.Millisecond)
 
 	checkGC(startTs)

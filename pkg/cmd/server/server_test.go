@@ -205,8 +205,8 @@ func TestParseCfg(t *testing.T) {
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
 			Puller: &config.PullerConfig{
-				EnableResolvedTsStuckDetection: false,
-				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+				EnableWatermarkStuckDetection: false,
+				WatermarkStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
 		ClusterID: "default",
@@ -352,8 +352,8 @@ check-balance-interval = "10s"
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
 			Puller: &config.PullerConfig{
-				EnableResolvedTsStuckDetection: false,
-				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+				EnableWatermarkStuckDetection: false,
+				WatermarkStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
 		ClusterID: "default",
@@ -491,8 +491,8 @@ cert-allowed-cn = ["dd","ee"]
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
 			Puller: &config.PullerConfig{
-				EnableResolvedTsStuckDetection: false,
-				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+				EnableWatermarkStuckDetection: false,
+				WatermarkStuckInterval:        config.TomlDuration(5 * time.Minute),
 			},
 		},
 		ClusterID: "default",
@@ -556,8 +556,8 @@ unknown3 = 3
 			MetaStoreConfig: config.MetaStoreConfiguration{},
 		},
 		Puller: &config.PullerConfig{
-			EnableResolvedTsStuckDetection: false,
-			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			EnableWatermarkStuckDetection: false,
+			WatermarkStuckInterval:        config.TomlDuration(5 * time.Minute),
 		},
 	}, o.serverConfig.Debug)
 }

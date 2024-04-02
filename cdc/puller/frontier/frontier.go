@@ -27,7 +27,7 @@ import (
 // use fakeRegionID ,so this span will be cached
 const fakeRegionID = 0
 
-// Frontier checks resolved event of spans and moves the global resolved ts ahead
+// Frontier checks resolved event of spans and moves the global watermark ahead
 type Frontier interface {
 	Forward(regionID uint64, span tablepb.Span, ts uint64)
 	Frontier() uint64

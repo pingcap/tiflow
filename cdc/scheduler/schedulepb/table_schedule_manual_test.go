@@ -42,7 +42,7 @@ func benchmarkMessageHeartbeatResponse(
 					State:   tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 433331421532337260,
-						ResolvedTs:   433331421532337261,
+						Watermark:    433331421532337261,
 					},
 				})
 		}

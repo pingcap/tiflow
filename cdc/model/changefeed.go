@@ -581,7 +581,7 @@ func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
 
 // ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
 type ChangeFeedStatusForAPI struct {
-	ResolvedTs   uint64 `json:"resolved-ts"`
+	Watermark    uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
@@ -589,7 +589,7 @@ type ChangeFeedStatusForAPI struct {
 type ChangeFeedSyncedStatusForAPI struct {
 	CheckpointTs        uint64 `json:"checkpoint-ts"`
 	LastSyncedTs        uint64 `json:"last-sync-time"`
-	PullerResolvedTs    uint64 `json:"puller-resolved-ts"`
+	PullerWatermark     uint64 `json:"puller-resolved-ts"`
 	SyncedCheckInterval int64  `json:"synced-check-interval"`
 	CheckpointInterval  int64  `json:"checkpoint-interval"`
 }

@@ -70,7 +70,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 	require.NoError(t, err)
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	schemaStorage.AdvanceWatermark(ver.Ver)
 
 	mounter := entry.NewMounter(schemaStorage, changefeed, time.UTC, filter, cfg.Integrity)
 

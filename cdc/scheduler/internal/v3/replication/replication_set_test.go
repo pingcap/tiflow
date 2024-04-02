@@ -66,27 +66,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -100,33 +100,33 @@ func TestNewReplicationSet(t *testing.T) {
 				State:    ReplicationSetStateReplicating,
 				Captures: map[string]Role{"1": RolePrimary},
 				Checkpoint: tablepb.Checkpoint{
-					CheckpointTs: 2, ResolvedTs: 2,
+					CheckpointTs: 2, Watermark: 2,
 				},
 				Stats: tablepb.Stats{
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 2,
-							ResolvedTs:   2,
+							Watermark:    2,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 2,
-							ResolvedTs:   2,
+							Watermark:    2,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 2,
-							ResolvedTs:   2,
+							Watermark:    2,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 2,
-							ResolvedTs:   2,
+							Watermark:    2,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 2,
-							ResolvedTs:   2,
+							Watermark:    2,
 							LastSyncedTs: 0,
 						},
 					},
@@ -137,7 +137,7 @@ func TestNewReplicationSet(t *testing.T) {
 				"1": {
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
-						CheckpointTs: 1, ResolvedTs: 1,
+						CheckpointTs: 1, Watermark: 1,
 					},
 				},
 			},
@@ -151,27 +151,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -194,33 +194,33 @@ func TestNewReplicationSet(t *testing.T) {
 				},
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: 2,
-					ResolvedTs:   2,
+					Watermark:    2,
 				},
 				Stats: tablepb.Stats{
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -231,14 +231,14 @@ func TestNewReplicationSet(t *testing.T) {
 					State: tablepb.TableStatePreparing,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 1,
-						ResolvedTs:   1,
+						Watermark:    1,
 					},
 				},
 				"2": {
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 2,
-						ResolvedTs:   2,
+						Watermark:    2,
 					},
 				},
 			},
@@ -255,27 +255,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -303,27 +303,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -349,27 +349,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -397,27 +397,27 @@ func TestNewReplicationSet(t *testing.T) {
 					StageCheckpoints: map[string]tablepb.Checkpoint{
 						"puller-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"puller-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sink": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-ingress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 						"sorter-egress": {
 							CheckpointTs: 0,
-							ResolvedTs:   0,
+							Watermark:    0,
 							LastSyncedTs: 0,
 						},
 					},
@@ -694,7 +694,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 		State: tablepb.TableStateReplicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 3,
-			ResolvedTs:   4,
+			Watermark:    4,
 		},
 	})
 	require.Nil(t, err)
@@ -704,7 +704,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   4,
+		Watermark:    4,
 	}, r.Checkpoint)
 }
 
@@ -843,14 +843,14 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		State: tablepb.TableStateReplicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 1,
-			ResolvedTs:   1,
+			Watermark:    1,
 		},
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 1,
-		ResolvedTs:   1,
+		Watermark:    1,
 	}, r.Checkpoint)
 
 	// AddTableRequest is lost somehow, send AddTableRequest again.
@@ -902,7 +902,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		State: tablepb.TableStateReplicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 2,
-			ResolvedTs:   3,
+			Watermark:    3,
 		},
 	})
 	require.Nil(t, err)
@@ -921,7 +921,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 2,
-		ResolvedTs:   3,
+		Watermark:    3,
 	}, r.Checkpoint)
 
 	// Removing source is in-progress.
@@ -930,7 +930,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		State: tablepb.TableStateStopping,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 3,
-			ResolvedTs:   3,
+			Watermark:    3,
 		},
 	})
 	require.Nil(t, err)
@@ -940,7 +940,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   3,
+		Watermark:    3,
 	}, r.Checkpoint)
 
 	// Source is removed.
@@ -950,7 +950,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		State: tablepb.TableStateStopped,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 3,
-			ResolvedTs:   4,
+			Watermark:    4,
 		},
 	})
 	require.Nil(t, err)
@@ -973,11 +973,11 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   4,
+		Watermark:    4,
 	}, r.Checkpoint)
 
 	// Source stopped message is lost somehow.
-	// rClone has checkpoint ts 3, resolved ts 3
+	// rClone has checkpoint ts 3, watermark 3
 	msgs, err = rClone.handleTableStatus(source, &tablepb.TableStatus{
 		Span:  tablepb.Span{TableID: tableID},
 		State: tablepb.TableStateAbsent,
@@ -994,7 +994,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 					IsSecondary: false,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 3,
-						ResolvedTs:   3,
+						Watermark:    3,
 					},
 				},
 			},
@@ -1005,7 +1005,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.False(t, rClone.hasRole(RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   3,
+		Watermark:    3,
 	}, rClone.Checkpoint)
 
 	// Commit -> Replicating
@@ -1389,7 +1389,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 		State: tablepb.TableStateStopped,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 3,
-			ResolvedTs:   4,
+			Watermark:    4,
 		},
 	})
 	require.Nil(t, err)
@@ -1399,7 +1399,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   4,
+		Watermark:    4,
 	}, r.Checkpoint)
 
 	// Source sends a heartbeat response.
@@ -1414,7 +1414,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, tablepb.Checkpoint{
 		CheckpointTs: 3,
-		ResolvedTs:   4,
+		Watermark:    4,
 	}, r.Checkpoint)
 
 	// Commit -> Replicating
@@ -1618,11 +1618,11 @@ func TestReplicationSetHeap_Less(t *testing.T) {
 	})
 	h = append(h, &ReplicationSet{
 		Span:       spanz.TableIDToComparableSpan(1),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, ResolvedTs: 3},
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, Watermark: 3},
 	})
 	h = append(h, &ReplicationSet{
 		Span:       spanz.TableIDToComparableSpan(2),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, ResolvedTs: 4},
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, Watermark: 4},
 	})
 	require.True(t, h.Less(1, 0))
 	require.True(t, h.Less(2, 1))
@@ -1696,14 +1696,14 @@ func TestUpdateCheckpointAndStats(t *testing.T) {
 		{
 			checkpoint: tablepb.Checkpoint{
 				CheckpointTs: 1,
-				ResolvedTs:   2,
+				Watermark:    2,
 			},
 			stats: tablepb.Stats{},
 		},
 		{
 			checkpoint: tablepb.Checkpoint{
 				CheckpointTs: 2,
-				ResolvedTs:   1,
+				Watermark:    1,
 			},
 			stats: tablepb.Stats{},
 		},

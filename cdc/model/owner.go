@@ -82,10 +82,10 @@ type TaskPosition struct {
 	//
 	// Deprecated: only used in API. TODO: remove API usage.
 	CheckPointTs uint64 `json:"checkpoint-ts"`
-	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
+	// The event that satisfies CommitTs <= Watermark can be synchronized. This is updated by corresponding processor.
 	//
 	// Deprecated: only used in API. TODO: remove API usage.
-	ResolvedTs uint64 `json:"resolved-ts"`
+	Watermark uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	//
 	// Deprecated: only used in API. TODO: remove API usage.
@@ -120,7 +120,7 @@ func (tp *TaskPosition) String() string {
 func (tp *TaskPosition) Clone() *TaskPosition {
 	ret := &TaskPosition{
 		CheckPointTs: tp.CheckPointTs,
-		ResolvedTs:   tp.ResolvedTs,
+		Watermark:    tp.Watermark,
 		Count:        tp.Count,
 	}
 	if tp.Error != nil {
@@ -173,7 +173,7 @@ func (o *TableOperation) TableProcessed() bool {
 }
 
 // TableApplied returns whether the table has finished the startup procedure.
-// Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
+// Returns true if table has been processed by processor and watermark reaches global watermark.
 func (o *TableOperation) TableApplied() bool {
 	return o.Status == OperFinished
 }

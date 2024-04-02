@@ -26,9 +26,9 @@ import (
 func TestEventSorter(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		input      []*model.RawKVEntry
-		resolvedTs uint64
-		expect     []*model.RawKVEntry
+		input     []*model.RawKVEntry
+		watermark uint64
+		expect    []*model.RawKVEntry
 	}{
 		{
 			input: []*model.RawKVEntry{
@@ -37,8 +37,8 @@ func TestEventSorter(t *testing.T) {
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 2, OpType: model.OpTypeDelete},
 			},
-			resolvedTs: 0,
-			expect:     []*model.RawKVEntry{},
+			watermark: 0,
+			expect:    []*model.RawKVEntry{},
 		},
 		{
 			input: []*model.RawKVEntry{
@@ -46,7 +46,7 @@ func TestEventSorter(t *testing.T) {
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 5, OpType: model.OpTypePut},
 			},
-			resolvedTs: 3,
+			watermark: 3,
 			expect: []*model.RawKVEntry{
 				{CRTs: 1, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypeDelete},
@@ -56,28 +56,28 @@ func TestEventSorter(t *testing.T) {
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 3,
-			expect:     []*model.RawKVEntry{},
+			input:     []*model.RawKVEntry{},
+			watermark: 3,
+			expect:    []*model.RawKVEntry{},
 		},
 		{
 			input: []*model.RawKVEntry{
 				{CRTs: 7, OpType: model.OpTypePut},
 			},
-			resolvedTs: 6,
+			watermark: 6,
 			expect: []*model.RawKVEntry{
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 5, OpType: model.OpTypePut},
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 6,
-			expect:     []*model.RawKVEntry{},
+			input:     []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			watermark: 6,
+			expect:    []*model.RawKVEntry{},
 		},
 		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 8,
+			input:     []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			watermark: 8,
 			expect: []*model.RawKVEntry{
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypeDelete},
@@ -85,9 +85,9 @@ func TestEventSorter(t *testing.T) {
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 15,
-			expect:     []*model.RawKVEntry{},
+			input:     []*model.RawKVEntry{},
+			watermark: 15,
+			expect:    []*model.RawKVEntry{},
 		},
 	}
 
@@ -99,8 +99,8 @@ func TestEventSorter(t *testing.T) {
 		for _, entry := range tc.input {
 			es.Add(span, model.NewPolymorphicEvent(entry))
 		}
-		es.Add(span, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		iter := es.FetchByTable(span, nextToFetch, sorter.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
+		es.Add(span, model.NewWatermarkPolymorphicEvent(0, tc.watermark))
+		iter := es.FetchByTable(span, nextToFetch, sorter.Position{CommitTs: tc.watermark, StartTs: tc.watermark})
 		for _, expect := range tc.expect {
 			event, pos, _ := iter.Next()
 			require.NotNil(t, event)
@@ -159,13 +159,13 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			false,
@@ -175,7 +175,7 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			&model.PolymorphicEvent{
@@ -197,7 +197,7 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			false,

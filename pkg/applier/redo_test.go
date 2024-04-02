@@ -37,7 +37,7 @@ var _ reader.RedoLogReader = &MockReader{}
 // MockReader is a mock redo log reader that implements LogReader interface
 type MockReader struct {
 	checkpointTs uint64
-	resolvedTs   uint64
+	watermark    uint64
 	redoLogCh    chan *model.RowChangedEvent
 	ddlEventCh   chan *model.DDLEvent
 }
@@ -45,13 +45,13 @@ type MockReader struct {
 // NewMockReader creates a new MockReader
 func NewMockReader(
 	checkpointTs uint64,
-	resolvedTs uint64,
+	watermark uint64,
 	redoLogCh chan *model.RowChangedEvent,
 	ddlEventCh chan *model.DDLEvent,
 ) *MockReader {
 	return &MockReader{
 		checkpointTs: checkpointTs,
-		resolvedTs:   resolvedTs,
+		watermark:    watermark,
 		redoLogCh:    redoLogCh,
 		ddlEventCh:   ddlEventCh,
 	}
@@ -83,8 +83,8 @@ func (br *MockReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, error) 
 }
 
 // ReadMeta implements LogReader.ReadMeta
-func (br *MockReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
-	return br.checkpointTs, br.resolvedTs, nil
+func (br *MockReader) ReadMeta(ctx context.Context) (checkpointTs, watermark uint64, err error) {
+	return br.checkpointTs, br.watermark, nil
 }
 
 func TestApply(t *testing.T) {
@@ -92,11 +92,11 @@ func TestApply(t *testing.T) {
 	defer cancel()
 
 	checkpointTs := uint64(1000)
-	resolvedTs := uint64(2000)
+	watermark := uint64(2000)
 	redoLogCh := make(chan *model.RowChangedEvent, 1024)
 	ddlEventCh := make(chan *model.DDLEvent, 1024)
 	createMockReader := func(ctx context.Context, cfg *RedoApplierConfig) (reader.RedoLogReader, error) {
-		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
+		return NewMockReader(checkpointTs, watermark, redoLogCh, ddlEventCh), nil
 	}
 
 	dbIndex := 0
@@ -154,7 +154,7 @@ func TestApply(t *testing.T) {
 		},
 		{
 			StartTs:   1200,
-			CommitTs:  resolvedTs,
+			CommitTs:  watermark,
 			TableInfo: tableInfo,
 			PreColumns: model.Columns2ColumnDatas([]*model.Column{
 				{
@@ -191,7 +191,7 @@ func TestApply(t *testing.T) {
 			Type:  timodel.ActionCreateTable,
 		},
 		{
-			CommitTs: resolvedTs,
+			CommitTs: watermark,
 			TableInfo: &model.TableInfo{
 				TableName: model.TableName{
 					Schema: "test", Table: "resolved",
@@ -267,7 +267,7 @@ func getMockDB(t *testing.T) *sql.DB {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	// First, apply row which commitTs equal to resolvedTs
+	// First, apply row which commitTs equal to watermark
 	mock.ExpectBegin()
 	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
 		WithArgs(1).
@@ -277,7 +277,7 @@ func getMockDB(t *testing.T) *sql.DB {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	// Then, apply ddl which commitTs equal to resolvedTs
+	// Then, apply ddl which commitTs equal to watermark
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("create table resolved(id int not null unique key)").WillReturnResult(sqlmock.NewResult(1, 1))

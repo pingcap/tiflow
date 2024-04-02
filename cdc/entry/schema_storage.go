@@ -39,7 +39,7 @@ import (
 type SchemaStorage interface {
 	// GetSnapshot returns the nearest snapshot which currentTs is less than or
 	// equal to the ts.
-	// It may block caller when ts is larger than the resolvedTs of SchemaStorage.
+	// It may block caller when ts is larger than the Watermark of SchemaStorage.
 	GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schema.Snapshot
@@ -59,10 +59,10 @@ type SchemaStorage interface {
 	// Ineligible means that the table does not have a primary key or unique key.
 	IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error)
 
-	// AdvanceResolvedTs advances the resolved ts
-	AdvanceResolvedTs(ts uint64)
-	// ResolvedTs returns the resolved ts of the schema storage
-	ResolvedTs() uint64
+	// AdvanceWatermark advances the watermark
+	AdvanceWatermark(ts uint64)
+	// Watermark returns the watermark of the schema storage
+	Watermark() uint64
 	// DoGC removes snaps that are no longer needed at the specified TS.
 	// It returns the TS from which the oldest maintained snapshot is valid.
 	DoGC(ts uint64) (lastSchemaTs uint64)
@@ -73,7 +73,7 @@ type schemaStorage struct {
 	snapsMu sync.RWMutex
 
 	gcTs          uint64
-	resolvedTs    uint64
+	watermark     uint64
 	schemaVersion int64
 
 	filter filter.Filter
@@ -111,7 +111,7 @@ func NewSchemaStorage(
 	}
 	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
-		resolvedTs:     startTs,
+		Watermark:      startTs,
 		forceReplicate: forceReplicate,
 		filter:         filter,
 		id:             id,
@@ -128,10 +128,10 @@ func (s *schemaStorage) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
 	}
-	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
-	if ts > resolvedTs {
+	watermark := atomic.LoadUint64(&s.Watermark)
+	if ts > watermark {
 		// Caller should retry.
-		return nil, cerror.ErrSchemaStorageUnresolved.GenWithStackByArgs(ts, resolvedTs)
+		return nil, cerror.ErrSchemaStorageUnresolved.GenWithStackByArgs(ts, watermark)
 	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
@@ -194,7 +194,7 @@ func (s *schemaStorage) GetLastSnapshot() *schema.Snapshot {
 func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
 		s.schemaVersion = job.BinlogInfo.SchemaVersion
-		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+		s.AdvanceWatermark(job.BinlogInfo.FinishedTS)
 		return nil
 	}
 	s.snapsMu.Lock()
@@ -234,7 +234,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	}
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
-	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+	s.AdvanceWatermark(job.BinlogInfo.FinishedTS)
 	log.Info("schemaStorage: update snapshot by the DDL job",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
@@ -331,17 +331,17 @@ func (s *schemaStorage) IsIneligibleTable(
 	return snap.IsIneligibleTableID(tableID), nil
 }
 
-// AdvanceResolvedTs advances the resolved. Not thread safe.
+// AdvanceWatermark advances the resolved. Not thread safe.
 // NOTE: SHOULD NOT call it concurrently
-func (s *schemaStorage) AdvanceResolvedTs(ts uint64) {
-	if ts > s.ResolvedTs() {
-		atomic.StoreUint64(&s.resolvedTs, ts)
+func (s *schemaStorage) AdvanceWatermark(ts uint64) {
+	if ts > s.Watermark() {
+		atomic.StoreUint64(&s.watermark, ts)
 	}
 }
 
-// ResolvedTs returns the resolved ts of the schema storage
-func (s *schemaStorage) ResolvedTs() uint64 {
-	return atomic.LoadUint64(&s.resolvedTs)
+// Watermark returns the watermark of the schema storage
+func (s *schemaStorage) Watermark() uint64 {
+	return atomic.LoadUint64(&s.watermark)
 }
 
 // DoGC removes snaps which of ts less than this specified ts
@@ -551,13 +551,13 @@ func (s *MockSchemaStorage) BuildDDLEvents(
 	return nil, nil
 }
 
-// AdvanceResolvedTs implements SchemaStorage.
-func (s *MockSchemaStorage) AdvanceResolvedTs(ts uint64) {
+// AdvanceWatermark implements SchemaStorage.
+func (s *MockSchemaStorage) AdvanceWatermark(ts uint64) {
 	atomic.StoreUint64(&s.Resolved, ts)
 }
 
-// ResolvedTs implements SchemaStorage.
-func (s *MockSchemaStorage) ResolvedTs() uint64 {
+// Watermark implements SchemaStorage.
+func (s *MockSchemaStorage) Watermark() uint64 {
 	return atomic.LoadUint64(&s.Resolved)
 }
 

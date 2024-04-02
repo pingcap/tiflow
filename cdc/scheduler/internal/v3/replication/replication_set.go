@@ -151,35 +151,35 @@ func NewReplicationSet(
 		Captures:   make(map[string]Role),
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: checkpoint,
-			ResolvedTs:   checkpoint,
+			Watermark:    checkpoint,
 		},
 		// We need to initialize the stats with the checkpoint ts.
 		// Only when the table into ReplicationSetStateReplicating state, owner will update the table's stats
 		// In advanceCheckpoint, it will first check table.Stats.StageCheckpoints["puller-egress"] whether it is nil,
-		// Only when it's not nil, then consider it join to calculate the slowest puller resolved ts.
+		// Only when it's not nil, then consider it join to calculate the slowest puller watermark.
 		// If we don't initialize the stats here, when the new table is stuck in incremental scan
-		// the min puller resolved ts calulcated in advanceCheckpoint will increase continuely
+		// the min puller watermark calulcated in advanceCheckpoint will increase continuely
 		Stats: tablepb.Stats{
 			StageCheckpoints: map[string]tablepb.Checkpoint{
 				"puller-egress": {
 					CheckpointTs: checkpoint,
-					ResolvedTs:   checkpoint,
+					Watermark:    checkpoint,
 				},
 				"puller-ingress": {
 					CheckpointTs: checkpoint,
-					ResolvedTs:   checkpoint,
+					Watermark:    checkpoint,
 				},
 				"sink": {
 					CheckpointTs: checkpoint,
-					ResolvedTs:   checkpoint,
+					Watermark:    checkpoint,
 				},
 				"sorter-ingress": {
 					CheckpointTs: checkpoint,
-					ResolvedTs:   checkpoint,
+					Watermark:    checkpoint,
 				},
 				"sorter-egress": {
 					CheckpointTs: checkpoint,
-					ResolvedTs:   checkpoint,
+					Watermark:    checkpoint,
 				},
 			},
 		},
@@ -980,7 +980,7 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 		State: tablepb.TableStateReplicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: r.Checkpoint.CheckpointTs,
-			ResolvedTs:   r.Checkpoint.ResolvedTs,
+			Watermark:    r.Checkpoint.Watermark,
 		},
 	}
 	return r.poll(&status, r.Primary)
@@ -1022,33 +1022,33 @@ func (r *ReplicationSet) handleCaptureShutdown(
 func (r *ReplicationSet) updateCheckpointAndStats(
 	checkpoint tablepb.Checkpoint, stats tablepb.Stats,
 ) {
-	if checkpoint.ResolvedTs < checkpoint.CheckpointTs {
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+	if checkpoint.Watermark < checkpoint.CheckpointTs {
+		log.Warn("schedulerv3: watermark should not less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Int64("tableID", r.Span.TableID),
 			zap.Any("replicationSet", r),
 			zap.Any("checkpoint", checkpoint))
 
-		// TODO: resolvedTs should not be zero, but we have to handle it for now.
-		if checkpoint.ResolvedTs == 0 {
-			checkpoint.ResolvedTs = checkpoint.CheckpointTs
+		// TODO: watermark should not be zero, but we have to handle it for now.
+		if checkpoint.Watermark == 0 {
+			checkpoint.Watermark = checkpoint.CheckpointTs
 		}
 	}
 	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
 		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
 	}
-	if r.Checkpoint.ResolvedTs < checkpoint.ResolvedTs {
-		r.Checkpoint.ResolvedTs = checkpoint.ResolvedTs
+	if r.Checkpoint.Watermark < checkpoint.Watermark {
+		r.Checkpoint.Watermark = checkpoint.Watermark
 	}
-	if r.Checkpoint.ResolvedTs < r.Checkpoint.CheckpointTs {
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+	if r.Checkpoint.Watermark < r.Checkpoint.CheckpointTs {
+		log.Warn("schedulerv3: watermark should not less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Int64("tableID", r.Span.TableID),
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
-			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
+			zap.Any("watermark", r.Checkpoint.Watermark))
 	}
 
 	if r.Checkpoint.LastSyncedTs < checkpoint.LastSyncedTs {
@@ -1081,7 +1081,7 @@ func (h SetHeap) Less(i, j int) bool {
 		return true
 	}
 	if h[i].Checkpoint.CheckpointTs == h[j].Checkpoint.CheckpointTs {
-		return h[i].Checkpoint.ResolvedTs > h[j].Checkpoint.ResolvedTs
+		return h[i].Checkpoint.Watermark > h[j].Checkpoint.Watermark
 	}
 	return false
 }

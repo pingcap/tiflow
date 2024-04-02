@@ -560,46 +560,46 @@ func (r *Manager) AdvanceCheckpoint(
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
 ) (watermark schedulepb.Watermark) {
-	var redoFlushedResolvedTs model.Ts
+	var redoFlushedWatermark model.Ts
 	limitBarrierWithRedo := func(watermark *schedulepb.Watermark) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
-		redoFlushedResolvedTs = flushedMeta.ResolvedTs
+		redoFlushedWatermark = flushedMeta.Watermark
 		log.Debug("owner gets flushed redo meta",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("flushedCheckpointTs", flushedMeta.CheckpointTs),
-			zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
-		if flushedMeta.ResolvedTs < watermark.ResolvedTs {
-			watermark.ResolvedTs = flushedMeta.ResolvedTs
+			zap.Uint64("flushedWatermark", flushedMeta.Watermark))
+		if flushedMeta.Watermark < watermark.Watermark {
+			watermark.Watermark = flushedMeta.Watermark
 		}
 
-		if watermark.CheckpointTs > watermark.ResolvedTs {
-			watermark.CheckpointTs = watermark.ResolvedTs
+		if watermark.CheckpointTs > watermark.Watermark {
+			watermark.CheckpointTs = watermark.Watermark
 		}
 
-		if barrier.GlobalBarrierTs > watermark.ResolvedTs {
-			barrier.GlobalBarrierTs = watermark.ResolvedTs
+		if barrier.GlobalBarrierTs > watermark.Watermark {
+			barrier.GlobalBarrierTs = watermark.Watermark
 		}
 	}
 	defer func() {
-		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
+		if redoFlushedWatermark != 0 && barrier.GlobalBarrierTs > redoFlushedWatermark {
 			log.Panic("barrierTs should never greater than redo flushed",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Uint64("barrierTs", barrier.GlobalBarrierTs),
-				zap.Uint64("redoFlushedResolvedTs", redoFlushedResolvedTs))
+				zap.Uint64("redoFlushedWatermark", redoFlushedWatermark))
 		}
 	}()
 
 	r.slowestPuller = tablepb.Span{}
 	r.slowestSink = tablepb.Span{}
-	resolvedTsOfSlowestSink := model.Ts(math.MaxUint64)
+	watermarkOfSlowestSink := model.Ts(math.MaxUint64)
 
 	watermark = schedulepb.Watermark{
-		CheckpointTs:     math.MaxUint64,
-		ResolvedTs:       math.MaxUint64,
-		LastSyncedTs:     0,
-		PullerResolvedTs: math.MaxUint64,
+		CheckpointTs:    math.MaxUint64,
+		Watermark:       math.MaxUint64,
+		LastSyncedTs:    0,
+		PullerWatermark: math.MaxUint64,
 	}
 
 	cannotProceed := false
@@ -627,26 +627,26 @@ func (r *Manager) AdvanceCheckpoint(
 					tableSpanEndFound = true
 				}
 
-				// Find the minimum checkpoint ts and resolved ts.
+				// Find the minimum checkpoint ts and watermark.
 				if watermark.CheckpointTs > table.Checkpoint.CheckpointTs ||
 					(watermark.CheckpointTs == table.Checkpoint.CheckpointTs &&
-						resolvedTsOfSlowestSink > table.Checkpoint.ResolvedTs) {
+						watermarkOfSlowestSink > table.Checkpoint.Watermark) {
 					watermark.CheckpointTs = table.Checkpoint.CheckpointTs
 					r.slowestSink = span
-					resolvedTsOfSlowestSink = table.Checkpoint.ResolvedTs
+					watermarkOfSlowestSink = table.Checkpoint.Watermark
 				}
-				if watermark.ResolvedTs > table.Checkpoint.ResolvedTs {
-					watermark.ResolvedTs = table.Checkpoint.ResolvedTs
+				if watermark.Watermark > table.Checkpoint.Watermark {
+					watermark.Watermark = table.Checkpoint.Watermark
 				}
 
 				// Find the max lastSyncedTs of all tables.
 				if watermark.LastSyncedTs < table.Checkpoint.LastSyncedTs {
 					watermark.LastSyncedTs = table.Checkpoint.LastSyncedTs
 				}
-				// Find the minimum puller resolved ts.
+				// Find the minimum puller watermark.
 				if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
-					if watermark.PullerResolvedTs > pullerCkpt.ResolvedTs {
-						watermark.PullerResolvedTs = pullerCkpt.ResolvedTs
+					if watermark.PullerWatermark > pullerCkpt.Watermark {
+						watermark.PullerWatermark = pullerCkpt.Watermark
 						r.slowestPuller = span
 					}
 				}
@@ -678,32 +678,32 @@ func (r *Manager) AdvanceCheckpoint(
 	if cannotProceed {
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
-			watermark.ResolvedTs = barrier.RedoBarrierTs
+			watermark.Watermark = barrier.RedoBarrierTs
 			watermark.LastSyncedTs = checkpointCannotProceed
-			watermark.PullerResolvedTs = checkpointCannotProceed
+			watermark.PullerWatermark = checkpointCannotProceed
 			limitBarrierWithRedo(&watermark)
 		}
 		return schedulepb.Watermark{
-			CheckpointTs:     checkpointCannotProceed,
-			ResolvedTs:       checkpointCannotProceed,
-			LastSyncedTs:     checkpointCannotProceed,
-			PullerResolvedTs: checkpointCannotProceed,
+			CheckpointTs:    checkpointCannotProceed,
+			Watermark:       checkpointCannotProceed,
+			LastSyncedTs:    checkpointCannotProceed,
+			PullerWatermark: checkpointCannotProceed,
 		}
 	}
 
-	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
+	// If currentTables is empty, we should advance newWatermark to global barrier ts and
 	// advance newCheckpointTs to min table barrier ts.
-	if watermark.ResolvedTs == math.MaxUint64 || watermark.CheckpointTs == math.MaxUint64 {
-		if watermark.CheckpointTs != watermark.ResolvedTs || currentTables.Len() != 0 {
-			log.Panic("schedulerv3: newCheckpointTs and newResolvedTs should be both maxUint64 "+
+	if watermark.Watermark == math.MaxUint64 || watermark.CheckpointTs == math.MaxUint64 {
+		if watermark.CheckpointTs != watermark.Watermark || currentTables.Len() != 0 {
+			log.Panic("schedulerv3: newCheckpointTs and newWatermark should be both maxUint64 "+
 				"if currentTables is empty",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
-				zap.Uint64("newResolvedTs", watermark.ResolvedTs),
+				zap.Uint64("newWatermark", watermark.Watermark),
 				zap.Any("currentTables", currentTables))
 		}
-		watermark.ResolvedTs = barrier.GlobalBarrierTs
+		watermark.Watermark = barrier.GlobalBarrierTs
 		watermark.CheckpointTs = barrier.MinTableBarrierTs
 	}
 
@@ -712,7 +712,7 @@ func (r *Manager) AdvanceCheckpoint(
 		// TODO: add panic after we fix the bug that newCheckpointTs > minTableBarrierTs.
 		// log.Panic("schedulerv3: newCheckpointTs should not be larger than minTableBarrierTs",
 		// 	zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
-		// 	zap.Uint64("newResolvedTs", watermark.ResolvedTs),
+		// 	zap.Uint64("newWatermark", watermark.Watermark),
 		// 	zap.Any("currentTables", currentTables.currentTables),
 		// 	zap.Any("barrier", barrier.Barrier),
 		// 	zap.Any("minTableBarrierTs", barrier.MinTableBarrierTs))
@@ -729,15 +729,15 @@ func (r *Manager) AdvanceCheckpoint(
 	}
 
 	if redoMetaManager.Enabled() {
-		if watermark.ResolvedTs > barrier.RedoBarrierTs {
-			watermark.ResolvedTs = barrier.RedoBarrierTs
+		if watermark.Watermark > barrier.RedoBarrierTs {
+			watermark.Watermark = barrier.RedoBarrierTs
 		}
-		redoMetaManager.UpdateMeta(watermark.CheckpointTs, watermark.ResolvedTs)
+		redoMetaManager.UpdateMeta(watermark.CheckpointTs, watermark.Watermark)
 		log.Debug("owner updates redo meta",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
-			zap.Uint64("newResolvedTs", watermark.ResolvedTs))
+			zap.Uint64("newWatermark", watermark.Watermark))
 		limitBarrierWithRedo(&watermark)
 	}
 
@@ -766,7 +766,7 @@ func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
 			zap.Int64("tableID", table.Span.TableID),
 			zap.String("tableStatus", table.State.String()),
 			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
-			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
+			zap.Uint64("watermark", table.Checkpoint.Watermark),
 			zap.Duration("checkpointLag", currentPDTime.
 				Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
 	}
@@ -785,8 +785,8 @@ func (r *Manager) CollectMetrics() {
 		phyCkpTs := oracle.ExtractPhysical(table.Checkpoint.CheckpointTs)
 		slowestTableCheckpointTsGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkpTs))
-		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
-		slowestTableResolvedTsGauge.
+		phyRTs := oracle.ExtractPhysical(table.Checkpoint.Watermark)
+		slowestTableWatermarkGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
 
 		// Slow table latency metrics.
@@ -801,25 +801,25 @@ func (r *Manager) CollectMetrics() {
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
 			slowestTableStageCheckpointTsLagHistogramVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
-			// Resolved ts
-			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
-			slowestTableStageResolvedTsGaugeVec.
+			// Watermark
+			phyRTs := oracle.ExtractPhysical(checkpoint.Watermark)
+			slowestTableStageWatermarkGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
-			resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
-			slowestTableStageResolvedTsLagGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
-			slowestTableStageResolvedTsLagHistogramVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
+			watermarkLag := float64(phyCurrentTs-phyRTs) / 1e3
+			slowestTableStageWatermarkLagGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(watermarkLag)
+			slowestTableStageWatermarkLagHistogramVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(watermarkLag)
 		}
 		// Barrier ts
 		stage := "barrier"
 		phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
-		slowestTableStageResolvedTsGaugeVec.
+		slowestTableStageWatermarkGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
 		barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
-		slowestTableStageResolvedTsLagGaugeVec.
+		slowestTableStageWatermarkLagGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
-		slowestTableStageResolvedTsLagHistogramVec.
+		slowestTableStageWatermarkLagHistogramVec.
 			WithLabelValues(cf.Namespace, cf.ID, stage).Observe(barrierTsLag)
 		// Region count
 		slowestTableRegionGaugeVec.
@@ -864,12 +864,12 @@ func (r *Manager) CollectMetrics() {
 
 	if table, ok := r.spans.Get(r.slowestPuller); ok {
 		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
-			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
-			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
+			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.Watermark)
+			slowestTablePullerWatermark.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
 
 			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
 			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
-			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
+			slowestTablePullerWatermarkLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
 		}
 	}
 }
@@ -881,7 +881,7 @@ func (r *Manager) CleanMetrics() {
 	slowestTableIDGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	slowestTableStateGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	slowestTableCheckpointTsGauge.DeleteLabelValues(cf.Namespace, cf.ID)
-	slowestTableResolvedTsGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableWatermarkGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	runningScheduleTaskGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,
@@ -896,11 +896,11 @@ func (r *Manager) CleanMetrics() {
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
 	slowestTableStageCheckpointTsGaugeVec.Reset()
-	slowestTableStageResolvedTsGaugeVec.Reset()
+	slowestTableStageWatermarkGaugeVec.Reset()
 	slowestTableStageCheckpointTsLagGaugeVec.Reset()
-	slowestTableStageResolvedTsLagGaugeVec.Reset()
+	slowestTableStageWatermarkLagGaugeVec.Reset()
 	slowestTableStageCheckpointTsLagHistogramVec.Reset()
-	slowestTableStageResolvedTsLagHistogramVec.Reset()
+	slowestTableStageWatermarkLagHistogramVec.Reset()
 	slowestTableRegionGaugeVec.Reset()
 }
 

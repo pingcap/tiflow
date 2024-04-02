@@ -61,7 +61,7 @@ func jonToRawKVEntry(t *testing.T, job *timodel.Job) *model.RawKVEntry {
 
 func tsToRawKVEntry(_ *testing.T, ts model.Ts) *model.RawKVEntry {
 	return &model.RawKVEntry{
-		OpType:  model.OpTypeResolved,
+		OpType:  model.OpTypeWatermark,
 		CRTs:    ts,
 		StartTs: ts,
 	}
@@ -77,10 +77,10 @@ func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
 	puller.Input(context.Background(), rawTs, []tablepb.Span{})
 }
 
-func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
+func waitWatermark(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
-			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
+		if p.(*ddlJobPullerImpl).getWatermark() < targetTs {
+			return fmt.Errorf("watermark %d < targetTs %d", p.(*ddlJobPullerImpl).getWatermark(), targetTs)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
@@ -125,7 +125,7 @@ func TestHandleRenameTable(t *testing.T) {
 
 	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
-	ddlJobPullerImpl.setResolvedTs(startTs)
+	ddlJobPullerImpl.setWatermark(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
@@ -167,38 +167,38 @@ func TestHandleRenameTable(t *testing.T) {
 		job := helper.DDL2Job("create database test1")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t1(id int)")
 		remainTables[0] = job.TableID
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t2(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t3(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t5(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create database ignore1")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table ignore1.a(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
 
@@ -225,22 +225,22 @@ func TestHandleRenameTable(t *testing.T) {
 		job := helper.DDL2Job("create database test2")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t1(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t2(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t3(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test2.t1 to test2.t11, test2.t2 to test2.t22, test2.t3 to test2.t33")
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
@@ -253,18 +253,18 @@ func TestHandleRenameTable(t *testing.T) {
 		job := helper.DDL2Job("create database Test3")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table Test3.t1(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// skip this table
 		job = helper.DDL2Job("create table Test3.t2(id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table Test3.t1 to Test3.t11, Test3.t2 to Test3.t22")
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
@@ -280,34 +280,34 @@ func TestHandleRenameTable(t *testing.T) {
 		job := helper.DDL2Job("create table test1.t99 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
 		job = helper.DDL2Job("create table test1.t1000 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
 		job = helper.DDL2Job("create table test1.t888 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t20230808 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t202308081 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t202308082 (id int)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
-		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+		waitWatermark(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 		// since test1.99 in filter rule, we replicate it
 		job = helper.DDL2Job("rename table test1.t99 to test1.t999")
 		skip, err := ddlJobPullerImpl.handleJob(job)
@@ -352,7 +352,7 @@ func TestHandleJob(t *testing.T) {
 	defer helper.Close()
 	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
-	ddlJobPullerImpl.setResolvedTs(startTs)
+	ddlJobPullerImpl.setWatermark(startTs)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
 		"test1.t1",
@@ -573,7 +573,7 @@ func TestDDLPuller(t *testing.T) {
 	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
-	ddlJobPullerImpl.setResolvedTs(startTs)
+	ddlJobPullerImpl.setWatermark(startTs)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -585,13 +585,13 @@ func TestDDLPuller(t *testing.T) {
 	defer wg.Wait()
 	defer p.Close()
 
-	resolvedTs, ddl := p.PopFrontDDL()
-	require.Equal(t, resolvedTs, startTs)
+	watermark, ddl := p.PopFrontDDL()
+	require.Equal(t, watermark, startTs)
 	require.Nil(t, ddl)
 
-	// test send resolvedTs
+	// test send watermark
 	inputTs(t, ddlJobPullerImpl, 15)
-	waitResolvedTsGrowing(t, p, 15)
+	waitWatermarkGrowing(t, p, 15)
 
 	// test send ddl job out of order
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
@@ -610,20 +610,20 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 16},
 		Query:      "create table t2(id int)",
 	})
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(15))
+	watermark, ddl = p.PopFrontDDL()
+	require.Equal(t, watermark, uint64(15))
 	require.Nil(t, ddl)
 
 	inputTs(t, ddlJobPullerImpl, 20)
-	waitResolvedTsGrowing(t, p, 16)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(16))
+	waitWatermarkGrowing(t, p, 16)
+	watermark, ddl = p.PopFrontDDL()
+	require.Equal(t, watermark, uint64(16))
 	require.Equal(t, ddl.ID, int64(1))
 
 	// DDL could be processed with a delay, wait here for a pending DDL job is added
-	waitResolvedTsGrowing(t, p, 18)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(18))
+	waitWatermarkGrowing(t, p, 18)
+	watermark, ddl = p.PopFrontDDL()
+	require.Equal(t, watermark, uint64(18))
 	require.Equal(t, ddl.ID, int64(2))
 
 	// test add ddl job repeated
@@ -646,17 +646,17 @@ func TestDDLPuller(t *testing.T) {
 	})
 
 	inputTs(t, ddlJobPullerImpl, 30)
-	waitResolvedTsGrowing(t, p, 25)
+	waitWatermarkGrowing(t, p, 25)
 
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(25))
+	watermark, ddl = p.PopFrontDDL()
+	require.Equal(t, watermark, uint64(25))
 	require.Equal(t, ddl.ID, int64(3))
 	_, ddl = p.PopFrontDDL()
 	require.Nil(t, ddl)
 
-	waitResolvedTsGrowing(t, p, 30)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(30))
+	waitWatermarkGrowing(t, p, 30)
+	watermark, ddl = p.PopFrontDDL()
+	require.Equal(t, watermark, uint64(30))
 	require.Nil(t, ddl)
 
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
@@ -669,14 +669,14 @@ func TestDDLPuller(t *testing.T) {
 	})
 
 	inputTs(t, ddlJobPullerImpl, 40)
-	waitResolvedTsGrowing(t, p, 40)
-	resolvedTs, ddl = p.PopFrontDDL()
+	waitWatermarkGrowing(t, p, 40)
+	watermark, ddl = p.PopFrontDDL()
 	// no ddl should be received
-	require.Equal(t, resolvedTs, uint64(40))
+	require.Equal(t, watermark, uint64(40))
 	require.Nil(t, ddl)
 }
 
-func TestResolvedTsStuck(t *testing.T) {
+func TestWatermarkStuck(t *testing.T) {
 	// For observing the logs
 	zapcore, logs := observer.New(zap.WarnLevel)
 	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
@@ -703,7 +703,7 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
-	ddlJobPullerImpl.setResolvedTs(startTs)
+	ddlJobPullerImpl.setWatermark(startTs)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -719,25 +719,25 @@ func TestResolvedTsStuck(t *testing.T) {
 	defer p.Close()
 
 	// test initialize state
-	resolvedTs, ddl := p.PopFrontDDL()
-	require.Equal(t, resolvedTs, startTs)
+	watermark, ddl := p.PopFrontDDL()
+	require.Equal(t, watermark, startTs)
 	require.Nil(t, ddl)
 
 	inputTs(t, ddlJobPullerImpl, 30)
-	waitResolvedTsGrowing(t, p, 30)
+	waitWatermarkGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
 
 	inputTs(t, ddlJobPullerImpl, 40)
-	waitResolvedTsGrowing(t, p, 40)
+	waitWatermarkGrowing(t, p, 40)
 }
 
-// waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
-// DDL, DDL resolved ts reaches targetTs.
-func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
+// waitWatermarkGrowing can wait the first DDL reaches targetTs or if no pending
+// DDL, DDL watermark reaches targetTs.
+func waitWatermarkGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		resolvedTs := p.ResolvedTs()
-		if resolvedTs < targetTs {
-			return errors.New("resolvedTs < targetTs")
+		watermark := p.Watermark()
+		if watermark < targetTs {
+			return errors.New("watermark < targetTs")
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))

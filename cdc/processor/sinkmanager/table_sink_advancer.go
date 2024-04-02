@@ -132,7 +132,7 @@ func (a *tableSinkAdvancer) advance(isLastTime bool) (err error) {
 		// hasn't been recorded yet. To avoid losing it, record it manually.
 		if isLastTime && a.pendingTxnSize > 0 {
 			a.sinkMemQuota.Record(a.task.span,
-				model.NewResolvedTs(a.currTxnCommitTs), a.pendingTxnSize)
+				model.NewWatermark(a.currTxnCommitTs), a.pendingTxnSize)
 			a.pendingTxnSize = 0
 		}
 	}
@@ -295,19 +295,19 @@ func advanceTableSinkWithBatchID(
 	batchID uint64,
 	sinkMemQuota *memquota.MemQuota,
 ) error {
-	resolvedTs := model.NewResolvedTs(commitTs)
-	resolvedTs.Mode = model.BatchResolvedMode
-	resolvedTs.BatchID = batchID
+	watermark := model.NewWatermark(commitTs)
+	watermark.Mode = model.BatchResolvedMode
+	watermark.BatchID = batchID
 	log.Debug("Advance table sink with batch ID",
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Any("resolvedTs", resolvedTs),
+		zap.Any("watermark", watermark),
 		zap.Uint64("size", size))
 	if size > 0 {
-		sinkMemQuota.Record(t.span, resolvedTs, size)
+		sinkMemQuota.Record(t.span, watermark, size)
 	}
-	return t.tableSink.updateResolvedTs(resolvedTs)
+	return t.tableSink.updateWatermark(watermark)
 }
 
 func advanceTableSink(
@@ -316,17 +316,17 @@ func advanceTableSink(
 	size uint64,
 	sinkMemQuota *memquota.MemQuota,
 ) error {
-	resolvedTs := model.NewResolvedTs(commitTs)
+	watermark := model.NewWatermark(commitTs)
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Any("resolvedTs", resolvedTs),
+		zap.Any("watermark", watermark),
 		zap.Uint64("size", size))
 	if size > 0 {
-		sinkMemQuota.Record(t.span, resolvedTs, size)
+		sinkMemQuota.Record(t.span, watermark, size)
 	}
-	return t.tableSink.updateResolvedTs(resolvedTs)
+	return t.tableSink.updateWatermark(watermark)
 }
 
 func needEmitAndAdvance(splitTxn bool, committedTxnSize uint64, pendingTxnSize uint64) bool {

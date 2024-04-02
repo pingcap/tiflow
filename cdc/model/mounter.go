@@ -37,7 +37,7 @@ func (r RowChangedDatums) IsEmpty() bool {
 type PolymorphicEvent struct {
 	StartTs  uint64
 	CRTs     uint64
-	Resolved *ResolvedTs
+	Resolved *Watermark
 
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
@@ -56,8 +56,8 @@ func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV.
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
-	if rawKV.OpType == OpTypeResolved {
-		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
+	if rawKV.OpType == OpTypeWatermark {
+		return NewWatermarkPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
 		StartTs: rawKV.StartTs,
@@ -66,11 +66,11 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	}
 }
 
-// NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts.
-func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
+// NewWatermarkPolymorphicEvent creates a new PolymorphicEvent with the watermark.
+func NewWatermarkPolymorphicEvent(regionID uint64, watermark uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:  resolvedTs,
-		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
+		CRTs:  watermark,
+		RawKV: &RawKVEntry{CRTs: watermark, OpType: OpTypeWatermark, RegionID: regionID},
 		Row:   nil,
 	}
 }
@@ -80,10 +80,10 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
 
-// IsResolved returns true if the event is resolved. Note that this function can
+// IsWatermark returns true if the event is watermark. Note that this function can
 // only be called when `RawKV != nil`.
-func (e *PolymorphicEvent) IsResolved() bool {
-	return e.RawKV.OpType == OpTypeResolved
+func (e *PolymorphicEvent) IsWatermark() bool {
+	return e.RawKV.OpType == OpTypeWatermark
 }
 
 // SetUpFinishedCh set up the finished chan, should be called before mounting the event.
@@ -112,13 +112,13 @@ func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
 	return nil
 }
 
-// ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
+// ComparePolymorphicEvents compares two events by CRTs, Watermark, StartTs, Delete/Put order.
 // It returns true if and only if i should precede j.
 func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 	if i.CRTs == j.CRTs {
-		if i.IsResolved() {
+		if i.IsWatermark() {
 			return false
-		} else if j.IsResolved() {
+		} else if j.IsWatermark() {
 			return true
 		}
 
@@ -144,37 +144,37 @@ type ResolvedMode int
 
 const (
 	// NormalResolvedMode means that all events whose commitTs is less than or equal to
-	// `resolved.Ts` are sent to Sink.
+	// `Watermark.Ts` are sent to Sink.
 	NormalResolvedMode ResolvedMode = iota
 	// BatchResolvedMode means that all events whose commitTs is less than
-	// 'resolved.Ts' are sent to Sink.
+	// 'Watermark.Ts' are sent to Sink.
 	BatchResolvedMode
 )
 
-// ResolvedTs is the resolved timestamp of sink module.
-type ResolvedTs struct {
+// Watermark is the resolved timestamp of sink module.
+type Watermark struct {
 	Mode    ResolvedMode
 	Ts      uint64
 	BatchID uint64
 }
 
-// NewResolvedTs creates a normal ResolvedTs.
-func NewResolvedTs(t uint64) ResolvedTs {
-	return ResolvedTs{Ts: t, Mode: NormalResolvedMode, BatchID: math.MaxUint64}
+// NewWatermark creates a normal Watermark.
+func NewWatermark(t uint64) Watermark {
+	return Watermark{Ts: t, Mode: NormalResolvedMode, BatchID: math.MaxUint64}
 }
 
-// IsBatchMode returns true if the resolved ts is BatchResolvedMode.
-func (r ResolvedTs) IsBatchMode() bool {
+// IsBatchMode returns true if the watermark is BatchResolvedMode.
+func (r Watermark) IsBatchMode() bool {
 	return r.Mode == BatchResolvedMode
 }
 
-// AdvanceBatch advances the batch id of the resolved ts.
-func (r ResolvedTs) AdvanceBatch() ResolvedTs {
+// AdvanceBatch advances the batch id of the watermark.
+func (r Watermark) AdvanceBatch() Watermark {
 	if !r.IsBatchMode() {
-		log.Panic("can't advance batch since resolved ts is not in batch mode",
+		log.Panic("can't advance batch since watermark is not in batch mode",
 			zap.Any("resolved", r))
 	}
-	return ResolvedTs{
+	return Watermark{
 		Mode:    BatchResolvedMode,
 		Ts:      r.Ts,
 		BatchID: r.BatchID + 1,
@@ -183,15 +183,15 @@ func (r ResolvedTs) AdvanceBatch() ResolvedTs {
 
 // ResolvedMark returns a timestamp `ts` based on the r.mode, which marks that all events
 // whose commitTs is less than or equal to `ts` are sent to Sink.
-func (r ResolvedTs) ResolvedMark() uint64 {
+func (r Watermark) ResolvedMark() uint64 {
 	switch r.Mode {
 	case NormalResolvedMode:
 		// with NormalResolvedMode, cdc guarantees all events whose commitTs is
-		// less than or equal to `resolved.Ts` are sent to Sink.
+		// less than or equal to `Watermark.Ts` are sent to Sink.
 		return r.Ts
 	case BatchResolvedMode:
 		// with BatchResolvedMode, cdc guarantees all events whose commitTs is
-		// less than `resolved.Ts` are sent to Sink.
+		// less than `Watermark.Ts` are sent to Sink.
 		return r.Ts - 1
 	default:
 		log.Error("unknown resolved mode", zap.Any("resolved", r))
@@ -199,28 +199,28 @@ func (r ResolvedTs) ResolvedMark() uint64 {
 	}
 }
 
-// EqualOrGreater judge whether the resolved ts is equal or greater than the given ts.
-func (r ResolvedTs) EqualOrGreater(r1 ResolvedTs) bool {
+// EqualOrGreater judge whether the watermark is equal or greater than the given ts.
+func (r Watermark) EqualOrGreater(r1 Watermark) bool {
 	if r.Ts == r1.Ts {
 		return r.BatchID >= r1.BatchID
 	}
 	return r.Ts > r1.Ts
 }
 
-// Less judge whether the resolved ts is less than the given ts.
-func (r ResolvedTs) Less(r1 ResolvedTs) bool {
+// Less judge whether the watermark is less than the given ts.
+func (r Watermark) Less(r1 Watermark) bool {
 	return !r.EqualOrGreater(r1)
 }
 
-// Greater judge whether the resolved ts is greater than the given ts.
-func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
+// Greater judge whether the watermark is greater than the given ts.
+func (r Watermark) Greater(r1 Watermark) bool {
 	if r.Ts == r1.Ts {
 		return r.BatchID > r1.BatchID
 	}
 	return r.Ts > r1.Ts
 }
 
-// Equal judge whether the resolved ts is equal to the given ts.
-func (r ResolvedTs) Equal(r1 ResolvedTs) bool {
+// Equal judge whether the watermark is equal to the given ts.
+func (r Watermark) Equal(r1 Watermark) bool {
 	return r == r1
 }

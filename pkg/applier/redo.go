@@ -75,9 +75,9 @@ type RedoApplier struct {
 	sinkFactory *dmlfactory.SinkFactory
 	// tableSinks is a map from tableID to table sink.
 	// We create it when we need it, and close it after we finish applying the redo logs.
-	tableSinks         map[model.TableID]tablesink.TableSink
-	tableResolvedTsMap map[model.TableID]*memquota.MemConsumeRecord
-	appliedLogCount    uint64
+	tableSinks        map[model.TableID]tablesink.TableSink
+	tableWatermarkMap map[model.TableID]*memquota.MemConsumeRecord
+	appliedLogCount   uint64
 
 	errCh chan error
 
@@ -135,7 +135,7 @@ func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 	}
 
 	ra.tableSinks = make(map[model.TableID]tablesink.TableSink)
-	ra.tableResolvedTsMap = make(map[model.TableID]*memquota.MemConsumeRecord)
+	ra.tableWatermarkMap = make(map[model.TableID]*memquota.MemConsumeRecord)
 	return nil
 }
 
@@ -156,13 +156,13 @@ func (ra *RedoApplier) bgReleaseQuota(ctx context.Context) error {
 }
 
 func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
-	checkpointTs, resolvedTs, err := ra.rd.ReadMeta(ctx)
+	checkpointTs, watermark, err := ra.rd.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
 	log.Info("apply redo log starts",
 		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs))
+		zap.Uint64("watermark", watermark))
 	if err := ra.initSink(ctx); err != nil {
 		return err
 	}
@@ -209,8 +209,8 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 	}
 	// wait all tables to flush data
-	for tableID := range ra.tableResolvedTsMap {
-		if err := ra.waitTableFlush(ctx, tableID, resolvedTs); err != nil {
+	for tableID := range ra.tableWatermarkMap {
+		if err := ra.waitTableFlush(ctx, tableID, watermark); err != nil {
 			return err
 		}
 		ra.tableSinks[tableID].Close()
@@ -219,7 +219,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	log.Info("apply redo log finishes",
 		zap.Uint64("appliedLogCount", ra.appliedLogCount),
 		zap.Uint64("appliedDDLCount", ra.appliedDDLCount),
-		zap.Uint64("currentCheckpoint", resolvedTs))
+		zap.Uint64("currentCheckpoint", watermark))
 	return errApplyFinished
 }
 
@@ -231,21 +231,21 @@ func (ra *RedoApplier) resetQuota(rowSize uint64) error {
 	}
 
 	// flush all tables before acquire new quota
-	for tableID, tableRecord := range ra.tableResolvedTsMap {
-		if !tableRecord.ResolvedTs.IsBatchMode() {
-			log.Panic("table resolved ts should always be in batch mode when apply redo log")
+	for tableID, tableRecord := range ra.tableWatermarkMap {
+		if !tableRecord.Watermark.IsBatchMode() {
+			log.Panic("table watermark should always be in batch mode when apply redo log")
 		}
 
-		if err := ra.tableSinks[tableID].UpdateResolvedTs(tableRecord.ResolvedTs); err != nil {
+		if err := ra.tableSinks[tableID].UpdateWatermark(tableRecord.Watermark); err != nil {
 			return err
 		}
 		ra.memQuota.Record(spanz.TableIDToComparableSpan(tableID),
-			tableRecord.ResolvedTs, tableRecord.Size)
+			tableRecord.Watermark, tableRecord.Size)
 
 		// reset new record
-		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
-			ResolvedTs: tableRecord.ResolvedTs.AdvanceBatch(),
-			Size:       0,
+		ra.tableWatermarkMap[tableID] = &memquota.MemConsumeRecord{
+			Watermark: tableRecord.Watermark.AdvanceBatch(),
+			Size:      0,
 		}
 	}
 
@@ -271,7 +271,7 @@ func (ra *RedoApplier) applyDDL(
 		}
 		if ddl.TableInfo == nil {
 			// Note this could omly happen when using old version of cdc, and the commit ts
-			// of the DDL should be equal to checkpoint ts or resolved ts.
+			// of the DDL should be equal to checkpoint ts or watermark.
 			log.Warn("ignore DDL without table info", zap.Any("ddl", ddl))
 			return true
 		}
@@ -318,10 +318,10 @@ func (ra *RedoApplier) applyRow(
 		)
 		ra.tableSinks[tableID] = tableSink
 	}
-	if _, ok := ra.tableResolvedTsMap[tableID]; !ok {
+	if _, ok := ra.tableWatermarkMap[tableID]; !ok {
 		// Initialize table record using checkpointTs.
-		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
-			ResolvedTs: model.ResolvedTs{
+		ra.tableWatermarkMap[tableID] = &memquota.MemConsumeRecord{
+			Watermark: model.Watermark{
 				Mode:    model.BatchResolvedMode,
 				Ts:      checkpointTs,
 				BatchID: 1,
@@ -331,23 +331,23 @@ func (ra *RedoApplier) applyRow(
 	}
 
 	ra.tableSinks[tableID].AppendRowChangedEvents(row)
-	record := ra.tableResolvedTsMap[tableID]
+	record := ra.tableWatermarkMap[tableID]
 	record.Size += rowSize
-	if row.CommitTs > record.ResolvedTs.Ts {
-		// Use batch resolvedTs to flush data as quickly as possible.
-		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
-			ResolvedTs: model.ResolvedTs{
+	if row.CommitTs > record.Watermark.Ts {
+		// Use batch watermark to flush data as quickly as possible.
+		ra.tableWatermarkMap[tableID] = &memquota.MemConsumeRecord{
+			Watermark: model.Watermark{
 				Mode:    model.BatchResolvedMode,
 				Ts:      row.CommitTs,
 				BatchID: 1,
 			},
 			Size: record.Size,
 		}
-	} else if row.CommitTs < ra.tableResolvedTsMap[tableID].ResolvedTs.Ts {
+	} else if row.CommitTs < ra.tableWatermarkMap[tableID].Watermark.Ts {
 		log.Panic("commit ts of redo log regressed",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("commitTs", row.CommitTs),
-			zap.Any("resolvedTs", ra.tableResolvedTsMap[tableID]))
+			zap.Any("watermark", ra.tableWatermarkMap[tableID]))
 	}
 
 	ra.appliedLogCount++
@@ -360,40 +360,40 @@ func (ra *RedoApplier) waitTableFlush(
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
 
-	oldTableRecord := ra.tableResolvedTsMap[tableID]
-	if oldTableRecord.ResolvedTs.Ts < rts {
-		// Use new batch resolvedTs to flush data.
-		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
-			ResolvedTs: model.ResolvedTs{
+	oldTableRecord := ra.tableWatermarkMap[tableID]
+	if oldTableRecord.Watermark.Ts < rts {
+		// Use new batch watermark to flush data.
+		ra.tableWatermarkMap[tableID] = &memquota.MemConsumeRecord{
+			Watermark: model.Watermark{
 				Mode:    model.BatchResolvedMode,
 				Ts:      rts,
 				BatchID: 1,
 			},
-			Size: ra.tableResolvedTsMap[tableID].Size,
+			Size: ra.tableWatermarkMap[tableID].Size,
 		}
-	} else if oldTableRecord.ResolvedTs.Ts > rts {
-		log.Panic("resolved ts of redo log regressed",
-			zap.Any("oldResolvedTs", oldTableRecord),
-			zap.Any("newResolvedTs", rts))
+	} else if oldTableRecord.Watermark.Ts > rts {
+		log.Panic("watermark of redo log regressed",
+			zap.Any("oldWatermark", oldTableRecord),
+			zap.Any("newWatermark", rts))
 	}
 
-	tableRecord := ra.tableResolvedTsMap[tableID]
-	if err := ra.tableSinks[tableID].UpdateResolvedTs(tableRecord.ResolvedTs); err != nil {
+	tableRecord := ra.tableWatermarkMap[tableID]
+	if err := ra.tableSinks[tableID].UpdateWatermark(tableRecord.Watermark); err != nil {
 		return err
 	}
 	ra.memQuota.Record(spanz.TableIDToComparableSpan(tableID),
-		tableRecord.ResolvedTs, tableRecord.Size)
+		tableRecord.Watermark, tableRecord.Size)
 
 	// Make sure all events are flushed to downstream.
-	for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(tableRecord.ResolvedTs) {
+	for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(tableRecord.Watermark) {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			log.Warn(
-				"Table sink is not catching up with resolved ts for a long time",
+				"Table sink is not catching up with watermark for a long time",
 				zap.Int64("tableID", tableID),
-				zap.Any("resolvedTs", tableRecord.ResolvedTs),
+				zap.Any("watermark", tableRecord.Watermark),
 				zap.Any("checkpointTs", ra.tableSinks[tableID].GetCheckpointTs()),
 			)
 		default:
@@ -402,9 +402,9 @@ func (ra *RedoApplier) waitTableFlush(
 	}
 
 	// reset new record
-	ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
-		ResolvedTs: tableRecord.ResolvedTs.AdvanceBatch(),
-		Size:       0,
+	ra.tableWatermarkMap[tableID] = &memquota.MemConsumeRecord{
+		Watermark: tableRecord.Watermark.AdvanceBatch(),
+		Size:      0,
 	}
 	return nil
 }
@@ -420,7 +420,7 @@ func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.R
 }
 
 // ReadMeta creates a new redo applier and read meta from reader
-func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resolvedTs uint64, err error) {
+func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, watermark uint64, err error) {
 	rd, err := createRedoReader(ctx, ra.cfg)
 	if err != nil {
 		return 0, 0, err

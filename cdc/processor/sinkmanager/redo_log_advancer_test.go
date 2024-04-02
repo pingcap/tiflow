@@ -34,14 +34,14 @@ var _ redo.DMLManager = &mockRedoDMLManager{}
 type mockRedoDMLManager struct {
 	mu                  sync.Mutex
 	events              map[int64][]*model.RowChangedEvent
-	resolvedTss         map[int64]model.Ts
+	watermarks          map[int64]model.Ts
 	releaseRowsMemories map[int64]func()
 }
 
 func newMockRedoDMLManager() *mockRedoDMLManager {
 	return &mockRedoDMLManager{
 		events:              make(map[int64][]*model.RowChangedEvent),
-		resolvedTss:         make(map[int64]model.Ts),
+		watermarks:          make(map[int64]model.Ts),
 		releaseRowsMemories: make(map[int64]func()),
 	}
 }
@@ -70,25 +70,25 @@ func (m *mockRedoDMLManager) RemoveTable(span tablepb.Span) {
 	panic("unreachable")
 }
 
-func (m *mockRedoDMLManager) UpdateResolvedTs(ctx context.Context,
-	span tablepb.Span, resolvedTs uint64,
+func (m *mockRedoDMLManager) UpdateWatermark(ctx context.Context,
+	span tablepb.Span, watermark uint64,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.resolvedTss[span.TableID] = resolvedTs
+	m.watermarks[span.TableID] = watermark
 	return nil
 }
 
-func (m *mockRedoDMLManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+func (m *mockRedoDMLManager) StartTable(span tablepb.Span, watermark uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.resolvedTss[span.TableID] = resolvedTs
+	m.watermarks[span.TableID] = watermark
 }
 
-func (m *mockRedoDMLManager) GetResolvedTs(span tablepb.Span) model.Ts {
+func (m *mockRedoDMLManager) GetWatermark(span tablepb.Span) model.Ts {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.resolvedTss[span.TableID]
+	return m.watermarks[span.TableID]
 }
 
 func (m *mockRedoDMLManager) EmitRowChangedEvents(ctx context.Context,
@@ -289,7 +289,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	require.NoError(suite.T(), err)
 
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
-	require.Equal(suite.T(), uint64(1), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(1), manager.GetWatermark(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
 	manager.releaseRowsMemory(suite.testSpan)
@@ -338,7 +338,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	)
 
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 4)
-	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(3), manager.GetWatermark(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
 	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
@@ -380,7 +380,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 	)
 	require.NoError(suite.T(), err)
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
-	require.Equal(suite.T(), uint64(2), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(2), manager.GetWatermark(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
 	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
@@ -429,7 +429,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	require.Equal(suite.T(), uint64(3), advancer.currTxnCommitTs)
 
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
-	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(3), manager.GetWatermark(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
 	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),

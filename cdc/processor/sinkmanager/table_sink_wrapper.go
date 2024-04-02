@@ -57,8 +57,8 @@ type tableSinkWrapper struct {
 
 		innerMu      sync.Mutex
 		advanced     time.Time
-		resolvedTs   model.ResolvedTs
-		checkpointTs model.ResolvedTs
+		watermark    model.Watermark
+		checkpointTs model.Watermark
 		lastSyncedTs model.Ts
 	}
 
@@ -72,9 +72,9 @@ type tableSinkWrapper struct {
 
 	// barrierTs is the barrier bound of the table sink.
 	barrierTs atomic.Uint64
-	// receivedSorterResolvedTs is the resolved ts received from the sorter.
+	// receivedSorterWatermark is the watermark received from the sorter.
 	// We use this to advance the redo log.
-	receivedSorterResolvedTs atomic.Uint64
+	receivedSorterWatermark atomic.Uint64
 
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
@@ -126,11 +126,11 @@ func newTableSinkWrapper(
 	}
 
 	res.tableSink.version = 0
-	res.tableSink.checkpointTs = model.NewResolvedTs(startTs)
-	res.tableSink.resolvedTs = model.NewResolvedTs(startTs)
+	res.tableSink.checkpointTs = model.NewWatermark(startTs)
+	res.tableSink.watermark = model.NewWatermark(startTs)
 	res.tableSink.advanced = time.Now()
 
-	res.receivedSorterResolvedTs.Store(startTs)
+	res.receivedSorterWatermark.Store(startTs)
 	res.barrierTs.Store(startTs)
 	return res
 }
@@ -162,13 +162,13 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	util.MustCompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, startTs)
+	util.MustCompareAndMonotonicIncrease(&t.receivedSorterWatermark, startTs)
 	// the barrierTs should always larger than or equal to the checkpointTs, so we need to update
 	// barrierTs before the checkpointTs is updated.
 	t.updateBarrierTs(startTs)
-	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
-		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
-		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
+	if model.NewWatermark(startTs).Greater(t.tableSink.checkpointTs) {
+		t.tableSink.checkpointTs = model.NewWatermark(startTs)
+		t.tableSink.watermark = model.NewWatermark(startTs)
 		t.tableSink.advanced = time.Now()
 	}
 	t.state.Store(tablepb.TableStateReplicating)
@@ -190,15 +190,15 @@ func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
 	util.MustCompareAndMonotonicIncrease(&t.barrierTs, ts)
 }
 
-func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	increased := util.CompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, ts)
+func (t *tableSinkWrapper) updateReceivedSorterWatermark(ts model.Ts) {
+	increased := util.CompareAndMonotonicIncrease(&t.receivedSorterWatermark, ts)
 	if increased && t.state.Load() == tablepb.TableStatePreparing {
-		// Update the state to `Prepared` when the receivedSorterResolvedTs is updated for the first time.
+		// Update the state to `Prepared` when the receivedSorterWatermark is updated for the first time.
 		t.state.Store(tablepb.TableStatePrepared)
 	}
 }
 
-func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
+func (t *tableSinkWrapper) updateWatermark(ts model.Watermark) error {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
 	if t.tableSink.s == nil {
@@ -207,8 +207,8 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	}
 	t.tableSink.innerMu.Lock()
 	defer t.tableSink.innerMu.Unlock()
-	t.tableSink.resolvedTs = ts
-	return t.tableSink.s.UpdateResolvedTs(ts)
+	t.tableSink.watermark = ts
+	return t.tableSink.s.UpdateWatermark(ts)
 }
 
 func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
@@ -220,7 +220,7 @@ func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
 	return t.tableSink.lastSyncedTs
 }
 
-func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
+func (t *tableSinkWrapper) getCheckpointTs() model.Watermark {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
 	t.tableSink.innerMu.Lock()
@@ -231,15 +231,15 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 		if t.tableSink.checkpointTs.Less(checkpointTs) {
 			t.tableSink.checkpointTs = checkpointTs
 			t.tableSink.advanced = time.Now()
-		} else if !checkpointTs.Less(t.tableSink.resolvedTs) {
+		} else if !checkpointTs.Less(t.tableSink.watermark) {
 			t.tableSink.advanced = time.Now()
 		}
 	}
 	return t.tableSink.checkpointTs
 }
 
-func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
-	return t.receivedSorterResolvedTs.Load()
+func (t *tableSinkWrapper) getReceivedSorterWatermark() model.Ts {
+	return t.receivedSorterWatermark.Load()
 }
 
 func (t *tableSinkWrapper) getState() tablepb.TableState {
@@ -249,15 +249,15 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 // getUpperBoundTs returns the upperbound of the table sink.
 // It is used by sinkManager to generate sink task.
 // upperBoundTs should be the minimum of the following two values:
-// 1. the resolved ts of the sorter
+// 1. the watermark of the sorter
 // 2. the barrier ts of the table
 func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
-	resolvedTs := t.getReceivedSorterResolvedTs()
+	watermark := t.getReceivedSorterWatermark()
 	barrierTs := t.barrierTs.Load()
-	if resolvedTs > barrierTs {
-		resolvedTs = barrierTs
+	if watermark > barrierTs {
+		watermark = barrierTs
 	}
-	return resolvedTs
+	return watermark
 }
 
 func (t *tableSinkWrapper) markAsClosing() {
@@ -358,7 +358,7 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 	if t.tableSink.checkpointTs.Less(checkpointTs) {
 		t.tableSink.checkpointTs = checkpointTs
 	}
-	t.tableSink.resolvedTs = checkpointTs
+	t.tableSink.watermark = checkpointTs
 	t.tableSink.lastSyncedTs = t.tableSink.s.GetLastSyncedTs()
 	t.tableSink.advanced = time.Now()
 	t.tableSink.innerMu.Unlock()

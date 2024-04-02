@@ -24,10 +24,10 @@ import (
 )
 
 // Only for test.
-func (r *progressTracker) pendingResolvedTsEventsCount() int {
+func (r *progressTracker) pendingWatermarkEventsCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return len(r.resolvedTsCache)
+	return len(r.watermarkCache)
 }
 
 func TestNewProgressTracker(t *testing.T) {
@@ -38,7 +38,7 @@ func TestNewProgressTracker(t *testing.T) {
 		t,
 		uint64(0),
 		tracker.advance().Ts,
-		"init lastMinResolvedTs should be 0",
+		"init lastMinWatermark should be 0",
 	)
 }
 
@@ -52,24 +52,24 @@ func TestAddEvent(t *testing.T) {
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 }
 
-func TestAddResolvedTs(t *testing.T) {
+func TestAddWatermark(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
-	tracker.addResolvedTs(model.NewResolvedTs(1))
-	tracker.addResolvedTs(model.NewResolvedTs(2))
-	tracker.addResolvedTs(model.NewResolvedTs(3))
-	require.Equal(t, 0, tracker.trackingCount(), "resolved ts should not be added")
-	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
+	tracker.addWatermark(model.NewWatermark(1))
+	tracker.addWatermark(model.NewWatermark(2))
+	tracker.addWatermark(model.NewWatermark(3))
+	require.Equal(t, 0, tracker.trackingCount(), "watermark should not be added")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinWatermark should be 3")
 
 	// There is an event in the tracker.
 	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
-	tracker.addResolvedTs(model.NewResolvedTs(3))
-	require.Equal(t, 1, tracker.trackingCount(), "resolved ts should be added")
-	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
+	tracker.addWatermark(model.NewWatermark(2))
+	tracker.addWatermark(model.NewWatermark(3))
+	require.Equal(t, 1, tracker.trackingCount(), "watermark should be added")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinWatermark should not be updated")
 }
 
 func TestRemove(t *testing.T) {
@@ -85,36 +85,36 @@ func TestRemove(t *testing.T) {
 	tracker.advance()
 	require.Equal(t, 3, tracker.trackingCount(), "not advanced")
 
-	// Both event and resolved ts.
+	// Both event and watermark.
 	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 = tracker.addEvent()
 	cb2 = tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(3))
+	tracker.addWatermark(model.NewWatermark(3))
 	cb4 = tracker.addEvent()
 	cb5 = tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(6))
-	tracker.addResolvedTs(model.NewResolvedTs(7))
-	tracker.addResolvedTs(model.NewResolvedTs(8))
+	tracker.addWatermark(model.NewWatermark(6))
+	tracker.addWatermark(model.NewWatermark(7))
+	tracker.addWatermark(model.NewWatermark(8))
 	// Remove one event.
 	cb2()
 	tracker.advance()
 	require.Equal(t, 4, tracker.trackingCount())
-	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinWatermark should not be updated")
 	// Remove one more event.
 	cb4()
 	tracker.advance()
 	require.Equal(t, 4, tracker.trackingCount())
-	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinWatermark should not be updated")
 	// Remove one more event.
 	cb1()
 	tracker.advance()
 	require.Equal(t, 1, tracker.trackingCount())
-	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be advanced")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinWatermark should be advanced")
 	// Remove the last event.
 	cb5()
 	tracker.advance()
 	require.Equal(t, 0, tracker.trackingCount())
-	require.Equal(t, uint64(8), tracker.advance().Ts, "lastMinResolvedTs should be 8")
+	require.Equal(t, uint64(8), tracker.advance().Ts, "lastMinWatermark should be 8")
 }
 
 func TestCloseTracker(t *testing.T) {
@@ -122,11 +122,11 @@ func TestCloseTracker(t *testing.T) {
 
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addWatermark(model.NewWatermark(1))
 	cb2 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addWatermark(model.NewWatermark(2))
 	cb3 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(3))
+	tracker.addWatermark(model.NewWatermark(3))
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 
 	var wg sync.WaitGroup
@@ -151,11 +151,11 @@ func TestCloseTrackerCancellable(t *testing.T) {
 
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addWatermark(model.NewWatermark(1))
 	tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addWatermark(model.NewWatermark(2))
 	tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(3))
+	tracker.addWatermark(model.NewWatermark(3))
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 
 	dead := make(chan struct{})
@@ -212,11 +212,11 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addWatermark(model.NewWatermark(1))
 	cb2 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addWatermark(model.NewWatermark(2))
 	cb3 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(3))
+	tracker.addWatermark(model.NewWatermark(3))
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 
 	var wg sync.WaitGroup
@@ -240,53 +240,53 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
 }
 
-func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
+func TestOnlyWatermarkShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	t.Parallel()
 
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addWatermark(model.NewWatermark(1))
 	cb2 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
-	tracker.addResolvedTs(model.NewResolvedTs(3))
+	tracker.addWatermark(model.NewWatermark(2))
+	tracker.addWatermark(model.NewWatermark(3))
 	cb3 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(4))
-	tracker.addResolvedTs(model.NewResolvedTs(5))
+	tracker.addWatermark(model.NewWatermark(4))
+	tracker.addWatermark(model.NewWatermark(5))
 	require.Equal(t, 3, tracker.trackingCount(), "Events should be added")
 	cb1()
 	cb2()
-	tracker.addResolvedTs(model.NewResolvedTs(6))
+	tracker.addWatermark(model.NewWatermark(6))
 	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
 	require.Equal(t, 1, tracker.trackingCount(), "Only one event should be left")
 	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs still should be 3")
 	cb3()
 	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
-	tracker.addResolvedTs(model.NewResolvedTs(7))
-	tracker.addResolvedTs(model.NewResolvedTs(8))
-	tracker.addResolvedTs(model.NewResolvedTs(9))
-	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
+	tracker.addWatermark(model.NewWatermark(7))
+	tracker.addWatermark(model.NewWatermark(8))
+	tracker.addWatermark(model.NewWatermark(9))
+	require.Equal(t, 0, tracker.pendingWatermarkEventsCount(), "WatermarkCache should be empty")
 	require.Equal(t, uint64(9), tracker.advance().Ts, "CheckpointTs should be advanced")
 }
 
-func TestShouldDirectlyUpdateResolvedTsIfNoMoreEvents(t *testing.T) {
+func TestShouldDirectlyUpdateWatermarkIfNoMoreEvents(t *testing.T) {
 	t.Parallel()
 
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addWatermark(model.NewWatermark(1))
 	cb2 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(2))
-	tracker.addResolvedTs(model.NewResolvedTs(3))
-	require.Equal(t, 2, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have 2 events")
+	tracker.addWatermark(model.NewWatermark(2))
+	tracker.addWatermark(model.NewWatermark(3))
+	require.Equal(t, 2, tracker.pendingWatermarkEventsCount(), "WatermarkCache should only have 2 events")
 	cb3 := tracker.addEvent()
-	tracker.addResolvedTs(model.NewResolvedTs(4))
-	tracker.addResolvedTs(model.NewResolvedTs(5))
-	tracker.addResolvedTs(model.NewResolvedTs(6))
+	tracker.addWatermark(model.NewWatermark(4))
+	tracker.addWatermark(model.NewWatermark(5))
+	tracker.addWatermark(model.NewWatermark(6))
 	cb1()
 	cb2()
 	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
-	require.Equal(t, 1, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have one event")
+	require.Equal(t, 1, tracker.pendingWatermarkEventsCount(), "WatermarkCache should only have one event")
 	cb3()
 	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
-	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
+	require.Equal(t, 0, tracker.pendingWatermarkEventsCount(), "WatermarkCache should be empty")
 }

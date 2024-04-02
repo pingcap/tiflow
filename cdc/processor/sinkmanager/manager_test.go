@@ -93,14 +93,14 @@ func addTableAndAddEventsToSortEngine(
 		{
 			CRTs: 4,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 				CRTs:   4,
 			},
 		},
 		{
 			CRTs: 6,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 				CRTs:   6,
 			},
 		},
@@ -164,8 +164,8 @@ func TestRemoveTable(t *testing.T) {
 	require.NoError(t, err)
 	totalEventSize := addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 5)
-	manager.schemaStorage.AdvanceResolvedTs(5)
+	manager.UpdateReceivedSorterWatermark(span, 5)
+	manager.schemaStorage.AdvanceWatermark(5)
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
 		return manager.sinkMemQuota.GetUsedBytes() == totalEventSize
@@ -203,8 +203,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 5)
-	manager.schemaStorage.AdvanceResolvedTs(5)
+	manager.UpdateReceivedSorterWatermark(span, 5)
+	manager.schemaStorage.AdvanceWatermark(5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -214,8 +214,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 
 	manager.UpdateBarrierTs(6, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 6)
-	manager.schemaStorage.AdvanceResolvedTs(6)
+	manager.UpdateReceivedSorterWatermark(span, 6)
+	manager.schemaStorage.AdvanceWatermark(6)
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
 		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
@@ -224,7 +224,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
-func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
+func TestGenerateTableSinkTaskWithWatermark(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -240,10 +240,10 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	// This would happen when the table just added to this node and redo log is enabled.
-	// So there is possibility that the resolved ts is smaller than the global barrier ts.
+	// So there is possibility that the watermark is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 3)
-	manager.schemaStorage.AdvanceResolvedTs(4)
+	manager.UpdateReceivedSorterWatermark(span, 3)
+	manager.schemaStorage.AdvanceWatermark(4)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -270,8 +270,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, span)
 
 	manager.UpdateBarrierTs(4, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 5)
-	manager.schemaStorage.AdvanceResolvedTs(5)
+	manager.UpdateReceivedSorterWatermark(span, 5)
+	manager.schemaStorage.AdvanceWatermark(5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -297,7 +297,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
-	manager.UpdateReceivedSorterResolvedTs(span, 5)
+	manager.UpdateReceivedSorterWatermark(span, 5)
 
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
 	tableSink, ok := manager.tableSinks.Load(span)
@@ -323,8 +323,8 @@ func TestClose(t *testing.T) {
 
 // This could happen when closing the sink manager and source manager.
 // We close the sink manager first, and then close the source manager.
-// So probably the source manager calls the sink manager to update the resolved ts to a removed table.
-func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
+// So probably the source manager calls the sink manager to update the watermark to a removed table.
+func TestUpdateReceivedSorterWatermarkOfNonExistTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -336,7 +336,7 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 		manager.Close()
 	}()
 
-	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
+	manager.UpdateReceivedSorterWatermark(spanz.TableIDToComparableSpan(1), 1)
 }
 
 // Sink worker errors should cancel the sink manager correctly.
@@ -362,8 +362,8 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	source.AddTable(span, "test", 100)
 	manager.AddTable(span, 100, math.MaxUint64)
 	manager.StartTable(span, 100)
-	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
-	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	source.Add(span, model.NewWatermarkPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterWatermark(span, 101)
 	manager.UpdateBarrierTs(101, nil)
 
 	timer := time.NewTimer(5 * time.Second)
@@ -412,7 +412,7 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	table, exists := manager.tableSinks.Load(span)
 	require.True(t, exists)
 
-	table.(*tableSinkWrapper).updateReceivedSorterResolvedTs(4)
+	table.(*tableSinkWrapper).updateReceivedSorterWatermark(4)
 	table.(*tableSinkWrapper).updateBarrierTs(4)
 	select {
 	case task := <-manager.sinkTaskChan:

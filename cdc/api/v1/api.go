@@ -248,7 +248,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		TargetTs:       info.TargetTs,
 		CheckpointTSO:  status.CheckpointTs,
 		CheckpointTime: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-		ResolvedTs:     status.ResolvedTs,
+		Watermark:      status.Watermark,
 		Engine:         info.Engine,
 		FeedState:      info.State,
 		TaskStatus:     taskStatus,

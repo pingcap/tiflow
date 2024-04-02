@@ -22,7 +22,7 @@ type KVClientConfig struct {
 	WorkerConcurrent uint `toml:"worker-concurrent" json:"worker-concurrent"`
 	// how many grpc streams will be established to every TiKV node
 	GrpcStreamConcurrent uint `toml:"grpc-stream-concurrent" json:"grpc-stream-concurrent"`
-	// Advance table ResolvedTs interval.
+	// Advance table Watermark interval.
 	AdvanceIntervalInMs uint `toml:"advance-interval-in-ms" json:"advance-interval-in-ms"`
 	// how many goroutines to maintain frontiers.
 	FrontierConcurrent uint `toml:"frontier-concurrent" json:"frontier-concurrent"`

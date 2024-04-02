@@ -22,19 +22,19 @@ import (
 // LogMeta is used for store meta info.
 type LogMeta struct {
 	CheckpointTs uint64 `msg:"checkpointTs"`
-	ResolvedTs   uint64 `msg:"resolvedTs"`
+	Watermark    uint64 `msg:"watermark"`
 }
 
 // ParseMeta parses meta.
-func ParseMeta(metas []*LogMeta, checkpointTs, resolvedTs *model.Ts) {
+func ParseMeta(metas []*LogMeta, checkpointTs, watermark *model.Ts) {
 	*checkpointTs = 0
-	*resolvedTs = 0
+	*watermark = 0
 	for _, meta := range metas {
 		if *checkpointTs < meta.CheckpointTs {
 			*checkpointTs = meta.CheckpointTs
 		}
-		if *resolvedTs < meta.ResolvedTs {
-			*resolvedTs = meta.ResolvedTs
+		if *watermark < meta.Watermark {
+			*watermark = meta.Watermark
 		}
 	}
 }

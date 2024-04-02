@@ -74,11 +74,11 @@ func (t *tableSpan) getTableSpanStatus(collectStat bool) tablepb.TableStatus {
 }
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
-	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+	if status.Checkpoint.Watermark < status.Checkpoint.CheckpointTs {
+		log.Warn("schedulerv3: watermark should not less than checkpoint ts",
 			zap.Any("tableStatus", status),
 			zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
-			zap.Any("resolved", status.Checkpoint.ResolvedTs))
+			zap.Any("resolved", status.Checkpoint.Watermark))
 	}
 	return &schedulepb.Message{
 		MsgType: schedulepb.MsgDispatchTableResponse,
@@ -94,16 +94,16 @@ func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message 
 }
 
 func newRemoveTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
-	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
-		// TODO: resolvedTs should not be zero, but we have to handle it for now.
-		if status.Checkpoint.ResolvedTs == 0 {
-			// Advance resolved ts to checkpoint ts if table is removed.
-			status.Checkpoint.ResolvedTs = status.Checkpoint.CheckpointTs
+	if status.Checkpoint.Watermark < status.Checkpoint.CheckpointTs {
+		// TODO: watermark should not be zero, but we have to handle it for now.
+		if status.Checkpoint.Watermark == 0 {
+			// Advance watermark to checkpoint ts if table is removed.
+			status.Checkpoint.Watermark = status.Checkpoint.CheckpointTs
 		} else {
-			log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+			log.Warn("schedulerv3: watermark should not less than checkpoint ts",
 				zap.Any("tableStatus", status),
 				zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
-				zap.Any("resolved", status.Checkpoint.ResolvedTs))
+				zap.Any("resolved", status.Checkpoint.Watermark))
 		}
 	}
 	message := &schedulepb.Message{

@@ -52,8 +52,8 @@ type redoManager interface {
 type DDLManager interface {
 	redoManager
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
-	UpdateResolvedTs(ctx context.Context, resolvedTs uint64) error
-	GetResolvedTs() model.Ts
+	UpdateWatermark(ctx context.Context, watermark uint64) error
+	GetWatermark() model.Ts
 }
 
 // NewDisabledDDLManager creates a disabled ddl Manager.
@@ -87,12 +87,12 @@ func (m *ddlManager) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) erro
 	return m.logManager.emitRedoEvents(ctx, m.fakeSpan, nil, ddl)
 }
 
-func (m *ddlManager) UpdateResolvedTs(ctx context.Context, resolvedTs uint64) error {
-	return m.logManager.UpdateResolvedTs(ctx, m.fakeSpan, resolvedTs)
+func (m *ddlManager) UpdateWatermark(ctx context.Context, watermark uint64) error {
+	return m.logManager.UpdateWatermark(ctx, m.fakeSpan, watermark)
 }
 
-func (m *ddlManager) GetResolvedTs() model.Ts {
-	return m.logManager.GetResolvedTs(m.fakeSpan)
+func (m *ddlManager) GetWatermark() model.Ts {
+	return m.logManager.GetWatermark(m.fakeSpan)
 }
 
 // DMLManager defines an interface that is used to manage dml logs in processor.
@@ -101,8 +101,8 @@ type DMLManager interface {
 	AddTable(span tablepb.Span, startTs uint64)
 	StartTable(span tablepb.Span, startTs uint64)
 	RemoveTable(span tablepb.Span)
-	UpdateResolvedTs(ctx context.Context, span tablepb.Span, resolvedTs uint64) error
-	GetResolvedTs(span tablepb.Span) model.Ts
+	UpdateWatermark(ctx context.Context, span tablepb.Span, watermark uint64) error
+	GetWatermark(span tablepb.Span) model.Ts
 	EmitRowChangedEvents(
 		ctx context.Context,
 		span tablepb.Span,
@@ -148,7 +148,7 @@ func (m *dmlManager) EmitRowChangedEvents(
 type cacheEvents struct {
 	span            tablepb.Span
 	events          []writer.RedoEvent
-	resolvedTs      model.Ts
+	watermark       model.Ts
 	isResolvedEvent bool
 
 	// releaseMemory is used to track memory usage of the events.
@@ -183,7 +183,7 @@ func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (ok bool) {
 }
 
 // logManager manages redo log writer, buffers un-persistent redo logs, calculates
-// redo log resolved ts. It implements DDLManager and DMLManager interface.
+// redo log watermark. It implements DDLManager and DMLManager interface.
 type logManager struct {
 	enabled bool
 	cfg     *writer.LogWriterConfig
@@ -321,21 +321,21 @@ func (m *logManager) emitRedoEvents(
 
 // StartTable starts a table, which means the table is ready to emit redo events.
 // Note that this function should only be called once when adding a new table to processor.
-func (m *logManager) StartTable(span tablepb.Span, resolvedTs uint64) {
-	// advance unflushed resolved ts
-	m.onResolvedTsMsg(span, resolvedTs)
+func (m *logManager) StartTable(span tablepb.Span, watermark uint64) {
+	// advance unflushed watermark
+	m.onWatermarkMsg(span, watermark)
 
-	// advance flushed resolved ts
+	// advance flushed watermark
 	if value, loaded := m.rtsMap.Load(span); loaded {
-		value.(*statefulRts).checkAndSetFlushed(resolvedTs)
+		value.(*statefulRts).checkAndSetFlushed(watermark)
 	}
 }
 
-// UpdateResolvedTs asynchronously updates resolved ts of a single table.
-func (m *logManager) UpdateResolvedTs(
+// UpdateWatermark asynchronously updates watermark of a single table.
+func (m *logManager) UpdateWatermark(
 	ctx context.Context,
 	span tablepb.Span,
-	resolvedTs uint64,
+	watermark uint64,
 ) error {
 	return m.withLock(func(m *logManager) error {
 		select {
@@ -343,7 +343,7 @@ func (m *logManager) UpdateResolvedTs(
 			return errors.Trace(ctx.Err())
 		case m.logBuffer.In() <- cacheEvents{
 			span:            span,
-			resolvedTs:      resolvedTs,
+			watermark:       watermark,
 			isResolvedEvent: true,
 		}:
 		}
@@ -351,12 +351,12 @@ func (m *logManager) UpdateResolvedTs(
 	})
 }
 
-// GetResolvedTs returns the resolved ts of a table
-func (m *logManager) GetResolvedTs(span tablepb.Span) model.Ts {
+// GetWatermark returns the watermark of a table
+func (m *logManager) GetWatermark(span tablepb.Span) model.Ts {
 	if value, ok := m.rtsMap.Load(span); ok {
 		return value.(*statefulRts).getFlushed()
 	}
-	panic("GetResolvedTs is called on an invalid table")
+	panic("GetWatermark is called on an invalid table")
 }
 
 // AddTable adds a new table in redo log manager
@@ -403,7 +403,7 @@ func (m *logManager) postFlush(tableRtsMap *spanz.HashMap[model.Ts]) {
 		if value, loaded := m.rtsMap.Load(span); loaded {
 			changed := value.(*statefulRts).checkAndSetFlushed(flushed)
 			if !changed {
-				log.Debug("flush redo with regressed resolved ts",
+				log.Debug("flush redo with regressed watermark",
 					zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 					zap.String("changefeed", m.cfg.ChangeFeedID.ID),
 					zap.Stringer("span", &span),
@@ -472,7 +472,7 @@ func (m *logManager) handleEvent(
 	}()
 
 	if e.isResolvedEvent {
-		m.onResolvedTsMsg(e.span, e.resolvedTs)
+		m.onWatermarkMsg(e.span, e.watermark)
 	} else {
 		if e.releaseMemory != nil {
 			m.releaseMemoryCbs = append(m.releaseMemoryCbs, e.releaseMemory)
@@ -496,10 +496,10 @@ func (m *logManager) handleEvent(
 	return nil
 }
 
-func (m *logManager) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
+func (m *logManager) onWatermarkMsg(span tablepb.Span, watermark model.Ts) {
 	// It's possible that the table is removed while redo log is still in writing.
 	if value, loaded := m.rtsMap.Load(span); loaded {
-		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
+		value.(*statefulRts).checkAndSetUnflushed(watermark)
 	}
 }
 

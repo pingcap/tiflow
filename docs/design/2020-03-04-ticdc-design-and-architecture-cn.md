@@ -62,7 +62,7 @@ TiKV 建立 TiCDC 链接后的行为分为两个阶段：
 2. 推流。这个阶段贯穿于整个 TiCDC 链接生命周期，将 region 上的写入实时推到下游，输出的内容有：
    1. Prewrite，region 上的上锁操作
    2. Commit，region 上的提交操作
-   3. ResolvedTS，一个特殊的 TS，保证该 region 后续不会再出现小于该 TS 的提交操作
+   3. Watermark，一个特殊的 TS，保证该 region 后续不会再出现小于该 TS 的提交操作
 
 注意这两个阶段是同时开始的（即建立连接）。
 
@@ -88,7 +88,7 @@ TiKV 建立 TiCDC 链接后的行为分为两个阶段：
   - errorpb.RegionNotFound
   - errorpb.EpochNotMatch，region 分裂后通常会在已经建立的 gRPC stream 中返回此错误，TiCDC 遇到该错误时会重新扫描 kv range 获取新的 region 信息，并重新建立新的同步数据流。
 
-- ResolvedTs：为了数据还原的一致性，只有当所有 region 都保证**在某个 ts 之前的所有数据都已经被 TiCDC 获取到**，TiCDC 才会对 ts 前的 kv change event 进行排序并向下游进行事务还原。 因此对于一定时间没有任何数据写入的 region，需要提供某种机制推进该 ts，以降低 TiCDC 还原事务的延迟。ResolvedTs 类型 event 就是解决这个问题。
+- Watermark：为了数据还原的一致性，只有当所有 region 都保证**在某个 ts 之前的所有数据都已经被 TiCDC 获取到**，TiCDC 才会对 ts 前的 kv change event 进行排序并向下游进行事务还原。 因此对于一定时间没有任何数据写入的 region，需要提供某种机制推进该 ts，以降低 TiCDC 还原事务的延迟。Watermark 类型 event 就是解决这个问题。
 
 ## Capture 组件
 
@@ -111,7 +111,7 @@ Owner 维护全局的同步状态，会对集群的同步进行监控和适当�
   - 维护运行的 processor 状态信息，对于异常节点进行清理
 
 - 执行处理 DDL，向下游同步 DDL
-- 更新每一个 changefeed 的全局的 CheckpointTs 和 ResolvedTs
+- 更新每一个 changefeed 的全局的 CheckpointTs 和 Watermark
 
 ### Processor 角色
 
@@ -124,12 +124,12 @@ Owner 维护全局的同步状态，会对集群的同步进行监控和适当�
   - processor 运行过程中也会监控同步信息，对于增加或删除的表调整 EventFeed gRPC stream。
 
 - 维护本地 ResovledTs 和 CheckpointTs
-- 根据全局 ResolvedTs 推进自己节点的数据向下游同步
+- 根据全局 Watermark 推进自己节点的数据向下游同步
 
 ### DML 和 DDL 的正确性保证
 
-- 全局 ResolvedTs 由 owner 计算，取值为所有 processor 的 ResolvedTs 和 DDL puller 的 ResolvedTs 的最小值
-- 所有 processor 严格按照全局 ResolvedTs 进行数据同步，只会同步数据到全局 ResolvedTs。同步数据后会更新本地 CheckpointTs
+- 全局 Watermark 由 owner 计算，取值为所有 processor 的 Watermark 和 DDL puller 的 Watermark 的最小值
+- 所有 processor 严格按照全局 Watermark 进行数据同步，只会同步数据到全局 Watermark。同步数据后会更新本地 CheckpointTs
 - 同步 DDL 前需要保证所有 processor 的 CheckpointTs 到达 DDL commitTs，之后才会向下游执行 DDL
 
 # 高可用策略

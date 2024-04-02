@@ -85,7 +85,7 @@ The communication protocol between the Owner and the Processors is as follows:
 - ```go
   type CheckpointMessage struct {
   	CheckpointTs Ts `json:"checkpoint-ts"`
-  	ResolvedTs   Ts `json:"resolved-ts"`
+  	Watermark   Ts `json:"resolved-ts"`
       // We can add more fields in the future
   }
   ```

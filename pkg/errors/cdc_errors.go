@@ -530,7 +530,7 @@ var (
 
 	// schema storage errors
 	ErrSchemaStorageUnresolved = errors.Normalize(
-		"can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)",
+		"can not found schema snapshot, the specified ts(%d) is more than watermark(%d)",
 		errors.RFCCodeText("CDC:ErrSchemaStorageUnresolved"),
 	)
 	ErrSchemaStorageGCed = errors.Normalize(
@@ -680,7 +680,7 @@ var (
 		errors.RFCCodeText("CDC:ErrTableIneligible"),
 	)
 	ErrInvalidCheckpointTs = errors.Normalize(
-		"checkpointTs(%v) should not larger than resolvedTs(%v)",
+		"checkpointTs(%v) should not larger than watermark(%v)",
 		errors.RFCCodeText("CDC:ErrInvalidCheckpointTs"),
 	)
 

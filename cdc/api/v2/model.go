@@ -1036,7 +1036,7 @@ type ChangeFeedInfo struct {
 	Error          *RunningError      `json:"error,omitempty"`
 	CreatorVersion string             `json:"creator_version,omitempty"`
 
-	ResolvedTs     uint64                    `json:"resolved_ts"`
+	Watermark      uint64                    `json:"resolved_ts"`
 	CheckpointTs   uint64                    `json:"checkpoint_ts"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
@@ -1046,7 +1046,7 @@ type ChangeFeedInfo struct {
 type SyncedStatus struct {
 	Synced           bool           `json:"synced"`
 	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
-	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	PullerWatermark  model.JSONTime `json:"puller_resolved_ts"`
 	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
 	NowTs            model.JSONTime `json:"now_ts"`
 	Info             string         `json:"info"`
@@ -1249,7 +1249,7 @@ type CloudStorageConfig struct {
 // ChangefeedStatus holds common information of a changefeed in cdc
 type ChangefeedStatus struct {
 	State        string        `json:"state,omitempty"`
-	ResolvedTs   uint64        `json:"resolved_ts"`
+	Watermark    uint64        `json:"resolved_ts"`
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`

@@ -137,7 +137,7 @@ type ChangefeedDetail struct {
 	SinkURI        string              `json:"sink_uri"`
 	CreateTime     JSONTime            `json:"create_time"`
 	StartTs        uint64              `json:"start_ts"`
-	ResolvedTs     uint64              `json:"resolved_ts"`
+	Watermark      uint64              `json:"resolved_ts"`
 	TargetTs       uint64              `json:"target_ts"`
 	CheckpointTSO  uint64              `json:"checkpoint_tso"`
 	CheckpointTime JSONTime            `json:"checkpoint_time"`

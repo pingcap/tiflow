@@ -60,8 +60,8 @@ How to obatin pictures in this document?
 ## Changefeed
 
 - Changefeed table count ： 一个同步任务中分配到各个 TiCDC 节点同步的数据表个数
-- Processor resolved ts ： TiCDC 节点内部状态中已同步的时间点
-- Table resolved ts ： 同步任务中各数据表的同步进度
+- Processor watermark ： TiCDC 节点内部状态中已同步的时间点
+- Table watermark ： 同步任务中各数据表的同步进度
 - Table count maintained by owner： 同步任务中由 owner 管理的表数量和状态
 - Changefeed checkpoint ： 同步任务同步到下游的进度，正常情况下绿柱应和黄线相接
 - PD etcd requests/s ： TiCDC 节点每秒读写 PD 的次数
@@ -70,7 +70,7 @@ How to obatin pictures in this document?
 ![TiCDC Dashboard - Changefeed metrics 1](/docs/media/dashboard/changefeed-1.png)
 
 - Changefeed checkpoint lag ： 同步任务上下游数据的进度差（以时间计算）
-- Changefeed resolved ts lag ： TiCDC 节点内部同步状态与上游的进度差（以时间计算）
+- Changefeed watermark lag ： TiCDC 节点内部同步状态与上游的进度差（以时间计算）
 - Sink write duration ： TiCDC 将一个事务的更改写到下游的耗时直方图
 - Sink write duration percentile： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 将一个事务的更改写到下游所花费的时间
 
@@ -117,7 +117,7 @@ How to obatin pictures in this document?
 ![TiCDC Dashboard - Events metrics 3](/docs/media/dashboard/events-3.png)
 
 - KV client dispatch events/s ： TiCDC 节点内部 KV client 模块每秒分发数据变更的个数
-- KV client batch resolved size ： TiKV 批量发给 TiCDC 的 resolved ts 消息的大小
+- KV client batch resolved size ： TiKV 批量发给 TiCDC 的 watermark 消息的大小
 
 ![TiCDC Dashboard - Events metrics 4](/docs/media/dashboard/events-4.png)
 
@@ -139,9 +139,9 @@ How to obatin pictures in this document?
 
 - CDC endpoint CPU ： TiKV 节点上 CDC endpoint 线程使用的 CPU
 - CDC worker CPU ： TiKV 节点上 CDC worker 线程使用的 CPU
-- Min resolved ts ： TiKV 节点上最小的 resolved ts
-- Min resovled region ： TiKV 节点上最小的 resolved ts 的 region ID
-- Resolved ts lag duration percentile ： TiKV 节点上最小的 resolved ts 与当前时间的差距
+- Min watermark ： TiKV 节点上最小的 watermark
+- Min resovled region ： TiKV 节点上最小的 watermark 的 region ID
+- Watermark lag duration percentile ： TiKV 节点上最小的 watermark 与当前时间的差距
 
 ![TiCDC Dashboard - TiKV metrics 1](/docs/media/dashboard/tikv-1.png)
 

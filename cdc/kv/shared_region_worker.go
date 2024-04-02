@@ -90,12 +90,12 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, sto
 
 // NOTE:
 //  1. all contents come from one same TiKV store stream;
-//  2. eventItem and resolvedTs shouldn't appear simultaneously;
+//  2. eventItem and watermark shouldn't appear simultaneously;
 type statefulEvent struct {
-	eventItem       eventItem
-	resolvedTsBatch resolvedTsBatch
-	stream          *requestedStream
-	start           time.Time
+	eventItem      eventItem
+	watermarkBatch watermarkBatch
+	stream         *requestedStream
+	start          time.Time
 }
 
 type eventItem struct {
@@ -105,7 +105,7 @@ type eventItem struct {
 }
 
 // NOTE: all regions must come from the same requestedTable, and regions will never be empty.
-type resolvedTsBatch struct {
+type watermarkBatch struct {
 	ts      uint64
 	regions []*regionFeedState
 }
@@ -118,11 +118,11 @@ func newEventItem(item *cdcpb.Event, state *regionFeedState, stream *requestedSt
 	}
 }
 
-func newResolvedTsBatch(ts uint64, stream *requestedStream) statefulEvent {
+func newWatermarkBatch(ts uint64, stream *requestedStream) statefulEvent {
 	return statefulEvent{
-		resolvedTsBatch: resolvedTsBatch{ts: ts},
-		stream:          stream,
-		start:           time.Now(),
+		watermarkBatch: watermarkBatch{ts: ts},
+		stream:         stream,
+		start:          time.Now(),
 	}
 }
 
@@ -201,9 +201,9 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 				w.handleSingleRegionError(state, event.stream)
 				return
 			}
-		case *cdcpb.Event_ResolvedTs:
-			w.handleResolvedTs(ctx, resolvedTsBatch{
-				ts:      x.ResolvedTs,
+		case *cdcpb.Event_Watermark:
+			w.handleWatermark(ctx, watermarkBatch{
+				ts:      x.Watermark,
 				regions: []*regionFeedState{state},
 			})
 		case *cdcpb.Event_Error:
@@ -212,8 +212,8 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 			return
 		case *cdcpb.Event_Admin_:
 		}
-	} else if len(event.resolvedTsBatch.regions) > 0 {
-		w.handleResolvedTs(ctx, event.resolvedTsBatch)
+	} else if len(event.watermarkBatch.regions) > 0 {
+		w.handleWatermark(ctx, event.watermarkBatch)
 	}
 }
 
@@ -283,12 +283,12 @@ func handleEventEntry(
 			}
 			state.matcher.matchCachedRollbackRow(true)
 		case cdcpb.Event_COMMITTED:
-			resolvedTs := state.getLastResolvedTs()
-			if entry.CommitTs <= resolvedTs {
-				logPanic("The CommitTs must be greater than the resolvedTs",
+			watermark := state.getLastWatermark()
+			if entry.CommitTs <= watermark {
+				logPanic("The CommitTs must be greater than the watermark",
 					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
-					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("watermark", watermark),
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
@@ -325,13 +325,13 @@ func handleEventEntry(
 				continue
 			}
 
-			// NOTE: state.getLastResolvedTs() will never less than startTs.
-			resolvedTs := state.getLastResolvedTs()
-			if entry.CommitTs <= resolvedTs {
-				logPanic("The CommitTs must be greater than the resolvedTs",
+			// NOTE: state.getLastWatermark() will never less than startTs.
+			watermark := state.getLastWatermark()
+			if entry.CommitTs <= watermark {
+				logPanic("The CommitTs must be greater than the watermark",
 					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
-					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("watermark", watermark),
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
@@ -383,15 +383,15 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeed
 	return revent, nil
 }
 
-func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
+func (w *sharedRegionWorker) handleWatermark(ctx context.Context, batch watermarkBatch) {
 	if w.client.config.KVClient.AdvanceIntervalInMs > 0 {
 		w.advanceTableSpan(ctx, batch)
 	} else {
-		w.forwardResolvedTsToPullerFrontier(ctx, batch)
+		w.forwardWatermarkToPullerFrontier(ctx, batch)
 	}
 }
 
-func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Context, batch resolvedTsBatch) {
+func (w *sharedRegionWorker) forwardWatermarkToPullerFrontier(ctx context.Context, batch watermarkBatch) {
 	resolvedSpans := make(map[SubscriptionID]*struct {
 		spans          []model.RegionComparableSpan
 		requestedTable *requestedTable
@@ -412,17 +412,17 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 		}
 
 		regionID := state.getRegionID()
-		lastResolvedTs := state.getLastResolvedTs()
-		if batch.ts < lastResolvedTs {
-			log.Debug("The resolvedTs is fallen back in kvclient",
+		lastWatermark := state.getLastWatermark()
+		if batch.ts < lastWatermark {
+			log.Debug("The watermark is fallen back in kvclient",
 				zap.String("namespace", w.changefeed.Namespace),
 				zap.String("changefeed", w.changefeed.ID),
 				zap.Uint64("regionID", regionID),
-				zap.Uint64("resolvedTs", batch.ts),
-				zap.Uint64("lastResolvedTs", lastResolvedTs))
+				zap.Uint64("watermark", batch.ts),
+				zap.Uint64("lastWatermark", lastWatermark))
 			continue
 		}
-		state.updateResolvedTs(batch.ts)
+		state.updateWatermark(batch.ts)
 
 		span := model.RegionComparableSpan{Span: state.sri.span, Region: regionID}
 		span.Span.TableID = state.sri.requestedTable.span.TableID
@@ -430,15 +430,15 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 	}
 
 	for subscriptionID, spansAndChan := range resolvedSpans {
-		log.Debug("region worker get a ResolvedTs",
+		log.Debug("region worker get a Watermark",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Any("subscriptionID", subscriptionID),
-			zap.Uint64("ResolvedTs", batch.ts),
+			zap.Uint64("Watermark", batch.ts),
 			zap.Int("spanCount", len(spansAndChan.spans)))
 		if len(spansAndChan.spans) > 0 {
 			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{
-				Spans: spansAndChan.spans, ResolvedTs: batch.ts,
+				Spans: spansAndChan.spans, Watermark: batch.ts,
 			}}
 			x := spansAndChan.requestedTable.associateSubscriptionID(revent)
 			select {
@@ -450,36 +450,36 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 	}
 }
 
-func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolvedTsBatch) {
+func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch watermarkBatch) {
 	for _, state := range batch.regions {
 		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 
 		regionID := state.getRegionID()
-		lastResolvedTs := state.getLastResolvedTs()
-		if batch.ts < lastResolvedTs {
-			log.Debug("The resolvedTs is fallen back in kvclient",
+		lastWatermark := state.getLastWatermark()
+		if batch.ts < lastWatermark {
+			log.Debug("The watermark is fallen back in kvclient",
 				zap.String("namespace", w.changefeed.Namespace),
 				zap.String("changefeed", w.changefeed.ID),
 				zap.Uint64("regionID", regionID),
-				zap.Uint64("resolvedTs", batch.ts),
-				zap.Uint64("lastResolvedTs", lastResolvedTs))
+				zap.Uint64("watermark", batch.ts),
+				zap.Uint64("lastWatermark", lastWatermark))
 			continue
 		}
-		state.updateResolvedTs(batch.ts)
+		state.updateWatermark(batch.ts)
 	}
 
 	rt := batch.regions[0].sri.requestedTable
 	now := time.Now().UnixMilli()
 	lastAdvance := rt.lastAdvanceTime.Load()
 	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && rt.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
-		ts := rt.rangeLock.CalculateMinResolvedTs()
+		ts := rt.rangeLock.CalculateMinWatermark()
 		if ts > rt.startTs {
 			revent := model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpans{
-					Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
-					ResolvedTs: ts,
+					Spans:     []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
+					Watermark: ts,
 				},
 			}
 			x := rt.associateSubscriptionID(revent)

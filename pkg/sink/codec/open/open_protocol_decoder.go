@@ -160,11 +160,11 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey.Type != model.MessageTypeResolved {
 		return 0, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found resolved event message")
 	}
-	resolvedTs := b.nextKey.Ts
+	watermark := b.nextKey.Ts
 	b.nextKey = nil
-	// resolved ts event's value part is empty, can be ignored.
+	// watermark event's value part is empty, can be ignored.
 	b.valueBytes = nil
-	return resolvedTs, nil
+	return watermark, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface

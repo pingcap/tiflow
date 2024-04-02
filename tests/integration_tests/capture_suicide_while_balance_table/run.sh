@@ -12,10 +12,10 @@ SINK_TYPE=$1
 # 1. Two captures, capture-1 is the owner, each capture replicates more than one table.
 # 2. capture-2 replicates some DMLs but has some delay, such as large amount of
 #    incremental scan data, sink block, etc, we name this slow table as table-slow.
-# 3. Before capture-2 the checkpoint ts of table-slow reaches global resolved ts,
+# 3. Before capture-2 the checkpoint ts of table-slow reaches global watermark,
 #    a rebalance operation is triggered, either by manual rebalance or a new capture
 #    joins the cluster. So a delete table operation will be dispatched to capture-2,
-#    and the boundary ts is global resolved ts. capture-2 will continue to replicate
+#    and the boundary ts is global watermark. capture-2 will continue to replicate
 #    table-slow until the checkpoint ts reaches the boundary ts.
 # 4. However, before the checkpoint ts of table-slow reaches boundary ts, capture-2
 #    suicides itself because of some network issue or PD jitter.
@@ -64,7 +64,7 @@ function run() {
 	table_name=$(echo $table_query | tail -n 1 | awk '{print $(NF)}')
 	run_sql "insert into capture_suicide_while_balance_table.${table_name} values (),(),(),(),()"
 
-	# sleep some time to wait global resolved ts forwarded
+	# sleep some time to wait global watermark forwarded
 	sleep 2
 	curl -X POST http://127.0.0.1:8300/capture/owner/move_table -d "cf-id=${changefeed_id}&target-cp-id=${target_capture}&table-id=${one_table_id}"
 	# sleep some time to wait table balance job is written to etcd

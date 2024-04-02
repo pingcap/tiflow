@@ -199,7 +199,7 @@ func testBatchCodec(
 	}
 
 	encoder = encoderBuilder.Build()
-	for _, cs := range s.ResolvedTsCases {
+	for _, cs := range s.WatermarkCases {
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			require.Nil(t, err)

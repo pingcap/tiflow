@@ -287,10 +287,10 @@ func (c *coordinator) poll(
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return schedulepb.Watermark{
-			CheckpointTs:     checkpointCannotProceed,
-			ResolvedTs:       checkpointCannotProceed,
-			LastSyncedTs:     checkpointCannotProceed,
-			PullerResolvedTs: checkpointCannotProceed,
+			CheckpointTs:    checkpointCannotProceed,
+			Watermark:       checkpointCannotProceed,
+			LastSyncedTs:    checkpointCannotProceed,
+			PullerWatermark: checkpointCannotProceed,
 		}, errors.Trace(err)
 	}
 
@@ -304,10 +304,10 @@ func (c *coordinator) poll(
 	msgs, err = c.replicationM.HandleMessage(recvMsgs)
 	if err != nil {
 		return schedulepb.Watermark{
-			CheckpointTs:     checkpointCannotProceed,
-			ResolvedTs:       checkpointCannotProceed,
-			LastSyncedTs:     checkpointCannotProceed,
-			PullerResolvedTs: checkpointCannotProceed,
+			CheckpointTs:    checkpointCannotProceed,
+			Watermark:       checkpointCannotProceed,
+			LastSyncedTs:    checkpointCannotProceed,
+			PullerWatermark: checkpointCannotProceed,
 		}, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
@@ -323,7 +323,7 @@ func (c *coordinator) poll(
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
 		watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
-		// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
+		// tick capture manager after checkpoint calculation to take account watermark in barrier
 		// when redo is enabled
 		msgs = c.captureM.Tick(c.replicationM.ReplicationSets(),
 			c.schedulerM.DrainingTarget(), barrier.Barrier)
@@ -337,10 +337,10 @@ func (c *coordinator) poll(
 			changes.Init, changes.Removed, checkpointTs)
 		if err != nil {
 			return schedulepb.Watermark{
-				CheckpointTs:     checkpointCannotProceed,
-				ResolvedTs:       checkpointCannotProceed,
-				LastSyncedTs:     checkpointCannotProceed,
-				PullerResolvedTs: checkpointCannotProceed,
+				CheckpointTs:    checkpointCannotProceed,
+				Watermark:       checkpointCannotProceed,
+				LastSyncedTs:    checkpointCannotProceed,
+				PullerWatermark: checkpointCannotProceed,
 			}, errors.Trace(err)
 		}
 		msgBuf = append(msgBuf, msgs...)
@@ -358,10 +358,10 @@ func (c *coordinator) poll(
 	msgs, err = c.replicationM.HandleTasks(allTasks)
 	if err != nil {
 		return schedulepb.Watermark{
-			CheckpointTs:     checkpointCannotProceed,
-			ResolvedTs:       checkpointCannotProceed,
-			LastSyncedTs:     checkpointCannotProceed,
-			PullerResolvedTs: checkpointCannotProceed,
+			CheckpointTs:    checkpointCannotProceed,
+			Watermark:       checkpointCannotProceed,
+			LastSyncedTs:    checkpointCannotProceed,
+			PullerWatermark: checkpointCannotProceed,
 		}, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
@@ -369,7 +369,7 @@ func (c *coordinator) poll(
 	// Checkpoint calculation
 	watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
 
-	// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
+	// tick capture manager after checkpoint calculation to take account watermark in barrier
 	// when redo is enabled
 	msgs = c.captureM.Tick(c.replicationM.ReplicationSets(),
 		c.schedulerM.DrainingTarget(), barrier.Barrier)
@@ -379,10 +379,10 @@ func (c *coordinator) poll(
 	err = c.sendMsgs(ctx, msgBuf)
 	if err != nil {
 		return schedulepb.Watermark{
-			CheckpointTs:     checkpointCannotProceed,
-			ResolvedTs:       checkpointCannotProceed,
-			LastSyncedTs:     checkpointCannotProceed,
-			PullerResolvedTs: checkpointCannotProceed,
+			CheckpointTs:    checkpointCannotProceed,
+			Watermark:       checkpointCannotProceed,
+			LastSyncedTs:    checkpointCannotProceed,
+			PullerWatermark: checkpointCannotProceed,
 		}, errors.Trace(err)
 	}
 

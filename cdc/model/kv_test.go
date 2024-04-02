@@ -30,7 +30,7 @@ func TestRegionFeedEvent(t *testing.T) {
 	resolved := &ResolvedSpans{
 		Spans: []RegionComparableSpan{{
 			Span: tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
-		}}, ResolvedTs: 111,
+		}}, Watermark: 111,
 	}
 
 	ev := &RegionFeedEvent{}

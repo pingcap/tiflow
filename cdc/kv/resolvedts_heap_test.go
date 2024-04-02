@@ -23,40 +23,40 @@ import (
 func checkRegionTsInfoWithoutEvTime(t *testing.T, obtained, expected *regionTsInfo) {
 	require.Equal(t, expected.regionID, obtained.regionID)
 	require.Equal(t, expected.index, obtained.index)
-	require.Equal(t, expected.ts.resolvedTs, obtained.ts.resolvedTs)
+	require.Equal(t, expected.ts.watermark, obtained.ts.watermark)
 }
 
-func TestRegionTsManagerResolvedTs(t *testing.T) {
+func TestRegionTsManagerWatermark(t *testing.T) {
 	t.Parallel()
 	mgr := newRegionTsManager()
 	initRegions := []*regionTsInfo{
-		{regionID: 102, ts: newResolvedTsItem(1040)},
-		{regionID: 100, ts: newResolvedTsItem(1000)},
-		{regionID: 101, ts: newResolvedTsItem(1020)},
+		{regionID: 102, ts: newWatermarkItem(1040)},
+		{regionID: 100, ts: newWatermarkItem(1000)},
+		{regionID: 101, ts: newWatermarkItem(1020)},
 	}
 	for _, rts := range initRegions {
-		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+		mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	}
 	require.Equal(t, 3, mgr.Len())
 	rts := mgr.Pop()
-	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
+	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newWatermarkItem(1000), index: -1})
 
-	// resolved ts is not updated
-	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+	// watermark is not updated
+	mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	rts = mgr.Pop()
-	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
+	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newWatermarkItem(1000), index: -1})
 
-	// resolved ts updated
-	rts.ts.resolvedTs = 1001
-	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+	// watermark updated
+	rts.ts.watermark = 1001
+	mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	mgr.Upsert(100, 1100, time.Now())
 
 	rts = mgr.Pop()
-	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 101, ts: newResolvedTsItem(1020), index: -1})
+	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 101, ts: newWatermarkItem(1020), index: -1})
 	rts = mgr.Pop()
-	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 102, ts: newResolvedTsItem(1040), index: -1})
+	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 102, ts: newWatermarkItem(1040), index: -1})
 	rts = mgr.Pop()
-	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100), index: -1})
+	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newWatermarkItem(1100), index: -1})
 	rts = mgr.Pop()
 	require.Nil(t, rts)
 }
@@ -65,57 +65,57 @@ func TestRegionTsManagerPenalty(t *testing.T) {
 	t.Parallel()
 	mgr := newRegionTsManager()
 	initRegions := []*regionTsInfo{
-		{regionID: 100, ts: newResolvedTsItem(1000)},
+		{regionID: 100, ts: newWatermarkItem(1000)},
 	}
 	for _, rts := range initRegions {
-		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+		mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	}
 	require.Equal(t, 1, mgr.Len())
 
-	// test penalty increases if resolved ts keeps unchanged
+	// test penalty increases if watermark keeps unchanged
 	for i := 0; i < 6; i++ {
-		rts := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000)}
-		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+		rts := &regionTsInfo{regionID: 100, ts: newWatermarkItem(1000)}
+		mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	}
 	rts := mgr.Pop()
-	require.Equal(t, uint64(1000), rts.ts.resolvedTs)
+	require.Equal(t, uint64(1000), rts.ts.watermark)
 	require.Equal(t, 6, rts.ts.penalty)
 
-	// test penalty is cleared to zero if resolved ts is advanced
-	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
-	rtsNew := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(2000)}
-	mgr.Upsert(rtsNew.regionID, rtsNew.ts.resolvedTs, rtsNew.ts.eventTime)
+	// test penalty is cleared to zero if watermark is advanced
+	mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
+	rtsNew := &regionTsInfo{regionID: 100, ts: newWatermarkItem(2000)}
+	mgr.Upsert(rtsNew.regionID, rtsNew.ts.watermark, rtsNew.ts.eventTime)
 	rts = mgr.Pop()
 	require.Equal(t, 0, rts.ts.penalty)
-	require.Equal(t, uint64(2000), rts.ts.resolvedTs)
+	require.Equal(t, uint64(2000), rts.ts.watermark)
 }
 
 func TestRegionTsManagerPenaltyForFallBackEvent(t *testing.T) {
 	t.Parallel()
 	mgr := newRegionTsManager()
 	initRegions := []*regionTsInfo{
-		{regionID: 100, ts: newResolvedTsItem(1000)},
+		{regionID: 100, ts: newWatermarkItem(1000)},
 	}
 	for _, rts := range initRegions {
-		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+		mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	}
 	require.Equal(t, 1, mgr.Len())
 
 	// test penalty increases if we meet a fallback event
 	for i := 0; i < 6; i++ {
-		rts := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(uint64(1000 - i))}
-		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
+		rts := &regionTsInfo{regionID: 100, ts: newWatermarkItem(uint64(1000 - i))}
+		mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
 	}
 	rts := mgr.Pop()
-	// original resolvedTs will remain unchanged
-	require.Equal(t, uint64(1000), rts.ts.resolvedTs)
+	// original watermark will remain unchanged
+	require.Equal(t, uint64(1000), rts.ts.watermark)
 	require.Equal(t, 6, rts.ts.penalty)
 
-	// test penalty is cleared to zero if resolved ts is advanced
-	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
-	rtsNew := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(2000)}
-	mgr.Upsert(rtsNew.regionID, rtsNew.ts.resolvedTs, rtsNew.ts.eventTime)
+	// test penalty is cleared to zero if watermark is advanced
+	mgr.Upsert(rts.regionID, rts.ts.watermark, rts.ts.eventTime)
+	rtsNew := &regionTsInfo{regionID: 100, ts: newWatermarkItem(2000)}
+	mgr.Upsert(rtsNew.regionID, rtsNew.ts.watermark, rtsNew.ts.eventTime)
 	rts = mgr.Pop()
 	require.Equal(t, 0, rts.ts.penalty)
-	require.Equal(t, uint64(2000), rts.ts.resolvedTs)
+	require.Equal(t, uint64(2000), rts.ts.watermark)
 }

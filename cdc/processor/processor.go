@@ -174,9 +174,9 @@ func (p *processor) AddTableSpan(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.redo.r.Enabled() {
-					// ResolvedTs is store in external storage when redo log is enabled, so we need to
-					// start table with ResolvedTs in redoDMLManager.
-					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+					// Watermark is store in external storage when redo log is enabled, so we need to
+					// start table with Watermark in redoDMLManager.
+					p.redo.r.StartTable(span, checkpoint.Watermark)
 				}
 				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
 					return false, errors.Trace(err)
@@ -254,14 +254,14 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 
 	globalCheckpointTs := p.latestStatus.CheckpointTs
 
-	var tableResolvedTs, tableCheckpointTs uint64
+	var tableWatermark, tableCheckpointTs uint64
 	var state tablepb.TableState
 	done := func() bool {
 		var alreadyExist bool
 		state, alreadyExist = p.sinkManager.r.GetTableState(span)
 		if alreadyExist {
 			stats := p.sinkManager.r.GetTableStats(span)
-			tableResolvedTs = stats.ResolvedTs
+			tableWatermark = stats.Watermark
 			tableCheckpointTs = stats.CheckpointTs
 		} else {
 			log.Panic("table which was added is not found",
@@ -285,7 +285,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Uint64("tableResolvedTs", tableResolvedTs),
+			zap.Uint64("tableWatermark", tableWatermark),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
@@ -298,7 +298,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Stringer("span", &span),
-		zap.Uint64("tableResolvedTs", tableResolvedTs),
+		zap.Uint64("tableWatermark", tableWatermark),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
@@ -369,7 +369,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 		Span:    span,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: sinkStats.CheckpointTs,
-			ResolvedTs:   sinkStats.ResolvedTs,
+			Watermark:    sinkStats.Watermark,
 			LastSyncedTs: sinkStats.LastSyncedTs,
 		},
 		State: state,
@@ -390,15 +390,15 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
 				CheckpointTs: pullerStats.CheckpointTsIngress,
-				ResolvedTs:   pullerStats.ResolvedTsIngress,
+				Watermark:    pullerStats.WatermarkIngress,
 			},
 			"puller-egress": {
 				CheckpointTs: pullerStats.CheckpointTsEgress,
-				ResolvedTs:   pullerStats.ResolvedTsEgress,
+				Watermark:    pullerStats.WatermarkEgress,
 			},
 			"sink": {
 				CheckpointTs: sinkStats.CheckpointTs,
-				ResolvedTs:   sinkStats.ResolvedTs,
+				Watermark:    sinkStats.Watermark,
 			},
 		},
 	}
@@ -406,11 +406,11 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	sortStats := p.sourceManager.r.GetTableSorterStats(span)
 	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
 		CheckpointTs: sortStats.ReceivedMaxCommitTs,
-		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
+		Watermark:    sortStats.ReceivedMaxWatermark,
 	}
 	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-		CheckpointTs: sinkStats.ResolvedTs,
-		ResolvedTs:   sinkStats.ResolvedTs,
+		CheckpointTs: sinkStats.Watermark,
+		Watermark:    sinkStats.Watermark,
 	}
 
 	return stats
@@ -644,7 +644,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	p.sinkManager.spawn(prcCtx)
 
 	// Bind them so that sourceManager can notify sinkManager.r.
-	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterWatermark)
 	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
 	if err != nil {
 		return err
@@ -741,13 +741,13 @@ func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	tableBarrier := p.calculateTableBarrierTs(barrier)
 	globalBarrierTs := barrier.GetGlobalBarrierTs()
 
-	schemaResolvedTs := p.ddlHandler.r.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < globalBarrierTs {
+	schemaWatermark := p.ddlHandler.r.schemaStorage.Watermark()
+	if schemaWatermark < globalBarrierTs {
 		// Do not update barrier ts that is larger than
-		// DDL puller's resolved ts.
+		// DDL puller's watermark.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		globalBarrierTs = schemaResolvedTs
+		globalBarrierTs = schemaWatermark
 	}
 	log.Debug("update barrierTs",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -917,8 +917,8 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 		state, _ := p.sinkManager.r.GetTableState(span)
 		stats := p.sinkManager.r.GetTableStats(span)
 		// TODO: add table name.
-		fmt.Fprintf(w, "span: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-			&span, stats.ResolvedTs, stats.CheckpointTs, state)
+		fmt.Fprintf(w, "span: %s, watermark: %d, checkpointTs: %d, state: %s\n",
+			&span, stats.Watermark, stats.CheckpointTs, state)
 	}
 
 	return nil
@@ -1009,8 +1009,8 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 			case jobEntry = <-d.puller.Output():
 			}
 			failpoint.Inject("processorDDLResolved", nil)
-			if jobEntry.OpType == model.OpTypeResolved {
-				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
+			if jobEntry.OpType == model.OpTypeWatermark {
+				d.schemaStorage.AdvanceWatermark(jobEntry.CRTs)
 			}
 		}
 	})

@@ -27,7 +27,7 @@ import (
 const (
 	// defaultRequestMemSize is the default memory usage for a request.
 	defaultRequestMemSize = uint64(1024 * 1024) // 1MB
-	// Avoid update resolved ts too frequently, if there are too many small transactions.
+	// Avoid update watermark too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
 	// bufferSize is the size of the buffer used to store the events.
 	bufferSize = 1024
@@ -93,7 +93,7 @@ func validateAndAdjustBound(
 	}
 
 	if !upperBound.IsCommitFence() {
-		log.Panic("Task upperbound must be a ResolvedTs",
+		log.Panic("Task upperbound must be a Watermark",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.Stringer("span", span),

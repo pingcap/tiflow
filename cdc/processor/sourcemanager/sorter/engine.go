@@ -167,6 +167,6 @@ func (p Position) IsCommitFence() bool {
 
 // TableStats of a sort engine.
 type TableStats struct {
-	ReceivedMaxCommitTs   model.Ts
-	ReceivedMaxResolvedTs model.Ts
+	ReceivedMaxCommitTs  model.Ts
+	ReceivedMaxWatermark model.Ts
 }

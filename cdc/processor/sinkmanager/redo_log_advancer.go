@@ -72,7 +72,7 @@ func newRedoLogAdvancer(
 }
 
 // advance tries to emit the events to the redo log manager and
-// advance the resolved ts of the redo log manager.
+// advance the watermark of the redo log manager.
 func (a *redoLogAdvancer) advance(ctx context.Context) error {
 	if len(a.events) > 0 {
 		// releaseMem is used to release the memory quota
@@ -101,15 +101,15 @@ func (a *redoLogAdvancer) advance(ctx context.Context) error {
 		a.pendingTxnSize = 0
 	}
 	if a.lastTxnCommitTs > a.emittedCommitTs {
-		if err := a.redoDMLManager.UpdateResolvedTs(ctx, a.task.span,
+		if err := a.redoDMLManager.UpdateWatermark(ctx, a.task.span,
 			a.lastTxnCommitTs); err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("update resolved ts to redo",
+		log.Debug("update watermark to redo",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
 			zap.Stringer("span", &a.task.span),
-			zap.Uint64("resolvedTs", a.lastTxnCommitTs))
+			zap.Uint64("watermark", a.lastTxnCommitTs))
 		a.emittedCommitTs = a.lastTxnCommitTs
 	}
 

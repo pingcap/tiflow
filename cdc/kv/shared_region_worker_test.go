@@ -163,7 +163,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	}
 }
 
-func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
+func TestSharedRegionWorkerHandleWatermark(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newSharedClientForTestSharedRegionWorker()
@@ -176,21 +176,21 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	s1.sri.requestedTable = client.newRequestedTable(1, tablepb.Span{}, 0, eventCh)
 	s1.sri.lockedRange = &regionlock.LockedRange{}
 	s1.setInitialized()
-	s1.updateResolvedTs(9)
+	s1.updateWatermark(9)
 
 	s2 := newRegionFeedState(singleRegionInfo{verID: tikv.NewRegionVerID(2, 2, 2)}, 2)
 	s2.sri.requestedTable = client.newRequestedTable(2, tablepb.Span{}, 0, eventCh)
 	s2.sri.lockedRange = &regionlock.LockedRange{}
 	s2.setInitialized()
-	s2.updateResolvedTs(11)
+	s2.updateWatermark(11)
 
 	s3 := newRegionFeedState(singleRegionInfo{verID: tikv.NewRegionVerID(3, 3, 3)}, 3)
 	s3.sri.requestedTable = client.newRequestedTable(3, tablepb.Span{}, 0, eventCh)
 	s3.sri.lockedRange = &regionlock.LockedRange{}
-	s3.updateResolvedTs(8)
+	s3.updateWatermark(8)
 
-	worker.handleResolvedTs(ctx, resolvedTsBatch{ts: 10, regions: []*regionFeedState{s1, s2, s3}})
-	require.Equal(t, uint64(10), s1.getLastResolvedTs())
-	require.Equal(t, uint64(11), s2.getLastResolvedTs())
-	require.Equal(t, uint64(8), s3.getLastResolvedTs())
+	worker.handleWatermark(ctx, watermarkBatch{ts: 10, regions: []*regionFeedState{s1, s2, s3}})
+	require.Equal(t, uint64(10), s1.getLastWatermark())
+	require.Equal(t, uint64(11), s2.getLastWatermark())
+	require.Equal(t, uint64(8), s3.getLastWatermark())
 }
