@@ -217,6 +217,8 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
 }
 
+// nonAsyncPool is a dummy implementation of workerpool.AsyncPool, which runs tasks synchronously.
+// It is used in tests to avoid the overhead of asynchronous task scheduling.
 type nonAsyncPool struct{}
 
 func (f *nonAsyncPool) Go(_ context.Context, fn func()) error {
