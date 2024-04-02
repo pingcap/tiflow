@@ -208,7 +208,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		fieldTypeMap[col.Name.L] = &col.FieldType
+		fieldTypeMap[col.Name.O] = &col.FieldType
 	}
 
 	result := &message{
@@ -221,51 +221,20 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	}
 
 	ctx := context.Background()
-	timezone, err := common.QueryTimezone(ctx, d.upstreamTiDB)
-	if err != nil {
-		return nil, err
-	}
+	timezone := common.MustQueryTimezone(ctx, d.upstreamTiDB)
 	switch m.Type {
 	case DMLTypeInsert:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Data = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		result.Data = d.buildData(holder, fieldTypeMap, timezone)
 	case DMLTypeUpdate:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Data = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		result.Data = d.buildData(holder, fieldTypeMap, timezone)
 
-		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
-		if err != nil {
-			return nil, err
-		}
-		old, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Old = old
+		holder = common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		result.Old = d.buildData(holder, fieldTypeMap, timezone)
 	case DMLTypeDelete:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Old = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		result.Old = d.buildData(holder, fieldTypeMap, timezone)
 	}
 
 	d.msg = result
@@ -274,7 +243,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 func (d *Decoder) buildData(
 	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	columnsCount := holder.Length()
 	result := make(map[string]interface{}, columnsCount)
 
@@ -284,13 +253,14 @@ func (d *Decoder) buildData(
 
 		fieldType, ok := fieldTypeMap[col.Name()]
 		if !ok {
-			return nil, cerror.ErrCodecDecode.GenWithStack(
-				"cannot found the field type, schema: %s, table: %s, column: %s",
-				d.msg.Schema, d.msg.Table, col.Name())
+			log.Panic("cannot found the field type",
+				zap.String("schema", d.msg.Schema),
+				zap.String("table", d.msg.Table),
+				zap.String("column", col.Name()))
 		}
 		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
-	return result, nil
+	return result
 }
 
 // NextDDLEvent returns the next DDL event if exists
@@ -387,12 +357,7 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 		table:   table,
 		version: version,
 	}
-
-	entry, ok := m.memo[key]
-	if ok {
-		return entry
-	}
-	return nil
+	return m.memo[key]
 }
 
 type tableSchemaKey struct {
