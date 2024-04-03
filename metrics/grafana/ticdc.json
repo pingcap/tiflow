@@ -2215,7 +2215,7 @@
           "dashLength": 10,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The number of regions that take a long time to scan",
+          "description": "The number of regions that take a long time(more than 60s) to scan",
           "editable": true,
           "fieldConfig": {
             "defaults": {},
