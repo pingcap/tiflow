@@ -104,11 +104,11 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.Equal(t, 0, len(stream.requestedRegions.m))
 }
 
-func TestRequestedTable(t *testing.T) {
+func TestsubscribedTable(t *testing.T) {
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
-	table := s.newRequestedTable(SubscriptionID(1), span, 100, nil)
-	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
+	table := s.newSubscribedTable(SubscriptionID(1), span, 100, nil)
+	s.totalSpans.v = make(map[SubscriptionID]*subscribedTable)
 	s.totalSpans.v[SubscriptionID(1)] = table
 	s.pdClock = pdutil.NewClock4Test()
 
@@ -127,7 +127,7 @@ func TestRequestedTable(t *testing.T) {
 	// Lock another range, no task will be triggered before initialized.
 	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	state := newRegionFeedState(regionInfo{lockedRange: res.LockedRange, requestedTable: table}, 1)
+	state := newRegionFeedState(regionInfo{lockedRange: res.LockedRange, subscribedTable: table}, 1)
 	select {
 	case <-s.resolveLockCh.Out():
 		require.True(t, false, "shouldn't get a resolve lock task")

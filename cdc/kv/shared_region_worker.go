@@ -104,7 +104,7 @@ type eventItem struct {
 	state *regionFeedState
 }
 
-// NOTE: all regions must come from the same requestedTable, and regions will never be empty.
+// NOTE: all regions must come from the same subscribedTable, and regions will never be empty.
 type resolvedTsBatch struct {
 	ts      uint64
 	regions []*regionFeedState
@@ -219,21 +219,21 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 
 // NOTE: context.Canceled won't be treated as an error.
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
-	startTs := state.sri.requestedTable.startTs
+	startTs := state.sri.subscribedTable.startTs
 	emit := func(assembled model.RegionFeedEvent) bool {
-		x := state.sri.requestedTable.associateSubscriptionID(assembled)
+		e := newMultiplexingEvent(assembled, state.sri.subscribedTable)
 		select {
-		case state.sri.requestedTable.eventCh <- x:
+		case state.sri.subscribedTable.eventCh <- e:
 			return true
 		case <-ctx.Done():
 			return false
 		}
 	}
-	tableID := state.sri.requestedTable.span.TableID
+	tableID := state.sri.subscribedTable.span.TableID
 	log.Debug("region worker get an Event",
 		zap.String("namespace", w.changefeed.Namespace),
 		zap.String("changefeed", w.changefeed.ID),
-		zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
+		zap.Any("subscriptionID", state.sri.subscribedTable.subscriptionID),
 		zap.Int64("tableID", tableID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
 	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
@@ -393,8 +393,8 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 
 func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Context, batch resolvedTsBatch) {
 	resolvedSpans := make(map[SubscriptionID]*struct {
-		spans          []model.RegionComparableSpan
-		requestedTable *requestedTable
+		spans           []model.RegionComparableSpan
+		subscribedTable *subscribedTable
 	})
 
 	for _, state := range batch.regions {
@@ -402,13 +402,13 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 			continue
 		}
 
-		spansAndChan := resolvedSpans[state.sri.requestedTable.subscriptionID]
+		spansAndChan := resolvedSpans[state.sri.subscribedTable.subscriptionID]
 		if spansAndChan == nil {
 			spansAndChan = &struct {
-				spans          []model.RegionComparableSpan
-				requestedTable *requestedTable
-			}{requestedTable: state.sri.requestedTable}
-			resolvedSpans[state.sri.requestedTable.subscriptionID] = spansAndChan
+				spans           []model.RegionComparableSpan
+				subscribedTable *subscribedTable
+			}{subscribedTable: state.sri.subscribedTable}
+			resolvedSpans[state.sri.subscribedTable.subscriptionID] = spansAndChan
 		}
 
 		regionID := state.getRegionID()
@@ -425,7 +425,7 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 		state.updateResolvedTs(batch.ts)
 
 		span := model.RegionComparableSpan{Span: state.sri.span, Region: regionID}
-		span.Span.TableID = state.sri.requestedTable.span.TableID
+		span.Span.TableID = state.sri.subscribedTable.span.TableID
 		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
@@ -440,9 +440,9 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{
 				Spans: spansAndChan.spans, ResolvedTs: batch.ts,
 			}}
-			x := spansAndChan.requestedTable.associateSubscriptionID(revent)
+			e := newMultiplexingEvent(revent, spansAndChan.subscribedTable)
 			select {
-			case spansAndChan.requestedTable.eventCh <- x:
+			case spansAndChan.subscribedTable.eventCh <- e:
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
 			case <-ctx.Done():
 			}
@@ -470,21 +470,21 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 		state.updateResolvedTs(batch.ts)
 	}
 
-	rt := batch.regions[0].sri.requestedTable
+	table := batch.regions[0].sri.subscribedTable
 	now := time.Now().UnixMilli()
-	lastAdvance := rt.lastAdvanceTime.Load()
-	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && rt.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
-		ts := rt.rangeLock.CalculateMinResolvedTs()
-		if ts > rt.startTs {
+	lastAdvance := table.lastAdvanceTime.Load()
+	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && table.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
+		ts := table.rangeLock.CalculateMinResolvedTs()
+		if ts > table.startTs {
 			revent := model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpans{
-					Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
+					Spans:      []model.RegionComparableSpan{{Span: table.span, Region: 0}},
 					ResolvedTs: ts,
 				},
 			}
-			x := rt.associateSubscriptionID(revent)
+			e := newMultiplexingEvent(revent, table)
 			select {
-			case rt.eventCh <- x:
+			case table.eventCh <- e:
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
 			case <-ctx.Done():
 			}

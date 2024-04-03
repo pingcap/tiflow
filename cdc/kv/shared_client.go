@@ -120,6 +120,15 @@ type MultiplexingEvent struct {
 	Start          time.Time
 }
 
+// newMultiplexingEvent creates a new MultiplexingEvent.
+func newMultiplexingEvent(e model.RegionFeedEvent, table *subscribedTable) MultiplexingEvent {
+	return MultiplexingEvent{
+		RegionFeedEvent: e,
+		SubscriptionID:  table.subscriptionID,
+		Start:           time.Now(),
+	}
+}
+
 // SharedClient is shared by many tables to pull events from TiKV.
 // All exported Methods are thread-safe.
 type SharedClient struct {
@@ -136,27 +145,25 @@ type SharedClient struct {
 	pdClock      pdutil.Clock
 	lockResolver txnutil.LockResolver
 
+	totalSpans struct {
+		sync.RWMutex
+		v map[SubscriptionID]*subscribedTable
+	}
+
+	workers []*sharedRegionWorker
+	// Note: stores is only motified in handleRegion goroutine,
+	// so it is not protected by a lock.
+	stores map[string]*requestedStore
+
 	// rangeTaskCh is used to receive range tasks.
 	// The tasks will be handled in `handleRangeTask` goroutine.
 	rangeTaskCh *chann.DrainableChann[rangeTask]
 	// regionCh is used to cache region tasks after ranges locked.
-	// The region will be handled in `dispatchRegionRequest` goroutine.
+	// The region will be handled in `handleRegionRequest` goroutine.
 	regionCh *chann.DrainableChann[regionInfo]
-	// regionRouter is used to cache region tasks with rpcCtx attached.
-	regionRouter *chann.DrainableChann[regionInfo]
 	// resolveLockCh is used to retrieve resolve lock tasks.
 	resolveLockCh *chann.DrainableChann[resolveLockTask]
 	errCh         *chann.DrainableChann[regionErrorInfo]
-
-	workers []*sharedRegionWorker
-
-	// only modified in requestRegionToStore so lock is unnecessary.
-	requestedStores map[string]*requestedStore
-
-	totalSpans struct {
-		sync.RWMutex
-		v map[SubscriptionID]*requestedTable
-	}
 
 	logRegionDetails func(msg string, fields ...zap.Field)
 }
@@ -171,18 +178,28 @@ type resolveLockTask struct {
 // rangeTask represents a task to subscribe a range span of a table.
 // It can be a part of a table or a whole table, it also can be a part of a region.
 type rangeTask struct {
-	span           tablepb.Span
-	requestedTable *requestedTable
+	span            tablepb.Span
+	subscribedTable *subscribedTable
 }
 
+// requestedStore represents a store that has been connected.
+// A store may have multiple streams.
 type requestedStore struct {
-	storeID    uint64
-	storeAddr  string
+	storeID   uint64
+	storeAddr string
+	// Use to select a stream to send request.
 	nextStream atomic.Uint32
 	streams    []*requestedStream
 }
 
-type requestedTable struct {
+func (rs *requestedStore) getStream() *requestedStream {
+	index := rs.nextStream.Add(1) % uint32(len(rs.streams))
+	return rs.streams[index]
+}
+
+// subscribedTable represents a table to subscribe.
+// It contains the span of the table, the startTs of the table, and the ouput event channel.
+type subscribedTable struct {
 	subscriptionID SubscriptionID
 
 	span      tablepb.Span
@@ -225,13 +242,12 @@ func NewSharedClient(
 
 		rangeTaskCh:   chann.NewAutoDrainChann[rangeTask](),
 		regionCh:      chann.NewAutoDrainChann[regionInfo](),
-		regionRouter:  chann.NewAutoDrainChann[regionInfo](),
 		resolveLockCh: chann.NewAutoDrainChann[resolveLockTask](),
 		errCh:         chann.NewAutoDrainChann[regionErrorInfo](),
 
-		requestedStores: make(map[string]*requestedStore),
+		stores: make(map[string]*requestedStore),
 	}
-	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
+	s.totalSpans.v = make(map[SubscriptionID]*subscribedTable)
 	if cfg.Debug.Puller.LogRegionDetails {
 		s.logRegionDetails = log.Info
 	} else {
@@ -249,7 +265,7 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
-// It new a requestedTable and store it in `s.totalSpans`,
+// It new a subscribedTable and store it in `s.totalSpans`,
 // and send a rangeTask to `s.requestRangeCh`.
 // The rangeTask will be handled in `handleRequestRanges` goroutine.
 func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
@@ -259,12 +275,12 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	rt := s.newRequestedTable(subID, span, startTs, eventCh)
+	rt := s.newSubscribedTable(subID, span, startTs, eventCh)
 	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
 
-	s.rangeTaskCh.In() <- rangeTask{span: span, requestedTable: rt}
+	s.rangeTaskCh.In() <- rangeTask{span: span, subscribedTable: rt}
 	log.Info("event feed subscribes table success",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
@@ -324,8 +340,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	}
 
 	g.Go(func() error { return s.handleRangeTask(ctx) })
-	g.Go(func() error { return s.handleRegionRequest(ctx) })
-	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
+	g.Go(func() error { return s.handleRegion(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.resolveLock(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
@@ -343,24 +358,18 @@ func (s *SharedClient) Run(ctx context.Context) error {
 func (s *SharedClient) Close() {
 	s.rangeTaskCh.CloseAndDrain()
 	s.regionCh.CloseAndDrain()
-	s.regionRouter.CloseAndDrain()
 	s.resolveLockCh.CloseAndDrain()
 	s.errCh.CloseAndDrain()
 	s.clearMetrics()
 
-	for _, rs := range s.requestedStores {
+	for _, rs := range s.stores {
 		for _, stream := range rs.streams {
 			stream.requests.CloseAndDrain()
 		}
 	}
 }
 
-// GetPDClock returns a pdutil.Clock.
-func (s *SharedClient) GetPDClock() pdutil.Clock {
-	return s.pdClock
-}
-
-func (s *SharedClient) setTableStopped(rt *requestedTable) {
+func (s *SharedClient) setTableStopped(rt *subscribedTable) {
 	log.Info("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
@@ -370,14 +379,14 @@ func (s *SharedClient) setTableStopped(rt *requestedTable) {
 	// Then send a special singleRegionInfo to regionRouter to deregister the table
 	// from all TiKV instances.
 	if rt.stopped.CompareAndSwap(false, true) {
-		s.regionRouter.In() <- regionInfo{requestedTable: rt}
+		s.regionCh.In() <- regionInfo{subscribedTable: rt}
 		if rt.rangeLock.Stop() {
 			s.onTableDrained(rt)
 		}
 	}
 }
 
-func (s *SharedClient) onTableDrained(rt *requestedTable) {
+func (s *SharedClient) onTableDrained(rt *subscribedTable) {
 	log.Info("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
@@ -392,81 +401,70 @@ func (s *SharedClient) onRegionFail(errInfo regionErrorInfo) {
 	s.errCh.In() <- errInfo
 }
 
-// handleRegionRequest receives regionInfo from regionCh and attch rpcCtx to them,
-// then send them to regionRouter.
-func (s *SharedClient) handleRegionRequest(ctx context.Context) error {
-	attachCtx := func(ctx context.Context, sri regionInfo) {
-		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
-		if rpcCtx != nil {
-			sri.rpcCtx = rpcCtx
-			locateTime := time.Since(sri.lockedRange.Created).Milliseconds()
-			s.metrics.regionLocateDuration.Observe(float64(locateTime))
-			s.regionRouter.In() <- sri
-			return
-		}
-		if err != nil {
-			log.Debug("event feed get RPC context fail",
+// handleRegion receives regionInfo from regionCh and attch rpcCtx to them,
+// then send them to corresponding requestedStore.
+func (s *SharedClient) handleRegion(ctx context.Context, eg *errgroup.Group) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case region := <-s.regionCh.Out():
+			// If lockedRange is nil it means it's a special task from stopping the table.
+			if region.lockedRange == nil {
+				for _, rs := range s.stores {
+					s.broadcastRequest(rs, region)
+				}
+				continue
+			}
+
+			s.attachRPCContextForRegion(ctx, &region)
+			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
+			stream := store.getStream()
+			stream.requests.In() <- region
+
+			s.logRegionDetails("event feed will request a region",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
-				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Error(err))
-		}
-		s.onRegionFail(newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case sri := <-s.regionCh.Out():
-			attachCtx(ctx, sri)
+				zap.Uint64("streamID", stream.streamID),
+				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
+				zap.Uint64("regionID", region.verID.GetID()),
+				zap.Uint64("storeID", store.storeID),
+				zap.String("addr", store.storeAddr))
 		}
 	}
 }
 
-func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Group) error {
-	for {
-		var region regionInfo
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case region = <-s.regionRouter.Out():
-		}
-		// If lockedRange is nil it means it's a special task from stopping the table.
-		if region.lockedRange == nil {
-			for _, rs := range s.requestedStores {
-				s.broadcastRequest(rs, region)
-			}
-			continue
-		}
-
-		storeID := region.rpcCtx.Peer.StoreId
-		storeAddr := region.rpcCtx.Addr
-		s.appendRequest(s.requestStore(ctx, g, storeID, storeAddr), region)
-	}
-}
-
-func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
+func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region *regionInfo) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, kvclientv2.ReplicaReadLeader, 0)
-	if err != nil {
-		return nil, errors.Trace(err)
+	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, region.verID, kvclientv2.ReplicaReadLeader, 0)
+	if rpcCtx != nil {
+		region.rpcCtx = rpcCtx
+		locateTime := time.Since(region.lockedRange.Created).Milliseconds()
+		s.metrics.regionLocateDuration.Observe(float64(locateTime))
+		return
 	}
-	return rpcCtx, nil
+	if err != nil {
+		log.Debug("event feed get RPC context fail",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", region.verID.GetID()),
+			zap.Error(err))
+	}
+	s.onRegionFail(newRegionErrorInfo(*region, &rpcCtxUnavailableErr{verID: region.verID}))
 }
 
-func (s *SharedClient) requestStore(
+// getStore gets a requestedStore from requestedStores by storeAddr.
+func (s *SharedClient) getStore(
 	ctx context.Context, g *errgroup.Group,
 	storeID uint64, storeAddr string,
 ) *requestedStore {
 	var rs *requestedStore
-	if rs = s.requestedStores[storeAddr]; rs != nil {
+	if rs = s.stores[storeAddr]; rs != nil {
 		return rs
 	}
-
 	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
-	s.requestedStores[storeAddr] = rs
+	s.stores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
@@ -475,36 +473,23 @@ func (s *SharedClient) requestStore(
 	return rs
 }
 
-func (s *SharedClient) createRegionRequest(sri regionInfo) *cdcpb.ChangeDataRequest {
+func (s *SharedClient) createRegionRequest(region regionInfo) *cdcpb.ChangeDataRequest {
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
-		RegionId:     sri.verID.GetID(),
-		RequestId:    uint64(sri.requestedTable.subscriptionID),
-		RegionEpoch:  sri.rpcCtx.Meta.RegionEpoch,
-		CheckpointTs: sri.resolvedTs(),
-		StartKey:     sri.span.StartKey,
-		EndKey:       sri.span.EndKey,
+		RegionId:     region.verID.GetID(),
+		RequestId:    uint64(region.subscribedTable.subscriptionID),
+		RegionEpoch:  region.rpcCtx.Meta.RegionEpoch,
+		CheckpointTs: region.resolvedTs(),
+		StartKey:     region.span.StartKey,
+		EndKey:       region.span.EndKey,
 		ExtraOp:      kvrpcpb.ExtraOp_ReadOldValue,
 		FilterLoop:   s.filterLoop,
 	}
 }
 
-func (s *SharedClient) appendRequest(r *requestedStore, sri regionInfo) {
-	offset := r.nextStream.Add(1) % uint32(len(r.streams))
-	s.logRegionDetails("event feed will request a region",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID),
-		zap.Uint64("streamID", r.streams[offset].streamID),
-		zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
-		zap.Uint64("regionID", sri.verID.GetID()),
-		zap.Uint64("storeID", r.storeID),
-		zap.String("addr", r.storeAddr))
-	r.streams[offset].requests.In() <- sri
-}
-
-func (s *SharedClient) broadcastRequest(r *requestedStore, sri regionInfo) {
+func (s *SharedClient) broadcastRequest(r *requestedStore, region regionInfo) {
 	for _, stream := range r.streams {
-		stream.requests.In() <- sri
+		stream.requests.In() <- region
 	}
 }
 
@@ -516,7 +501,7 @@ func (s *SharedClient) handleRangeTask(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-s.rangeTaskCh.Out():
-			g.Go(func() error { return s.divideSpanAndScheduleRegionRequests(ctx, task.span, task.requestedTable) })
+			g.Go(func() error { return s.divideSpanAndScheduleRegionRequests(ctx, task.span, task.subscribedTable) })
 		}
 	}
 }
@@ -524,12 +509,12 @@ func (s *SharedClient) handleRangeTask(ctx context.Context) error {
 // divideSpanAndScheduleRegionRequests processes the specified span by dividing it into
 // manageable regions and schedules requests to subscribe to these regions.
 // 1. Load regions from PD.
-// 2. Find the intersection of each region.span and the requestedTable.span.
+// 2. Find the intersection of each region.span and the subscribedTable.span.
 // 3. Schedule a region request to subscribe the region.
 func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 	ctx context.Context,
 	span tablepb.Span,
-	requestedTable *requestedTable,
+	subscribedTable *subscribedTable,
 ) error {
 	// Limit the number of regions loaded at a time to make the load more stable.
 	limit := 1024
@@ -545,7 +530,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 		log.Debug("event feed is going to load regions",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", requestedTable.subscriptionID),
+			zap.Any("subscriptionID", subscribedTable.subscriptionID),
 			zap.Any("span", nextSpan))
 
 		backoff := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -554,7 +539,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Any("subscriptionID", requestedTable.subscriptionID),
+				zap.Any("subscriptionID", subscribedTable.subscriptionID),
 				zap.Any("span", nextSpan),
 				zap.Error(err))
 			backoffBeforeLoad = true
@@ -572,7 +557,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			log.Warn("event feed load regions with holes",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Any("subscriptionID", requestedTable.subscriptionID),
+				zap.Any("subscriptionID", subscribedTable.subscriptionID),
 				zap.Any("span", nextSpan))
 			backoffBeforeLoad = true
 			continue
@@ -584,25 +569,25 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			// So we need to fix it by calling spanz.HackSpan.
 			regionSpan = spanz.HackSpan(regionSpan)
 
-			// Find the intersection of the regionSpan returned by PD and the requestedTable.span.
+			// Find the intersection of the regionSpan returned by PD and the subscribedTable.span.
 			// The intersection is the span that needs to be subscribed.
-			intersectantSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
+			intersectantSpan, err := spanz.Intersect(subscribedTable.span, regionSpan)
 			if err != nil {
 				log.Panic("event feed check spans intersect shouldn't fail",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Any("subscriptionID", requestedTable.subscriptionID))
+					zap.Any("subscriptionID", subscribedTable.subscriptionID))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
-			regionInfo := newRegionInfo(verID, intersectantSpan, nil, requestedTable)
+			regionInfo := newRegionInfo(verID, intersectantSpan, nil, subscribedTable)
 
 			// Schedule a region request to subscribe the region.
 			s.scheduleRegionRequest(ctx, regionInfo)
 
 			nextSpan.StartKey = regionMeta.EndKey
-			// If the nextSpan.StartKey is larger than the requestedTable.span.EndKey,
-			// it means all span of the requestedTable have been requested. So we return.
+			// If the nextSpan.StartKey is larger than the subscribedTable.span.EndKey,
+			// it means all span of the subscribedTable have been requested. So we return.
 			if spanz.EndCompare(nextSpan.StartKey, span.EndKey) >= 0 {
 				return nil
 			}
@@ -625,14 +610,14 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, region regionI
 			}
 		case regionlock.LockRangeStatusStale:
 			for _, r := range res.RetryRanges {
-				s.scheduleRangeRequest(ctx, r, region.requestedTable)
+				s.scheduleRangeRequest(ctx, r, region.subscribedTable)
 			}
 		default:
 			return
 		}
 	}
 
-	rangeLock := region.requestedTable.rangeLock
+	rangeLock := region.subscribedTable.rangeLock
 	res := rangeLock.LockRange(ctx, region.span.StartKey, region.span.EndKey, region.verID.GetID(), region.verID.GetVer())
 	if res.Status == regionlock.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -642,10 +627,10 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, region regionI
 
 func (s *SharedClient) scheduleRangeRequest(
 	ctx context.Context, span tablepb.Span,
-	requestedTable *requestedTable,
+	subscribedTable *subscribedTable,
 ) {
 	select {
-	case s.rangeTaskCh.In() <- rangeTask{span: span, requestedTable: requestedTable}:
+	case s.rangeTaskCh.In() <- rangeTask{span: span, subscribedTable: subscribedTable}:
 	case <-ctx.Done():
 	}
 }
@@ -664,10 +649,10 @@ func (s *SharedClient) handleErrors(ctx context.Context) error {
 }
 
 func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
-	if errInfo.requestedTable.rangeLock.UnlockRange(
+	if errInfo.subscribedTable.rangeLock.UnlockRange(
 		errInfo.span.StartKey, errInfo.span.EndKey,
 		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs()) {
-		s.onTableDrained(errInfo.requestedTable)
+		s.onTableDrained(errInfo.subscribedTable)
 		return nil
 	}
 
@@ -678,7 +663,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		s.logRegionDetails("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
+			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
 			zap.Stringer("error", innerErr))
 
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
@@ -689,12 +674,12 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		}
 		if innerErr.GetEpochNotMatch() != nil {
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
+			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 			return nil
 		}
 		if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
+			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 			return nil
 		}
 		if innerErr.GetServerIsBusy() != nil {
@@ -717,14 +702,14 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		log.Warn("empty or unknown cdc error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
+			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
 			zap.Stringer("error", innerErr))
 		metricFeedUnknownErrorCounter.Inc()
 		s.scheduleRegionRequest(ctx, errInfo.regionInfo)
 		return nil
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
+		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
@@ -737,7 +722,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		log.Warn("event feed meets an internal error, fail the changefeed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
+			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
 			zap.Error(err))
 		return err
 	}
@@ -853,14 +838,14 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 	}
 }
 
-func (s *SharedClient) newRequestedTable(
+func (s *SharedClient) newSubscribedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
 	eventCh chan<- MultiplexingEvent,
-) *requestedTable {
+) *subscribedTable {
 	cfName := s.changefeed.String()
 	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
 
-	rt := &requestedTable{
+	rt := &subscribedTable{
 		subscriptionID: subID,
 		span:           span,
 		startTs:        startTs,
@@ -878,15 +863,7 @@ func (s *SharedClient) newRequestedTable(
 	return rt
 }
 
-func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) MultiplexingEvent {
-	return MultiplexingEvent{
-		RegionFeedEvent: event,
-		SubscriptionID:  r.subscriptionID,
-		Start:           time.Now(),
-	}
-}
-
-func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
+func (r *subscribedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
 
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)

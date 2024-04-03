@@ -75,7 +75,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		tikv.RegionVerID{},
 		span,
 		&tikv.RPCContext{},
-		&requestedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh},
+		&subscribedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh},
 	)
 	sri.lockedRange = &regionlock.LockedRange{}
 	state := newRegionFeedState(sri, 1)
@@ -177,19 +177,19 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	eventCh := make(chan MultiplexingEvent, 2)
 
 	s1 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(1, 1, 1)}, 1)
-	s1.sri.requestedTable = client.newRequestedTable(1, tablepb.Span{}, 0, eventCh)
+	s1.sri.subscribedTable = client.newSubscribedTable(1, tablepb.Span{}, 0, eventCh)
 	s1.sri.lockedRange = &regionlock.LockedRange{}
 	s1.setInitialized()
 	s1.updateResolvedTs(9)
 
 	s2 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(2, 2, 2)}, 2)
-	s2.sri.requestedTable = client.newRequestedTable(2, tablepb.Span{}, 0, eventCh)
+	s2.sri.subscribedTable = client.newSubscribedTable(2, tablepb.Span{}, 0, eventCh)
 	s2.sri.lockedRange = &regionlock.LockedRange{}
 	s2.setInitialized()
 	s2.updateResolvedTs(11)
 
 	s3 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(3, 3, 3)}, 3)
-	s3.sri.requestedTable = client.newRequestedTable(3, tablepb.Span{}, 0, eventCh)
+	s3.sri.subscribedTable = client.newSubscribedTable(3, tablepb.Span{}, 0, eventCh)
 	s3.sri.lockedRange = &regionlock.LockedRange{}
 	s3.updateResolvedTs(8)
 

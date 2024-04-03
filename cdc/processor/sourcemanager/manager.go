@@ -130,6 +130,7 @@ func newSourceManager(
 	mgr.puller = puller.NewMultiplexingPuller(
 		mgr.changefeedID,
 		client,
+		up.PDClock,
 		consume,
 		slots,
 		hasher,

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +40,10 @@ func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *Multiplexi
 		}
 	}
 	return NewMultiplexingPuller(
-		model.ChangeFeedID{}, client, consume,
+		model.ChangeFeedID{},
+		client,
+		pdutil.NewClock4Test(),
+		consume,
 		1, func(tablepb.Span, int) int { return 0 }, 1,
 	)
 }

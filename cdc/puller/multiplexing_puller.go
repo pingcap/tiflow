@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -128,18 +129,11 @@ type subscription struct {
 	subID kv.SubscriptionID
 }
 
-// Puller pull data from tikv and push changes into a buffer.
-// type Puller interface {
-// 	// Run the puller, continually fetch event from TiKV and add event into buffer.
-// 	Run(ctx context.Context) error
-// 	Output() <-chan *model.RawKVEntry
-// 	Stats() Stats
-// }
-
 // MultiplexingPuller works with `kv.SharedClient`. All tables share resources.
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
+	pdClock    pdutil.Clock
 	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
 	// inputChannelIndexer is used to determine which input channel to use for a given span.
 	inputChannelIndexer func(span tablepb.Span, workerCount int) int
@@ -177,6 +171,7 @@ type MultiplexingPuller struct {
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
+	pdClock pdutil.Clock,
 	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
 	workerCount int,
 	inputChannelIndexer func(tablepb.Span, int) int,
@@ -185,6 +180,7 @@ func NewMultiplexingPuller(
 	mpuller := &MultiplexingPuller{
 		changefeed:              changefeed,
 		client:                  client,
+		pdClock:                 pdClock,
 		consume:                 consume,
 		inputChannelIndexer:     inputChannelIndexer,
 		resolvedTsAdvancerCount: resolvedTsAdvancerCount,
@@ -210,7 +206,8 @@ func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, t
 func (p *MultiplexingPuller) subscribe(
 	spans []tablepb.Span,
 	startTs model.Ts,
-	tableName string) {
+	tableName string,
+) {
 	for _, span := range spans {
 		// Base on the current design, a MultiplexingPuller is only used for one changefeed.
 		// So, one span can only be subscribed once.
@@ -238,8 +235,8 @@ func (p *MultiplexingPuller) subscribe(
 	progress.consume.f = func(
 		ctx context.Context,
 		raw *model.RawKVEntry,
-		spans []tablepb.Span) error {
-
+		spans []tablepb.Span,
+	) error {
 		progress.consume.RLock()
 		defer progress.consume.RUnlock()
 		if !progress.consume.removed {
@@ -470,7 +467,7 @@ func (p *MultiplexingPuller) runResolveLockChecker(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveLockTicker.C:
 		}
-		currentTime := p.client.GetPDClock().CurrentTime()
+		currentTime := p.pdClock.CurrentTime()
 		for progress := range p.getAllProgresses() {
 			select {
 			case <-ctx.Done():

@@ -326,7 +326,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	sri := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
 	for {
-		subscriptionID := sri.requestedTable.subscriptionID
+		subscriptionID := sri.subscribedTable.subscriptionID
 		log.Debug("event feed gets a singleRegionInfo",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
@@ -364,9 +364,9 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					return errors.Trace(err)
 				}
 			}
-		} else if sri.requestedTable.stopped.Load() {
+		} else if sri.subscribedTable.stopped.Load() {
 			// It can be skipped directly because there must be no pending states from
-			// the stopped requestedTable, or the special singleRegionInfo for stopping
+			// the stopped subscribedTable, or the special singleRegionInfo for stopping
 			// the table will be handled later.
 			c.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 		} else {

@@ -32,25 +32,29 @@ const (
 )
 
 type regionInfo struct {
-	verID  tikv.RegionVerID
+	verID tikv.RegionVerID
+	// The span of the region.
+	// Note: The span is not always the real span of the region, it is the span of the
+	// region that we are interested in.
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	requestedTable *requestedTable
-	lockedRange    *regionlock.LockedRange
+	// The table that the region belongs to.
+	subscribedTable *subscribedTable
+	lockedRange     *regionlock.LockedRange
 }
 
 func newRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,
 	rpcCtx *tikv.RPCContext,
-	requestedTable *requestedTable,
+	subscribedTable *subscribedTable,
 ) regionInfo {
 	return regionInfo{
-		verID:          verID,
-		span:           span,
-		rpcCtx:         rpcCtx,
-		requestedTable: requestedTable,
+		verID:           verID,
+		span:            span,
+		rpcCtx:          rpcCtx,
+		subscribedTable: subscribedTable,
 	}
 }
 
@@ -163,8 +167,8 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
-	if s.sri.requestedTable != nil {
-		s.sri.requestedTable.postUpdateRegionResolvedTs(
+	if s.sri.subscribedTable != nil {
+		s.sri.subscribedTable.postUpdateRegionResolvedTs(
 			s.sri.verID.GetID(),
 			s.sri.verID.GetVer(),
 			state,
