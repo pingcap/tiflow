@@ -98,7 +98,7 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
 	require.Nil(t, err)
 
-	gcManager.lastSafePointTs = 20
+	gcManager.lastSafePointTs.Store(20)
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 	require.True(t, cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)))
 	require.True(t, cerror.IsChangefeedGCFastFailError(err))

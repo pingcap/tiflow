@@ -227,6 +227,8 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 		ok := a.liveness.Store(liveness)
 		if ok {
 			log.Info("schedulerv3: agent updates liveness",
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.String("old", currentLiveness.String()),
 				zap.String("new", liveness.String()))
 		}

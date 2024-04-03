@@ -600,6 +600,13 @@ func testChangefeedReleaseResource(
 	tester.MustApplyPatches()
 	require.Equal(t, cf.initialized, expectedInitialized)
 
+	// redo's metaManager:Run() will call preStart, which will clean up the redo log dir.
+	// Run() is another background goroutine called in tick()
+	// so it's not guaranteed to be started before the next tick()
+	// Thus, we need to wait for a while to make sure the redo log dir is cleaned up before remove changefeed
+	// Otherwise, it will delete the delete mark file after we remove changefeed, which will cause the test to fail
+	time.Sleep(5 * time.Second)
+
 	// remove changefeed from state manager by admin job
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{
 		CfID: cf.id,

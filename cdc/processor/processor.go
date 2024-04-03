@@ -138,6 +138,10 @@ func (p *processor) AddTableSpan(
 		return false, nil
 	}
 
+	failpoint.Inject("ProcessorAddTableError", func() {
+		failpoint.Return(false, cerror.New("processor add table injected error"))
+	})
+
 	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Error("table start ts must not be 0",

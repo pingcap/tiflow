@@ -584,10 +584,11 @@ func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *vars.Global
 func (c *captureImpl) runEtcdWorker(
 	ctx context.Context,
 	reactor orchestrator.Reactor,
-	reactorState orchestrator.ReactorState,
+	reactorState *orchestrator.GlobalReactorState,
 	timerInterval time.Duration,
 	role string,
 ) error {
+	reactorState.Role = role
 	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
 		etcd.BaseKey(c.EtcdClient.GetClusterID()), reactor, reactorState, c.migrator)
 	if err != nil {

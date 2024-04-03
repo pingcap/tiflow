@@ -500,8 +500,10 @@ func decodeColumns(
 	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Panic("cannot found the value for the column",
+			log.Warn("cannot found the value for the column, "+
+				"it must be a generated column and TiCDC does not replicate generated column value",
 				zap.String("column", info.Name.O))
+			continue
 		}
 		columnID := tableInfo.ForceGetColumnIDByName(info.Name.O)
 		col := decodeColumn(value, columnID, &info.FieldType)
@@ -509,6 +511,7 @@ func decodeColumns(
 			log.Panic("cannot decode column",
 				zap.String("name", info.Name.O), zap.Any("data", value))
 		}
+
 		result = append(result, col)
 	}
 	return result
