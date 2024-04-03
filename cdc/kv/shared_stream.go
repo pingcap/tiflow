@@ -34,8 +34,8 @@ type requestedStream struct {
 	streamID uint64
 
 	// To trigger a connect action lazily.
-	preFetchForConnecting *singleRegionInfo
-	requests              *chann.DrainableChann[singleRegionInfo]
+	preFetchForConnecting *regionInfo
+	requests              *chann.DrainableChann[regionInfo]
 
 	requestedRegions struct {
 		sync.RWMutex
@@ -60,7 +60,7 @@ type tableExclusive struct {
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
 	stream := newRequestedStream(streamIDGen.Add(1))
 	stream.logRegionDetails = c.logRegionDetails
-	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
+	stream.requests = chann.NewAutoDrainChann[regionInfo]()
 
 	waitForPreFetching := func() error {
 		if stream.preFetchForConnecting != nil {
@@ -77,7 +77,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 				return ctx.Err()
 			case sri := <-stream.requests.Out():
 				if sri.lockedRange != nil {
-					stream.preFetchForConnecting = new(singleRegionInfo)
+					stream.preFetchForConnecting = new(regionInfo)
 					*stream.preFetchForConnecting = sri
 					return nil
 				}
@@ -276,11 +276,11 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		return nil
 	}
 
-	fetchMoreReq := func() (singleRegionInfo, error) {
+	fetchMoreReq := func() (regionInfo, error) {
 		waitReqTicker := time.NewTicker(60 * time.Second)
 		defer waitReqTicker.Stop()
 		for {
-			var sri singleRegionInfo
+			var sri regionInfo
 			select {
 			case <-ctx.Done():
 				return sri, ctx.Err()
@@ -452,8 +452,8 @@ func (s *requestedStream) clearStates() (v map[SubscriptionID]map[uint64]*region
 	return
 }
 
-func (s *requestedStream) clearPendingRegions() []singleRegionInfo {
-	regions := make([]singleRegionInfo, 0, s.requests.Len()+1)
+func (s *requestedStream) clearPendingRegions() []regionInfo {
+	regions := make([]regionInfo, 0, s.requests.Len()+1)
 	if s.preFetchForConnecting != nil {
 		sri := *s.preFetchForConnecting
 		s.preFetchForConnecting = nil

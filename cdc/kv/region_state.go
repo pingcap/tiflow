@@ -31,7 +31,7 @@ const (
 	stateRemoved uint32 = 2
 )
 
-type singleRegionInfo struct {
+type regionInfo struct {
 	verID  tikv.RegionVerID
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
@@ -40,36 +40,38 @@ type singleRegionInfo struct {
 	lockedRange    *regionlock.LockedRange
 }
 
-func newSingleRegionInfo(
+func newRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,
 	rpcCtx *tikv.RPCContext,
-) singleRegionInfo {
-	return singleRegionInfo{
-		verID:  verID,
-		span:   span,
-		rpcCtx: rpcCtx,
+	requestedTable *requestedTable,
+) regionInfo {
+	return regionInfo{
+		verID:          verID,
+		span:           span,
+		rpcCtx:         rpcCtx,
+		requestedTable: requestedTable,
 	}
 }
 
-func (s singleRegionInfo) resolvedTs() uint64 {
+func (s regionInfo) resolvedTs() uint64 {
 	return s.lockedRange.ResolvedTs.Load()
 }
 
 type regionErrorInfo struct {
-	singleRegionInfo
+	regionInfo
 	err error
 }
 
-func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
+func newRegionErrorInfo(info regionInfo, err error) regionErrorInfo {
 	return regionErrorInfo{
-		singleRegionInfo: info,
-		err:              err,
+		regionInfo: info,
+		err:        err,
 	}
 }
 
 type regionFeedState struct {
-	sri       singleRegionInfo
+	sri       regionInfo
 	requestID uint64
 	matcher   *matcher
 
@@ -87,7 +89,7 @@ type regionFeedState struct {
 	}
 }
 
-func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
+func newRegionFeedState(sri regionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
 		sri:       sri,
 		requestID: requestID,
@@ -171,7 +173,7 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 	}
 }
 
-func (s *regionFeedState) getRegionInfo() singleRegionInfo {
+func (s *regionFeedState) getRegionInfo() regionInfo {
 	return s.sri
 }
 

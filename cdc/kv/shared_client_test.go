@@ -127,7 +127,7 @@ func TestRequestedTable(t *testing.T) {
 	// Lock another range, no task will be triggered before initialized.
 	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	state := newRegionFeedState(singleRegionInfo{lockedRange: res.LockedRange, requestedTable: table}, 1)
+	state := newRegionFeedState(regionInfo{lockedRange: res.LockedRange, requestedTable: table}, 1)
 	select {
 	case <-s.resolveLockCh.Out():
 		require.True(t, false, "shouldn't get a resolve lock task")
