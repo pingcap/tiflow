@@ -176,7 +176,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Uint64("streamID", stream.streamID),
 			zap.Any("subscriptionID", state.getRegionID()),
-			zap.Uint64("regionID", state.sri.verID.GetID()),
+			zap.Uint64("regionID", state.region.verID.GetID()),
 			zap.Bool("reschedule", stepsToRemoved),
 			zap.Error(err))
 	}
@@ -219,21 +219,21 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 
 // NOTE: context.Canceled won't be treated as an error.
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
-	startTs := state.sri.subscribedTable.startTs
+	startTs := state.region.subscribedTable.startTs
 	emit := func(assembled model.RegionFeedEvent) bool {
-		e := newMultiplexingEvent(assembled, state.sri.subscribedTable)
+		e := newMultiplexingEvent(assembled, state.region.subscribedTable)
 		select {
-		case state.sri.subscribedTable.eventCh <- e:
+		case state.region.subscribedTable.eventCh <- e:
 			return true
 		case <-ctx.Done():
 			return false
 		}
 	}
-	tableID := state.sri.subscribedTable.span.TableID
+	tableID := state.region.subscribedTable.span.TableID
 	log.Debug("region worker get an Event",
 		zap.String("namespace", w.changefeed.Namespace),
 		zap.String("changefeed", w.changefeed.ID),
-		zap.Any("subscriptionID", state.sri.subscribedTable.subscriptionID),
+		zap.Any("subscriptionID", state.region.subscribedTable.subscriptionID),
 		zap.Int64("tableID", tableID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
 	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
@@ -269,7 +269,7 @@ func handleEventEntry(
 				zap.Int64("tableID", tableID),
 				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", state.requestID),
-				zap.Stringer("span", &state.sri.span))
+				zap.Stringer("span", &state.region.span))
 
 			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
@@ -402,13 +402,13 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 			continue
 		}
 
-		spansAndChan := resolvedSpans[state.sri.subscribedTable.subscriptionID]
+		spansAndChan := resolvedSpans[state.region.subscribedTable.subscriptionID]
 		if spansAndChan == nil {
 			spansAndChan = &struct {
 				spans           []model.RegionComparableSpan
 				subscribedTable *subscribedTable
-			}{subscribedTable: state.sri.subscribedTable}
-			resolvedSpans[state.sri.subscribedTable.subscriptionID] = spansAndChan
+			}{subscribedTable: state.region.subscribedTable}
+			resolvedSpans[state.region.subscribedTable.subscriptionID] = spansAndChan
 		}
 
 		regionID := state.getRegionID()
@@ -424,8 +424,8 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 		}
 		state.updateResolvedTs(batch.ts)
 
-		span := model.RegionComparableSpan{Span: state.sri.span, Region: regionID}
-		span.Span.TableID = state.sri.subscribedTable.span.TableID
+		span := model.RegionComparableSpan{Span: state.region.span, Region: regionID}
+		span.Span.TableID = state.region.subscribedTable.span.TableID
 		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
@@ -470,7 +470,7 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 		state.updateResolvedTs(batch.ts)
 	}
 
-	table := batch.regions[0].sri.subscribedTable
+	table := batch.regions[0].region.subscribedTable
 	now := time.Now().UnixMilli()
 	lastAdvance := table.lastAdvanceTime.Load()
 	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && table.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {

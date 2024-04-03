@@ -75,10 +75,10 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case sri := <-stream.requests.Out():
-				if sri.lockedRange != nil {
+			case region := <-stream.requests.Out():
+				if region.lockedRange != nil {
 					stream.preFetchForConnecting = new(regionInfo)
-					*stream.preFetchForConnecting = sri
+					*stream.preFetchForConnecting = region
 					return nil
 				}
 			}
@@ -97,18 +97,18 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 				for _, state := range m {
 					state.markStopped(&sendRequestToStoreErr{})
 					sfEvent := newEventItem(nil, state, stream)
-					slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
+					slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
 					_ = c.workers[slot].sendEvent(ctx, sfEvent)
 				}
 			}
 			// Why we need to re-schedule pending regions? This because the store can
 			// fail forever, and all regions are scheduled to other stores.
-			for _, sri := range stream.clearPendingRegions() {
-				if sri.lockedRange == nil {
+			for _, region := range stream.clearPendingRegions() {
+				if region.lockedRange == nil {
 					// It means it's a special task for stopping the table.
 					continue
 				}
-				c.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+				c.onRegionFail(newRegionErrorInfo(region, &sendRequestToStoreErr{}))
 			}
 			if err := util.Hang(ctx, time.Second); err != nil {
 				return err
@@ -280,16 +280,16 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		waitReqTicker := time.NewTicker(60 * time.Second)
 		defer waitReqTicker.Stop()
 		for {
-			var sri regionInfo
+			var region regionInfo
 			select {
 			case <-ctx.Done():
-				return sri, ctx.Err()
-			case sri = <-s.requests.Out():
-				return sri, nil
+				return region, ctx.Err()
+			case region = <-s.requests.Out():
+				return region, nil
 			case <-waitReqTicker.C:
 				// The stream is idle now, will be re-established when necessary.
 				if s.countStates() == 0 {
-					return sri, errors.New("closed as idle")
+					return region, errors.New("closed as idle")
 				}
 			}
 		}
@@ -323,20 +323,20 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 	}()
 
-	sri := *s.preFetchForConnecting
+	region := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
 	for {
-		subscriptionID := sri.subscribedTable.subscriptionID
+		subscriptionID := region.subscribedTable.subscriptionID
 		log.Debug("event feed gets a singleRegionInfo",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
 			zap.Any("subscriptionID", subscriptionID),
-			zap.Uint64("regionID", sri.verID.GetID()),
+			zap.Uint64("regionID", region.verID.GetID()),
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr))
 		// It means it's a special task for stopping the table.
-		if sri.lockedRange == nil {
+		if region.lockedRange == nil {
 			if s.multiplexing != nil {
 				req := &cdcpb.ChangeDataRequest{
 					RequestId: uint64(subscriptionID),
@@ -359,23 +359,23 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			for _, state := range s.takeStates(subscriptionID) {
 				state.markStopped(&sendRequestToStoreErr{})
 				sfEvent := newEventItem(nil, state, s)
-				slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
+				slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
 				if err = c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
 					return errors.Trace(err)
 				}
 			}
-		} else if sri.subscribedTable.stopped.Load() {
+		} else if region.subscribedTable.stopped.Load() {
 			// It can be skipped directly because there must be no pending states from
 			// the stopped subscribedTable, or the special singleRegionInfo for stopping
 			// the table will be handled later.
-			c.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+			c.onRegionFail(newRegionErrorInfo(region, &sendRequestToStoreErr{}))
 		} else {
-			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
+			connectTime := time.Since(region.lockedRange.Created).Milliseconds()
 			c.metrics.regionConnectDuration.Observe(float64(connectTime))
 
-			state := newRegionFeedState(sri, uint64(subscriptionID))
+			state := newRegionFeedState(region, uint64(subscriptionID))
 			state.start()
-			s.setState(subscriptionID, sri.verID.GetID(), state)
+			s.setState(subscriptionID, region.verID.GetID(), state)
 
 			var cc *sharedconn.ConnAndClient
 			if s.multiplexing != nil {
@@ -383,12 +383,12 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
 				return err
 			}
-			if err = doSend(cc, c.createRegionRequest(sri), subscriptionID); err != nil {
+			if err = doSend(cc, c.createRegionRequest(region), subscriptionID); err != nil {
 				return err
 			}
 		}
 
-		if sri, err = fetchMoreReq(); err != nil {
+		if region, err = fetchMoreReq(); err != nil {
 			return err
 		}
 	}
@@ -455,9 +455,9 @@ func (s *requestedStream) clearStates() (v map[SubscriptionID]map[uint64]*region
 func (s *requestedStream) clearPendingRegions() []regionInfo {
 	regions := make([]regionInfo, 0, s.requests.Len()+1)
 	if s.preFetchForConnecting != nil {
-		sri := *s.preFetchForConnecting
+		region := *s.preFetchForConnecting
 		s.preFetchForConnecting = nil
-		regions = append(regions, sri)
+		regions = append(regions, region)
 	}
 	for i := 1; i < cap(regions); i++ {
 		regions = append(regions, <-s.requests.Out())

@@ -75,7 +75,7 @@ func newRegionErrorInfo(info regionInfo, err error) regionErrorInfo {
 }
 
 type regionFeedState struct {
-	sri       regionInfo
+	region    regionInfo
 	requestID uint64
 	matcher   *matcher
 
@@ -93,9 +93,9 @@ type regionFeedState struct {
 	}
 }
 
-func newRegionFeedState(sri regionInfo, requestID uint64) *regionFeedState {
+func newRegionFeedState(region regionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
-		sri:       sri,
+		region:    region,
 		requestID: requestID,
 	}
 }
@@ -140,24 +140,24 @@ func (s *regionFeedState) takeError() (err error) {
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.sri.lockedRange.Initialzied.Load()
+	return s.region.lockedRange.Initialzied.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.sri.lockedRange.Initialzied.Store(true)
+	s.region.lockedRange.Initialzied.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
-	return s.sri.verID.GetID()
+	return s.region.verID.GetID()
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return s.sri.lockedRange.ResolvedTs.Load()
+	return s.region.lockedRange.ResolvedTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	state := s.sri.lockedRange
+	state := s.region.lockedRange
 	for {
 		last := state.ResolvedTs.Load()
 		if last > resolvedTs {
@@ -167,22 +167,22 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
-	if s.sri.subscribedTable != nil {
-		s.sri.subscribedTable.postUpdateRegionResolvedTs(
-			s.sri.verID.GetID(),
-			s.sri.verID.GetVer(),
+	if s.region.subscribedTable != nil {
+		s.region.subscribedTable.postUpdateRegionResolvedTs(
+			s.region.verID.GetID(),
+			s.region.verID.GetVer(),
 			state,
-			s.sri.span,
+			s.region.span,
 		)
 	}
 }
 
 func (s *regionFeedState) getRegionInfo() regionInfo {
-	return s.sri
+	return s.region
 }
 
 func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, string) {
-	return s.sri.verID.GetID(), s.sri.span, s.sri.rpcCtx.Addr
+	return s.region.verID.GetID(), s.region.span, s.region.rpcCtx.Addr
 }
 
 type syncRegionFeedStateMap struct {
