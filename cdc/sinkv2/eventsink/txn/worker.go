@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -54,6 +56,11 @@ type worker struct {
 	flushInterval            time.Duration
 	hasPending               bool
 	postTxnExecutedCallbacks []func()
+
+	flushBound     atomic.Uint64
+	flushBoundOnce sync.Once
+	flushWait      atomic.Uint64
+	flushWaitOnce  sync.Once
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
@@ -86,12 +93,16 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 // dependency graph and resolve related dependencies for these transacitons
 // which depend on this executed txn.
 func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) bool {
-	t := os.Getenv("TICDC_FLUSH_BOUND")
-	cnt, err := strconv.Atoi(t)
-	if err != nil {
-		cnt = 64
-	}
-	if len(w.txnCh.In()) >= cnt {
+	w.flushBoundOnce.Do(func() {
+		t := os.Getenv("TICDC_FLUSH_BOUND")
+		cnt, err := strconv.Atoi(t)
+		if err != nil {
+			cnt = 64
+		}
+		w.flushBound.Store(uint64(cnt))
+		log.Error("TICDC_FLUSH_BOUND", zap.Int("cnt", cnt))
+	})
+	if len(w.txnCh.In()) >= int(w.flushBound.Load()) {
 		return false
 	}
 	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
@@ -182,12 +193,16 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 // It returns true only if it can no longer be flushed.
 func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
 	if w.ID == 1 {
-		t := os.Getenv("TICDC_FLUSH_WAIT")
-		cnt, err := strconv.Atoi(t)
-		if err != nil {
-			cnt = 10
-		}
-		time.Sleep(time.Duration(cnt) * time.Millisecond)
+		w.flushWaitOnce.Do(func() {
+			t := os.Getenv("TICDC_FLUSH_WAIT")
+			cnt, err := strconv.Atoi(t)
+			if err != nil {
+				cnt = 10
+			}
+			w.flushWait.Store(uint64(cnt))
+			log.Error("TICDC_FLUSH_WAIT", zap.Int("cnt", cnt))
+		})
+		time.Sleep(time.Duration(w.flushWait.Load()) * time.Millisecond)
 	}
 	if w.hasPending {
 		start := time.Now()
