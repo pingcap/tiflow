@@ -49,8 +49,9 @@ import (
 )
 
 const (
-	dialTimeout           = 10 * time.Second
-	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+	dialTimeout = 10 * time.Second
+	// Maximum total sleep time(in ms), 20 seconds.
+	tikvRequestMaxBackoff = 20000
 
 	// TiCDC may open numerous gRPC streams,
 	// with 65535 bytes window size, 10K streams takes about 27GB memory.
@@ -87,18 +88,6 @@ var (
 	logPanic       = log.Panic
 )
 
-type regionErrorInfo struct {
-	singleRegionInfo
-	err error
-}
-
-func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
-	return regionErrorInfo{
-		singleRegionInfo: info,
-		err:              err,
-	}
-}
-
 type eventError struct {
 	err *cdcpb.Error
 }
@@ -131,7 +120,8 @@ type MultiplexingEvent struct {
 	Start          time.Time
 }
 
-// SharedClient is shared in many tables. Methods are thread-safe.
+// SharedClient is shared by many tables to pull events from TiKV.
+// All exported Methods are thread-safe.
 type SharedClient struct {
 	changefeed model.ChangeFeedID
 	config     *config.ServerConfig
@@ -255,6 +245,9 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
+// It new a requestedTable and store it in `s.totalSpans`,
+// and send a rangeTask to `s.requestRangeCh`.
+// The rangeTask will be handled in `handleRequestRanges` goroutine.
 func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
 	if span.TableID == 0 {
 		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
@@ -543,8 +536,8 @@ func (s *SharedClient) divideAndScheduleRegions(
 			zap.Any("subscriptionID", requestedTable.subscriptionID),
 			zap.Any("span", nextSpan))
 
-		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
+		backoff := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(backoff, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -575,8 +568,12 @@ func (s *SharedClient) divideAndScheduleRegions(
 
 		for _, region := range metas {
 			// NOTE: the End key return by the PD API will be nil to represent the biggest key.
+			// So we need to fix it by calling spanz.HackSpan.
 			regionSpan := tablepb.Span{StartKey: region.StartKey, EndKey: region.EndKey}
 			regionSpan = spanz.HackSpan(regionSpan)
+
+			// Find the intersection of the regionSpan returned by PD and the requestedTable.span.
+			// The intersection is the span that needs to be subscribed.
 			partialSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
 			if err != nil {
 				log.Panic("event feed check spans intersect shouldn't fail",
@@ -584,12 +581,15 @@ func (s *SharedClient) divideAndScheduleRegions(
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", requestedTable.subscriptionID))
 			}
+
 			verID := tikv.NewRegionVerID(region.Id, region.RegionEpoch.ConfVer, region.RegionEpoch.Version)
 			sri := newSingleRegionInfo(verID, partialSpan, nil)
 			sri.requestedTable = requestedTable
 			s.scheduleRegionRequest(ctx, sri)
 
 			nextSpan.StartKey = region.EndKey
+			// If the nextSpan.StartKey is larger than the requestedTable.span.EndKey,
+			// it means all span of the requestedTable have been requested. So we return.
 			if spanz.EndCompare(nextSpan.StartKey, span.EndKey) >= 0 {
 				return nil
 			}

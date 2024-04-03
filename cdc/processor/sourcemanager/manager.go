@@ -110,6 +110,9 @@ func newSourceManager(
 		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
 		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
 	)
+
+	// consume add raw kv entry to the engine.
+	// It will be called by the puller when new raw kv entry is received.
 	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",

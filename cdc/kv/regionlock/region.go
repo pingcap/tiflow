@@ -27,26 +27,31 @@ func CheckRegionsLeftCover(regions []*metapb.Region, span tablepb.Span) bool {
 	return len(regions) > 0 && len(subRegions) == len(regions)
 }
 
-// CutRegionsLeftCoverSpan cuts regions at the position which doesn't cover span
-// or is incontinuous with the previous one.
-func CutRegionsLeftCoverSpan(regions []*metapb.Region, span tablepb.Span) []*metapb.Region {
+// CutRegionsLeftCoverSpan processes a list of regions to remove those that
+// do not cover the specified span or are discontinuous with the previous region.
+// It returns a new slice containing only the continuous regions that cover the span.
+func CutRegionsLeftCoverSpan(regions []*metapb.Region, spanToCover tablepb.Span) []*metapb.Region {
 	if len(regions) == 0 {
 		return nil
 	}
+
 	sort.Slice(regions, func(i, j int) bool {
 		return spanz.StartCompare(regions[i].StartKey, regions[j].StartKey) == -1
 	})
-	if spanz.StartCompare(regions[0].StartKey, span.StartKey) == 1 {
+
+	// If the start key of the first region is after the span's start key,
+	// no regions cover the span, return nil.
+	if spanz.StartCompare(regions[0].StartKey, spanToCover.StartKey) == 1 {
 		return nil
 	}
 
-	nextStart := regions[0].StartKey
+	nextStartKey := regions[0].StartKey
 	for i, region := range regions {
-		// incontinuous regions
-		if spanz.StartCompare(nextStart, region.StartKey) != 0 {
+		// If find discontinuous, return the regions up to the current index.
+		if spanz.StartCompare(nextStartKey, region.StartKey) != 0 {
 			return regions[:i]
 		}
-		nextStart = region.EndKey
+		nextStartKey = region.EndKey
 	}
 	return regions
 }

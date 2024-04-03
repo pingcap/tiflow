@@ -56,6 +56,18 @@ func (s singleRegionInfo) resolvedTs() uint64 {
 	return s.lockedRange.ResolvedTs.Load()
 }
 
+type regionErrorInfo struct {
+	singleRegionInfo
+	err error
+}
+
+func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
+	return regionErrorInfo{
+		singleRegionInfo: info,
+		err:              err,
+	}
+}
+
 type regionFeedState struct {
 	sri       singleRegionInfo
 	requestID uint64
