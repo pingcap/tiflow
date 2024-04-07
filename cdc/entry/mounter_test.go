@@ -1124,6 +1124,186 @@ func TestVerifyChecksumHasNullFields(t *testing.T) {
 	require.NotNil(t, event)
 }
 
+func TestChecksumAfterAlterIntegerType(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	createTableDDL := `create table test.t(
+		id int primary key auto_increment,
+ 		a tinyint, b tinyint unsigned,
+ 		c smallint, d smallint unsigned,
+ 		e mediumint, f mediumint unsigned,
+ 		g int, h int unsigned,
+ 		i bigint, j bigint unsigned)`
+	_ = helper.DDL2Event(createTableDDL)
+
+	sql := `insert into test.t values (
+		2,
+ 		127, 255,
+ 		32767, 65535,
+ 		8388607, 16777215,
+ 		2147483647, 4294967295,
+ 		9223372036854775807, 18446744073709551615)`
+	event := helper.DML2Event(sql, "test", "t")
+	require.NotNil(t, event)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	// make unsigned to signed, small integer type to large integer type, and large integer type to small integer type
+	_ = helper.DDL2Event(`alter table t modify column a bigint unsigned`)
+	_ = helper.DDL2Event(`alter table t modify column b bigint`)
+	_ = helper.DDL2Event(`alter table t modify column c int unsigned`)
+	_ = helper.DDL2Event(`alter table t modify column d int`)
+	_ = helper.DDL2Event(`alter table t modify column e smallint unsigned`)
+	_ = helper.DDL2Event(`alter table t modify column f smallint`)
+	_ = helper.DDL2Event(`alter table t modify column g tinyint unsigned`)
+	_ = helper.DDL2Event(`alter table t modify column h tinyint`)
+	_ = helper.DDL2Event(`alter table t modify column i smallint unsigned`)
+	_ = helper.DDL2Event(`alter table t modify column j smallint`)
+
+	helper.Tk().MustExec("update t set id = 1 where id = 2")
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+}
+
+func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event("create table t (a int primary key, b int default 1)")
+	event := helper.DML2Event("insert into t (a) values (1)", "test", "t")
+	require.NotNil(t, event)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	_ = helper.DDL2Event("alter table t modify column b int default 2")
+	helper.Tk().MustExec("update t set b = 10 where a = 1")
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+}
+
+func TestChecksumAfterAddColumns(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event("create table t (a int primary key)")
+	event := helper.DML2Event("insert into t values (1)", "test", "t")
+	require.NotNil(t, event)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	_ = helper.DDL2Event("alter table t add column b int default 1")
+
+	helper.Tk().MustExec("update t set b = 10 where a = 1")
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+}
+
+func TestChecksumAfterDropColumns(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event("create table t (a int primary key, b int, c int)")
+	event := helper.DML2Event("insert into t values (1, 2, 3)", "test", "t")
+	require.NotNil(t, event)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	_ = helper.DDL2Event("alter table t drop column b")
+
+	helper.Tk().MustExec("update t set c = 10 where a = 1")
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+}
+
 func TestVerifyChecksumNonIntegerPrimaryKey(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
