@@ -543,7 +543,8 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 }
 
 func verifyRawBytesChecksum(
-	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, key kv.Key, tz *time.Location,
+	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder,
+	key kv.Key, rawDatums map[int64]types.Datum, tz *time.Location,
 ) (uint32, bool, error) {
 	expected, ok := decoder.GetChecksum()
 	if !ok {
@@ -555,6 +556,11 @@ func verifyRawBytesChecksum(
 	)
 	for _, col := range columns {
 		columnID := col.ColumnID
+		// cannot be found from the raw datum, which means the column comes from filled with default value,
+		// it's after Add column, not encoded into the raw bytes, so just ignore it.
+		if _, ok := rawDatums[columnID]; !ok {
+			continue
+		}
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
@@ -589,7 +595,7 @@ func verifyRawBytesChecksum(
 func (m *mounter) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
 	columns []*model.ColumnData, rawColumns []types.Datum,
-	key kv.Key, isPreRow bool,
+	key kv.Key, rawDatums map[int64]types.Datum, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
@@ -607,7 +613,7 @@ func (m *mounter) verifyChecksum(
 	case 0:
 		return verifyColumnChecksum(columnInfos, rawColumns, decoder, m.tz)
 	case 1:
-		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
+		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, rawDatums, m.tz)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
@@ -660,7 +666,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, row.PreRow, true)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
@@ -692,7 +698,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, row.Row, false)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
