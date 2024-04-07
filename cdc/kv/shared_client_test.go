@@ -104,7 +104,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.Equal(t, 0, len(stream.requestedRegions.m))
 }
 
-func TestsubscribedTable(t *testing.T) {
+func TestSubscribedTable(t *testing.T) {
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newSubscribedTable(SubscriptionID(1), span, 100, nil)

@@ -198,7 +198,7 @@ func (rs *requestedStore) getStream() *requestedStream {
 }
 
 // subscribedTable represents a table to subscribe.
-// It contains the span of the table, the startTs of the table, and the ouput event channel.
+// It contains the span of the table, the startTs of the table, and the output event channel.
 type subscribedTable struct {
 	subscriptionID SubscriptionID
 
