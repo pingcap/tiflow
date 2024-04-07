@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -42,7 +41,7 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   *chann.DrainableChann[txnWithNotifier]
+	txnCh   chan txnWithNotifier
 	backend backend
 
 	// Metrics.
@@ -57,7 +56,7 @@ type worker struct {
 	hasPending               bool
 	postTxnExecutedCallbacks []func()
 
-	flushBound     atomic.Uint64
+	isWorkerFull   atomic.Bool
 	flushBoundOnce sync.Once
 	flushWait      atomic.Uint64
 	flushWaitOnce  sync.Once
@@ -66,13 +65,21 @@ type worker struct {
 func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
 	wid := fmt.Sprintf("%d", ID)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+
+	t := os.Getenv("TICDC_FLUSH_BOUND")
+	flushBound, err := strconv.Atoi(t)
+	if err != nil {
+		flushBound = 64
+	}
+	log.Error("TICDC_FLUSH_BOUND", zap.Int("cnt", flushBound),
+		zap.Int("workerID", ID), zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)))
 	return &worker{
 		ctx:         ctx,
 		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.NewDrainableChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
+		txnCh:   make(chan txnWithNotifier, flushBound),
 		backend: backend,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -93,24 +100,23 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 // dependency graph and resolve related dependencies for these transacitons
 // which depend on this executed txn.
 func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) bool {
-	w.flushBoundOnce.Do(func() {
-		t := os.Getenv("TICDC_FLUSH_BOUND")
-		cnt, err := strconv.Atoi(t)
-		if err != nil {
-			cnt = 64
-		}
-		w.flushBound.Store(uint64(cnt))
-		log.Error("TICDC_FLUSH_BOUND", zap.Int("cnt", cnt))
-	})
-	if len(w.txnCh.In()) >= int(w.flushBound.Load()) {
-		return false
+	if w.isWorkerFull.Load() && len(w.txnCh) <= 0 {
+		w.isWorkerFull.Store(false)
 	}
-	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
-	return true
+
+	if !w.isWorkerFull.Load() {
+		select {
+		case w.txnCh <- txnWithNotifier{txn, postTxnExecuted}:
+			return true
+		default:
+			w.isWorkerFull.CompareAndSwap(false, true)
+		}
+	}
+	return false
 }
 
 func (w *worker) close() {
-	w.txnCh.CloseAndDrain()
+	close(w.txnCh)
 }
 
 // Run a loop.
@@ -142,7 +148,7 @@ func (w *worker) runLoop() error {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID))
 			return nil
-		case txn := <-w.txnCh.Out():
+		case txn := <-w.txnCh:
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
 			}
@@ -197,12 +203,14 @@ func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
 			t := os.Getenv("TICDC_FLUSH_WAIT")
 			cnt, err := strconv.Atoi(t)
 			if err != nil {
-				cnt = 10
+				cnt = 0
 			}
 			w.flushWait.Store(uint64(cnt))
 			log.Error("TICDC_FLUSH_WAIT", zap.Int("cnt", cnt))
 		})
-		time.Sleep(time.Duration(w.flushWait.Load()) * time.Millisecond)
+		if w.flushWait.Load() != 0 {
+			time.Sleep(time.Duration(w.flushWait.Load()) * time.Millisecond)
+		}
 	}
 	if w.hasPending {
 		start := time.Now()
