@@ -214,15 +214,15 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 }
 
 // reset the capture before run it.
-func (c *captureImpl) reset(ctx context.Context, globalVars *vars.GlobalVars) error {
+func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(), concurrency.WithLease(lease.ID))
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	log.Info("reset session successfully", zap.Any("session", sess))
 
@@ -251,11 +251,8 @@ func (c *captureImpl) reset(ctx context.Context, globalVars *vars.GlobalVars) er
 	})
 	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient, c.EtcdClient.GetEtcdClient())
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-
-	c.processorManager = c.newProcessorManager(
-		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -282,9 +279,18 @@ func (c *captureImpl) reset(ctx context.Context, globalVars *vars.GlobalVars) er
 	messageClientConfig.AdvertisedAddr = advertiseAddr
 
 	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
+	globalVars := &vars.GlobalVars{
+		CaptureInfo:       c.info,
+		EtcdClient:        c.EtcdClient,
+		MessageServer:     c.MessageServer,
+		MessageRouter:     c.MessageRouter,
+		SortEngineFactory: c.sortEngineFactory,
+	}
+	c.processorManager = c.newProcessorManager(
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)
 
 	log.Info("capture initialized", zap.Any("capture", c.info))
-	return nil
+	return globalVars, nil
 }
 
 // Run runs the capture
@@ -332,14 +338,7 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-	globalVars := &vars.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
-	}
-	err := c.reset(stdCtx, globalVars)
+	globalVars, err := c.reset(stdCtx)
 	if err != nil {
 		log.Error("reset capture failed", zap.Error(err))
 		return errors.Trace(err)

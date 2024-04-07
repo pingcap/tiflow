@@ -309,7 +309,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, true, globalVars, changefeedVars)
 
 	// init tick
 	checkChangefeedNormal(changefeed)
