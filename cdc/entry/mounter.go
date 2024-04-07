@@ -473,11 +473,13 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		return types.NewDatum(nil), nil
 	}
 	switch ft.GetType() {
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
-		if mysql.HasUnsignedFlag(ft.GetFlag()) {
-			return types.NewUintDatum(value.(uint64)), nil
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+		switch v := value.(type) {
+		case uint64:
+			return types.NewUintDatum(v), nil
+		case int64:
+			return types.NewIntDatum(v), nil
 		}
-		return types.NewIntDatum(value.(int64)), nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		// todo: DefaultStmtNoWarningContext timezone is set to UTC, is it correct?
 		t, err := types.ParseTime(types.DefaultStmtNoWarningContext, value.(string), ft.GetType(), ft.GetDecimal())
@@ -505,22 +507,20 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		}
 		return types.NewDecimalDatum(mysqlDecimal), nil
 	case mysql.TypeEnum:
-		enum, err := types.ParseEnum(ft.GetElems(), value.(string), ft.GetCollate())
+		enum, err := types.ParseEnumValue(ft.GetElems(), value.(uint64))
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
 		return types.NewMysqlEnumDatum(enum), nil
 	case mysql.TypeSet:
-		set, err := types.ParseSetName(ft.GetElems(), value.(string), ft.GetCollate())
+		set, err := types.ParseSetValue(ft.GetElems(), value.(uint64))
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
 		return types.NewMysqlSetDatum(set, ft.GetCollate()), nil
 	case mysql.TypeBit:
-		binaryLiteral, err := types.ParseBitStr(value.(string))
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
+		byteSize := (ft.GetFlen() + 7) >> 3
+		binaryLiteral := types.NewBinaryLiteralFromUint(value.(uint64), byteSize)
 		return types.NewMysqlBitDatum(binaryLiteral), nil
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
@@ -533,7 +533,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		log.Panic("unknown data type when build datum",
 			zap.Any("type", ft.GetType()), zap.Any("value", value), zap.Reflect("type", reflect.TypeOf(value)))
 	case mysql.TypeFloat:
-		return types.NewFloat32Datum(float32(value.(float64))), nil
+		return types.NewFloat32Datum(value.(float32)), nil
 	case mysql.TypeDouble:
 		return types.NewFloat64Datum(value.(float64)), nil
 	default:
@@ -545,7 +545,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 func verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder, key kv.Key, tz *time.Location,
 ) (uint32, bool, error) {
-	expectedRawChecksum, ok := decoder.GetChecksum()
+	expected, ok := decoder.GetChecksum()
 	if !ok {
 		return 0, true, nil
 	}
@@ -574,14 +574,14 @@ func verifyRawBytesChecksum(
 	if err != nil {
 		return 0, false, errors.Trace(err)
 	}
-	if obtained == expectedRawChecksum {
-		return expectedRawChecksum, true, nil
+	if obtained == expected {
+		return expected, true, nil
 	}
 
 	log.Error("raw bytes checksum mismatch",
-		zap.Uint32("expected", expectedRawChecksum), zap.Uint32("obtained", obtained))
+		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained))
 
-	return expectedRawChecksum, false, nil
+	return expected, false, nil
 }
 
 // return error when calculate the checksum.

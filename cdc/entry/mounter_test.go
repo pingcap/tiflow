@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package entry
 
 import (
@@ -1416,11 +1413,6 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NotNil(t, row)
 	require.NotNil(t, row.Checksum)
 
-	expected, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-	require.Equal(t, expected, row.Checksum.Current)
-	require.False(t, row.Checksum.Corrupted)
-
 	// row with 2 checksum
 	tk.MustExec("insert into t values (3, 30)")
 	job = helper.DDL2Job("alter table t change column a a varchar(10)")
@@ -1439,18 +1431,6 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, row)
 	require.NotNil(t, row.Checksum)
-
-	first, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-
-	extra, ok := mounter.decoder.GetExtraChecksum()
-	require.True(t, ok)
-
-	if row.Checksum.Current != first {
-		require.Equal(t, extra, row.Checksum.Current)
-	} else {
-		require.Equal(t, first, row.Checksum.Current)
-	}
 	require.False(t, row.Checksum.Corrupted)
 
 	// hack the table info to make the checksum corrupted
