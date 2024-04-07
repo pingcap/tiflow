@@ -56,10 +56,9 @@ type worker struct {
 	hasPending               bool
 	postTxnExecutedCallbacks []func()
 
-	isWorkerFull   atomic.Bool
-	flushBoundOnce sync.Once
-	flushWait      atomic.Uint64
-	flushWaitOnce  sync.Once
+	isWorkerFull  atomic.Bool
+	flushWait     atomic.Uint64
+	flushWaitOnce sync.Once
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
@@ -69,9 +68,9 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 	t := os.Getenv("TICDC_FLUSH_BOUND")
 	flushBound, err := strconv.Atoi(t)
 	if err != nil {
-		flushBound = 64
+		flushBound = 1024
 	}
-	log.Error("TICDC_FLUSH_BOUND", zap.Int("cnt", flushBound),
+	log.Info("TICDC_FLUSH_BOUND", zap.Int("cnt", flushBound),
 		zap.Int("workerID", ID), zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)))
 	return &worker{
 		ctx:         ctx,

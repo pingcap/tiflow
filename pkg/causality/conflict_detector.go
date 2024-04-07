@@ -16,9 +16,11 @@ package causality
 import (
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // ConflictDetector implements a logic that dispatches transaction
@@ -78,7 +80,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
 	node := internal.NewNode()
-	node.TryResolved = func(workerID int64) bool {
+	node.TrySendToWorker = func(workerID int64) bool {
 		// This callback is called after the transaction is executed.
 		postTxnExecuted := func() {
 			// After this transaction is executed, we can remove the node from the graph,
@@ -95,6 +97,7 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
+	node.WorkerCount = int64(len(d.workers))
 	d.slots.Add(node, sortedKeysHash)
 }
 
@@ -128,7 +131,7 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 // sendToWorker should not call txn.Callback if it returns an error.
 func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, postTxnExecuted func(), workerID int64) bool {
 	if workerID < 0 {
-		panic("must assign with a valid workerID")
+		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
 	}
 	txn.OnConflictResolved()
 	worker := d.workers[workerID]
