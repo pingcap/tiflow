@@ -21,15 +21,24 @@ import (
 
 var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements SlotNode[*Node].
 
+func newNodeForTest() *Node {
+	node := NewNode()
+	node.OnNotified = func(callback func()) {
+		// run the callback immediately
+		callback()
+	}
+	return node
+}
+
 func TestNodeFree(t *testing.T) {
 	// This case should not be run parallel to
 	// others, for fear that the use-after-free
-	// will race with NewNode() in other cases.
+	// will race with newNodeForTest() in other cases.
 
-	nodeA := NewNode()
+	nodeA := newNodeForTest()
 	nodeA.Free()
 
-	nodeA = NewNode()
+	nodeA = newNodeForTest()
 	nodeA.Free()
 
 	// Double freeing should panic.
@@ -41,8 +50,8 @@ func TestNodeFree(t *testing.T) {
 func TestNodeEquals(t *testing.T) {
 	t.Parallel()
 
-	nodeA := NewNode()
-	nodeB := NewNode()
+	nodeA := newNodeForTest()
+	nodeB := newNodeForTest()
 	require.False(t, nodeA.NodeID() == nodeB.NodeID())
 	require.True(t, nodeA.NodeID() == nodeA.NodeID())
 }
@@ -51,8 +60,8 @@ func TestNodeDependOn(t *testing.T) {
 	t.Parallel()
 
 	// Construct a dependency graph: A --> B
-	nodeA := NewNode()
-	nodeB := NewNode()
+	nodeA := newNodeForTest()
+	nodeB := newNodeForTest()
 
 	nodeA.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB}, 999)
 	require.Equal(t, nodeA.dependerCount(), 0)
@@ -63,8 +72,8 @@ func TestNodeSingleDependency(t *testing.T) {
 	t.Parallel()
 
 	// Node B depends on A, without any other resolved dependencies.
-	nodeA := NewNode()
-	nodeB := NewNode()
+	nodeA := newNodeForTest()
+	nodeB := newNodeForTest()
 	nodeB.RandWorkerID = func() workerID { return 100 }
 	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
 	require.True(t, nodeA.tryAssignTo(1))
@@ -72,8 +81,8 @@ func TestNodeSingleDependency(t *testing.T) {
 	require.Equal(t, workerID(1), nodeB.assignedWorkerID())
 
 	// Node D depends on C, with some other resolved dependencies.
-	nodeC := NewNode()
-	nodeD := NewNode()
+	nodeC := newNodeForTest()
+	nodeD := newNodeForTest()
 	nodeD.RandWorkerID = func() workerID { return 100 }
 	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
 	require.True(t, nodeC.tryAssignTo(2))
@@ -90,9 +99,9 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	// C─┤
 	//   └────►B
 
-	nodeA := NewNode()
-	nodeB := NewNode()
-	nodeC := NewNode()
+	nodeA := newNodeForTest()
+	nodeB := newNodeForTest()
+	nodeC := newNodeForTest()
 
 	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
 	nodeC.RandWorkerID = func() workerID { return 100 }
@@ -111,17 +120,17 @@ func TestNodeResolveImmediately(t *testing.T) {
 	t.Parallel()
 
 	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
-	nodeA := NewNode()
+	nodeA := newNodeForTest()
 	nodeA.RandWorkerID = func() workerID { return workerID(100) }
 	nodeA.DependOn(nil, 999)
 	require.Equal(t, workerID(100), nodeA.assignedWorkerID())
 
 	// Node D depends on B and C, all of them are assigned to 1.
-	nodeB := NewNode()
+	nodeB := newNodeForTest()
 	require.True(t, nodeB.tryAssignTo(1))
-	nodeC := NewNode()
+	nodeC := newNodeForTest()
 	require.True(t, nodeC.tryAssignTo(1))
-	nodeD := NewNode()
+	nodeD := newNodeForTest()
 	nodeD.RandWorkerID = func() workerID { return workerID(100) }
 	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
 	require.Equal(t, workerID(1), nodeD.assignedWorkerID())
@@ -129,7 +138,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	// Node E depends on B and C and some other resolved dependencies.
 	nodeB.Remove()
 	nodeC.Remove()
-	nodeE := NewNode()
+	nodeE := newNodeForTest()
 	nodeE.RandWorkerID = func() workerID { return workerID(100) }
 	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
 	require.Equal(t, workerID(100), nodeE.assignedWorkerID())
@@ -138,7 +147,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 func TestNodeDependOnSelf(t *testing.T) {
 	t.Parallel()
 
-	nodeA := NewNode()
+	nodeA := newNodeForTest()
 	require.Panics(t, func() {
 		nodeA.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 999)
 	})
@@ -147,7 +156,7 @@ func TestNodeDependOnSelf(t *testing.T) {
 func TestNodeDoubleAssigning(t *testing.T) {
 	t.Parallel()
 
-	// nodeA := NewNode()
+	// nodeA := newNodeForTest()
 	// require.True(t, nodeA.tryAssignTo(1))
 	// require.False(t, nodeA.tryAssignTo(2))
 
