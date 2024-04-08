@@ -66,7 +66,7 @@ func TestTryInitialize(t *testing.T) {
 	require.False(t, initializer.initialized.Load())
 	require.False(t, initialized)
 
-	//test submit error
+	// test submit error
 	initializer = NewInitializer(func(ctx context.Context) error {
 		return nil
 	})
@@ -88,7 +88,7 @@ func TestTerminate(t *testing.T) {
 	require.False(t, initializer.initialized.Load())
 	require.False(t, initializer.initializing.Load())
 
-	//test submit error
+	// test submit error
 	initializer = NewInitializer(func(ctx context.Context) error {
 		return nil
 	})
