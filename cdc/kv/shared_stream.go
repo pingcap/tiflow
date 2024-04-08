@@ -104,7 +104,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			// Why we need to re-schedule pending regions? This because the store can
 			// fail forever, and all regions are scheduled to other stores.
 			for _, region := range stream.clearPendingRegions() {
-				if region.lockedRange == nil {
+				if region.isStoped() {
 					// It means it's a special task for stopping the table.
 					continue
 				}
@@ -336,7 +336,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr))
 		// It means it's a special task for stopping the table.
-		if region.lockedRange == nil {
+		if region.isStoped() {
 			if s.multiplexing != nil {
 				req := &cdcpb.ChangeDataRequest{
 					RequestId: uint64(subscriptionID),

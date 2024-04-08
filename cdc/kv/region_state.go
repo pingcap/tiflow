@@ -44,6 +44,11 @@ type regionInfo struct {
 	lockedRange     *regionlock.LockedRange
 }
 
+func (s regionInfo) isStoped() bool {
+	// lockedRange only nil when the region's subscribedTable is stopped.
+	return s.lockedRange == nil
+}
+
 func newRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,

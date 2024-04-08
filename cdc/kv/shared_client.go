@@ -69,6 +69,24 @@ const (
 	regionScheduleReload = false
 
 	scanRegionsConcurrency = 1024
+
+	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
+	resolveLockMinInterval  time.Duration  = 10 * time.Second
+	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
+)
+
+var (
+	// To generate an ID for a new subscription. And the subscription ID will also be used as
+	// `RequestId` in region requests of the table.
+	subscriptionIDGen atomic.Uint64
+	// To generate a streamID in `newStream`.
+	streamIDGen atomic.Uint64
+)
+
+var (
+	// unreachable error, only used in unit test
+	errUnreachable = errors.New("kv client unreachable error")
+	logPanic       = log.Panic
 )
 
 var (
@@ -80,12 +98,6 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
-)
-
-var (
-	// unreachable error, only used in unit test
-	errUnreachable = errors.New("kv client unreachable error")
-	logPanic       = log.Panic
 )
 
 type eventError struct {
@@ -113,7 +125,8 @@ func (e *sendRequestToStoreErr) Error() string { return "send request to store e
 // SubscriptionID comes from `SharedClient.AllocSubscriptionID`.
 type SubscriptionID uint64
 
-// MultiplexingEvent is like model.RegionFeedEvent.
+// MultiplexingEvent wrap a region event with
+// SubscriptionID to indicate which subscription it belongs to.
 type MultiplexingEvent struct {
 	model.RegionFeedEvent
 	SubscriptionID SubscriptionID
@@ -341,8 +354,8 @@ func (s *SharedClient) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.handleRangeTask(ctx) })
 	g.Go(func() error { return s.handleRegion(ctx, g) })
-	g.Go(func() error { return s.handleErrors(ctx) })
-	g.Go(func() error { return s.resolveLock(ctx) })
+	g.Go(func() error { return s.handleError(ctx) })
+	g.Go(func() error { return s.handleResolveLockTask(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	log.Info("event feed started",
@@ -409,15 +422,19 @@ func (s *SharedClient) handleRegion(ctx context.Context, eg *errgroup.Group) err
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case region := <-s.regionCh.Out():
-			// If lockedRange is nil it means it's a special task from stopping the table.
-			if region.lockedRange == nil {
+			if region.isStoped() {
 				for _, rs := range s.stores {
 					s.broadcastRequest(rs, region)
 				}
 				continue
 			}
 
-			s.attachRPCContextForRegion(ctx, &region)
+			region, ok := s.attachRPCContextForRegion(ctx, region)
+			// If attachRPCContextForRegion fails, the region will be re-scheduled.
+			if !ok {
+				continue
+			}
+
 			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
@@ -434,14 +451,14 @@ func (s *SharedClient) handleRegion(ctx context.Context, eg *errgroup.Group) err
 	}
 }
 
-func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region *regionInfo) {
+func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region regionInfo) (regionInfo, bool) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, region.verID, kvclientv2.ReplicaReadLeader, 0)
 	if rpcCtx != nil {
 		region.rpcCtx = rpcCtx
 		locateTime := time.Since(region.lockedRange.Created).Milliseconds()
 		s.metrics.regionLocateDuration.Observe(float64(locateTime))
-		return
+		return region, true
 	}
 	if err != nil {
 		log.Debug("event feed get RPC context fail",
@@ -451,7 +468,8 @@ func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region *re
 			zap.Uint64("regionID", region.verID.GetID()),
 			zap.Error(err))
 	}
-	s.onRegionFail(newRegionErrorInfo(*region, &rpcCtxUnavailableErr{verID: region.verID}))
+	s.onRegionFail(newRegionErrorInfo(region, &rpcCtxUnavailableErr{verID: region.verID}))
+	return region, false
 }
 
 // getStore gets a requestedStore from requestedStores by storeAddr.
@@ -635,20 +653,20 @@ func (s *SharedClient) scheduleRangeRequest(
 	}
 }
 
-func (s *SharedClient) handleErrors(ctx context.Context) error {
+func (s *SharedClient) handleError(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case errInfo := <-s.errCh.Out():
-			if err := s.handleError(ctx, errInfo); err != nil {
+			if err := s.doHandleError(ctx, errInfo); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
+func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInfo) error {
 	if errInfo.subscribedTable.rangeLock.UnlockRange(
 		errInfo.span.StartKey, errInfo.span.EndKey,
 		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs()) {
@@ -728,7 +746,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	}
 }
 
-func (s *SharedClient) resolveLock(ctx context.Context) error {
+func (s *SharedClient) handleResolveLockTask(ctx context.Context) error {
 	resolveLastRun := make(map[uint64]time.Time)
 
 	gcResolveLastRun := func() {
@@ -924,18 +942,3 @@ func hashRegionID(regionID uint64, slots int) int {
 	binary.LittleEndian.PutUint64(b, regionID)
 	return int(seahash.Sum64(b) % uint64(slots))
 }
-
-var (
-	// To generate an ID for a new subscription. And the subscription ID will also be used as
-	// `RequestId` in region requests of the table.
-	subscriptionIDGen atomic.Uint64
-
-	// To generate a streamID in `newStream`.
-	streamIDGen atomic.Uint64
-)
-
-const (
-	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
-	resolveLockMinInterval  time.Duration  = 10 * time.Second
-	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
-)
