@@ -34,8 +34,12 @@ const (
 type regionInfo struct {
 	verID tikv.RegionVerID
 	// The span of the region.
-	// Note: The span is not always the real span of the region, it is the span of the
-	// region that we are interested in.
+	// Note(dongmen): The span doesn't always represent the whole span of a region.
+	// Instead, it is the portion of the region that belongs the subcribed table.
+	// Multiple tables can belong to the same region.
+	// For instance, consider region-1 with a span of [a, d).
+	// It contains 3 tables: t1[a, b), t2[b,c), and t3[c,d).
+	// If only table t1 is subscribed to, then the span of interest is [a,b).
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 

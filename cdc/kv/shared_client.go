@@ -352,10 +352,10 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		s.workers = append(s.workers, worker)
 	}
 
-	g.Go(func() error { return s.handleRangeTask(ctx) })
-	g.Go(func() error { return s.handleRegion(ctx, g) })
-	g.Go(func() error { return s.handleError(ctx) })
-	g.Go(func() error { return s.handleResolveLockTask(ctx) })
+	g.Go(func() error { return s.handleRangeTasks(ctx) })
+	g.Go(func() error { return s.handleRegions(ctx, g) })
+	g.Go(func() error { return s.handleErrors(ctx) })
+	g.Go(func() error { return s.handleResolveLockTasks(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	log.Info("event feed started",
@@ -414,9 +414,9 @@ func (s *SharedClient) onRegionFail(errInfo regionErrorInfo) {
 	s.errCh.In() <- errInfo
 }
 
-// handleRegion receives regionInfo from regionCh and attch rpcCtx to them,
+// handleRegions receives regionInfo from regionCh and attch rpcCtx to them,
 // then send them to corresponding requestedStore.
-func (s *SharedClient) handleRegion(ctx context.Context, eg *errgroup.Group) error {
+func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -511,7 +511,7 @@ func (s *SharedClient) broadcastRequest(r *requestedStore, region regionInfo) {
 	}
 }
 
-func (s *SharedClient) handleRangeTask(ctx context.Context) error {
+func (s *SharedClient) handleRangeTasks(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(scanRegionsConcurrency)
 	for {
@@ -653,7 +653,7 @@ func (s *SharedClient) scheduleRangeRequest(
 	}
 }
 
-func (s *SharedClient) handleError(ctx context.Context) error {
+func (s *SharedClient) handleErrors(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -746,7 +746,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 	}
 }
 
-func (s *SharedClient) handleResolveLockTask(ctx context.Context) error {
+func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 	resolveLastRun := make(map[uint64]time.Time)
 
 	gcResolveLastRun := func() {

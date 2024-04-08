@@ -76,7 +76,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			case <-ctx.Done():
 				return ctx.Err()
 			case region := <-stream.requests.Out():
-				if region.lockedRange != nil {
+				if !region.isStoped() {
 					stream.preFetchForConnecting = new(regionInfo)
 					*stream.preFetchForConnecting = region
 					return nil
