@@ -26,7 +26,7 @@ import (
 
 type conflictTestDriver struct {
 	workers          []*workerForTest
-	conflictDetector *causality.ConflictDetector[*workerForTest, *txnForTest]
+	conflictDetector *causality.ConflictDetector[*txnForTest]
 	generator        workloadGenerator
 
 	pendingCount atomic.Int64
@@ -40,7 +40,11 @@ func newConflictTestDriver(
 	for i := 0; i < numWorkers; i++ {
 		workers = append(workers, newWorkerForTest())
 	}
-	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, uint64(numSlots))
+	detector := causality.NewConflictDetector[*txnForTest](uint64(numSlots), causality.WorkerOption{
+		WorkerCount: numWorkers,
+		Size:        1024,
+		IsBlock:     true,
+	})
 	return &conflictTestDriver{
 		workers:          workers,
 		conflictDetector: detector,

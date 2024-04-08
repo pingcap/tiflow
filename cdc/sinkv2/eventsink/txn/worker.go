@@ -18,22 +18,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
-
-type txnWithNotifier struct {
-	*txnEvent
-	postTxnExecuted func()
-}
 
 type worker struct {
 	ctx         context.Context
@@ -41,7 +35,6 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   chan txnWithNotifier
 	backend backend
 
 	// Metrics.
@@ -55,10 +48,6 @@ type worker struct {
 	flushInterval            time.Duration
 	hasPending               bool
 	postTxnExecutedCallbacks []func()
-
-	isWorkerFull  atomic.Bool
-	flushWait     atomic.Uint64
-	flushWaitOnce sync.Once
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
@@ -78,7 +67,6 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   make(chan txnWithNotifier, flushBound),
 		backend: backend,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -93,33 +81,8 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 	}
 }
 
-// Add adds a txnEvent to the worker.
-// The worker will call postTxnExecuted() after the txn executed.
-// The postTxnExecuted will remove the txn related Node in the conflict detector's
-// dependency graph and resolve related dependencies for these transacitons
-// which depend on this executed txn.
-func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) bool {
-	if w.isWorkerFull.Load() && len(w.txnCh) <= 0 {
-		w.isWorkerFull.Store(false)
-	}
-
-	if !w.isWorkerFull.Load() {
-		select {
-		case w.txnCh <- txnWithNotifier{txn, postTxnExecuted}:
-			return true
-		default:
-			w.isWorkerFull.CompareAndSwap(false, true)
-		}
-	}
-	return false
-}
-
-func (w *worker) close() {
-	close(w.txnCh)
-}
-
 // Run a loop.
-func (w *worker) runLoop() error {
+func (w *worker) runLoop(conflictDetector *causality.ConflictDetector[*txnEvent]) error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -135,6 +98,8 @@ func (w *worker) runLoop() error {
 	ticker := time.NewTicker(w.flushInterval)
 	defer ticker.Stop()
 
+	txnCh := conflictDetector.GetWorkerOutputChann(int64(w.ID))
+
 	needFlush := false
 	var flushTimeSlice, totalTimeSlice time.Duration
 	overseerTicker := time.NewTicker(time.Second)
@@ -147,9 +112,9 @@ func (w *worker) runLoop() error {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID))
 			return nil
-		case txn := <-w.txnCh:
-			if txn.txnEvent != nil {
-				needFlush = w.onEvent(txn)
+		case txn := <-txnCh:
+			if txn.TxnEvent != nil {
+				needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
 			}
 		case <-ticker.C:
 			needFlush = true
@@ -175,42 +140,28 @@ func (w *worker) runLoop() error {
 
 // onEvent is called when a new event is received.
 // It returns true if the event is sent to backend.
-func (w *worker) onEvent(txn txnWithNotifier) bool {
+func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	w.hasPending = true
 
-	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
+	if txn.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
-		txn.txnEvent.Callback()
+		txn.Callback()
 		// Still necessary to append the callbacks into the pending list.
-		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
+		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
 		return false
 	}
 
 	w.metricConflictDetectDuration.Observe(txn.conflictResolved.Sub(txn.start).Seconds())
 	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
-	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
-	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
+	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
+	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
 }
 
 // doFlush flushes the backend.
 // It returns true only if it can no longer be flushed.
 func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
-	if w.ID == 1 {
-		w.flushWaitOnce.Do(func() {
-			t := os.Getenv("TICDC_FLUSH_WAIT")
-			cnt, err := strconv.Atoi(t)
-			if err != nil {
-				cnt = 0
-			}
-			w.flushWait.Store(uint64(cnt))
-			log.Error("TICDC_FLUSH_WAIT", zap.Int("cnt", cnt))
-		})
-		if w.flushWait.Load() != 0 {
-			time.Sleep(time.Duration(w.flushWait.Load()) * time.Millisecond)
-		}
-	}
 	if w.hasPending {
 		start := time.Now()
 		defer func() {

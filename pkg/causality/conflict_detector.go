@@ -27,8 +27,8 @@ import (
 // to different workers in a way that transactions modifying the same
 // keys are never executed concurrently and have their original orders
 // preserved.
-type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
-	workers []Worker
+type ConflictDetector[Txn txnEvent] struct {
+	workers []worker[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -51,17 +51,20 @@ type txnFinishedEvent struct {
 }
 
 // NewConflictDetector creates a new ConflictDetector.
-func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
-	workers []Worker,
-	numSlots uint64,
-) *ConflictDetector[Worker, Txn] {
-	ret := &ConflictDetector[Worker, Txn]{
-		workers:       workers,
+func NewConflictDetector[Txn txnEvent](
+	numSlots uint64, opt WorkerOption,
+) *ConflictDetector[Txn] {
+	ret := &ConflictDetector[Txn]{
+		workers:       make([]worker[Txn], opt.WorkerCount),
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
 		notifiedNodes: chann.NewDrainableChann[func()](),
 		garbageNodes:  chann.NewDrainableChann[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
+	}
+
+	for i := 0; i < opt.WorkerCount; i++ {
+		ret.workers[i] = newWorker[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -77,7 +80,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 //
 // NOTE: if multiple threads access this concurrently,
 // Txn.GenSortedDedupKeysHash must be sorted by the slot index.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
+func (d *ConflictDetector[Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
 	node := internal.NewNode()
 	node.TrySendToWorker = func(workerID int64) bool {
@@ -102,12 +105,12 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 }
 
 // Close closes the ConflictDetector.
-func (d *ConflictDetector[Worker, Txn]) Close() {
+func (d *ConflictDetector[Txn]) Close() {
 	close(d.closeCh)
 	d.wg.Wait()
 }
 
-func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.CloseAndDrain()
 		d.garbageNodes.CloseAndDrain()
@@ -129,11 +132,19 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, postTxnExecuted func(), workerID int64) bool {
+func (d *ConflictDetector[Txn]) sendToWorker(txn Txn, postTxnExecuted func(), workerID int64) bool {
 	if workerID < 0 {
 		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
 	}
 	txn.OnConflictResolved()
 	worker := d.workers[workerID]
-	return worker.Add(txn, postTxnExecuted)
+	return worker.Add(TxnWithNotifier[Txn]{txn, postTxnExecuted})
+}
+
+// GetWorkerOutputChann returns the output channel of the worker.
+func (d *ConflictDetector[Txn]) GetWorkerOutputChann(workerID int64) <-chan TxnWithNotifier[Txn] {
+	if workerID < 0 {
+		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
+	}
+	return d.workers[workerID].Out()
 }
