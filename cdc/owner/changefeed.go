@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -120,13 +121,8 @@ type changefeed struct {
 	wg sync.WaitGroup
 
 	// state related fields
-	initialized  *atomic.Bool
-	initializing *atomic.Bool
-	initError    *atomic.Error
-
-	// func to cancel the changefeed initialization
-	cancelInitialize context.CancelFunc
-	initialWaitGroup sync.WaitGroup
+	initialized *atomic.Bool
+	initializer *async.Initializer
 
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
@@ -222,15 +218,13 @@ func NewChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
-
-		initializing: atomic.NewBool(false),
-		initialized:  atomic.NewBool(false),
-		initError:    atomic.NewError(nil),
+		initialized:           atomic.NewBool(false),
 
 		globalVars: globalVars,
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
+	c.initializer = async.NewInitializer(c.initialize)
 	return c
 }
 
@@ -401,27 +395,11 @@ func (c *changefeed) tick(ctx context.Context,
 	if adminJobPending {
 		return 0, 0, nil
 	}
-	if !c.initializing.Load() && !c.initialized.Load() {
-		c.initializing.Store(true)
-		initialCtx, cancelInitialize := context.WithCancel(ctx)
-		c.initialWaitGroup.Add(1)
-		c.cancelInitialize = cancelInitialize
-		err := c.globalVars.ChangefeedThreadPool.Go(initialCtx, func() {
-			defer c.initialWaitGroup.Done()
-			if err := c.initialize(initialCtx); err != nil {
-				c.initError.Store(errors.Trace(err))
-			}
-			c.initializing.Store(false)
-		})
-		if err != nil {
-			c.initialWaitGroup.Done()
-			return 0, 0, errors.Trace(err)
-		}
+	initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
 	}
-	if c.initError.Load() != nil {
-		return 0, 0, errors.Trace(c.initError.Load())
-	}
-	if c.initializing.Load() {
+	if !initialized {
 		return 0, 0, nil
 	}
 
@@ -777,12 +755,7 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx context.Context) {
-	if c.initializing.Load() {
-		if c.cancelInitialize != nil {
-			c.cancelInitialize()
-		}
-		c.initialWaitGroup.Wait()
-	}
+	c.initializer.Terminate()
 	c.cleanupMetrics()
 	if c.isReleased {
 		return
@@ -827,8 +800,6 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.barriers = nil
 	c.resolvedTs = 0
 	c.initialized.Store(false)
-	c.initializing.Store(false)
-	c.initError.Store(nil)
 	c.isReleased = true
 
 	log.Info("changefeed closed",

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
@@ -91,13 +92,8 @@ type processor struct {
 
 	sinkManager component[*sinkmanager.SinkManager]
 
-	initialized  *atomic.Bool
-	initializing *atomic.Bool
-	initError    *atomic.Error
-
-	// func to cancel the processor initialization
-	cancelInitialize context.CancelFunc
-	initialWaitGroup sync.WaitGroup
+	initialized *atomic.Bool
+	initializer *async.Initializer
 
 	lazyInit func(ctx context.Context) error
 	newAgent func(
@@ -445,9 +441,7 @@ func NewProcessor(
 		latestInfo:      info,
 		latestStatus:    status,
 
-		initError:    atomic.NewError(nil),
-		initialized:  atomic.NewBool(false),
-		initializing: atomic.NewBool(false),
+		initialized: atomic.NewBool(false),
 
 		ownerCaptureInfoClient: ownerCaptureInfoClient,
 		globalVars:             globalVars,
@@ -466,6 +460,7 @@ func NewProcessor(
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
 	p.cfg = cfg
+	p.initializer = async.NewInitializer(p.lazyInit)
 	return p
 }
 
@@ -568,27 +563,11 @@ func (p *processor) tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if !p.initializing.Load() && !p.initialized.Load() {
-		initCtx, cancelInitialize := context.WithCancel(ctx)
-		p.initializing.Store(true)
-		p.cancelInitialize = cancelInitialize
-		p.initialWaitGroup.Add(1)
-		err := p.globalVars.ChangefeedThreadPool.Go(initCtx, func() {
-			defer p.initialWaitGroup.Done()
-			if err := p.lazyInit(initCtx); err != nil {
-				p.initError.Store(err)
-			}
-			p.initializing.Store(false)
-		})
-		if err != nil {
-			p.initialWaitGroup.Done()
-			return errors.Trace(err)
-		}
+	initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+	if err != nil {
+		return errors.Trace(err)
 	}
-	if p.initError.Load() != nil {
-		return errors.Trace(p.initError.Load())
-	}
-	if p.initializing.Load() {
+	if !initialized {
 		return nil
 	}
 
@@ -866,12 +845,7 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
-	if p.initializing.Load() {
-		if p.cancelInitialize != nil {
-			p.cancelInitialize()
-		}
-		p.initialWaitGroup.Wait()
-	}
+	p.initializer.Terminate()
 	// clean up metrics first to avoid some metrics are not cleaned up
 	// when error occurs during closing the processor
 	p.cleanupMetrics()
