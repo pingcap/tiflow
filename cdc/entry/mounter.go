@@ -31,7 +31,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/table"
-	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -548,16 +547,15 @@ func verifyRawBytesChecksum(
 		datums    []*types.Datum
 	)
 	for _, col := range columns {
+		// TiDB does not encode null value into the bytes, so just ignore it.
+		if col.Value == nil {
+			continue
+		}
 		columnID := col.ColumnID
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
 			return 0, false, errors.Trace(err)
-		}
-		if skip := tables.CanSkip(tableInfo.TableInfo, &table.Column{
-			ColumnInfo: columnInfo,
-		}, &datum); skip {
-			continue
 		}
 		datums = append(datums, &datum)
 		columnIDs = append(columnIDs, columnID)
