@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -46,6 +47,79 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	dialTimeout           = 10 * time.Second
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+
+	// TiCDC may open numerous gRPC streams,
+	// with 65535 bytes window size, 10K streams takes about 27GB memory.
+	//
+	// 65535 bytes, the initial window size in http2 spec.
+	grpcInitialWindowSize = (1 << 16) - 1
+	// 8 MB The value for initial window size on a connection
+	grpcInitialConnWindowSize = 1 << 23
+	// 256 MB The maximum message size the client can receive
+	grpcMaxCallRecvMsgSize = 1 << 28
+
+	// TiCDC always interacts with region leader, every time something goes wrong,
+	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
+	// don't need to force reload region anymore.
+	regionScheduleReload = false
+
+	scanRegionsConcurrency = 1024
+)
+
+var (
+	metricFeedNotLeaderCounter        = eventFeedErrorCounter.WithLabelValues("NotLeader")
+	metricFeedEpochNotMatchCounter    = eventFeedErrorCounter.WithLabelValues("EpochNotMatch")
+	metricFeedRegionNotFoundCounter   = eventFeedErrorCounter.WithLabelValues("RegionNotFound")
+	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
+	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
+	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
+	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
+)
+
+var (
+	// unreachable error, only used in unit test
+	errUnreachable = errors.New("kv client unreachable error")
+	logPanic       = log.Panic
+)
+
+type regionErrorInfo struct {
+	singleRegionInfo
+	err error
+}
+
+func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
+	return regionErrorInfo{
+		singleRegionInfo: info,
+		err:              err,
+	}
+}
+
+type eventError struct {
+	err *cdcpb.Error
+}
+
+// Error implement error interface.
+func (e *eventError) Error() string {
+	return e.err.String()
+}
+
+type rpcCtxUnavailableErr struct {
+	verID tikv.RegionVerID
+}
+
+func (e *rpcCtxUnavailableErr) Error() string {
+	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
+		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
+}
+
+type sendRequestToStoreErr struct{}
+
+func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
 
 // SubscriptionID comes from `SharedClient.AllocSubscriptionID`.
 type SubscriptionID uint64
@@ -680,7 +754,9 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 			}
 		}
 		start := time.Now()
-		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		defer func() {
+			s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		}()
 
 		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
 			log.Warn("event feed resolve lock fail",
@@ -723,6 +799,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
+		slowInitializeRegion := 0
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
@@ -735,6 +812,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 						zap.Any("slowRegion", attr.SlowestRegion))
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+				slowInitializeRegion += 1
 				log.Info("event feed initializes a region too slow",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
@@ -756,6 +834,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			}
 		}
 		s.totalSpans.RUnlock()
+		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegion))
 	}
 }
 
@@ -810,6 +889,7 @@ type sharedClientMetrics struct {
 	batchResolvedSize       prometheus.Observer
 	lockResolveWaitDuration prometheus.Observer
 	lockResolveRunDuration  prometheus.Observer
+	slowInitializeRegion    prometheus.Gauge
 }
 
 func (s *SharedClient) initMetrics() {
@@ -828,6 +908,9 @@ func (s *SharedClient) initMetrics() {
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "run")
 
 	s.metrics.batchResolvedSize = batchResolvedEventSize.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
+
+	s.metrics.slowInitializeRegion = slowInitializeRegion.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
 }
 

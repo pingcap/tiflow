@@ -7,7 +7,8 @@
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
-	format-makefiles check-makefiles oauth2_server
+	format-makefiles check-makefiles oauth2_server prepare_test_binaries
+
 
 .DEFAULT_GOAL := default
 
@@ -100,7 +101,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v8.0.0-master
+	RELEASE_VERSION := v8.1.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
@@ -609,5 +610,5 @@ engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin
 	$(FAILPOINT_DISABLE)
 
 prepare_test_binaries:
-	cd scripts && ./download-integration-test-binaries.sh master && cd ..
+	./scripts/download-integration-test-binaries.sh "$(branch)" "$(community)" "$(ver)" "$(os)" "$(arch)"
 	touch prepare_test_binaries

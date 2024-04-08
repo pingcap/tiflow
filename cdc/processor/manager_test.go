@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -42,10 +42,11 @@ type managerTester struct {
 func NewManager4Test(
 	t *testing.T,
 	liveness *model.Liveness,
+	globalVars *vars.GlobalVars,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg).(*managerImpl)
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg, globalVars).(*managerImpl)
 	m.newProcessor = func(
 		info *model.ChangeFeedInfo,
 		status *model.ChangeFeedStatus,
@@ -56,29 +57,33 @@ func NewManager4Test(
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 		client etcd.OwnerCaptureInfoClient,
+		globalVars *vars.GlobalVars,
 	) *processor {
-		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client)
+		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client, globalVars)
 	}
 	return m
 }
 
 //nolint:unused
-func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
-	s.manager = NewManager4Test(t, &s.liveness)
+func (s *managerTester) resetSuit(globalVars *vars.GlobalVars,
+	t *testing.T,
+) {
+	s.manager = NewManager4Test(t, &s.liveness, globalVars)
 	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
-	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
+	captureInfoBytes, err := globalVars.CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
 		fmt.Sprintf("%s/capture/%s",
 			etcd.DefaultClusterAndMetaPrefix,
-			ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
+			globalVars.CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
 func TestChangefeed(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -129,9 +134,10 @@ func TestChangefeed(t *testing.T) {
 }
 
 func TestDebugInfo(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -195,9 +201,10 @@ func TestDebugInfo(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -233,9 +240,10 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
+	globalVars := vars.NewGlobalVars4Test()
 	liveness := model.LivenessCaptureAlive
 	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg, globalVars).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -251,9 +259,10 @@ func TestSendCommandError(t *testing.T) {
 }
 
 func TestManagerLiveness(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")

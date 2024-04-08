@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -31,8 +30,10 @@ import (
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -42,78 +43,52 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-type mockPuller struct {
-	t          *testing.T
-	inCh       chan *model.RawKVEntry
-	outCh      chan *model.RawKVEntry
-	resolvedTs model.Ts
-}
-
-func (m *mockPuller) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
-	return entry.ParseDDLJob(nil, rawKV, 0)
-}
-
-//nolint:unparam
-func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {
-	return &mockPuller{
-		t:          t,
-		inCh:       make(chan *model.RawKVEntry),
-		outCh:      make(chan *model.RawKVEntry),
-		resolvedTs: startTs - 1,
-	}
-}
-
-func (m *mockPuller) Run(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case e := <-m.inCh:
-			m.outCh <- e
-			atomic.StoreUint64(&m.resolvedTs, e.CRTs)
-		}
-	}
-}
-
-func (m *mockPuller) Output() <-chan *model.RawKVEntry {
-	return m.outCh
-}
-
-func (m *mockPuller) Stats() Stats {
-	return Stats{}
-}
-
-func (m *mockPuller) append(e *model.RawKVEntry) {
-	m.inCh <- e
-}
-
-func (m *mockPuller) appendDDL(job *timodel.Job) {
+func jonToRawKVEntry(t *testing.T, job *timodel.Job) *model.RawKVEntry {
 	b, err := json.Marshal(job)
-	require.Nil(m.t, err)
+	require.Nil(t, err)
 	ek := []byte("m")
 	ek = codec.EncodeBytes(ek, []byte("DDLJobList"))
 	ek = codec.EncodeUint(ek, uint64('l'))
 	ek = codec.EncodeInt(ek, 1)
-	m.append(&model.RawKVEntry{
+	return &model.RawKVEntry{
 		OpType:  model.OpTypePut,
 		Key:     ek,
 		Value:   b,
 		StartTs: job.StartTS,
 		CRTs:    job.BinlogInfo.FinishedTS,
-	})
+	}
 }
 
-func (m *mockPuller) appendResolvedTs(ts model.Ts) {
-	m.append(&model.RawKVEntry{
+func tsToRawKVEntry(_ *testing.T, ts model.Ts) *model.RawKVEntry {
+	return &model.RawKVEntry{
 		OpType:  model.OpTypeResolved,
 		CRTs:    ts,
 		StartTs: ts,
-	})
+	}
+}
+
+func inputDDL(t *testing.T, puller *ddlJobPullerImpl, job *timodel.Job) {
+	rawJob := jonToRawKVEntry(t, job)
+	puller.Input(context.Background(), rawJob, []tablepb.Span{})
+}
+
+func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
+	rawTs := tsToRawKVEntry(t, ts)
+	puller.Input(context.Background(), rawTs, []tablepb.Span{})
+}
+
+func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
+	err := retry.Do(context.Background(), func() error {
+		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
+			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
+	require.Nil(t, err)
 }
 
 func newMockDDLJobPuller(
 	t *testing.T,
-	puller Puller,
 	needSchemaStorage bool,
 ) (DDLJobPuller, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
@@ -121,8 +96,7 @@ func newMockDDLJobPuller(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
 	}
-	res.multiplexing = false
-	res.puller.Puller = puller
+	res.sorter = memorysorter.NewEntrySorter(model.ChangeFeedID4Test("puller", "test"))
 
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {
@@ -146,12 +120,13 @@ func newMockDDLJobPuller(
 }
 
 func TestHandleRenameTable(t *testing.T) {
-	startTs := uint64(10)
-	mockPuller := newMockPuller(t, startTs)
-	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
 
+	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
 		"test1.t1",
@@ -172,6 +147,7 @@ func TestHandleRenameTable(t *testing.T) {
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -189,39 +165,39 @@ func TestHandleRenameTable(t *testing.T) {
 	{
 		remainTables := make([]int64, 1)
 		job := helper.DDL2Job("create database test1")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t1(id int)")
 		remainTables[0] = job.TableID
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t2(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t3(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t5(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create database ignore1")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table ignore1.a(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
@@ -247,23 +223,23 @@ func TestHandleRenameTable(t *testing.T) {
 	// all tables are filtered out
 	{
 		job := helper.DDL2Job("create database test2")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t1(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t2(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test2.t3(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test2.t1 to test2.t11, test2.t2 to test2.t22, test2.t3 to test2.t33")
@@ -275,19 +251,19 @@ func TestHandleRenameTable(t *testing.T) {
 	// test uppercase db name
 	{
 		job := helper.DDL2Job("create database Test3")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table Test3.t1(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// skip this table
 		job = helper.DDL2Job("create table Test3.t2(id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table Test3.t1 to Test3.t11, Test3.t2 to Test3.t22")
@@ -302,35 +278,35 @@ func TestHandleRenameTable(t *testing.T) {
 	// test rename table
 	{
 		job := helper.DDL2Job("create table test1.t99 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
 		job = helper.DDL2Job("create table test1.t1000 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
 		job = helper.DDL2Job("create table test1.t888 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t20230808 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t202308081 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t202308082 (id int)")
-		mockPuller.appendDDL(job)
-		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		inputDDL(t, ddlJobPullerImpl, job)
+		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 		// since test1.99 in filter rule, we replicate it
 		job = helper.DDL2Job("rename table test1.t99 to test1.t999")
@@ -372,12 +348,11 @@ func TestHandleRenameTable(t *testing.T) {
 }
 
 func TestHandleJob(t *testing.T) {
-	startTs := uint64(10)
-	mockPuller := newMockPuller(t, startTs)
-	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
-
+	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
 		"test1.t1",
@@ -580,33 +555,26 @@ func TestHandleJob(t *testing.T) {
 	}
 }
 
-func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
-	err := retry.Do(context.Background(), func() error {
-		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
-			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
-		}
-		return nil
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
-	require.Nil(t, err)
-}
-
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
-	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
+	f, err := filter.NewFilter(changefeedVars.Info.Config, "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		changefeedVars.Info.Config.ForceReplicate,
+		changefeedVars.ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
-	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
+	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
+	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
+	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -623,11 +591,11 @@ func TestDDLPuller(t *testing.T) {
 	require.Nil(t, ddl)
 
 	// test send resolvedTs
-	mockPuller.appendResolvedTs(15)
+	inputTs(t, ddlJobPullerImpl, 15)
 	waitResolvedTsGrowing(t, p, 15)
 
 	// test send ddl job out of order
-	mockPuller.appendDDL(&timodel.Job{
+	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         2,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    5,
@@ -635,7 +603,7 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, FinishedTS: 18},
 		Query:      "create table test.t1(id int)",
 	})
-	mockPuller.appendDDL(&timodel.Job{
+	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         1,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    5,
@@ -647,7 +615,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Equal(t, resolvedTs, uint64(15))
 	require.Nil(t, ddl)
 
-	mockPuller.appendResolvedTs(20)
+	inputTs(t, ddlJobPullerImpl, 20)
 	waitResolvedTsGrowing(t, p, 16)
 	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(16))
@@ -660,7 +628,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Equal(t, ddl.ID, int64(2))
 
 	// test add ddl job repeated
-	mockPuller.appendDDL(&timodel.Job{
+	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         3,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
@@ -668,7 +636,8 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
 		Query:      "create table t3(id int)",
 	})
-	mockPuller.appendDDL(&timodel.Job{
+
+	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         3,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
@@ -676,7 +645,8 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
 		Query:      "create table t3(id int)",
 	})
-	mockPuller.appendResolvedTs(30)
+
+	inputTs(t, ddlJobPullerImpl, 30)
 	waitResolvedTsGrowing(t, p, 25)
 
 	resolvedTs, ddl = p.PopFrontDDL()
@@ -690,7 +660,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Equal(t, resolvedTs, uint64(30))
 	require.Nil(t, ddl)
 
-	mockPuller.appendDDL(&timodel.Job{
+	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         5,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
@@ -698,7 +668,8 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 36},
 		Query:      "create table t4(id int)",
 	})
-	mockPuller.appendResolvedTs(40)
+
+	inputTs(t, ddlJobPullerImpl, 40)
 	waitResolvedTsGrowing(t, p, 40)
 	resolvedTs, ddl = p.PopFrontDDL()
 	// no ddl should be received
@@ -716,22 +687,26 @@ func TestResolvedTsStuck(t *testing.T) {
 	defer restoreFn()
 
 	startTs := uint64(10)
-	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+
+	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		changefeedVars.Info.Config.ForceReplicate,
+		changefeedVars.ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
 
-	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
+	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
+	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -750,11 +725,11 @@ func TestResolvedTsStuck(t *testing.T) {
 	require.Equal(t, resolvedTs, startTs)
 	require.Nil(t, ddl)
 
-	mockPuller.appendResolvedTs(30)
+	inputTs(t, ddlJobPullerImpl, 30)
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
 
-	mockPuller.appendResolvedTs(40)
+	inputTs(t, ddlJobPullerImpl, 40)
 	waitResolvedTsGrowing(t, p, 40)
 }
 
