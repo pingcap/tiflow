@@ -67,7 +67,7 @@ func NewGlobalVars4Test() *GlobalVars {
 		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
-		ChangefeedThreadPool: &nonAsyncPool{},
+		ChangefeedThreadPool: &NonAsyncPool{},
 	}
 }
 
@@ -82,15 +82,15 @@ func NewGlobalVarsAndChangefeedVars4Test() (*GlobalVars, *ChangefeedVars) {
 	}
 }
 
-// nonAsyncPool is a dummy implementation of workerpool.AsyncPool, which runs tasks synchronously.
+// NonAsyncPool is a dummy implementation of workerpool.AsyncPool, which runs tasks synchronously.
 // It is used in tests to avoid the overhead of asynchronous task scheduling.
-type nonAsyncPool struct{}
+type NonAsyncPool struct{}
 
-func (f *nonAsyncPool) Go(_ context.Context, fn func()) error {
+func (f *NonAsyncPool) Go(_ context.Context, fn func()) error {
 	fn()
 	return nil
 }
 
-func (f *nonAsyncPool) Run(_ context.Context) error {
+func (f *NonAsyncPool) Run(_ context.Context) error {
 	return nil
 }

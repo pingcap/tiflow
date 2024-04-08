@@ -563,12 +563,14 @@ func (p *processor) tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !initialized {
-		return nil
+	if !p.initialized.Load() {
+		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !initialized {
+			return nil
+		}
 	}
 
 	barrier, err := p.agent.Tick(ctx)

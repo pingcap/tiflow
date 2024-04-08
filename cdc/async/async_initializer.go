@@ -38,6 +38,7 @@ type Initializer struct {
 	initFunc func(ctx context.Context) error
 }
 
+// NewInitializer creates a new initializer.
 func NewInitializer(initFunc func(ctx context.Context) error) *Initializer {
 	return &Initializer{
 		initialized:  atomic.NewBool(false),
@@ -57,16 +58,22 @@ func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpo
 		initialCtx, cancelInitialize := context.WithCancel(ctx)
 		initializer.initialWaitGroup.Add(1)
 		initializer.cancelInitialize = cancelInitialize
+		log.Info("submit async initializer task to the worker pool")
 		err := pool.Go(initialCtx, func() {
-			defer initializer.initialWaitGroup.Done()
+			defer func() {
+				initializer.initialWaitGroup.Done()
+				initializer.initializing.Store(false)
+			}()
 			if err := initializer.initFunc(initialCtx); err != nil {
 				initializer.initError.Store(errors.Trace(err))
+			} else {
+				initializer.initialized.Store(true)
 			}
-			initializer.initializing.Store(false)
 		})
 		if err != nil {
 			log.Error("failed to submit async initializer task to the worker pool", zap.Error(err))
 			initializer.initialWaitGroup.Done()
+			initializer.initializing.Store(false)
 			return false, errors.Trace(err)
 		}
 	}
@@ -84,4 +91,7 @@ func (initializer *Initializer) Terminate() {
 		}
 		initializer.initialWaitGroup.Wait()
 	}
+	initializer.initializing.Store(false)
+	initializer.initialized.Store(false)
+	initializer.initError.Store(nil)
 }

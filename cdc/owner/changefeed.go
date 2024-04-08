@@ -395,12 +395,15 @@ func (c *changefeed) tick(ctx context.Context,
 	if adminJobPending {
 		return 0, 0, nil
 	}
-	initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
-	if err != nil {
-		return 0, 0, errors.Trace(err)
-	}
-	if !initialized {
-		return 0, 0, nil
+
+	if !c.initialized.Load() {
+		initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return 0, 0, errors.Trace(err)
+		}
+		if !initialized {
+			return 0, 0, nil
+		}
 	}
 
 	select {
