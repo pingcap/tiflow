@@ -70,10 +70,10 @@ func newFeedStateManager4Test(
 }
 
 func TestHandleJob(t *testing.T) {
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	manager.state = state
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -100,7 +100,7 @@ func TestHandleJob(t *testing.T) {
 
 	// a running can not be resume
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type: model.AdminResume,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -109,7 +109,7 @@ func TestHandleJob(t *testing.T) {
 
 	// stop a changefeed
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type: model.AdminStop,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -123,7 +123,7 @@ func TestHandleJob(t *testing.T) {
 
 	// resume a changefeed
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type: model.AdminResume,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -136,7 +136,7 @@ func TestHandleJob(t *testing.T) {
 
 	// remove a changefeed
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type: model.AdminRemove,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -148,10 +148,10 @@ func TestHandleJob(t *testing.T) {
 }
 
 func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -169,7 +169,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 	// stop a changefeed
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type: model.AdminStop,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -183,7 +183,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 	// resume the changefeed in stopped state
 	manager.PushAdminJob(&model.AdminJob{
-		CfID:                  changefeedVars.ID,
+		CfID:                  model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type:                  model.AdminResume,
 		OverwriteCheckpointTs: 100,
 	})
@@ -214,7 +214,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 	// resume the changefeed in failed state
 	manager.isRetrying = true
 	manager.PushAdminJob(&model.AdminJob{
-		CfID:                  changefeedVars.ID,
+		CfID:                  model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type:                  model.AdminResume,
 		OverwriteCheckpointTs: 200,
 	})
@@ -229,10 +229,10 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 }
 
 func TestMarkFinished(t *testing.T) {
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -259,10 +259,10 @@ func TestMarkFinished(t *testing.T) {
 }
 
 func TestCleanUpInfos(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -294,10 +294,10 @@ func TestCleanUpInfos(t *testing.T) {
 }
 
 func TestHandleError(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -373,10 +373,10 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestHandleFastFailError(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(0, 0, 0, 0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -407,10 +407,10 @@ func TestHandleFastFailError(t *testing.T) {
 }
 
 func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(0, 0, 0, 0)
 	manager.state = orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	err := &model.RunningError{
 		Addr:    globalVars.CaptureInfo.AdvertiseAddr,
 		Code:    "CDC:ErrReachMaxTry",
@@ -464,10 +464,10 @@ func TestChangefeedStatusNotExist(t *testing.T) {
     "creator-version": "v5.0.0-master-dirty"
 }
 `
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedConfig := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
 		fmt.Sprintf("%s/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 			etcd.DefaultClusterAndMetaPrefix): `
@@ -475,7 +475,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 "address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
 		fmt.Sprintf("%s/changefeed/info/",
 			etcd.DefaultClusterAndNamespacePrefix) +
-			changefeedVars.ID.ID: changefeedInfo,
+			changefeedConfig.ID: changefeedInfo,
 		fmt.Sprintf("%s/owner/156579d017f84a68",
 			etcd.DefaultClusterAndMetaPrefix,
 		): "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
@@ -487,7 +487,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	tester.MustApplyPatches()
 
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: changefeedVars.ID,
+		CfID: model.DefaultChangeFeedID(changefeedConfig.ID),
 		Type: model.AdminRemove,
 	})
 	manager.Tick(0, state.Status, state.Info)
@@ -499,10 +499,10 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 }
 
 func TestChangefeedNotRetry(t *testing.T) {
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// changefeed state normal
@@ -586,11 +586,11 @@ func TestChangefeedNotRetry(t *testing.T) {
 }
 
 func TestBackoffStopsUnexpectedly(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	// after 4000ms, the backoff will stop
 	manager := newFeedStateManager4Test(500, 500, 4000, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -649,11 +649,11 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 }
 
 func TestBackoffNeverStops(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	// the backoff will never stop
 	manager := newFeedStateManager4Test(100, 100, 0, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -700,11 +700,11 @@ func TestBackoffNeverStops(t *testing.T) {
 }
 
 func TestUpdateChangefeedEpoch(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	// Set a long backoff time
 	manager := newFeedStateManager4Test(int(time.Hour), int(time.Hour), 0, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -755,11 +755,11 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 }
 
 func TestHandleWarning(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	manager.changefeedErrorStuckDuration = 100 * time.Millisecond
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -869,10 +869,10 @@ func TestErrorAfterWarning(t *testing.T) {
 	t.Parallel()
 
 	maxElapsedTimeInMs := 2000
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, maxElapsedTimeInMs, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -957,10 +957,10 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	maxElapsedTimeInMs := 2000
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	manager := newFeedStateManager4Test(200, 1600, maxElapsedTimeInMs, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		changefeedVars.ID)
+		model.DefaultChangeFeedID(changefeedInfo.ID))
 	manager.state = state
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

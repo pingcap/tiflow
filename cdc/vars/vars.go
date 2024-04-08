@@ -47,14 +47,6 @@ type GlobalVars struct {
 	ChangefeedThreadPool workerpool.AsyncPool
 }
 
-// ChangefeedVars contains some vars which can be used anywhere in a pipeline
-// the lifecycle of vars in the ChangefeedVars should be aligned with the changefeed.
-// All field in Vars should be READ-ONLY and THREAD-SAFE
-type ChangefeedVars struct {
-	ID   model.ChangeFeedID
-	Info *model.ChangeFeedInfo
-}
-
 // NewGlobalVars4Test returns a GlobalVars for test,
 func NewGlobalVars4Test() *GlobalVars {
 	return &GlobalVars{
@@ -71,15 +63,14 @@ func NewGlobalVars4Test() *GlobalVars {
 	}
 }
 
-// NewGlobalVarsAndChangefeedVars4Test returns GlobalVars and ChangefeedVars for ut
-func NewGlobalVarsAndChangefeedVars4Test() (*GlobalVars, *ChangefeedVars) {
-	return NewGlobalVars4Test(), &ChangefeedVars{
-		ID: model.DefaultChangeFeedID("changefeed-id-test"),
-		Info: &model.ChangeFeedInfo{
+// NewGlobalVarsAndChangefeedInfo4Test returns GlobalVars and model.ChangeFeedInfo for ut
+func NewGlobalVarsAndChangefeedInfo4Test() (*GlobalVars, *model.ChangeFeedInfo) {
+	return NewGlobalVars4Test(),
+		&model.ChangeFeedInfo{
+			ID:      "changefeed-id-test",
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
-		},
-	}
+		}
 }
 
 // NonAsyncPool is a dummy implementation of workerpool.AsyncPool, which runs tasks synchronously.

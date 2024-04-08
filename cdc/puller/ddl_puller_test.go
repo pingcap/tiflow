@@ -558,20 +558,20 @@ func TestHandleJob(t *testing.T) {
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(changefeedVars.Info.Config, "")
+	f, err := filter.NewFilter(changefeedInfo.Config, "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		changefeedVars.Info.Config.ForceReplicate,
-		changefeedVars.ID,
+		changefeedInfo.Config.ForceReplicate,
+		model.DefaultChangeFeedID(changefeedInfo.ID),
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
 	ddlJobPullerImpl.setResolvedTs(startTs)
@@ -688,20 +688,20 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	startTs := uint64(10)
 
-	_, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		changefeedVars.Info.Config.ForceReplicate,
-		changefeedVars.ID,
+		changefeedInfo.Config.ForceReplicate,
+		model.DefaultChangeFeedID(changefeedInfo.ID),
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
