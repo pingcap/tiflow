@@ -33,8 +33,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -61,7 +61,7 @@ type Processor interface {
 	//
 	// It can be called in etcd ticks, so it should never be blocked.
 	// Tick Returns: error and warnings. error will be propagated to the owner, and warnings will be record.
-	Tick(cdcContext.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
+	Tick(context.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
 
 	// Close closes the processor.
 	Close() error
@@ -72,7 +72,7 @@ var _ Processor = (*processor)(nil)
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
-	globalVars   *cdcContext.GlobalVars
+	globalVars   *vars.GlobalVars
 
 	upstream     *upstream.Upstream
 	lastSchemaTs model.Ts
@@ -92,7 +92,7 @@ type processor struct {
 
 	initialized bool
 
-	lazyInit func(ctx cdcContext.Context) error
+	lazyInit func(ctx context.Context) error
 	newAgent func(
 		context.Context, *model.Liveness, uint64, *config.SchedulerConfig,
 		etcd.OwnerCaptureInfoClient,
@@ -427,6 +427,7 @@ func NewProcessor(
 	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 	ownerCaptureInfoClient etcd.OwnerCaptureInfoClient,
+	globalVars *vars.GlobalVars,
 ) *processor {
 	p := &processor{
 		upstream:        up,
@@ -438,6 +439,7 @@ func NewProcessor(
 		latestStatus:    status,
 
 		ownerCaptureInfoClient: ownerCaptureInfoClient,
+		globalVars:             globalVars,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -486,7 +488,7 @@ func isProcessorIgnorableError(err error) bool {
 //
 // It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
 	p.latestInfo = info
@@ -550,7 +552,7 @@ func (p *processor) handleWarnings() error {
 	return err
 }
 
-func (p *processor) tick(ctx cdcContext.Context) error {
+func (p *processor) tick(ctx context.Context) error {
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -572,16 +574,14 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 }
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
-func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
+func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if p.initialized {
 		return nil
 	}
 
 	// Here we use a separated context for sub-components, so we can custom the
 	// order of stopping all sub-components when closing the processor.
-	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
-	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
-	p.globalVars = prcCtx.GlobalVars()
+	prcCtx := context.Background()
 
 	var tz *time.Location
 	// todo: get the timezone from the global config or the changefeed config?
@@ -876,7 +876,7 @@ func (p *processor) Close() error {
 		p.agent = nil
 	}
 
-	// mark tables share the same cdcContext with its original table, don't need to cancel
+	// mark tables share the same ctx with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
 	log.Info("processor closed",
