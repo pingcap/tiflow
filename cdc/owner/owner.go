@@ -437,8 +437,8 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	// has crashed and has not cleaned up the stale metrics values.
 	changefeedCheckpointTsGauge.Reset()
 	changefeedCheckpointTsLagGauge.Reset()
-	changefeedResolvedTsGauge.Reset()
-	changefeedResolvedTsLagGauge.Reset()
+	changefeedWatermarkGauge.Reset()
+	changefeedWatermarkLagGauge.Reset()
 	changefeedStatusGauge.Reset()
 }
 
@@ -592,7 +592,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return nil
 		}
 		ret := &model.ChangeFeedStatusForAPI{}
-		ret.ResolvedTs = cfReactor.resolvedTs
+		ret.Watermark = cfReactor.watermark
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
 		query.Data = ret
 	case QueryChangeFeedSyncedStatus:
@@ -604,7 +604,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret := &model.ChangeFeedSyncedStatusForAPI{}
 		ret.LastSyncedTs = cfReactor.lastSyncedTs
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
-		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
+		ret.PullerWatermark = cfReactor.pullerWatermark
 
 		if cfReactor.latestInfo == nil {
 			ret.CheckpointInterval = 0

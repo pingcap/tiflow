@@ -48,9 +48,9 @@ type FeedStateManager interface {
 	// PushAdminJob pushed an admin job to the admin job queue
 	PushAdminJob(job *model.AdminJob)
 	// Tick is the main logic of the FeedStateManager, it will be called periodically
-	// resolvedTs is the resolvedTs of the changefeed
+	// watermark is the watermark of the changefeed
 	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
-	Tick(resolvedTs model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
+	Tick(watermark model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
 	// HandleError is called an error occurs in Changefeed.Tick
 	HandleError(errs ...*model.RunningError)
 	// HandleWarning is called a warning occurs in Changefeed.Tick
@@ -83,9 +83,9 @@ type feedStateManager struct {
 	backoffInterval               time.Duration               // the interval for restarting a changefeed in 'error' state
 	errBackoff                    *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
 
-	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
+	// watermark and initCheckpointTs is for checking whether watermark
 	// has been advanced or not.
-	resolvedTs           model.Ts
+	watermark            model.Ts
 	checkpointTs         model.Ts
 	checkpointTsAdvanced time.Time
 
@@ -139,7 +139,7 @@ func (m *feedStateManager) resetErrRetry() {
 	m.lastErrorRetryTime = time.Unix(0, 0)
 }
 
-func (m *feedStateManager) Tick(resolvedTs model.Ts,
+func (m *feedStateManager) Tick(watermark model.Ts,
 	status *model.ChangeFeedStatus, info *model.ChangeFeedInfo,
 ) (adminJobPending bool) {
 	m.checkAndInitLastRetryCheckpointTs(status)
@@ -149,10 +149,10 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts,
 			m.checkpointTs = status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
 		}
-		if m.resolvedTs < resolvedTs {
-			m.resolvedTs = resolvedTs
+		if m.watermark < watermark {
+			m.watermark = watermark
 		}
-		if m.checkpointTs >= m.resolvedTs {
+		if m.checkpointTs >= m.watermark {
 			m.checkpointTsAdvanced = time.Now()
 		}
 	}
@@ -384,7 +384,7 @@ func (m *feedStateManager) cleanUp() {
 	m.state.CleanUpTaskPositions()
 	m.checkpointTs = 0
 	m.checkpointTsAdvanced = time.Time{}
-	m.resolvedTs = 0
+	m.watermark = 0
 }
 
 func (m *feedStateManager) HandleError(errs ...*model.RunningError) {

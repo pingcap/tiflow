@@ -581,7 +581,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	err = storage.HandleDDLJob(job)
 	require.Nil(t, err)
 
-	require.Equal(t, storage.(*schemaStorage).resolvedTs, uint64(140))
+	require.Equal(t, storage.(*schemaStorage).watermark, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist := snap.SchemaByID(11)
@@ -653,7 +653,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	lastSchemaTs = storage.DoGC(155)
 	require.Equal(t, uint64(140), lastSchemaTs)
 
-	storage.AdvanceResolvedTs(185)
+	storage.AdvanceWatermark(185)
 
 	snap, err = storage.GetSnapshot(ctx, 180)
 	require.Nil(t, err)

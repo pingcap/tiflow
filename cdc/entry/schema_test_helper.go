@@ -265,7 +265,7 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(s.t, err)
-	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
+	s.schemaStorage.AdvanceWatermark(ver.Ver)
 
 	ctx := context.Background()
 

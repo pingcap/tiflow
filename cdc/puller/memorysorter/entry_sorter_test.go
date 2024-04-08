@@ -28,9 +28,9 @@ import (
 func TestEntrySorter(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		input      []*model.RawKVEntry
-		resolvedTs uint64
-		expect     []*model.RawKVEntry
+		input     []*model.RawKVEntry
+		watermark uint64
+		expect    []*model.RawKVEntry
 	}{
 		{
 			input: []*model.RawKVEntry{
@@ -39,9 +39,9 @@ func TestEntrySorter(t *testing.T) {
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 2, OpType: model.OpTypeDelete},
 			},
-			resolvedTs: 0,
+			watermark: 0,
 			expect: []*model.RawKVEntry{
-				{CRTs: 0, OpType: model.OpTypeResolved},
+				{CRTs: 0, OpType: model.OpTypeWatermark},
 			},
 		},
 		{
@@ -50,54 +50,54 @@ func TestEntrySorter(t *testing.T) {
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 5, OpType: model.OpTypePut},
 			},
-			resolvedTs: 3,
+			watermark: 3,
 			expect: []*model.RawKVEntry{
 				{CRTs: 1, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypeDelete},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 3, OpType: model.OpTypePut},
-				{CRTs: 3, OpType: model.OpTypeResolved},
+				{CRTs: 3, OpType: model.OpTypeWatermark},
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 3,
-			expect:     []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeResolved}},
+			input:     []*model.RawKVEntry{},
+			watermark: 3,
+			expect:    []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeWatermark}},
 		},
 		{
 			input: []*model.RawKVEntry{
 				{CRTs: 7, OpType: model.OpTypePut},
 			},
-			resolvedTs: 6,
+			watermark: 6,
 			expect: []*model.RawKVEntry{
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 5, OpType: model.OpTypePut},
-				{CRTs: 6, OpType: model.OpTypeResolved},
+				{CRTs: 6, OpType: model.OpTypeWatermark},
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 6,
+			input:     []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			watermark: 6,
 			expect: []*model.RawKVEntry{
-				{CRTs: 6, OpType: model.OpTypeResolved},
+				{CRTs: 6, OpType: model.OpTypeWatermark},
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 8,
+			input:     []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			watermark: 8,
 			expect: []*model.RawKVEntry{
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypePut},
-				{CRTs: 8, OpType: model.OpTypeResolved},
+				{CRTs: 8, OpType: model.OpTypeWatermark},
 			},
 		},
 		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 15,
+			input:     []*model.RawKVEntry{},
+			watermark: 15,
 			expect: []*model.RawKVEntry{
-				{CRTs: 15, OpType: model.OpTypeResolved},
+				{CRTs: 15, OpType: model.OpTypeWatermark},
 			},
 		},
 	}
@@ -114,7 +114,7 @@ func TestEntrySorter(t *testing.T) {
 		for _, entry := range tc.input {
 			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
+		es.AddEntry(ctx, model.NewWatermarkPolymorphicEvent(0, tc.watermark))
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			require.Equal(t, tc.expect[i], e.RawKV)
@@ -141,7 +141,7 @@ func TestEntrySorterRandomly(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
+		for watermark := uint64(1); watermark <= maxTs; watermark += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
 				opType = model.OpTypePut
@@ -150,30 +150,30 @@ func TestEntrySorterRandomly(t *testing.T) {
 			}
 			for i := 0; i < 1000; i++ {
 				entry := &model.RawKVEntry{
-					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
+					CRTs:   uint64(int64(watermark) + rand.Int63n(int64(maxTs-watermark))),
 					OpType: opType,
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
+			es.AddEntry(ctx, model.NewWatermarkPolymorphicEvent(0, watermark))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
+		es.AddEntry(ctx, model.NewWatermarkPolymorphicEvent(0, maxTs))
 	}()
 	var lastTs uint64
-	var resolvedTs uint64
+	var watermark uint64
 	lastOpType := model.OpTypePut
 	for entry := range es.Output() {
 		require.GreaterOrEqual(t, entry.CRTs, lastTs)
-		require.Greater(t, entry.CRTs, resolvedTs)
+		require.Greater(t, entry.CRTs, watermark)
 		if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
 			require.Greater(t, entry.CRTs, lastTs)
 		}
 		lastTs = entry.CRTs
 		lastOpType = entry.RawKV.OpType
 		if entry.IsResolved() {
-			resolvedTs = entry.CRTs
+			watermark = entry.CRTs
 		}
-		if resolvedTs == maxTs {
+		if watermark == maxTs {
 			break
 		}
 	}
@@ -226,13 +226,13 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			false,
@@ -242,7 +242,7 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			&model.PolymorphicEvent{
@@ -264,7 +264,7 @@ func TestEventLess(t *testing.T) {
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
-					OpType: model.OpTypeResolved,
+					OpType: model.OpTypeWatermark,
 				},
 			},
 			false,
@@ -314,7 +314,7 @@ func TestMergeEvents(t *testing.T) {
 		{
 			CRTs: 3,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 			},
 		},
 		{
@@ -326,7 +326,7 @@ func TestMergeEvents(t *testing.T) {
 		{
 			CRTs: 4,
 			RawKV: &model.RawKVEntry{
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeWatermark,
 			},
 		},
 		{
@@ -375,7 +375,7 @@ func BenchmarkSorter(b *testing.B) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
+		for watermark := uint64(1); watermark <= maxTs; watermark += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
 				opType = model.OpTypePut
@@ -384,21 +384,21 @@ func BenchmarkSorter(b *testing.B) {
 			}
 			for i := 0; i < 100000; i++ {
 				entry := &model.RawKVEntry{
-					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(1000)),
+					CRTs:   uint64(int64(watermark) + rand.Int63n(1000)),
 					OpType: opType,
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
+			es.AddEntry(ctx, model.NewWatermarkPolymorphicEvent(0, watermark))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
+		es.AddEntry(ctx, model.NewWatermarkPolymorphicEvent(0, maxTs))
 	}()
-	var resolvedTs uint64
+	var watermark uint64
 	for entry := range es.Output() {
 		if entry.IsResolved() {
-			resolvedTs = entry.CRTs
+			watermark = entry.CRTs
 		}
-		if resolvedTs == maxTs {
+		if watermark == maxTs {
 			break
 		}
 	}

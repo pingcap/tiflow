@@ -953,7 +953,7 @@ func TestErrorAfterWarning(t *testing.T) {
 	require.True(t, manager.ShouldRunning())
 }
 
-func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
+func TestHandleWarningWhileAdvanceWatermark(t *testing.T) {
 	t.Parallel()
 
 	maxElapsedTimeInMs := 2000
@@ -998,7 +998,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	require.Equal(t, model.StateWarning, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// 2. test when the changefeed is in warning state, and the resolvedTs and checkpointTs is not progressing,
+	// 2. test when the changefeed is in warning state, and the watermark and checkpointTs is not progressing,
 	// the changefeed state will remain warning whena new warning is encountered.
 	time.Sleep(manager.changefeedErrorStuckDuration + 10)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -1021,7 +1021,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	require.Equal(t, model.StateWarning, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// 3. Test changefeed remain warning when resolvedTs is progressing after stuck beyond the detection time.
+	// 3. Test changefeed remain warning when watermark is progressing after stuck beyond the detection time.
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.NotNil(t, status)
 		return &model.ChangeFeedStatus{

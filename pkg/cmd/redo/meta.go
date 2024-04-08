@@ -38,11 +38,11 @@ func (o *metaOptions) run(cmd *cobra.Command) error {
 		Dir:     o.dir,
 	}
 	ap := applier.NewRedoApplier(cfg)
-	checkpointTs, resolvedTs, err := ap.ReadMeta(ctx)
+	checkpointTs, watermark, err := ap.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
-	cmd.Printf("checkpoint-ts:%d, resolved-ts:%d\n", checkpointTs, resolvedTs)
+	cmd.Printf("checkpoint-ts:%d, resolved-ts:%d\n", checkpointTs, watermark)
 	return nil
 }
 

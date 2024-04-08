@@ -407,8 +407,8 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 type partitionSinks struct {
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
-	// resolvedTs record the maximum timestamp of the received event
-	resolvedTs uint64
+	// watermark record the maximum timestamp of the received event
+	watermark uint64
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -427,7 +427,7 @@ type Consumer struct {
 	sinksMu     sync.Mutex
 
 	// initialize to 0 by default
-	globalResolvedTs uint64
+	globalWatermark uint64
 
 	eventRouter *dispatcher.EventRouter
 
@@ -676,13 +676,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					)
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
+				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
+				partitionWatermark := atomic.LoadUint64(&sink.watermark)
+				if row.CommitTs <= globalWatermark || row.CommitTs <= partitionWatermark {
 					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+						zap.Uint64("globalWatermark", globalWatermark),
+						zap.Uint64("partitionWatermark", partitionWatermark),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
 					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
@@ -714,13 +714,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < globalResolvedTs || ts < partitionResolvedTs {
-					log.Warn("partition resolved ts fallback, skip it",
+				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
+				partitionWatermark := atomic.LoadUint64(&sink.watermark)
+				if ts < globalWatermark || ts < partitionWatermark {
+					log.Warn("partition watermark fallback, skip it",
 						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("partitionWatermark", partitionWatermark),
+						zap.Uint64("globalWatermark", globalWatermark),
 						zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
@@ -746,7 +746,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				atomic.StoreUint64(&sink.resolvedTs, ts)
+				atomic.StoreUint64(&sink.watermark, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 
@@ -822,10 +822,10 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	return nil
 }
 
-func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
+func (c *Consumer) getMinPartitionWatermark() (result uint64, err error) {
 	result = uint64(math.MaxUint64)
 	err = c.forEachSink(func(sink *partitionSinks) error {
-		a := atomic.LoadUint64(&sink.resolvedTs)
+		a := atomic.LoadUint64(&sink.watermark)
 		if a < result {
 			result = a
 		}
@@ -845,14 +845,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
+		minPartitionWatermark, err := c.getMinPartitionWatermark()
 		if err != nil {
 			return cerror.Trace(err)
 		}
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
+		if todoDDL != nil && todoDDL.CommitTs <= minPartitionWatermark {
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
@@ -866,59 +866,59 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 			c.popDDL()
 
-			if todoDDL.CommitTs < minPartitionResolvedTs {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+			if todoDDL.CommitTs < minPartitionWatermark {
+				log.Info("update minPartitionWatermark by DDL",
+					zap.Uint64("minPartitionWatermark", minPartitionWatermark),
 					zap.String("DDL", todoDDL.Query))
 			}
-			minPartitionResolvedTs = todoDDL.CommitTs
+			minPartitionWatermark = todoDDL.CommitTs
 		}
 
-		// update global resolved ts
-		if c.globalResolvedTs > minPartitionResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
+		// update global watermark
+		if c.globalWatermark > minPartitionWatermark {
+			log.Panic("global Watermark fallback",
+				zap.Uint64("globalWatermark", c.globalWatermark),
+				zap.Uint64("minPartitionWatermark", minPartitionWatermark))
 		}
 
-		if c.globalResolvedTs < minPartitionResolvedTs {
-			c.globalResolvedTs = minPartitionResolvedTs
+		if c.globalWatermark < minPartitionWatermark {
+			c.globalWatermark = minPartitionWatermark
 		}
 
 		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+			return syncFlushRowChangedEvents(ctx, sink, c.globalWatermark)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, watermark uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-		flushedResolvedTs := true
+		flushedWatermark := true
 		sink.tablesCommitTsMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			resolvedTs := model.NewResolvedTs(resolvedTs)
+			watermark := model.NewWatermark(watermark)
 			tableSink, ok := sink.tableSinksMap.Load(tableID)
 			if !ok {
 				log.Panic("Table sink not found", zap.Int64("tableID", tableID))
 			}
-			if err := tableSink.(tablesink.TableSink).UpdateResolvedTs(resolvedTs); err != nil {
-				log.Error("Failed to update resolved ts", zap.Error(err))
+			if err := tableSink.(tablesink.TableSink).UpdateWatermark(watermark); err != nil {
+				log.Error("Failed to update watermark", zap.Error(err))
 				return false
 			}
 			checkpoint := tableSink.(tablesink.TableSink).GetCheckpointTs()
-			if !checkpoint.EqualOrGreater(resolvedTs) {
-				flushedResolvedTs = false
+			if !checkpoint.EqualOrGreater(watermark) {
+				flushedWatermark = false
 			}
 			return true
 		})
-		if flushedResolvedTs {
+		if flushedWatermark {
 			return nil
 		}
 	}

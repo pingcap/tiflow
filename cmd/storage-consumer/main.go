@@ -124,7 +124,7 @@ type consumer struct {
 	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
 	tableDMLIdxMap map[cloudstorage.DmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
-	tableTsMap map[model.TableID]model.ResolvedTs
+	tableTsMap map[model.TableID]model.Watermark
 	// tableDefMap maintains a map of <`schema`.`table`, tableDef slice sorted by TableVersion>
 	tableDefMap map[string]map[uint64]*cloudstorage.TableDefinition
 	// tableSinkMap maintains a map of <TableID, TableSink>
@@ -216,7 +216,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		fileExtension:   extension,
 		errCh:           errCh,
 		tableDMLIdxMap:  make(map[cloudstorage.DmlPathKey]uint64),
-		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
+		tableTsMap:      make(map[model.TableID]model.Watermark),
 		tableDefMap:     make(map[string]map[uint64]*cloudstorage.TableDefinition),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
@@ -353,7 +353,7 @@ func (c *consumer) emitDMLEvents(
 
 			_, ok := c.tableTsMap[tableID]
 			if !ok || row.CommitTs > c.tableTsMap[tableID].Ts {
-				c.tableTsMap[tableID] = model.ResolvedTs{
+				c.tableTsMap[tableID] = model.Watermark{
 					Mode:    model.BatchResolvedMode,
 					Ts:      row.CommitTs,
 					BatchID: 1,
@@ -392,14 +392,14 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 		default:
 		}
 
-		resolvedTs := c.tableTsMap[tableID]
-		err := c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+		watermark := c.tableTsMap[tableID]
+		err := c.tableSinkMap[tableID].UpdateWatermark(watermark)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		checkpoint := c.tableSinkMap[tableID].GetCheckpointTs()
-		if checkpoint.Equal(resolvedTs) {
-			c.tableTsMap[tableID] = resolvedTs.AdvanceBatch()
+		if checkpoint.Equal(watermark) {
+			c.tableTsMap[tableID] = watermark.AdvanceBatch()
 			return nil
 		}
 		time.Sleep(defaultFlushWaitDuration)
@@ -425,8 +425,8 @@ func (c *consumer) syncExecDMLEvents(
 		return errors.Trace(err)
 	}
 
-	resolvedTs := c.tableTsMap[tableID]
-	err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+	watermark := c.tableTsMap[tableID]
+	err = c.tableSinkMap[tableID].UpdateWatermark(watermark)
 	if err != nil {
 		return errors.Trace(err)
 	}

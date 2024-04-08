@@ -56,7 +56,7 @@ type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	// startTs is the initial checkpointTs of the table sink.
 	startTs model.Ts
 
-	maxResolvedTs   model.ResolvedTs
+	maxWatermark    model.Watermark
 	backendSink     dmlsink.EventSink[E]
 	progressTracker *progressTracker
 	eventAppender   P
@@ -88,7 +88,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 		changefeedID:                     changefeedID,
 		span:                             span,
 		startTs:                          startTs,
-		maxResolvedTs:                    model.NewResolvedTs(0),
+		maxWatermark:                     model.NewWatermark(0),
 		backendSink:                      backendSink,
 		progressTracker:                  newProgressTracker(span, defaultBufferSize),
 		eventAppender:                    appender,
@@ -107,24 +107,24 @@ func (e *EventTableSink[E, P]) AppendRowChangedEvents(rows ...*model.RowChangedE
 	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
-// UpdateResolvedTs advances the resolved ts of the table sink.
-func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
-	// If resolvedTs is not greater than maxResolvedTs,
+// UpdateWatermark advances the watermark of the table sink.
+func (e *EventTableSink[E, P]) UpdateWatermark(watermark model.Watermark) error {
+	// If watermark is not greater than maxWatermark,
 	// the flush is unnecessary.
-	if e.maxResolvedTs.EqualOrGreater(resolvedTs) {
+	if e.maxWatermark.EqualOrGreater(watermark) {
 		return nil
 	}
-	e.maxResolvedTs = resolvedTs
+	e.maxWatermark = watermark
 
 	i := sort.Search(len(e.eventBuffer), func(i int) bool {
-		return e.eventBuffer[i].GetCommitTs() > resolvedTs.Ts
+		return e.eventBuffer[i].GetCommitTs() > watermark.Ts
 	})
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
 		// WriteEvents must be called to check whether the backend sink is dead
 		// or not, even if there is no more events. So if the backend is dead
 		// and re-initialized, we can know it and re-build a table sink.
-		e.progressTracker.addResolvedTs(resolvedTs)
+		e.progressTracker.addWatermark(watermark)
 		if err := e.backendSink.WriteEvents(); err != nil {
 			return SinkInternalError{err}
 		}
@@ -170,8 +170,8 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 	}
 
-	// Do not forget to add the resolvedTs to progressTracker.
-	e.progressTracker.addResolvedTs(resolvedTs)
+	// Do not forget to add the watermark to progressTracker.
+	e.progressTracker.addWatermark(watermark)
 	if err := e.backendSink.WriteEvents(resolvedCallbackableEvents...); err != nil {
 		return SinkInternalError{err}
 	}
@@ -179,7 +179,7 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.
-func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
+func (e *EventTableSink[E, P]) GetCheckpointTs() model.Watermark {
 	if e.state.Load() == state.TableSinkStopping {
 		if e.progressTracker.checkClosed(e.backendSink.Dead()) {
 			e.markAsClosed()

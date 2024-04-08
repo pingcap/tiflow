@@ -70,7 +70,7 @@ type ddlJobPullerImpl struct {
 	sorter        *memorysorter.EntrySorter
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
-	resolvedTs    uint64
+	watermark     uint64
 	schemaVersion int64
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
@@ -186,13 +186,13 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		return nil
 	}
 
-	if ddlRawKV.OpType == model.OpTypeResolved {
+	if ddlRawKV.OpType == model.OpTypeWatermark {
 		// Only nil in unit test case.
 		if p.schemaStorage != nil {
-			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+			p.schemaStorage.AdvanceWatermark(ddlRawKV.CRTs)
 		}
-		if ddlRawKV.CRTs > p.getResolvedTs() {
-			p.setResolvedTs(ddlRawKV.CRTs)
+		if ddlRawKV.CRTs > p.getWatermark() {
+			p.setWatermark(ddlRawKV.CRTs)
 		}
 	}
 
@@ -247,12 +247,12 @@ func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
 }
 
-func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
-	return atomic.LoadUint64(&p.resolvedTs)
+func (p *ddlJobPullerImpl) getWatermark() uint64 {
+	return atomic.LoadUint64(&p.watermark)
 }
 
-func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
-	atomic.StoreUint64(&p.resolvedTs, ts)
+func (p *ddlJobPullerImpl) setWatermark(ts uint64) {
+	atomic.StoreUint64(&p.watermark, ts)
 }
 
 func (p *ddlJobPullerImpl) initJobTableMeta() error {
@@ -300,9 +300,9 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
-	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
+	if job.BinlogInfo.FinishedTS <= p.getWatermark() ||
 		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
-		log.Info("ddl job finishedTs less than puller resolvedTs,"+
+		log.Info("ddl job finishedTs less than puller watermark,"+
 			"discard the ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -311,7 +311,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 			zap.String("query", job.Query),
-			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
+			zap.Uint64("pullerWatermark", p.getWatermark()))
 		return true, nil
 	}
 
@@ -429,7 +429,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, errors.Trace(err)
 	}
 
-	p.setResolvedTs(job.BinlogInfo.FinishedTS)
+	p.setWatermark(job.BinlogInfo.FinishedTS)
 	p.schemaVersion = job.BinlogInfo.SchemaVersion
 	return false, nil
 }
@@ -553,8 +553,8 @@ type DDLPuller interface {
 	Run(ctx context.Context) error
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
-	// ResolvedTs returns the resolved ts of the DDLPuller
-	ResolvedTs() uint64
+	// Watermark returns the watermark of the DDLPuller
+	Watermark() uint64
 	// Close closes the DDLPuller
 	Close()
 }
@@ -563,7 +563,7 @@ type ddlPullerImpl struct {
 	ddlJobPuller DDLJobPuller
 
 	mu             sync.Mutex
-	resolvedTS     uint64
+	watermark      uint64
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
 	cancel         context.CancelFunc
@@ -590,7 +590,7 @@ func NewDDLPuller(ctx context.Context,
 
 	return &ddlPullerImpl{
 		ddlJobPuller: puller,
-		resolvedTS:   startTs,
+		watermark:    startTs,
 		cancel:       func() {},
 		changefeedID: changefeed,
 	}
@@ -640,25 +640,25 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		cc := clock.New()
 		ticker := cc.Ticker(ddlPullerStuckWarnDuration)
 		defer ticker.Stop()
-		lastResolvedTsAdvancedTime := cc.Now()
+		lastWatermarkAdvancedTime := cc.Now()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
-				duration := cc.Since(lastResolvedTsAdvancedTime)
+				duration := cc.Since(lastWatermarkAdvancedTime)
 				if duration > ddlPullerStuckWarnDuration {
-					log.Warn("ddl puller resolved ts has not advanced",
+					log.Warn("ddl puller watermark has not advanced",
 						zap.String("namespace", h.changefeedID.Namespace),
 						zap.String("changefeed", h.changefeedID.ID),
 						zap.Duration("duration", duration),
-						zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
+						zap.Uint64("watermark", atomic.LoadUint64(&h.watermark)))
 				}
 			case e := <-h.ddlJobPuller.Output():
-				if e.OpType == model.OpTypeResolved {
-					if e.CRTs > atomic.LoadUint64(&h.resolvedTS) {
-						atomic.StoreUint64(&h.resolvedTS, e.CRTs)
-						lastResolvedTsAdvancedTime = cc.Now()
+				if e.OpType == model.OpTypeWatermark {
+					if e.CRTs > atomic.LoadUint64(&h.watermark) {
+						atomic.StoreUint64(&h.watermark, e.CRTs)
+						lastWatermarkAdvancedTime = cc.Now()
 						continue
 					}
 				}
@@ -670,7 +670,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	log.Info("DDL puller started",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
-		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
+		zap.Uint64("watermark", atomic.LoadUint64(&h.watermark)))
 
 	return g.Wait()
 }
@@ -680,7 +680,7 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil
+		return atomic.LoadUint64(&h.watermark), nil
 	}
 	job := h.pendingDDLJobs[0]
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
@@ -695,11 +695,11 @@ func (h *ddlPullerImpl) Close() {
 	h.cancel()
 }
 
-func (h *ddlPullerImpl) ResolvedTs() uint64 {
+func (h *ddlPullerImpl) Watermark() uint64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS)
+		return atomic.LoadUint64(&h.watermark)
 	}
 	job := h.pendingDDLJobs[0]
 	return job.BinlogInfo.FinishedTS

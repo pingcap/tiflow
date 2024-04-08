@@ -98,14 +98,14 @@ type changefeed struct {
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager FeedStateManager
-	resolvedTs       model.Ts
+	watermark        model.Ts
 
-	// lastSyncedTs is the lastest resolvedTs that has been synced to downstream.
-	// pullerResolvedTs is the minimum resolvedTs of all pullers.
-	// we don't need to initialize lastSyncedTs and pullerResolvedTs specially
+	// lastSyncedTs is the lastest watermark that has been synced to downstream.
+	// pullerWatermark is the minimum watermark of all pullers.
+	// we don't need to initialize lastSyncedTs and pullerWatermark specially
 	// because it will be updated in tick.
-	lastSyncedTs     model.Ts
-	pullerResolvedTs model.Ts
+	lastSyncedTs    model.Ts
+	pullerWatermark model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -137,10 +137,10 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge  prometheus.Gauge
 	metricsChangefeedCheckpointLagDuration prometheus.Observer
 
-	metricsChangefeedResolvedTsGauge       prometheus.Gauge
-	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
-	metricsChangefeedResolvedTsLagDuration prometheus.Observer
-	metricsCurrentPDTsGauge                prometheus.Gauge
+	metricsChangefeedWatermarkGauge       prometheus.Gauge
+	metricsChangefeedWatermarkLagGauge    prometheus.Gauge
+	metricsChangefeedWatermarkLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge               prometheus.Gauge
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
@@ -373,7 +373,7 @@ func (c *changefeed) checkStaleCheckpointTs(
 func (c *changefeed) tick(ctx context.Context,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (model.Ts, model.Ts, error) {
-	adminJobPending := c.feedStateManager.Tick(c.resolvedTs, c.latestStatus, c.latestInfo)
+	adminJobPending := c.feedStateManager.Tick(c.watermark, c.latestStatus, c.latestInfo)
 	preCheckpointTs := c.latestInfo.GetCheckpointTs(c.latestStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
@@ -421,13 +421,13 @@ func (c *changefeed) tick(ctx context.Context,
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Uint64("preCheckpointTs", preCheckpointTs),
-		zap.Uint64("preResolvedTs", c.resolvedTs),
+		zap.Uint64("preWatermark", c.watermark),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
 		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
 
 	if barrier.GlobalBarrierTs < preCheckpointTs {
-		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
+		// This condition implies that the DDL watermark has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
 		return 0, 0, nil
@@ -450,13 +450,13 @@ func (c *changefeed) tick(ctx context.Context,
 		}
 	}
 
-	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
-		if watermark.PullerResolvedTs > c.pullerResolvedTs {
-			c.pullerResolvedTs = watermark.PullerResolvedTs
-		} else if watermark.PullerResolvedTs < c.pullerResolvedTs {
-			log.Warn("the newPullerResolvedTs should not be smaller than c.pullerResolvedTs",
-				zap.Uint64("c.pullerResolvedTs", c.pullerResolvedTs),
-				zap.Uint64("newPullerResolvedTs", watermark.PullerResolvedTs))
+	if watermark.PullerWatermark != scheduler.CheckpointCannotProceed && watermark.PullerWatermark != math.MaxUint64 {
+		if watermark.PullerWatermark > c.pullerWatermark {
+			c.pullerWatermark = watermark.PullerWatermark
+		} else if watermark.PullerWatermark < c.pullerWatermark {
+			log.Warn("the newPullerWatermark should not be smaller than c.pullerWatermark",
+				zap.Uint64("c.pullerWatermark", c.pullerWatermark),
+				zap.Uint64("newPullerWatermark", watermark.PullerWatermark))
 		}
 	}
 
@@ -469,20 +469,20 @@ func (c *changefeed) tick(ctx context.Context,
 		if c.latestStatus != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
-			c.updateMetrics(currentTs, c.latestStatus.CheckpointTs, c.resolvedTs)
+			c.updateMetrics(currentTs, c.latestStatus.CheckpointTs, c.watermark)
 		}
 		return 0, 0, nil
 	}
 
 	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", c.resolvedTs),
-		zap.Uint64("newResolvedTs", watermark.ResolvedTs),
+		zap.Uint64("prevWatermark", c.watermark),
+		zap.Uint64("newWatermark", watermark.Watermark),
 		zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
-	// resolvedTs should never regress.
-	if watermark.ResolvedTs > c.resolvedTs {
-		c.resolvedTs = watermark.ResolvedTs
+	// watermark should never regress.
+	if watermark.Watermark > c.watermark {
+		c.watermark = watermark.Watermark
 	}
 
 	// MinTableBarrierTs should never regress
@@ -505,7 +505,7 @@ func (c *changefeed) tick(ctx context.Context,
 		watermark.CheckpointTs = c.latestStatus.CheckpointTs
 	})
 
-	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
+	c.updateMetrics(currentTs, watermark.CheckpointTs, c.watermark)
 	c.tickDownstreamObserver(ctx)
 
 	return watermark.CheckpointTs, barrier.MinTableBarrierTs, nil
@@ -514,8 +514,8 @@ func (c *changefeed) tick(ctx context.Context,
 func (c *changefeed) initialize(ctx context.Context) (err error) {
 	if c.initialized || c.latestStatus == nil {
 		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
-		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
-		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
+		//  1. use startTs as checkpointTs and watermark, if it's a new created changefeed; or
+		//  2. load checkpointTs and watermark from etcd, if it's an existing changefeed.
 		// And then it can continue to initialize.
 		return nil
 	}
@@ -542,8 +542,8 @@ LOOP2:
 	}
 
 	checkpointTs := c.latestStatus.CheckpointTs
-	if c.resolvedTs == 0 {
-		c.resolvedTs = checkpointTs
+	if c.watermark == 0 {
+		c.watermark = checkpointTs
 	}
 
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
@@ -610,7 +610,7 @@ LOOP2:
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(c.latestInfo.Config.EnableSyncPoint) {
-		c.barriers.Update(syncPointBarrier, c.resolvedTs)
+		c.barriers.Update(syncPointBarrier, c.watermark)
 	}
 	c.barriers.Update(finishBarrier, c.latestInfo.GetTargetTs())
 
@@ -712,7 +712,7 @@ LOOP2:
 		zap.String("changefeed", c.id.ID),
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", c.resolvedTs),
+		zap.Uint64("watermark", c.watermark),
 		zap.String("info", c.latestInfo.String()))
 
 	return nil
@@ -726,11 +726,11 @@ func (c *changefeed) initMetrics() {
 	c.metricsChangefeedCheckpointLagDuration = changefeedCheckpointLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
-	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
+	c.metricsChangefeedWatermarkGauge = changefeedWatermarkGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
+	c.metricsChangefeedWatermarkLagGauge = changefeedWatermarkLagGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
+	c.metricsChangefeedWatermarkLagDuration = changefeedWatermarkLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsCurrentPDTsGauge = currentPDTsGauge.WithLabelValues(c.id.Namespace, c.id.ID)
 
@@ -787,7 +787,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 
 	c.schema = nil
 	c.barriers = nil
-	c.resolvedTs = 0
+	c.watermark = 0
 	c.initialized = false
 	c.isReleased = true
 
@@ -805,13 +805,13 @@ func (c *changefeed) cleanupMetrics() {
 	c.metricsChangefeedCheckpointTsLagGauge = nil
 	c.metricsChangefeedCheckpointLagDuration = nil
 
-	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
-	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
-	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedWatermarkGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedWatermarkLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedWatermarkLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	currentPDTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsGauge = nil
-	c.metricsChangefeedResolvedTsLagGauge = nil
-	c.metricsChangefeedResolvedTsLagDuration = nil
+	c.metricsChangefeedWatermarkGauge = nil
+	c.metricsChangefeedWatermarkLagGauge = nil
+	c.metricsChangefeedWatermarkLagDuration = nil
 	c.metricsCurrentPDTsGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
@@ -930,7 +930,7 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	return nil
 }
 
-func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, watermark model.Ts) {
 	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
 
@@ -938,12 +938,12 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	c.metricsChangefeedCheckpointTsLagGauge.Set(checkpointLag)
 	c.metricsChangefeedCheckpointLagDuration.Observe(checkpointLag)
 
-	phyRTs := oracle.ExtractPhysical(resolvedTs)
-	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	phyRTs := oracle.ExtractPhysical(watermark)
+	c.metricsChangefeedWatermarkGauge.Set(float64(phyRTs))
 
 	resolvedLag := float64(currentTs-phyRTs) / 1e3
-	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
-	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
+	c.metricsChangefeedWatermarkLagGauge.Set(resolvedLag)
+	c.metricsChangefeedWatermarkLagDuration.Observe(resolvedLag)
 
 	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }

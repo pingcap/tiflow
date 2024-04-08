@@ -43,7 +43,7 @@ func (br *BlackHoleReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, er
 }
 
 // ReadMeta implements LogReader.ReadMeta
-func (br *BlackHoleReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+func (br *BlackHoleReader) ReadMeta(ctx context.Context) (checkpointTs, watermark uint64, err error) {
 	return 0, 1, nil
 }
 

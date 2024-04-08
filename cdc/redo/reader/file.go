@@ -281,7 +281,7 @@ func sortAndWriteFile(
 		if item.GetCommitTs() > cfg.endTs {
 			// If the commitTs is greater than endTs, we should stop sorting
 			// and ignore the rest of the logs.
-			log.Info("ignore logs which commitTs is greater than resolvedTs",
+			log.Info("ignore logs which commitTs is greater than watermark",
 				zap.Any("filename", fileName), zap.Uint64("endTs", cfg.endTs))
 			break
 		}

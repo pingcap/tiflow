@@ -271,8 +271,8 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus(request.CollectStats)
-		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs {
-			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
+		if status.Checkpoint.CheckpointTs > status.Checkpoint.Watermark {
+			log.Warn("schedulerv3: CheckpointTs is greater than Watermark",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.String("span", span.String()))

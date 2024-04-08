@@ -53,10 +53,10 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 
 // PullerConfig represents config for puller
 type PullerConfig struct {
-	// EnableResolvedTsStuckDetection is used to enable resolved ts stuck detection.
-	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
-	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
-	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
+	// EnableWatermarkStuckDetection is used to enable watermark stuck detection.
+	EnableWatermarkStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
+	// WatermarkStuckInterval is the interval of checking watermark stuck.
+	WatermarkStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
 	// LogRegionDetails determines whether logs Region details or not in puller and kv-client.
 	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
 }

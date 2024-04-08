@@ -136,9 +136,9 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler: NewDefaultSchedulerConfig(),
 		CDCV2:     &CDCV2{Enable: false},
 		Puller: &PullerConfig{
-			EnableResolvedTsStuckDetection: false,
-			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
-			LogRegionDetails:               false,
+			EnableWatermarkStuckDetection: false,
+			WatermarkStuckInterval:        TomlDuration(5 * time.Minute),
+			LogRegionDetails:              false,
 		},
 	},
 	ClusterID:              "default",

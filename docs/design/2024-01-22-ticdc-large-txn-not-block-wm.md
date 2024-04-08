@@ -199,7 +199,7 @@ TiCDC should be upgraded before TiKV (which is default behavior right now), and 
 
 ## Alternatives we have considered
 
-There was a proposal that calculate the ResolvedTs and CommittedTs in TiDB layer, this proposal has following drawbacks:
+There was a proposal that calculate the Watermark and CommittedTs in TiDB layer, this proposal has following drawbacks:
 
 - Change distributed water mark calculation into PD centralized calculation. If there are 1 million tables, calculating table-level water marks is nearly impossible
 - The TiKV layer is the source of truth, and it always has the latest information to advance the water mark. If we move the water mark calculation to the TiDB layer, we may sacrifice some freshness of the water mark.

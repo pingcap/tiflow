@@ -25,10 +25,10 @@
 | -------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | CDC Owner                  | -                                                                                | CDC 集群节点的角色之一，一个 CDC 集群有且只有一个 Owner 节点。Owner 节点负责协调各个 Processor 的进度，同步 DDL 等。 |
 | CDC Processor              | -                                                                                | CDC 集群节点的角色之一，一个 CDC 集群有数个 Processor 节点。Processor 节点执行对一张或多张表的的数据变更进行同步。   |
-| CDC Processor ResolvedTS   | ResolvedTS < ∀(unapplied CommitTS)                                               | ResolvedTS 保证单个对应 Processor 的任意 CommitTS 小于 ResolvedTS 的 Change Event 已经被输出到 CDC 集群。            |
-| CDC Processor CheckpointTS | CheckpointTS < ∀(unduplicated && unapplied CommitTS); CheckpointTS <= ResolvedTS | CheckpointTS 保证单个对应 Processor 的任意 CommitTS 小于 CheckpointTs 的 Change Event 已经被同步到对应 Sink。        |
-| CDC DDL Puller ResolvedTS  | ResolvedTS < ∀(FinishedTS of undone DDL Job)                                     | CDC DDLPuller ResolvedTS 保证任意 FinishedTS 小于 CDC DDLPuller ResolvedTS 的 DDL 已经被输出到 CDC 集群。            |
-| CDC Global ResolvedTS      | Global ResolvedTS = min(all Processor ResolvedTS)                                | CDC Global ResolvedTS 是各个 Processor 当前 ResolvedTS 的最小值                                                      |
+| CDC Processor Watermark   | Watermark < ∀(unapplied CommitTS)                                               | Watermark 保证单个对应 Processor 的任意 CommitTS 小于 Watermark 的 Change Event 已经被输出到 CDC 集群。            |
+| CDC Processor CheckpointTS | CheckpointTS < ∀(unduplicated && unapplied CommitTS); CheckpointTS <= Watermark | CheckpointTS 保证单个对应 Processor 的任意 CommitTS 小于 CheckpointTs 的 Change Event 已经被同步到对应 Sink。        |
+| CDC DDL Puller Watermark  | Watermark < ∀(FinishedTS of undone DDL Job)                                     | CDC DDLPuller Watermark 保证任意 FinishedTS 小于 CDC DDLPuller Watermark 的 DDL 已经被输出到 CDC 集群。            |
+| CDC Global Watermark      | Global Watermark = min(all Processor Watermark)                                | CDC Global Watermark 是各个 Processor 当前 Watermark 的最小值                                                      |
 | CDC Global CheckpointTS    | Global CheckpointTS = min(all Processor CheckpointTS)                            | CDC Global CheckpointTS 是各个 Processor 当前 CheckpointTS 的最小值                                                  |
 | DDL FinishedTS             | DDL 执行完成（DDL Job Status 转为 Done） 的事务的 CommitTS                       | 标记 DDL 何时被应用，用于 DDL 与 DML 之间的排序。                                                                    |
 
@@ -88,7 +88,7 @@ Value：
 }
 ```
 
-- Resolved Event：由 CDC Owner 产生，包含 ResolvedTS
+- Resolved Event：由 CDC Owner 产生，包含 Watermark
 
 ```
 示例：
@@ -123,7 +123,7 @@ Value:
    1. 每个变更第一次出现的次序一定是有序的（CommitTS 升序）
 1. 对于一个 partition：
    1. 不保证不同 row 的 Row Changed Event 之间的时序
-   1. Resolved Event 保证任意（CommitTS < ResolvedTS）的 Row Changed Event 在 Resolved Event 之后不会出现。
+   1. Resolved Event 保证任意（CommitTS < Watermark）的 Row Changed Event 在 Resolved Event 之后不会出现。
    1. DDL Event 保证任意（CommitTS < FinishedTS of DDL event）的 Row Changed Event 在 DDL Event 之后不会出现。
    1. Resolved Event 和 DDL Event 会广播到所有的 partition
 
@@ -205,14 +205,14 @@ CDC 集群：
 
 - CDC Owner
   - 暂停所有任务
-    - 令 CDC Global ResolvedTS = 0（或发送 AdminStop 指令）
+    - 令 CDC Global Watermark = 0（或发送 AdminStop 指令）
     - 等待所有 CDC Processor 的任务已经暂停（此处缺少 Processor 反馈机制）
   - 通知所有 CDC Processor，Partition 数量变更
   - 向 kafka 所有 Partition 广播 Admin Event，包含新的 Partition 数量信息
   - 恢复所有任务
     - 令 StartTS = CDC Global CheckpointTS 重启任务
 - CDC Consumer
-  - 收到 Admin Event 后，丢弃缓存中（CommitTS > Kafka Partition ResolvedTS) Row Changed Event，等待其他 listener 都收到 Admin Event。
+  - 收到 Admin Event 后，丢弃缓存中（CommitTS > Kafka Partition Watermark) Row Changed Event，等待其他 listener 都收到 Admin Event。
   - 全部 listener 收到 Admin Event 后，按照新的 partition 数量重新分配 listener
 
 注：第一版暂不实现 partition 的扩容与缩容。
@@ -223,9 +223,9 @@ CDC 集群：
 
 1. 基础方案
 
-直接在目前的 CDC 同步模型的基础上实现，目前 CDC 同步模型中，对于一个 CDC Processor 而言，CDC Processor 以 Table 为单位，捕获 TiKV Change Event。通过 Resolved TS 机制排序，将相同 CommitTS 的 TiKV Row Change Event 拼成一个事务。保证了表内事务的完整性和有序性。
+直接在目前的 CDC 同步模型的基础上实现，目前 CDC 同步模型中，对于一个 CDC Processor 而言，CDC Processor 以 Table 为单位，捕获 TiKV Change Event。通过 Watermark 机制排序，将相同 CommitTS 的 TiKV Row Change Event 拼成一个事务。保证了表内事务的完整性和有序性。
 
-TiKV Row Change Event 不需要经过拼事务的过程（CollectRawTxns Function），但是需要利用 ResolvedTS 排序，保证 Table 内 Row 级别的有序输出到 Kafka。
+TiKV Row Change Event 不需要经过拼事务的过程（CollectRawTxns Function），但是需要利用 Watermark 排序，保证 Table 内 Row 级别的有序输出到 Kafka。
 
 CDC 同步模型中的其他机制保持不变。
 
@@ -241,7 +241,7 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 2. 在基础方案上的优化
 
-以 row 为单位向 kafka 写数据，CDC 集群不需要还原事务。Owner 只需要维护 DDL 和 DML 的时序，可以令 `CDC Global ResolvedTS = MaxUint64`，而不是 `CDC Global ResolvedTS = min(all Processor ResolvedTS)`。`CDC Global CheckpointTS = min(CDC DDL Puller ResolvedTS, DDL Finished TS, min(all Processor CheckpointTS))`，而不是 `CDC Global CheckpointTS = min(all Processor CheckpointTS)`。
+以 row 为单位向 kafka 写数据，CDC 集群不需要还原事务。Owner 只需要维护 DDL 和 DML 的时序，可以令 `CDC Global Watermark = MaxUint64`，而不是 `CDC Global Watermark = min(all Processor Watermark)`。`CDC Global CheckpointTS = min(CDC DDL Puller Watermark, DDL Finished TS, min(all Processor CheckpointTS))`，而不是 `CDC Global CheckpointTS = min(all Processor CheckpointTS)`。
 
 正确性论证：
 
@@ -253,9 +253,9 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 “2.2” 约束的公式描述：
 
-`Kafka Partition ResolvedTS < ∀(unwritten CommitTS in all CDC Processors)`
+`Kafka Partition Watermark < ∀(unwritten CommitTS in all CDC Processors)`
 
-结合 CDC Processor ResolvedTS 定义，有：
+结合 CDC Processor Watermark 定义，有：
 
 `min(all Processor CheckpointTS) < ∀(unwritten CommitTS in all CDC Processors)`
 
@@ -265,15 +265,15 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 即 Global CheckpointTS 满足“2.2”约束。
 
-根据 CDC 同步模型，当且仅当 `CDC Global ResolvedTS = DDL FinishedTS 时，CDC Owner` 向下游写 DDL Event。
+根据 CDC 同步模型，当且仅当 `CDC Global Watermark = DDL FinishedTS 时，CDC Owner` 向下游写 DDL Event。
 因此，写 DDL Event 时，`DDL FinishedTS < ∀(unwritten CommitTS in all CDC Processors)`
 
 即 DDL FinishedTS 满足“2.3”约束。
 
 ### CDC Owner 逻辑
 
-- 向所有 partition 广播有序的 CDC Global CheckpointTS（作为 Kafka Partition ResolvedTS）。
-- 当 Kafka Partition ResolvedTS = DDL FinishedTS 时，向所有 partition 广播 DDL Event。
+- 向所有 partition 广播有序的 CDC Global CheckpointTS（作为 Kafka Partition Watermark）。
+- 当 Kafka Partition Watermark = DDL FinishedTS 时，向所有 partition 广播 DDL Event。
 
 ### CDC Processor 逻辑
 
@@ -289,9 +289,9 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 1. 每一个 partition 对应一个 listener
 2. 对于每一个 listener，首先缓存接收到的 Row Changed Event
-3. 收到 ResolvedTS 后，执行被缓存的 (Commit TS <= ResolvedTS) 的 Row Changed Event (commit TS <= ResolvedTS)
-   1. 不要求还原事务：单个 listener 收到 resolved ts 之后就可以写下游
-   1. 要求还原事务：需要所有的 listener 都收到 resolvedts，还原事务后写下游
+3. 收到 Watermark 后，执行被缓存的 (Commit TS <= Watermark) 的 Row Changed Event (commit TS <= Watermark)
+   1. 不要求还原事务：单个 listener 收到 watermark 之后就可以写下游
+   1. 要求还原事务：需要所有的 listener 都收到 watermark，还原事务后写下游
 4. 收到 DDL event 后，执行被缓存的 (Commit TS <= DDL FinishedTS) 的 Row Changed Event，并且等待其他 listener 都读到 DDL event
 5. 当所有的 listener 都收到 DDL 后，执行 DDL，并向下推进。
 

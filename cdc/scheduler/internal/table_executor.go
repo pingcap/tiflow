@@ -43,6 +43,6 @@ type TableExecutor interface {
 	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool)
 
-	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
+	// GetTableSpanStatus return the checkpoint and watermark for the given table span.
 	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
 }

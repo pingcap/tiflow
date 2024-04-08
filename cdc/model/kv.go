@@ -29,7 +29,7 @@ const (
 	OpTypeUnknown OpType = iota
 	OpTypePut
 	OpTypeDelete
-	OpTypeResolved
+	OpTypeWatermark
 )
 
 // RegionFeedEvent from the kv layer.
@@ -56,17 +56,17 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 }
 
 // ResolvedSpans guarantees all the KV value event
-// with commit ts less than ResolvedTs has been emitted.
+// with commit ts less than Watermark has been emitted.
 //
 //msgp:ignore ResolvedSpans
 type ResolvedSpans struct {
-	Spans      []RegionComparableSpan
-	ResolvedTs uint64
+	Spans     []RegionComparableSpan
+	Watermark uint64
 }
 
 // String implements fmt.Stringer interface.
 func (rs *ResolvedSpans) String() string {
-	return fmt.Sprintf("span: %v, resolved-ts: %d", rs.Spans, rs.ResolvedTs)
+	return fmt.Sprintf("span: %v, watermark: %d", rs.Spans, rs.Watermark)
 }
 
 // RegionComparableSpan contains a comparable span and a region id of that span
@@ -86,7 +86,7 @@ type RawKVEntry struct {
 	// nil for insert type
 	OldValue []byte `msg:"old_value"`
 	StartTs  uint64 `msg:"start_ts"`
-	// Commit or resolved TS
+	// Commit ts or watermark
 	CRTs uint64 `msg:"crts"`
 
 	// Additional debug info

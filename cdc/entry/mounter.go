@@ -44,7 +44,7 @@ import (
 
 type baseKVEntry struct {
 	StartTs uint64
-	// Commit or resolved TS
+	// Commit ts or watermark
 	CRTs uint64
 
 	PhysicalTableID int64

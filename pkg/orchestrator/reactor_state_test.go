@@ -141,7 +141,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
+					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, Watermark: 421980720003809281},
 				},
 			},
 		},
@@ -209,8 +209,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
-					"666777888":                            {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
+					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, Watermark: 421980720003809281},
+					"666777888":                            {CheckPointTs: 11332244, Watermark: 312321, Count: 8},
 				},
 			},
 		},
@@ -282,7 +282,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
+					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, Watermark: 421980720003809281},
 				},
 			},
 		},
@@ -327,7 +327,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				Info:      nil,
 				Status:    nil,
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
-					"666777888": {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
+					"666777888": {CheckPointTs: 11332244, Watermark: 312321, Count: 8},
 				},
 			},
 		},
@@ -463,7 +463,7 @@ func TestPatchTaskPosition(t *testing.T) {
 		return position, true, nil
 	})
 	state.PatchTaskPosition(captureID2, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		position.ResolvedTs = 2
+		position.Watermark = 2
 		return position, true, nil
 	})
 	stateTester.MustApplyPatches()
@@ -473,7 +473,7 @@ func TestPatchTaskPosition(t *testing.T) {
 		},
 		captureID2: {
 			CheckPointTs: 2,
-			ResolvedTs:   2,
+			Watermark:    2,
 		},
 	})
 	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -544,7 +544,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 						ClusterID: etcd.DefaultCDCClusterID,
 						ID:        model.DefaultChangeFeedID("test1"),
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
-							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, Watermark: 421980720003809281},
 						},
 					},
 					model.DefaultChangeFeedID("test2"): {
@@ -553,7 +553,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 								CheckPointTs: 421980719742451713,
-								ResolvedTs:   421980720003809281,
+								Watermark:    421980720003809281,
 							},
 						},
 					},
@@ -604,7 +604,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 								CheckPointTs: 421980719742451713,
-								ResolvedTs:   421980720003809281,
+								Watermark:    421980720003809281,
 							},
 						},
 					},

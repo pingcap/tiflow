@@ -51,7 +51,7 @@ func TestTaskPositionMarshal(t *testing.T) {
 	t.Parallel()
 
 	pos := &TaskPosition{
-		ResolvedTs:   420875942036766723,
+		Watermark:    420875942036766723,
 		CheckPointTs: 420875940070686721,
 	}
 	expected := `{"checkpoint-ts":420875940070686721,"resolved-ts":420875942036766723,"count":0,"error":null,"warning":null}`

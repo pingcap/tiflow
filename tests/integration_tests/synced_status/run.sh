@@ -6,11 +6,11 @@
 #   1. The sync status request of cdc server when the upstream cluster is available
 #      1.1 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold
 #      1.2 pdNow - lastSyncedTs < threshold
-#      1.3 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold, resolvedTs - checkpointTs > threshold
+#      1.3 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold, watermark - checkpointTs > threshold
 #   2. The sync status request of cdc server when the upstream pd is unavailable
-#      2.1 resolvedTs - checkpointTs < threshold
+#      2.1 watermark - checkpointTs < threshold
 #   3. The sync status request of cdc server when the upstream tikv is unavailable
-#      3.1 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs > threshold, resolvedTs - checkpointTs < threshold
+#      3.1 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs > threshold, watermark - checkpointTs < threshold
 #      3.2 pdNow - lastSyncedTs < threshold
 #   4. The sync status request of cdc server when the downstream tidb is available
 #      4.1 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold
@@ -179,7 +179,7 @@ function run_case_with_unavailable_tikv() {
 	target_message="Please check whether PD is online and TiKV Regions are all available. \
 If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. \
 To check whether TiKV regions are all available, you can view \
-'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. \
+'TiKV-Details' > 'Watermark' > 'Max Leader Watermark gap' on Grafana. \
 If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. \
 Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait"
 
@@ -278,7 +278,7 @@ function run_case_with_failpoint() {
 	target_message="Please check whether PD is online and TiKV Regions are all available. \
 If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. \
 To check whether TiKV regions are all available, you can view \
-'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. \
+'TiKV-Details' > 'Watermark' > 'Max Leader Watermark gap' on Grafana. \
 If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. \
 Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait"
 	if [ "$info" != "$target_message" ]; then

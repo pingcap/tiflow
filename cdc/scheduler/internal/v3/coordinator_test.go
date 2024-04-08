@@ -482,12 +482,12 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 					Span:  spanz.TableIDToComparableSpan(1),
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
-						CheckpointTs: 2, ResolvedTs: 4, LastSyncedTs: 3,
+						CheckpointTs: 2, Watermark: 4, LastSyncedTs: 3,
 					},
 					Stats: tablepb.Stats{
 						StageCheckpoints: map[string]tablepb.Checkpoint{
 							"puller-egress": {
-								ResolvedTs: model.Ts(5),
+								Watermark: model.Ts(5),
 							},
 						},
 					},
@@ -496,12 +496,12 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 					Span:  spanz.TableIDToComparableSpan(2),
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
-						CheckpointTs: 2, ResolvedTs: 4, LastSyncedTs: 4,
+						CheckpointTs: 2, Watermark: 4, LastSyncedTs: 4,
 					},
 					Stats: tablepb.Stats{
 						StageCheckpoints: map[string]tablepb.Checkpoint{
 							"puller-egress": {
-								ResolvedTs: model.Ts(6),
+								Watermark: model.Ts(6),
 							},
 						},
 					},
@@ -513,9 +513,9 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 2, watermark.CheckpointTs)
-	require.EqualValues(t, 4, watermark.ResolvedTs)
+	require.EqualValues(t, 4, watermark.Watermark)
 	require.EqualValues(t, 4, watermark.LastSyncedTs)
-	require.EqualValues(t, 5, watermark.PullerResolvedTs)
+	require.EqualValues(t, 5, watermark.PullerWatermark)
 
 	// Checkpoint should be advanced even if there is an uninitialized capture.
 	aliveCaptures["c"] = &model.CaptureInfo{}
@@ -533,12 +533,12 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 					Span:  spanz.TableIDToComparableSpan(1),
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
-						CheckpointTs: 3, ResolvedTs: 5, LastSyncedTs: 4,
+						CheckpointTs: 3, Watermark: 5, LastSyncedTs: 4,
 					},
 					Stats: tablepb.Stats{
 						StageCheckpoints: map[string]tablepb.Checkpoint{
 							"puller-egress": {
-								ResolvedTs: model.Ts(7),
+								Watermark: model.Ts(7),
 							},
 						},
 					},
@@ -547,12 +547,12 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 					Span:  spanz.TableIDToComparableSpan(2),
 					State: tablepb.TableStateReplicating,
 					Checkpoint: tablepb.Checkpoint{
-						CheckpointTs: 4, ResolvedTs: 5, LastSyncedTs: 6,
+						CheckpointTs: 4, Watermark: 5, LastSyncedTs: 6,
 					},
 					Stats: tablepb.Stats{
 						StageCheckpoints: map[string]tablepb.Checkpoint{
 							"puller-egress": {
-								ResolvedTs: model.Ts(7),
+								Watermark: model.Ts(7),
 							},
 						},
 					},
@@ -564,9 +564,9 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 3, watermark.CheckpointTs)
-	require.EqualValues(t, 5, watermark.ResolvedTs)
+	require.EqualValues(t, 5, watermark.Watermark)
 	require.EqualValues(t, 6, watermark.LastSyncedTs)
-	require.EqualValues(t, 7, watermark.PullerResolvedTs)
+	require.EqualValues(t, 7, watermark.PullerWatermark)
 }
 
 func TestCoordinatorDropMsgIfChangefeedEpochMismatch(t *testing.T) {

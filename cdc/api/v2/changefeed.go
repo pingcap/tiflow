@@ -499,7 +499,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(newCfInfo,
-		cfStatus.ResolvedTs, cfStatus.CheckpointTs, nil, true))
+		cfStatus.Watermark, cfStatus.CheckpointTs, nil, true))
 }
 
 // getChangefeed get detailed info of a changefeed
@@ -565,7 +565,7 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 				})
 		}
 	}
-	detail := toAPIModel(cfInfo, status.ResolvedTs,
+	detail := toAPIModel(cfInfo, status.Watermark,
 		status.CheckpointTs, taskStatus, true)
 	c.JSON(http.StatusOK, detail)
 }
@@ -694,7 +694,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 				})
 		}
 	}
-	c.JSON(http.StatusOK, toAPIModel(info, status.ResolvedTs, status.CheckpointTs,
+	c.JSON(http.StatusOK, toAPIModel(info, status.Watermark, status.CheckpointTs,
 		taskStatus, false))
 }
 
@@ -892,7 +892,7 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 	c.JSON(http.StatusOK, &ChangefeedStatus{
 		State:        string(info.State),
 		CheckpointTs: status.CheckpointTs,
-		ResolvedTs:   status.ResolvedTs,
+		Watermark:    status.Watermark,
 		LastError:    lastError,
 		LastWarning:  lastWarning,
 	})
@@ -951,11 +951,11 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
 		// case 1. we can't get pd client, pd may be unavailable.
-		//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
+		//         if pullerWatermark - checkpointTs > checkpointInterval, data is not synced
 		//         otherwise, if pd is unavailable, we decide data whether is synced based on
 		//         the time difference between current time and lastSyncedTs.
 		var message string
-		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
+		if (oracle.ExtractPhysical(status.PullerWatermark) - oracle.ExtractPhysical(status.CheckpointTs)) >
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
 		} else {
@@ -967,7 +967,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
 			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			PullerWatermark:  model.JSONTime(oracle.GetTimeFromTS(status.PullerWatermark)),
 			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
 			NowTs:            model.JSONTime(time.Unix(0, 0)),
 			Info:             message,
@@ -978,7 +978,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	// get time from pd
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
-	// We can normally get pd time. Thus we determine synced status based on physicalNow, lastSyncedTs, checkpointTs and pullerResolvedTs
+	// We can normally get pd time. Thus we determine synced status based on physicalNow, lastSyncedTs, checkpointTs and pullerWatermark
 	if (physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
 		(physicalNow-oracle.ExtractPhysical(status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
 		// case 2: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs < CheckpointInterval
@@ -986,7 +986,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
 			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			PullerWatermark:  model.JSONTime(oracle.GetTimeFromTS(status.PullerWatermark)),
 			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
 			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             "Data syncing is finished",
@@ -996,17 +996,17 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 
 	if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
 		// case 3: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs > CheckpointInterval
-		//         we should consider the situation that pd or tikv region is not healthy to block the advancing resolveTs.
-		//         if pullerResolvedTs - checkpointTs > CheckpointInterval-->  data is not synced
+		//         we should consider the situation that pd or tikv region is not healthy to block the advancing watermark.
+		//         if pullerWatermark - checkpointTs > CheckpointInterval-->  data is not synced
 		//         otherwise, if pd & tikv is healthy --> data is not synced
 		//                    if not healthy --> data is synced
 		var message string
-		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) <
+		if (oracle.ExtractPhysical(status.PullerWatermark) - oracle.ExtractPhysical(status.CheckpointTs)) <
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
 			message = fmt.Sprintf("Please check whether PD is online and TiKV Regions are all available. " +
 				"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. " +
 				"To check whether TiKV regions are all available, you can view " +
-				"'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. " +
+				"'TiKV-Details' > 'Watermark' > 'Max Leader Watermark gap' on Grafana. " +
 				"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. " +
 				"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait")
 		} else {
@@ -1015,7 +1015,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
 			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			PullerWatermark:  model.JSONTime(oracle.GetTimeFromTS(status.PullerWatermark)),
 			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
 			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             message,
@@ -1027,7 +1027,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	c.JSON(http.StatusOK, SyncedStatus{
 		Synced:           false,
 		SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-		PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+		PullerWatermark:  model.JSONTime(oracle.GetTimeFromTS(status.PullerWatermark)),
 		LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
 		NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 		Info:             "The data syncing is not finished, please wait",
@@ -1036,7 +1036,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 
 func toAPIModel(
 	info *model.ChangeFeedInfo,
-	resolvedTs uint64,
+	watermark uint64,
 	checkpointTs uint64,
 	taskStatus []model.CaptureTaskStatus,
 	maskSinkURI bool,
@@ -1076,7 +1076,7 @@ func toAPIModel(
 		Error:          runningError,
 		CreatorVersion: info.CreatorVersion,
 		CheckpointTs:   checkpointTs,
-		ResolvedTs:     resolvedTs,
+		Watermark:      watermark,
 		CheckpointTime: model.JSONTime(oracle.GetTimeFromTS(checkpointTs)),
 		TaskStatus:     taskStatus,
 	}

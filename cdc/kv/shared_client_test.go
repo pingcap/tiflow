@@ -136,7 +136,7 @@ func TestRequestedTable(t *testing.T) {
 
 	// Task will be triggered after initialized.
 	state.setInitialized()
-	state.updateResolvedTs(101)
+	state.updateWatermark(101)
 	select {
 	case <-s.resolveLockCh.Out():
 	case <-time.After(100 * time.Millisecond):
@@ -221,14 +221,14 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 				{
 					RegionId:  regionID,
 					RequestId: requestID,
-					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
+					Event:     &cdcpb.Event_Watermark{Watermark: ts},
 				},
 			},
 		}
 	}
 
 	checkTsEvent := func(event model.RegionFeedEvent, ts uint64) {
-		require.Equal(t, ts, event.Resolved.ResolvedTs)
+		require.Equal(t, ts, event.Resolved.Watermark)
 	}
 
 	events1 <- mockInitializedEvent(11, uint64(subID))

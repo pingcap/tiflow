@@ -19,16 +19,16 @@ import (
 )
 
 type tsItem struct {
-	resolvedTs uint64
-	eventTime  time.Time
-	penalty    int
+	watermark uint64
+	eventTime time.Time
+	penalty   int
 }
 
-func newResolvedTsItem(ts uint64) tsItem {
-	return tsItem{resolvedTs: ts, eventTime: time.Now()}
+func newWatermarkItem(wm uint64) tsItem {
+	return tsItem{watermark: wm, eventTime: time.Now()}
 }
 
-// regionTsInfo contains region resolvedTs information
+// regionTsInfo contains region watermark information
 type regionTsInfo struct {
 	regionID uint64
 	index    int
@@ -40,7 +40,7 @@ type regionTsHeap []*regionTsInfo
 func (rh regionTsHeap) Len() int { return len(rh) }
 
 func (rh regionTsHeap) Less(i, j int) bool {
-	return rh[i].ts.resolvedTs < rh[j].ts.resolvedTs
+	return rh[i].ts.watermark < rh[j].ts.watermark
 }
 
 func (rh regionTsHeap) Swap(i, j int) {
@@ -65,7 +65,7 @@ func (rh *regionTsHeap) Pop() interface{} {
 	return item
 }
 
-// regionTsManager is a used to maintain resolved ts information for N regions.
+// regionTsManager is a used to maintain watermark information for N regions.
 // This struct is not thread safe
 type regionTsManager struct {
 	// mapping from regionID to regionTsInfo object
@@ -81,17 +81,17 @@ func newRegionTsManager() *regionTsManager {
 }
 
 // Upsert implements insert	and update on duplicated key
-// if the region is exists update the resolvedTs, eventTime, penalty, and fixed heap order
+// if the region is exists update the watermark, eventTime, penalty, and fixed heap order
 // otherwise, insert a new regionTsInfo with penalty 0
-func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Time) {
+func (rm *regionTsManager) Upsert(regionID, watermark uint64, eventTime time.Time) {
 	if old, ok := rm.m[regionID]; ok {
-		// in a single resolved ts manager, we should not expect a fallback resolved event
+		// in a single watermark manager, we should not expect a fallback resolved event
 		// but, it's ok that we use fallback resolved event to increase penalty
-		if resolvedTs <= old.ts.resolvedTs && eventTime.After(old.ts.eventTime) {
+		if watermark <= old.ts.watermark && eventTime.After(old.ts.eventTime) {
 			old.ts.penalty++
 			old.ts.eventTime = eventTime
-		} else if resolvedTs > old.ts.resolvedTs {
-			old.ts.resolvedTs = resolvedTs
+		} else if watermark > old.ts.watermark {
+			old.ts.watermark = watermark
 			old.ts.eventTime = eventTime
 			old.ts.penalty = 0
 			heap.Fix(&rm.h, old.index)
@@ -99,7 +99,7 @@ func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Ti
 	} else {
 		item := &regionTsInfo{
 			regionID: regionID,
-			ts:       tsItem{resolvedTs: resolvedTs, eventTime: eventTime, penalty: 0},
+			ts:       tsItem{watermark: watermark, eventTime: eventTime, penalty: 0},
 		}
 		rm.Insert(item)
 	}

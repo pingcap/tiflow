@@ -173,7 +173,7 @@ func TestNewEventTableSink(t *testing.T) {
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
-	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
+	require.Equal(t, model.NewWatermark(0), tb.maxWatermark, "maxWatermark should start from 0")
 	require.NotNil(t, sink, tb.backendSink, "backendSink should be set")
 	require.NotNil(t, tb.progressTracker, "progressTracker should be set")
 	require.NotNil(t, tb.eventAppender, "eventAppender should be set")
@@ -196,7 +196,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
 }
 
-func TestUpdateResolvedTs(t *testing.T) {
+func TestUpdateWatermark(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{dead: make(chan struct{})}
@@ -209,42 +209,42 @@ func TestUpdateResolvedTs(t *testing.T) {
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(100))
+	err := tb.UpdateWatermark(model.NewWatermark(100))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(100), tb.maxResolvedTs, "maxResolvedTs should be updated")
+	require.Equal(t, model.NewWatermark(100), tb.maxWatermark, "maxWatermark should be updated")
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
 	require.Len(t, sink.events, 0, "no event should not be flushed")
 
 	// One event will be flushed.
-	err = tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	err = tb.UpdateWatermark(model.NewWatermark(101))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(101), tb.maxResolvedTs, "maxResolvedTs should be updated")
+	require.Equal(t, model.NewWatermark(101), tb.maxWatermark, "maxWatermark should be updated")
 	require.Len(t, tb.eventBuffer, 6, "txn event buffer should have 6 txns")
 	require.Len(t, sink.events, 1, "one event should be flushed")
 
 	// Two events will be flushed.
-	err = tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	err = tb.UpdateWatermark(model.NewWatermark(102))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(102), tb.maxResolvedTs, "maxResolvedTs should be updated")
+	require.Equal(t, model.NewWatermark(102), tb.maxWatermark, "maxWatermark should be updated")
 	require.Len(t, tb.eventBuffer, 4, "txn event buffer should have 4 txns")
 	require.Len(t, sink.events, 3, "two events should be flushed")
 
-	// Same resolved ts will not be flushed.
-	err = tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	// Same watermark will not be flushed.
+	err = tb.UpdateWatermark(model.NewWatermark(102))
 	require.Nil(t, err)
 	require.Equal(
 		t,
-		model.NewResolvedTs(102),
-		tb.maxResolvedTs,
-		"maxResolvedTs should not be updated",
+		model.NewWatermark(102),
+		tb.maxWatermark,
+		"maxWatermark should not be updated",
 	)
 	require.Len(t, tb.eventBuffer, 4, "txn event buffer should still have 4 txns")
 	require.Len(t, sink.events, 3, "no event should be flushed")
 
 	// All events will be flushed.
-	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err = tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(105), tb.maxResolvedTs, "maxResolvedTs should be updated")
+	require.Equal(t, model.NewWatermark(105), tb.maxWatermark, "maxWatermark should be updated")
 	require.Len(t, tb.eventBuffer, 0, "txn event buffer should be empty")
 	require.Len(t, sink.events, 7, "all events should be flushed")
 }
@@ -261,28 +261,28 @@ func TestGetCheckpointTs(t *testing.T) {
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
+	require.Equal(t, model.NewWatermark(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(0), "lastSyncedTs should be not updated")
 
 	// One event will be flushed.
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	err := tb.UpdateWatermark(model.NewWatermark(101))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
+	require.Equal(t, model.NewWatermark(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 	sink.acknowledge(101)
-	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, model.NewWatermark(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
 	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be the same as the flushed event")
 
 	// Flush all events.
-	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err = tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
-	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, model.NewWatermark(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
 	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be not updated")
 
 	// Only acknowledge some events.
 	sink.acknowledge(102)
 	require.Equal(
 		t,
-		model.NewResolvedTs(101),
+		model.NewWatermark(101),
 		tb.GetCheckpointTs(),
 		"checkpointTs should still be 101",
 	)
@@ -290,7 +290,7 @@ func TestGetCheckpointTs(t *testing.T) {
 
 	// Ack all events.
 	sink.acknowledge(105)
-	require.Equal(t, model.NewResolvedTs(105), tb.GetCheckpointTs(), "checkpointTs should be 105")
+	require.Equal(t, model.NewWatermark(105), tb.GetCheckpointTs(), "checkpointTs should be 105")
 	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(105), "lastSyncedTs should be updated")
 }
 
@@ -306,7 +306,7 @@ func TestClose(t *testing.T) {
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	var wg sync.WaitGroup
@@ -340,7 +340,7 @@ func TestOperationsAfterClose(t *testing.T) {
 	require.True(t, tb.AsyncClose())
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
 }
 
@@ -356,7 +356,7 @@ func TestCloseCancellable(t *testing.T) {
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 
@@ -389,7 +389,7 @@ func TestCloseReentrant(t *testing.T) {
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 
@@ -425,7 +425,7 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateWatermark(model.NewWatermark(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 

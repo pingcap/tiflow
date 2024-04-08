@@ -106,7 +106,7 @@ type ddlManager struct {
 	ddlPuller puller.DDLPuller
 	// schema store multiple version of schema, it is used by scheduler
 	schema entry.SchemaStorage
-	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
+	// redoDDLManager is used to send DDL events to redo log and get redo watermark.
 	redoDDLManager  redo.DDLManager
 	redoMetaManager redo.MetaManager
 	// ddlSink is used to ddlSink DDL events to the downstream
@@ -128,8 +128,8 @@ type ddlManager struct {
 	tableInfoCache      []*model.TableInfo
 	physicalTablesCache []model.TableID
 
-	BDRMode       bool
-	ddlResolvedTs model.Ts
+	BDRMode      bool
+	ddlWatermark model.Ts
 }
 
 func newDDLManager(
@@ -161,7 +161,7 @@ func newDDLManager(
 		redoMetaManager: redoMetaManager,
 		startTs:         startTs,
 		checkpointTs:    checkpointTs,
-		ddlResolvedTs:   startTs,
+		ddlWatermark:    startTs,
 		BDRMode:         bdrMode,
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
 	}
@@ -261,21 +261,21 @@ func (m *ddlManager) tick(
 		}
 	}
 
-	// advance resolvedTs
-	ddlRts := m.ddlPuller.ResolvedTs()
-	m.schema.AdvanceResolvedTs(ddlRts)
+	// advance watermark
+	ddlRts := m.ddlPuller.Watermark()
+	m.schema.AdvanceWatermark(ddlRts)
 	if m.redoDDLManager.Enabled() {
-		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
+		err := m.redoDDLManager.UpdateWatermark(ctx, ddlRts)
 		if err != nil {
 			return nil, nil, err
 		}
-		redoFlushedDDLRts := m.redoDDLManager.GetResolvedTs()
+		redoFlushedDDLRts := m.redoDDLManager.GetWatermark()
 		if redoFlushedDDLRts < ddlRts {
 			ddlRts = redoFlushedDDLRts
 		}
 	}
-	if m.ddlResolvedTs <= ddlRts {
-		m.ddlResolvedTs = ddlRts
+	if m.ddlWatermark <= ddlRts {
+		m.ddlWatermark = ddlRts
 	}
 
 	nextDDL := m.getNextDDL()
@@ -315,7 +315,7 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 	checkpointReachBarrier := m.checkpointTs == nextDDL.CommitTs
 
 	redoCheckpointReachBarrier := true
-	redoDDLResolvedTsExceedBarrier := true
+	redoDDLWatermarkExceedBarrier := true
 	if m.redoMetaManager.Enabled() {
 		if !m.redoDDLManager.Enabled() {
 			log.Panic("Redo meta manager is enabled but redo ddl manager is not enabled")
@@ -328,12 +328,12 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 		// need to wait `redoCheckpointTs == ddlCommitTs(ts=11)` before executing ddl-1.
 		redoCheckpointReachBarrier = flushed.CheckpointTs == nextDDL.CommitTs
 
-		// If redo is enabled, m.ddlResolvedTs == redoDDLManager.GetResolvedTs(), so we need to
+		// If redo is enabled, m.ddlWatermark == redoDDLManager.GetWatermark(), so we need to
 		// wait nextDDL to be written to redo log before executing this DDL.
-		redoDDLResolvedTsExceedBarrier = m.ddlResolvedTs >= nextDDL.CommitTs
+		redoDDLWatermarkExceedBarrier = m.ddlWatermark >= nextDDL.CommitTs
 	}
 
-	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
+	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLWatermarkExceedBarrier
 }
 
 func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
@@ -424,9 +424,9 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 	return res
 }
 
-// barrier returns ddlResolvedTs and tableBarrier
+// barrier returns ddlWatermark and tableBarrier
 func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
-	barrier := schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs)
+	barrier := schedulepb.NewBarrierWithMinTs(m.ddlWatermark)
 	tableBarrierMap := make(map[model.TableID]model.Ts)
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
@@ -439,8 +439,8 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 		}
 		if m.redoMetaManager.Enabled() && isRedoBarrierDDL(ddl) {
 			// The pipeline for a new table does not exist until the ddl is successfully
-			// executed, so the table's resolvedTs will not be calculated in redo.
-			// To solve this problem, resovedTs of redo manager should not be greater
+			// executed, so the table's watermark will not be calculated in redo.
+			// To solve this problem, watermark of redo manager should not be greater
 			// than the min commitTs of ddls that create a new physical table.
 			if ddl.CommitTs < barrier.RedoBarrierTs {
 				barrier.RedoBarrierTs = ddl.CommitTs
@@ -550,8 +550,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
-	if m.ddlResolvedTs == m.startTs {
-		// If ddlResolvedTs is equal to startTs it means that the changefeed is just started,
+	if m.ddlWatermark == m.startTs {
+		// If ddlWatermark is equal to startTs it means that the changefeed is just started,
 		// So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
 		log.Debug("changefeed is just started, use startTs to get snapshot",
@@ -559,7 +559,7 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Uint64("startTs", m.startTs),
 			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
+			zap.Uint64("ddlWatermark", m.ddlWatermark),
 		)
 		return
 	}

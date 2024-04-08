@@ -40,8 +40,8 @@ var _ MetaManager = (*metaManager)(nil)
 // MetaManager defines an interface that is used to manage redo meta and gc logs in owner.
 type MetaManager interface {
 	redoManager
-	// UpdateMeta updates the checkpointTs and resolvedTs asynchronously.
-	UpdateMeta(checkpointTs, resolvedTs model.Ts)
+	// UpdateMeta updates the checkpointTs and watermark asynchronously.
+	UpdateMeta(checkpointTs, watermark model.Ts)
 	// GetFlushedMeta returns the flushed meta.
 	GetFlushedMeta() common.LogMeta
 	// Cleanup deletes all redo logs, which are only called from the owner
@@ -61,7 +61,7 @@ type metaManager struct {
 	running atomic.Bool
 
 	metaCheckpointTs statefulRts
-	metaResolvedTs   statefulRts
+	metaWatermark    statefulRts
 
 	// This fields are used to process meta files and perform
 	// garbage collection of logs.
@@ -187,11 +187,11 @@ func (m *metaManager) WaitForReady(_ context.Context) {}
 func (m *metaManager) Close() {}
 
 // UpdateMeta updates meta.
-func (m *metaManager) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
-	if ok := m.metaResolvedTs.checkAndSetUnflushed(resolvedTs); !ok {
-		log.Warn("update redo meta with a regressed resolved ts, ignore",
-			zap.Uint64("currResolvedTs", m.metaResolvedTs.getFlushed()),
-			zap.Uint64("recvResolvedTs", resolvedTs),
+func (m *metaManager) UpdateMeta(checkpointTs, watermark model.Ts) {
+	if ok := m.metaWatermark.checkAndSetUnflushed(watermark); !ok {
+		log.Warn("update redo meta with a regressed watermark, ignore",
+			zap.Uint64("currWatermark", m.metaWatermark.getFlushed()),
+			zap.Uint64("recvWatermark", watermark),
 			zap.String("namespace", m.changeFeedID.Namespace),
 			zap.String("changefeed", m.changeFeedID.ID))
 	}
@@ -207,8 +207,8 @@ func (m *metaManager) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
 // GetFlushedMeta gets flushed meta.
 func (m *metaManager) GetFlushedMeta() common.LogMeta {
 	checkpointTs := m.metaCheckpointTs.getFlushed()
-	resolvedTs := m.metaResolvedTs.getFlushed()
-	return common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
+	watermark := m.metaWatermark.getFlushed()
+	return common.LogMeta{CheckpointTs: checkpointTs, Watermark: watermark}
 }
 
 // initMeta will read the meta file from external storage and
@@ -221,7 +221,7 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 	}
 
 	metas := []*common.LogMeta{
-		{CheckpointTs: m.startTs, ResolvedTs: m.startTs},
+		{CheckpointTs: m.startTs, Watermark: m.startTs},
 	}
 	var toRemoveMetaFiles []string
 	err := m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
@@ -262,16 +262,16 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
 
-	var checkpointTs, resolvedTs uint64
-	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
-	if checkpointTs == 0 || resolvedTs == 0 {
-		log.Panic("checkpointTs or resolvedTs is 0 when initializing redo meta in owner",
+	var checkpointTs, watermark uint64
+	common.ParseMeta(metas, &checkpointTs, &watermark)
+	if checkpointTs == 0 || watermark == 0 {
+		log.Panic("checkpointTs or watermark is 0 when initializing redo meta in owner",
 			zap.String("namespace", m.changeFeedID.Namespace),
 			zap.String("changefeed", m.changeFeedID.ID),
 			zap.Uint64("checkpointTs", checkpointTs),
-			zap.Uint64("resolvedTs", resolvedTs))
+			zap.Uint64("watermark", watermark))
 	}
-	m.metaResolvedTs.unflushed.Store(resolvedTs)
+	m.metaWatermark.unflushed.Store(watermark)
 	m.metaCheckpointTs.unflushed.Store(checkpointTs)
 	if err := m.maybeFlushMeta(ctx); err != nil {
 		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
@@ -282,7 +282,7 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 		zap.String("namespace", m.changeFeedID.Namespace),
 		zap.String("changefeed", m.changeFeedID.ID),
 		zap.Uint64("checkpointTs", flushedMeta.CheckpointTs),
-		zap.Uint64("resolvedTs", flushedMeta.ResolvedTs))
+		zap.Uint64("watermark", flushedMeta.Watermark))
 
 	return util.DeleteFilesInExtStorage(ctx, m.extStorage, toRemoveMetaFiles)
 }
@@ -410,22 +410,22 @@ func (m *metaManager) maybeFlushMeta(ctx context.Context) error {
 func (m *metaManager) prepareForFlushMeta() (bool, common.LogMeta) {
 	flushed := common.LogMeta{}
 	flushed.CheckpointTs = m.metaCheckpointTs.getFlushed()
-	flushed.ResolvedTs = m.metaResolvedTs.getFlushed()
+	flushed.Watermark = m.metaWatermark.getFlushed()
 
 	unflushed := common.LogMeta{}
 	unflushed.CheckpointTs = m.metaCheckpointTs.getUnflushed()
-	unflushed.ResolvedTs = m.metaResolvedTs.getUnflushed()
+	unflushed.Watermark = m.metaWatermark.getUnflushed()
 
 	hasChange := false
 	if flushed.CheckpointTs < unflushed.CheckpointTs ||
-		flushed.ResolvedTs < unflushed.ResolvedTs {
+		flushed.Watermark < unflushed.Watermark {
 		hasChange = true
 	}
 	return hasChange, unflushed
 }
 
 func (m *metaManager) postFlushMeta(meta common.LogMeta) {
-	m.metaResolvedTs.checkAndSetFlushed(meta.ResolvedTs)
+	m.metaWatermark.checkAndSetFlushed(meta.Watermark)
 	m.metaCheckpointTs.checkAndSetFlushed(meta.CheckpointTs)
 }
 

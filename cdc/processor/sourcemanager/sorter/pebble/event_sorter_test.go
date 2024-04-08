@@ -44,14 +44,14 @@ func TestTableOperations(t *testing.T) {
 	s.AddTable(span, 2)
 	s.AddTable(span, 1)
 
-	require.Equal(t, model.Ts(2), s.GetStatsByTable(span).ReceivedMaxResolvedTs)
+	require.Equal(t, model.Ts(2), s.GetStatsByTable(span).ReceivedMaxWatermark)
 
 	s.RemoveTable(span)
 	s.RemoveTable(span)
 }
 
-// TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
-func TestNoResolvedTs(t *testing.T) {
+// TestNoWatermark tests resolved timestamps shouldn't be emitted.
+func TestNoWatermark(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
 	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
@@ -65,13 +65,13 @@ func TestNoResolvedTs(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 	s.AddTable(span, 0)
-	resolvedTs := make(chan model.Ts)
-	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
+	watermark := make(chan model.Ts)
+	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { watermark <- ts })
 
-	s.Add(span, model.NewResolvedPolymorphicEvent(0, 1))
+	s.Add(span, model.NewWatermarkPolymorphicEvent(0, 1))
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
-	case ts := <-resolvedTs:
+	case ts := <-watermark:
 		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
 		event, _, err := iter.Next()
 		require.Nil(t, event)
@@ -96,8 +96,8 @@ func TestEventFetch(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 	s.AddTable(span, 1)
-	resolvedTs := make(chan model.Ts)
-	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
+	watermark := make(chan model.Ts)
+	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { watermark <- ts })
 
 	inputEvents := []*model.PolymorphicEvent{
 		model.NewPolymorphicEvent(&model.RawKVEntry{
@@ -127,15 +127,15 @@ func TestEventFetch(t *testing.T) {
 	}
 
 	s.Add(span, inputEvents...)
-	s.Add(span, model.NewResolvedPolymorphicEvent(0, 4))
-	require.Equal(t, model.Ts(4), s.GetStatsByTable(span).ReceivedMaxResolvedTs)
+	s.Add(span, model.NewWatermarkPolymorphicEvent(0, 4))
+	require.Equal(t, model.Ts(4), s.GetStatsByTable(span).ReceivedMaxWatermark)
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
 	sortedPositions := make([]sorter.Position, 0, len(inputEvents))
 
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
-	case ts := <-resolvedTs:
+	case ts := <-watermark:
 		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()

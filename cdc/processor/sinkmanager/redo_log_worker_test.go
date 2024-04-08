@@ -275,7 +275,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return m.GetResolvedTs(suite.testSpan) == 4
+		return m.GetWatermark(suite.testSpan) == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()

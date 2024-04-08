@@ -244,9 +244,9 @@ func (s *requestedStream) receive(
 				return err
 			}
 		}
-		if cevent.ResolvedTs != nil {
-			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+		if cevent.Watermark != nil {
+			c.metrics.batchResolvedSize.Observe(float64(len(cevent.Watermark.Regions)))
+			if err := s.sendWatermark(ctx, c, cevent.Watermark, subscriptionID); err != nil {
 				return err
 			}
 		}
@@ -504,30 +504,30 @@ func (s *requestedStream) sendRegionChangeEvents(
 	return nil
 }
 
-func (s *requestedStream) sendResolvedTs(
-	ctx context.Context, c *SharedClient, resolvedTs *cdcpb.ResolvedTs,
+func (s *requestedStream) sendWatermark(
+	ctx context.Context, c *SharedClient, watermark *cdcpb.Watermark,
 	tableSubID SubscriptionID,
 ) error {
 	var subscriptionID SubscriptionID
 	if tableSubID == invalidSubscriptionID {
-		subscriptionID = SubscriptionID(resolvedTs.RequestId)
+		subscriptionID = SubscriptionID(watermark.RequestId)
 	} else {
 		subscriptionID = tableSubID
 	}
 	sfEvents := make([]statefulEvent, len(c.workers))
-	for _, regionID := range resolvedTs.Regions {
+	for _, regionID := range watermark.Regions {
 		slot := hashRegionID(regionID, len(c.workers))
 		if sfEvents[slot].stream == nil {
-			sfEvents[slot] = newResolvedTsBatch(resolvedTs.Ts, s)
+			sfEvents[slot] = newWatermarkBatch(watermark.Ts, s)
 		}
-		x := &sfEvents[slot].resolvedTsBatch
+		x := &sfEvents[slot].watermarkBatch
 		if state := s.getState(subscriptionID, regionID); state != nil {
 			x.regions = append(x.regions, state)
 		}
 	}
 
 	for i, sfEvent := range sfEvents {
-		if len(sfEvent.resolvedTsBatch.regions) > 0 {
+		if len(sfEvent.watermarkBatch.regions) > 0 {
 			sfEvent.stream = s
 			if err := c.workers[i].sendEvent(ctx, sfEvent); err != nil {
 				return err

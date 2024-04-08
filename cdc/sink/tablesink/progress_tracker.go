@@ -37,20 +37,20 @@ const (
 	defaultBufferSize uint64 = 4096
 )
 
-// A pendingResolvedTs is received by progressTracker but hasn't been flushed yet.
-type pendingResolvedTs struct {
-	offset     uint64
-	resolvedTs model.ResolvedTs
+// A pendingWatermark is received by progressTracker but hasn't been flushed yet.
+type pendingWatermark struct {
+	offset    uint64
+	watermark model.Watermark
 }
 
 // progressTracker is used to track the progress of the table sink.
 //
 // For example,
-// We have txn1, txn2, resolvedTs2, txn3-1, txn3-2, resolvedTs3, resolvedTs4, resolvedTs5.
+// We have txn1, txn2, watermark2, txn3-1, txn3-2, watermark3, watermark4, watermark5.
 // txn3-1 and txn3-2 are in the same big txn.
-// First txn1 and txn2 are written, then the progress can be updated to resolvedTs2.
-// Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
-// Next, since no data is being written, we can update to resolvedTs5 in order.
+// First txn1 and txn2 are written, then the progress can be updated to watermark2.
+// Then txn3-1 and txn3-2 are written, then the progress can be updated to watermark3.
+// Next, since no data is being written, we can update to watermark5 in order.
 //
 // The core of the algorithm is `pendingEvents`, which is a bit map for all events.
 // Every event is associated with a `eventID` which is a continuous number. `eventID`
@@ -81,15 +81,15 @@ type progressTracker struct {
 	// The position that the next event which should be check in `advance`.
 	nextToResolvePos uint64
 
-	resolvedTsCache []pendingResolvedTs
+	watermarkCache []pendingWatermark
 
-	lastMinResolvedTs model.ResolvedTs
+	lastMinWatermark model.Watermark
 
 	lastCheckClosed atomic.Int64
 }
 
 // newProgressTracker is used to create a new progress tracker.
-// The last min resolved ts is set to 0.
+// The last min watermark is set to 0.
 // It means that the table sink has not started yet.
 func newProgressTracker(span tablepb.Span, bufferSize uint64) *progressTracker {
 	if bufferSize%8 != 0 {
@@ -102,7 +102,7 @@ func newProgressTracker(span tablepb.Span, bufferSize uint64) *progressTracker {
 		// It means the start of the table.
 		// It's Ok to use 0 here.
 		// Because sink node only update the checkpoint when it's growing.
-		lastMinResolvedTs: model.NewResolvedTs(0),
+		lastMinWatermark: model.NewWatermark(0),
 	}
 }
 
@@ -139,44 +139,44 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	return
 }
 
-// addResolvedTs is used to add the pending resolved ts.
-func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
+// addWatermark is used to add the pending watermark.
+func (r *progressTracker) addWatermark(watermark model.Watermark) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is frozen.
-	// So there is no need to try to append the resolved ts to `resolvedTsCache`.
+	// NOTICE: We should **NOT** update the `lastMinWatermark` when tracker is frozen.
+	// So there is no need to try to append the watermark to `watermarkCache`.
 	if r.frozen {
 		return
 	}
 
-	// If there is no event or all events are flushed, we can update the resolved ts directly.
+	// If there is no event or all events are flushed, we can update the watermark directly.
 	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
 		// Update the checkpoint ts.
-		r.lastMinResolvedTs = resolvedTs
+		r.lastMinWatermark = watermark
 		return
 	}
 
-	// Sometimes, if there are no events for a long time and a lot of resolved ts are received,
-	// we can update the last resolved ts directly.
-	tsCacheLen := len(r.resolvedTsCache)
+	// Sometimes, if there are no events for a long time and a lot of watermark are received,
+	// we can update the last watermark directly.
+	tsCacheLen := len(r.watermarkCache)
 	if tsCacheLen > 0 {
-		// The offset of the last resolved ts is the last event ID.
-		// It means no event is adding. We can update the resolved ts directly.
-		if r.resolvedTsCache[tsCacheLen-1].offset+1 == r.nextEventID {
-			r.resolvedTsCache[tsCacheLen-1].resolvedTs = resolvedTs
+		// The offset of the last watermark is the last event ID.
+		// It means no event is adding. We can update the watermark directly.
+		if r.watermarkCache[tsCacheLen-1].offset+1 == r.nextEventID {
+			r.watermarkCache[tsCacheLen-1].watermark = watermark
 			return
 		}
 	}
 
-	r.resolvedTsCache = append(r.resolvedTsCache, pendingResolvedTs{
-		offset:     r.nextEventID - 1,
-		resolvedTs: resolvedTs,
+	r.watermarkCache = append(r.watermarkCache, pendingWatermark{
+		offset:    r.nextEventID - 1,
+		watermark: watermark,
 	})
 }
 
 // advance tries to move forward the tracker and returns the latest resolved timestamp.
-func (r *progressTracker) advance() model.ResolvedTs {
+func (r *progressTracker) advance() model.Watermark {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -220,16 +220,16 @@ func (r *progressTracker) advance() model.ResolvedTs {
 
 	// Try to advance resolved timestamp based on `nextToResolvePos`.
 	if r.nextToResolvePos > 0 {
-		for len(r.resolvedTsCache) > 0 {
-			cached := r.resolvedTsCache[0]
+		for len(r.watermarkCache) > 0 {
+			cached := r.watermarkCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
-				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is frozen.
+				// NOTICE: We should **NOT** update the `lastMinWatermark` when tracker is frozen.
 				if !r.frozen {
-					r.lastMinResolvedTs = cached.resolvedTs
+					r.lastMinWatermark = cached.watermark
 				}
-				r.resolvedTsCache = r.resolvedTsCache[1:]
-				if len(r.resolvedTsCache) == 0 {
-					r.resolvedTsCache = nil
+				r.watermarkCache = r.watermarkCache[1:]
+				if len(r.watermarkCache) == 0 {
+					r.watermarkCache = nil
 				}
 			} else {
 				break
@@ -248,7 +248,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		}
 	}
 
-	return r.lastMinResolvedTs
+	return r.lastMinWatermark
 }
 
 // trackingCount returns the number of pending events and resolved timestamps.
@@ -297,7 +297,7 @@ func (r *progressTracker) checkClosed(backendDead <-chan struct{}) bool {
 }
 
 func (r *progressTracker) doCheckClosed() bool {
-	resolvedTs := r.advance()
+	watermark := r.advance()
 	trackingCount := r.trackingCount()
 	if trackingCount == 0 {
 		return true
@@ -310,7 +310,7 @@ func (r *progressTracker) doCheckClosed() bool {
 			log.Warn("Close table doesn't return in time, may be stuck",
 				zap.Stringer("span", &r.span),
 				zap.Int("trackingCount", trackingCount),
-				zap.Any("lastMinResolvedTs", resolvedTs))
+				zap.Any("lastMinWatermark", watermark))
 			break
 		}
 		lastCheck = r.lastCheckClosed.Load()

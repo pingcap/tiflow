@@ -49,8 +49,8 @@ type RedoLogReader interface {
 	ReadNextRow(ctx context.Context) (*model.RowChangedEvent, error)
 	// ReadNextDDL read one ddl event from redo logs.
 	ReadNextDDL(ctx context.Context) (*model.DDLEvent, error)
-	// ReadMeta reads meta from redo logs and returns the latest checkpointTs and resolvedTs
-	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
+	// ReadMeta reads meta from redo logs and returns the latest checkpointTs and watermark
+	ReadMeta(ctx context.Context) (checkpointTs, watermark uint64, err error)
 }
 
 // NewRedoLogReader creates a new redo log reader
@@ -145,7 +145,7 @@ func (l *LogReader) runRowReader(egCtx context.Context) error {
 	defer close(l.rowCh)
 	rowCfg := &readerConfig{
 		startTs:            l.meta.CheckpointTs,
-		endTs:              l.meta.ResolvedTs,
+		endTs:              l.meta.Watermark,
 		dir:                l.cfg.Dir,
 		fileType:           redo.RedoRowLogFileType,
 		uri:                l.cfg.URI,
@@ -159,7 +159,7 @@ func (l *LogReader) runDDLReader(egCtx context.Context) error {
 	defer close(l.ddlCh)
 	ddlCfg := &readerConfig{
 		startTs:            l.meta.CheckpointTs - 1,
-		endTs:              l.meta.ResolvedTs,
+		endTs:              l.meta.Watermark,
 		dir:                l.cfg.Dir,
 		fileType:           redo.RedoDDLLogFileType,
 		uri:                l.cfg.URI,
@@ -318,23 +318,23 @@ func (l *LogReader) initMeta(ctx context.Context) error {
 		return errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
 
-	var checkpointTs, resolvedTs uint64
-	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
-	if resolvedTs < checkpointTs {
-		log.Panic("in all meta files, resolvedTs is less than checkpointTs",
-			zap.Uint64("resolvedTs", resolvedTs),
+	var checkpointTs, watermark uint64
+	common.ParseMeta(metas, &checkpointTs, &watermark)
+	if watermark < checkpointTs {
+		log.Panic("in all meta files, watermark is less than checkpointTs",
+			zap.Uint64("watermark", watermark),
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
-	l.meta = &common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
+	l.meta = &common.LogMeta{CheckpointTs: checkpointTs, Watermark: watermark}
 	return nil
 }
 
 // ReadMeta implement ReadMeta interface
-func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, watermark uint64, err error) {
 	if l.meta == nil {
 		return 0, 0, errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
 	}
-	return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
+	return l.meta.CheckpointTs, l.meta.Watermark, nil
 }
 
 type logWithIdx struct {

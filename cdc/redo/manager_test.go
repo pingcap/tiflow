@@ -37,19 +37,19 @@ import (
 // Use a smaller worker number for test to speed up the test.
 var workerNumberForTest = 2
 
-func checkResolvedTs(t *testing.T, mgr *logManager, expectedRts uint64) {
+func checkWatermark(t *testing.T, mgr *logManager, expectedRts uint64) {
 	require.Eventually(t, func() bool {
-		resolvedTs := uint64(math.MaxUint64)
+		watermark := uint64(math.MaxUint64)
 		mgr.rtsMap.Range(func(span tablepb.Span, value any) bool {
 			v, ok := value.(*statefulRts)
 			require.True(t, ok)
 			ts := v.getFlushed()
-			if ts < resolvedTs {
-				resolvedTs = ts
+			if ts < watermark {
+				watermark = ts
 			}
 			return true
 		})
-		return resolvedTs == expectedRts
+		return watermark == expectedRts
 		// This retry 80 times, with redo.MinFlushIntervalInMs(50ms) interval,
 		// it will take 4s at most.
 	}, time.Second*4, time.Millisecond*redo.MinFlushIntervalInMs)
@@ -134,7 +134,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 		eg.Go(func() error {
 			return dmlMgr.Run(ctx)
 		})
-		// check emit row changed events can move forward resolved ts
+		// check emit row changed events can move forward watermark
 		spans := []tablepb.Span{
 			spanz.TableIDToComparableSpan(53),
 			spanz.TableIDToComparableSpan(55),
@@ -188,25 +188,25 @@ func TestLogManagerInProcessor(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// check UpdateResolvedTs can move forward the resolved ts when there is not row event.
-		flushResolvedTs := uint64(150)
+		// check UpdateWatermark can move forward the watermark when there is not row event.
+		flushWatermark := uint64(150)
 		for _, span := range spans {
-			checkResolvedTs(t, dmlMgr.logManager, startTs)
-			err := dmlMgr.UpdateResolvedTs(ctx, span, flushResolvedTs)
+			checkWatermark(t, dmlMgr.logManager, startTs)
+			err := dmlMgr.UpdateWatermark(ctx, span, flushWatermark)
 			require.NoError(t, err)
 		}
-		checkResolvedTs(t, dmlMgr.logManager, flushResolvedTs)
+		checkWatermark(t, dmlMgr.logManager, flushWatermark)
 
 		// check remove table can work normally
 		removeTable := spans[len(spans)-1]
 		spans = spans[:len(spans)-1]
 		dmlMgr.RemoveTable(removeTable)
-		flushResolvedTs = uint64(200)
+		flushWatermark = uint64(200)
 		for _, span := range spans {
-			err := dmlMgr.UpdateResolvedTs(ctx, span, flushResolvedTs)
+			err := dmlMgr.UpdateWatermark(ctx, span, flushWatermark)
 			require.NoError(t, err)
 		}
-		checkResolvedTs(t, dmlMgr.logManager, flushResolvedTs)
+		checkWatermark(t, dmlMgr.logManager, flushWatermark)
 
 		cancel()
 		require.ErrorIs(t, eg.Wait(), context.Canceled)
@@ -250,14 +250,14 @@ func TestLogManagerInOwner(t *testing.T) {
 			return ddlMgr.Run(ctx)
 		})
 
-		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
+		require.Equal(t, startTs, ddlMgr.GetWatermark())
 		ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
 		err := ddlMgr.EmitDDLEvent(ctx, ddl)
 		require.NoError(t, err)
-		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
+		require.Equal(t, startTs, ddlMgr.GetWatermark())
 
-		ddlMgr.UpdateResolvedTs(ctx, ddl.CommitTs)
-		checkResolvedTs(t, ddlMgr.logManager, ddl.CommitTs)
+		ddlMgr.UpdateWatermark(ctx, ddl.CommitTs)
+		checkWatermark(t, ddlMgr.logManager, ddl.CommitTs)
 
 		cancel()
 		require.ErrorIs(t, eg.Wait(), context.Canceled)
@@ -395,7 +395,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 				}
 				dmlMgr.EmitRowChangedEvents(ctx, span, nil, rows...)
 				if i%100 == 0 {
-					dmlMgr.UpdateResolvedTs(ctx, span, *maxCommitTs)
+					dmlMgr.UpdateWatermark(ctx, span, *maxCommitTs)
 				}
 			}
 		}(spanz.TableIDToComparableSpan(tableID))
@@ -406,7 +406,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 	for {
 		ok := true
 		maxTsMap.Range(func(span tablepb.Span, targetp *uint64) bool {
-			flushed := dmlMgr.GetResolvedTs(span)
+			flushed := dmlMgr.GetWatermark(span)
 			if flushed != *targetp {
 				ok = false
 				log.Info("", zap.Uint64("targetTs", *targetp),

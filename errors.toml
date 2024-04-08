@@ -388,7 +388,7 @@ bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", t
 
 ["CDC:ErrInvalidCheckpointTs"]
 error = '''
-checkpointTs(%v) should not larger than resolvedTs(%v)
+checkpointTs(%v) should not larger than watermark(%v)
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -898,7 +898,7 @@ table %d not found
 
 ["CDC:ErrSchemaStorageUnresolved"]
 error = '''
-can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
+can not found schema snapshot, the specified ts(%d) is more than watermark(%d)
 '''
 
 ["CDC:ErrServeHTTP"]

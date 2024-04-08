@@ -137,8 +137,8 @@ func TestDecodeResolvedEvent(t *testing.T) {
 		result:    make([]*common.Message, 0, 1),
 	}
 
-	resolvedTs := uint64(1591943372224)
-	message, err := encoder.EncodeCheckpointEvent(resolvedTs)
+	watermark := uint64(1591943372224)
+	message, err := encoder.EncodeCheckpointEvent(watermark)
 	require.NoError(t, err)
 	require.NotNil(t, message)
 
@@ -154,5 +154,5 @@ func TestDecodeResolvedEvent(t *testing.T) {
 
 	obtained, err := decoder.NextResolvedEvent()
 	require.NoError(t, err)
-	require.Equal(t, resolvedTs, obtained)
+	require.Equal(t, watermark, obtained)
 }

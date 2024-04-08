@@ -48,7 +48,7 @@ var _ puller.DDLPuller = (*mockDDLPuller)(nil)
 
 type mockDDLPuller struct {
 	// DDLPuller
-	resolvedTs    model.Ts
+	watermark     model.Ts
 	ddlQueue      []*timodel.Job
 	schemaStorage entry.SchemaStorage
 }
@@ -63,7 +63,7 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 		}
 		return job.BinlogInfo.FinishedTS, job
 	}
-	return m.resolvedTs, nil
+	return m.watermark, nil
 }
 
 func (m *mockDDLPuller) Close() {}
@@ -73,11 +73,11 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockDDLPuller) ResolvedTs() model.Ts {
+func (m *mockDDLPuller) Watermark() model.Ts {
 	if len(m.ddlQueue) > 0 {
 		return m.ddlQueue[0].BinlogInfo.FinishedTS
 	}
-	return m.resolvedTs
+	return m.watermark
 }
 
 type mockDDLSink struct {
@@ -168,10 +168,10 @@ func (m *mockScheduler) Tick(
 ) (watermark schedulepb.Watermark, err error) {
 	m.currentTables = currentTables
 	return schedulepb.Watermark{
-		CheckpointTs:     barrier.MinTableBarrierTs,
-		ResolvedTs:       barrier.GlobalBarrierTs,
-		LastSyncedTs:     scheduler.CheckpointCannotProceed,
-		PullerResolvedTs: scheduler.CheckpointCannotProceed,
+		CheckpointTs:    barrier.MinTableBarrierTs,
+		Watermark:       barrier.GlobalBarrierTs,
+		LastSyncedTs:    scheduler.CheckpointCannotProceed,
+		PullerWatermark: scheduler.CheckpointCannotProceed,
 	}, nil
 }
 
@@ -220,7 +220,7 @@ func createChangefeed4Test(globalVars *vars.GlobalVars,
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
 		) puller.DDLPuller {
-			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}
+			return &mockDDLPuller{watermark: startTs - 1, schemaStorage: schemaStorage}
 		},
 		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
@@ -352,54 +352,54 @@ func TestExecDDL(t *testing.T) {
 	require.Len(t, tableIDs, 1)
 
 	job = helper.DDL2Job("drop table test0.table0")
-	// ddl puller resolved ts grow up
+	// ddl puller watermark grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
-	mockDDLPuller.resolvedTs = startTs
+	mockDDLPuller.watermark = startTs
 	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
-	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	job.BinlogInfo.FinishedTS = mockDDLPuller.watermark
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barrier set in initialize is handled
 	tickTwoTime()
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 	// The ephemeral table should have left no trace in the schema cache
-	tableIDs, err = cf.schema.AllPhysicalTables(ctx, mockDDLPuller.resolvedTs)
+	tableIDs, err = cf.schema.AllPhysicalTables(ctx, mockDDLPuller.watermark)
 	require.Nil(t, err)
 	require.Len(t, tableIDs, 0)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
-	mockDDLPuller.resolvedTs += 1000
+	mockDDLPuller.watermark += 1000
 	tickTwoTime()
-	require.Equal(t, mockDDLPuller.resolvedTs, state.Status.CheckpointTs)
+	require.Equal(t, mockDDLPuller.watermark, state.Status.CheckpointTs)
 
 	// handle create database
 	job = helper.DDL2Job("create database test1")
-	mockDDLPuller.resolvedTs += 1000
-	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.watermark += 1000
+	job.BinlogInfo.FinishedTS = mockDDLPuller.watermark
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickTwoTime()
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 	require.Equal(t, "create database test1", mockDDLSink.ddlExecuting.Query)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
-	mockDDLPuller.resolvedTs += 1000
+	mockDDLPuller.watermark += 1000
 	tickTwoTime()
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 
 	// handle create table
 	job = helper.DDL2Job("create table test1.test1(id int primary key)")
-	mockDDLPuller.resolvedTs += 1000
-	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.watermark += 1000
+	job.BinlogInfo.FinishedTS = mockDDLPuller.watermark
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickTwoTime()
 
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 	require.Equal(t, "create table test1.test1(id int primary key)", mockDDLSink.ddlExecuting.Query)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
-	mockDDLPuller.resolvedTs += 1000
+	mockDDLPuller.watermark += 1000
 	tickTwoTime()
 	require.Contains(t, cf.scheduler.(*mockScheduler).currentTables, job.TableID)
 }
@@ -447,32 +447,32 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Len(t, names, 1)
 
 	job = helper.DDL2Job("drop table test0.table0")
-	// ddl puller resolved ts grow up
+	// ddl puller watermark grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
-	mockDDLPuller.resolvedTs = startTs + 1000
-	cf.ddlManager.schema.AdvanceResolvedTs(mockDDLPuller.resolvedTs)
-	state.Status.CheckpointTs = mockDDLPuller.resolvedTs
-	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.watermark = startTs + 1000
+	cf.ddlManager.schema.AdvanceWatermark(mockDDLPuller.watermark)
+	state.Status.CheckpointTs = mockDDLPuller.watermark
+	job.BinlogInfo.FinishedTS = mockDDLPuller.watermark
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barrier set in initialize is handled
 	tickThreeTime()
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 	tables, err = cf.ddlManager.allTables(ctx)
 	require.Nil(t, err)
 	// The ephemeral table should only be deleted after the ddl is executed.
 	require.Len(t, tables, 1)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
-	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Equal(t, ts, mockDDLPuller.watermark)
 	require.Len(t, names, 1)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
-	mockDDLPuller.resolvedTs += 2000
+	mockDDLPuller.watermark += 2000
 	tickThreeTime()
-	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.watermark)
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
-	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Equal(t, ts, mockDDLPuller.watermark)
 	require.Len(t, names, 0)
 }
 
@@ -497,8 +497,8 @@ func TestSyncPoint(t *testing.T) {
 
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
-	// add 5s to resolvedTs
-	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
+	// add 5s to watermark
+	mockDDLPuller.watermark = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.watermark).Add(5 * time.Second))
 	// tick 20 times
 	for i := 0; i <= 20; i++ {
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
@@ -529,7 +529,7 @@ func TestFinished(t *testing.T) {
 	tester.MustApplyPatches()
 
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
-	mockDDLPuller.resolvedTs += 2000
+	mockDDLPuller.watermark += 2000
 	// tick many times to make sure the change feed is stopped
 	for i := 0; i <= 10; i++ {
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
@@ -651,7 +651,7 @@ func TestBarrierAdvance(t *testing.T) {
 		cf.Tick(ctx, state.Info, state.Status, captures)
 		tester.MustApplyPatches()
 		if i == 1 {
-			cf.ddlManager.ddlResolvedTs += 10
+			cf.ddlManager.ddlWatermark += 10
 		}
 		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs)
 
@@ -679,7 +679,7 @@ func TestBarrierAdvance(t *testing.T) {
 			require.Equal(t, state.Info.StartTs+10, barrier.GlobalBarrierTs)
 
 			// Then the last tick barrier must be advanced correctly.
-			cf.ddlManager.ddlResolvedTs += 1000000000000
+			cf.ddlManager.ddlWatermark += 1000000000000
 			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10)
 			require.Nil(t, err)
 			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
@@ -692,7 +692,7 @@ func TestBarrierAdvance(t *testing.T) {
 			require.Nil(t, err)
 			require.Equal(t, nextSyncPointTs, barrier.GlobalBarrierTs)
 			require.Less(t, state.Status.CheckpointTs+10, barrier.GlobalBarrierTs)
-			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
+			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlWatermark)
 		}
 	}
 }

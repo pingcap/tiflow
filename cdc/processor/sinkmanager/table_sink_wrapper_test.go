@@ -146,13 +146,13 @@ func TestTableSinkWrapperStop(t *testing.T) {
 	require.Equal(t, 10, closeCnt, "table sink should be closed 10 times")
 }
 
-func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
+func TestUpdateReceivedSorterWatermark(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
-	wrapper.updateReceivedSorterResolvedTs(100)
-	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
+	wrapper.updateReceivedSorterWatermark(100)
+	require.Equal(t, uint64(100), wrapper.getReceivedSorterWatermark())
 	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
 }
 
@@ -241,9 +241,9 @@ func TestGetUpperBoundTs(t *testing.T) {
 	t.Parallel()
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
-	// Test when there is no resolved ts.
+	// Test when there is no watermark.
 	wrapper.barrierTs.Store(uint64(10))
-	wrapper.receivedSorterResolvedTs.Store(uint64(11))
+	wrapper.receivedSorterWatermark.Store(uint64(11))
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
 
 	wrapper.barrierTs.Store(uint64(12))
@@ -263,7 +263,7 @@ func TestNewTableSinkWrapper(t *testing.T) {
 	)
 	require.NotNil(t, wrapper)
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
-	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, uint64(10), wrapper.getReceivedSorterWatermark())
 	checkpointTs := wrapper.getCheckpointTs()
 	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
 }
@@ -362,16 +362,16 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 
 	// Shouldn't be stuck because `getCheckpointTs` will update tableSink.advanced.
 	nowTs := oracle.GoTimeToTS(time.Now())
-	wrapper.updateReceivedSorterResolvedTs(nowTs)
+	wrapper.updateReceivedSorterWatermark(nowTs)
 	wrapper.barrierTs.Store(nowTs)
 	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
 	require.False(t, isStuck)
 
 	time.Sleep(200 * time.Millisecond)
 	nowTs = oracle.GoTimeToTS(time.Now())
-	wrapper.updateReceivedSorterResolvedTs(nowTs)
+	wrapper.updateReceivedSorterWatermark(nowTs)
 	wrapper.barrierTs.Store(nowTs)
-	wrapper.updateResolvedTs(model.NewResolvedTs(nowTs))
+	wrapper.updateWatermark(model.NewWatermark(nowTs))
 	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
 	require.True(t, isStuck)
 }

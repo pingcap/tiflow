@@ -35,7 +35,7 @@ type cfMeta struct {
 	Config         *v2.ReplicaConfig         `json:"config"`
 	CreateTime     model.JSONTime            `json:"create_time"`
 	StartTs        uint64                    `json:"start_ts"`
-	ResolvedTs     uint64                    `json:"resolved_ts"`
+	Watermark      uint64                    `json:"resolved_ts"`
 	TargetTs       uint64                    `json:"target_ts"`
 	CheckpointTSO  uint64                    `json:"checkpoint_tso"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
@@ -107,7 +107,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		Config:         detail.Config,
 		CreateTime:     model.JSONTime(detail.CreateTime),
 		StartTs:        detail.StartTs,
-		ResolvedTs:     detail.ResolvedTs,
+		Watermark:      detail.Watermark,
 		TargetTs:       detail.TargetTs,
 		CheckpointTSO:  detail.CheckpointTs,
 		CheckpointTime: detail.CheckpointTime,

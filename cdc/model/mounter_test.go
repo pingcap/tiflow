@@ -29,7 +29,7 @@ func TestPolymorphicEvent(t *testing.T) {
 		RegionID: 2,
 	}
 	resolved := &RawKVEntry{
-		OpType: OpTypeResolved,
+		OpType: OpTypeWatermark,
 		CRTs:   101,
 	}
 
@@ -39,63 +39,63 @@ func TestPolymorphicEvent(t *testing.T) {
 	require.Equal(t, raw.StartTs, polyEvent.StartTs)
 	require.Equal(t, raw.RegionID, polyEvent.RegionID())
 
-	rawResolved := &RawKVEntry{CRTs: resolved.CRTs, OpType: OpTypeResolved}
+	rawResolved := &RawKVEntry{CRTs: resolved.CRTs, OpType: OpTypeWatermark}
 	polyEvent = NewPolymorphicEvent(resolved)
 	require.Equal(t, rawResolved, polyEvent.RawKV)
 	require.Equal(t, resolved.CRTs, polyEvent.CRTs)
 	require.Equal(t, uint64(0), polyEvent.StartTs)
 }
 
-func TestResolvedTs(t *testing.T) {
+func TestWatermark(t *testing.T) {
 	t.Parallel()
 
-	invalidResolvedTs := ResolvedTs{Mode: -1, Ts: 1}
-	require.Equal(t, uint64(0), invalidResolvedTs.ResolvedMark())
+	invalidWatermark := Watermark{Mode: -1, Ts: 1}
+	require.Equal(t, uint64(0), invalidWatermark.ResolvedMark())
 
 	ts := rand.Uint64()%10 + 1
 	batchID := rand.Uint64()%10 + 1
-	normalResolvedTs := NewResolvedTs(ts)
-	batchResolvedTs1 := ResolvedTs{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID}
-	require.True(t, normalResolvedTs.EqualOrGreater(batchResolvedTs1))
-	require.False(t, batchResolvedTs1.EqualOrGreater(normalResolvedTs))
-	require.False(t, normalResolvedTs.Less(batchResolvedTs1))
-	require.True(t, batchResolvedTs1.Less(normalResolvedTs))
+	normalWatermark := NewWatermark(ts)
+	batchWatermark1 := Watermark{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID}
+	require.True(t, normalWatermark.EqualOrGreater(batchWatermark1))
+	require.False(t, batchWatermark1.EqualOrGreater(normalWatermark))
+	require.False(t, normalWatermark.Less(batchWatermark1))
+	require.True(t, batchWatermark1.Less(normalWatermark))
 
-	batchResolvedTs2 := ResolvedTs{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID + 1}
-	require.True(t, normalResolvedTs.EqualOrGreater(batchResolvedTs2))
-	require.True(t, batchResolvedTs2.EqualOrGreater(batchResolvedTs1))
-	require.True(t, batchResolvedTs2.Less(normalResolvedTs))
-	require.True(t, batchResolvedTs1.Less(batchResolvedTs2))
+	batchWatermark2 := Watermark{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID + 1}
+	require.True(t, normalWatermark.EqualOrGreater(batchWatermark2))
+	require.True(t, batchWatermark2.EqualOrGreater(batchWatermark1))
+	require.True(t, batchWatermark2.Less(normalWatermark))
+	require.True(t, batchWatermark1.Less(batchWatermark2))
 
 	largerTs := ts + rand.Uint64()%10 + 1
-	largerResolvedTs := NewResolvedTs(largerTs)
-	require.True(t, largerResolvedTs.EqualOrGreater(normalResolvedTs))
-	largerBatchResolvedTs := ResolvedTs{
+	largerWatermark := NewWatermark(largerTs)
+	require.True(t, largerWatermark.EqualOrGreater(normalWatermark))
+	largerBatchWatermark := Watermark{
 		Mode:    BatchResolvedMode,
 		Ts:      largerTs,
 		BatchID: batchID,
 	}
-	require.True(t, largerBatchResolvedTs.EqualOrGreater(normalResolvedTs),
-		"largerBatchResolvedTs:%+v\nnormalResolvedTs:%+v", largerBatchResolvedTs, normalResolvedTs)
+	require.True(t, largerBatchWatermark.EqualOrGreater(normalWatermark),
+		"largerBatchWatermark:%+v\nnormalWatermark:%+v", largerBatchWatermark, normalWatermark)
 
-	smallerResolvedTs := NewResolvedTs(0)
-	require.True(t, normalResolvedTs.EqualOrGreater(smallerResolvedTs))
-	smallerBatchResolvedTs := ResolvedTs{Mode: BatchResolvedMode, Ts: 0, BatchID: batchID}
-	require.True(t, batchResolvedTs1.EqualOrGreater(smallerBatchResolvedTs))
+	smallerWatermark := NewWatermark(0)
+	require.True(t, normalWatermark.EqualOrGreater(smallerWatermark))
+	smallerBatchWatermark := Watermark{Mode: BatchResolvedMode, Ts: 0, BatchID: batchID}
+	require.True(t, batchWatermark1.EqualOrGreater(smallerBatchWatermark))
 }
 
-func TestResolvedTsEqual(t *testing.T) {
-	t1 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
-	t2 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
+func TestWatermarkEqual(t *testing.T) {
+	t1 := Watermark{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
+	t2 := Watermark{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
 	require.True(t, t1.Equal(t2))
 
-	t3 := NewResolvedTs(1)
+	t3 := NewWatermark(1)
 	require.False(t, t1.Equal(t3))
 
-	t4 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 2}
+	t4 := Watermark{Mode: BatchResolvedMode, Ts: 1, BatchID: 2}
 	require.False(t, t1.Equal(t4))
 
-	t5 := ResolvedTs{Mode: BatchResolvedMode, Ts: 2, BatchID: 1}
+	t5 := Watermark{Mode: BatchResolvedMode, Ts: 2, BatchID: 1}
 	require.False(t, t1.Equal(t5))
 }
 

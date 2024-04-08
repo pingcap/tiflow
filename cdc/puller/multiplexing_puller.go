@@ -38,7 +38,7 @@ const (
 
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
-	tableResolvedTsBufferSize int = 256
+	tableWatermarkBufferSize int = 256
 
 	defaultPullerOutputChanSize = 128
 )
@@ -51,10 +51,10 @@ type tableProgress struct {
 	startTs    model.Ts
 	tableName  string
 
-	initialized          atomic.Bool
-	resolvedTsUpdated    atomic.Int64
-	resolvedTs           atomic.Uint64
-	maxIngressResolvedTs atomic.Uint64
+	initialized         atomic.Bool
+	watermarkUpdated    atomic.Int64
+	watermark           atomic.Uint64
+	maxIngressWatermark atomic.Uint64
 
 	resolvedEventsCache chan kv.MultiplexingEvent
 	tsTracker           frontier.Frontier
@@ -91,7 +91,7 @@ type MultiplexingPuller struct {
 
 	// inputChs is used to collect events from client.
 	inputChs []chan kv.MultiplexingEvent
-	// advanceCh is used to handle resolved ts in frontier workers.
+	// advanceCh is used to handle watermark in frontier workers.
 	advanceCh chan *tableProgress
 
 	// NOTE: different subscriptions can share one tableProgress.
@@ -164,11 +164,11 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		startTs:    startTs,
 		tableName:  tableName,
 
-		resolvedEventsCache: make(chan kv.MultiplexingEvent, tableResolvedTsBufferSize),
+		resolvedEventsCache: make(chan kv.MultiplexingEvent, tableWatermarkBufferSize),
 		tsTracker:           frontier.NewFrontier(0, spans...),
 	}
 	progress.initialized.Store(false)
-	progress.resolvedTsUpdated.Store(time.Now().Unix())
+	progress.watermarkUpdated.Store(time.Now().Unix())
 
 	progress.consume.f = func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
 		progress.consume.RLock()
@@ -407,24 +407,24 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 				zap.String("tableName", p.tableName),
 				zap.Any("spans", p.spans))
 		}
-		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
-		if e.ResolvedTs > p.maxIngressResolvedTs.Load() {
-			p.maxIngressResolvedTs.Store(e.ResolvedTs)
+		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Watermark)
+		if e.Watermark > p.maxIngressWatermark.Load() {
+			p.maxIngressWatermark.Store(e.Watermark)
 		}
 	}
-	resolvedTs := p.tsTracker.Frontier()
+	watermark := p.tsTracker.Frontier()
 
-	if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
+	if watermark > 0 && p.initialized.CompareAndSwap(false, true) {
 		log.Info("puller is initialized",
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
 			zap.String("tableName", p.tableName),
-			zap.Uint64("resolvedTs", resolvedTs))
+			zap.Uint64("watermark", watermark))
 	}
-	if resolvedTs > p.resolvedTs.Load() {
-		p.resolvedTs.Store(resolvedTs)
-		p.resolvedTsUpdated.Store(time.Now().Unix())
-		raw := &model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved}
+	if watermark > p.watermark.Load() {
+		p.watermark.Store(watermark)
+		p.watermarkUpdated.Store(time.Now().Unix())
+		raw := &model.RawKVEntry{CRTs: watermark, OpType: model.OpTypeWatermark}
 		err = p.consume.f(ctx, raw, p.spans)
 	}
 
@@ -432,12 +432,12 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 }
 
 func (p *tableProgress) resolveLock(currentTime time.Time) {
-	resolvedTsUpdated := time.Unix(p.resolvedTsUpdated.Load(), 0)
-	if !p.initialized.Load() || time.Since(resolvedTsUpdated) < resolveLockFence {
+	watermarkUpdated := time.Unix(p.watermarkUpdated.Load(), 0)
+	if !p.initialized.Load() || time.Since(watermarkUpdated) < resolveLockFence {
 		return
 	}
-	resolvedTs := p.resolvedTs.Load()
-	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
+	watermark := p.watermark.Load()
+	resolvedTime := oracle.GetTimeFromTS(watermark)
 	if currentTime.Sub(resolvedTime) < resolveLockFence {
 		return
 	}
@@ -452,9 +452,9 @@ func (p *tableProgress) resolveLock(currentTime time.Time) {
 type Stats struct {
 	RegionCount         uint64
 	CheckpointTsIngress model.Ts
-	ResolvedTsIngress   model.Ts
+	WatermarkIngress    model.Ts
 	CheckpointTsEgress  model.Ts
-	ResolvedTsEgress    model.Ts
+	WatermarkEgress     model.Ts
 }
 
 // Stats returns Stats.
@@ -467,9 +467,9 @@ func (p *MultiplexingPuller) Stats(span tablepb.Span) Stats {
 	}
 	return Stats{
 		RegionCount:         p.client.RegionCount(progress.subID),
-		ResolvedTsIngress:   progress.maxIngressResolvedTs.Load(),
-		CheckpointTsIngress: progress.maxIngressResolvedTs.Load(),
-		ResolvedTsEgress:    progress.resolvedTs.Load(),
-		CheckpointTsEgress:  progress.resolvedTs.Load(),
+		WatermarkIngress:    progress.maxIngressWatermark.Load(),
+		CheckpointTsIngress: progress.maxIngressWatermark.Load(),
+		WatermarkEgress:     progress.watermark.Load(),
+		CheckpointTsEgress:  progress.watermark.Load(),
 	}
 }

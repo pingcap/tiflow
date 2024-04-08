@@ -297,7 +297,7 @@ const (
 	// this feature supports these interactions with TiKV sides:
 	// 1. in one GRPC stream, TiKV will merge resolved timestamps into several buckets based on
 	//    `RequestId`s. For example, region 100 and 101 have been subscribed twice with `RequestId`
-	//    1 and 2, TiKV will sends a ResolvedTs message
+	//    1 and 2, TiKV will sends a Watermark message
 	//    [{"RequestId": 1, "regions": [100, 101]}, {"RequestId": 2, "regions": [100, 101]}]
 	//    to the TiCDC client.
 	// 2. TiCDC can deregister all regions with a same request ID by specifying the `RequestId`.

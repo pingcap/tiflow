@@ -37,7 +37,7 @@ type ConsistentConfig struct {
 	// Default is 2000ms.
 	FlushIntervalInMs int64 `toml:"flush-interval" json:"flush-interval"`
 	// MetaFlushIntervalInMs is the flush interval(ms) of redo log to
-	// flush meta(resolvedTs and checkpointTs) to storage.
+	// flush meta(watermark and checkpointTs) to storage.
 	// Default is 200ms.
 	MetaFlushIntervalInMs int64 `toml:"meta-flush-interval" json:"meta-flush-interval"`
 	// EncodingWorkerNum is the number of workers to encode `RowChangeEvent`` to redo log.

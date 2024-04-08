@@ -116,7 +116,7 @@ func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) 
 	)
 }
 
-// NewResolvedMsg creates a resolved ts message.
+// NewResolvedMsg creates a watermark message.
 func NewResolvedMsg(proto config.Protocol, key, value []byte, ts uint64) *Message {
 	return NewMsg(proto, key, value, ts, model.MessageTypeResolved, nil, nil)
 }

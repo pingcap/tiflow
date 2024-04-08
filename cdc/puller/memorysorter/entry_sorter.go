@@ -32,10 +32,10 @@ const DDLPullerTableName = "DDL_PULLER"
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries.
 // For now, it only uses for DDL puller and test.
 type EntrySorter struct {
-	unsorted        []*model.PolymorphicEvent
-	lock            sync.Mutex
-	resolvedTsGroup []uint64
-	closed          int32
+	unsorted       []*model.PolymorphicEvent
+	lock           sync.Mutex
+	watermarkGroup []uint64
+	closed         int32
 
 	outputCh         chan *model.PolymorphicEvent
 	resolvedNotifier *notify.Notifier
@@ -91,25 +91,25 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			case <-time.After(defaultMetricInterval):
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
-				metricEntrySorterResolvedChanSizeGauge.Set(float64(len(es.resolvedTsGroup)))
+				metricEntrySorterResolvedChanSizeGauge.Set(float64(len(es.watermarkGroup)))
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
 			case <-receiver.C:
 				es.lock.Lock()
-				if len(es.resolvedTsGroup) == 0 {
+				if len(es.watermarkGroup) == 0 {
 					es.lock.Unlock()
 					continue
 				}
-				resolvedTsGroup := es.resolvedTsGroup
-				es.resolvedTsGroup = nil
+				watermarkGroup := es.watermarkGroup
+				es.watermarkGroup = nil
 				toSort := es.unsorted
 				es.unsorted = nil
 				es.lock.Unlock()
 
-				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
-				for i, rts := range resolvedTsGroup {
+				resEvents := make([]*model.PolymorphicEvent, len(watermarkGroup))
+				for i, rts := range watermarkGroup {
 					// regionID = 0 means the event is produced by TiCDC
-					resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
+					resEvents[i] = model.NewWatermarkPolymorphicEvent(0, rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()
@@ -117,12 +117,12 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 					return eventLess(toSort[i], toSort[j])
 				})
 				metricEntrySorterSortDuration.Observe(time.Since(startTime).Seconds())
-				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
+				maxWatermark := watermarkGroup[len(watermarkGroup)-1]
 
 				startTime = time.Now()
 				var merged []*model.PolymorphicEvent
 				mergeEvents(toSort, sorted, func(entry *model.PolymorphicEvent) {
-					if entry.CRTs <= maxResolvedTs {
+					if entry.CRTs <= maxWatermark {
 						output(ctx, entry)
 					} else {
 						merged = append(merged, entry)
@@ -143,8 +143,8 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 	es.lock.Lock()
 	defer es.lock.Unlock()
-	if entry.IsResolved() {
-		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
+	if entry.IsWatermark() {
+		es.watermarkGroup = append(es.watermarkGroup, entry.CRTs)
 		es.resolvedNotifier.Notify()
 	} else {
 		es.unsorted = append(es.unsorted, entry)

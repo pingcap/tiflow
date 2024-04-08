@@ -133,11 +133,11 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTableSinkWithBatchID() {
 	err := advanceTableSinkWithBatchID(task, 2, 256, 1, memoryQuota)
 	require.NoError(suite.T(), err)
 
-	expectedResolvedTs := model.NewResolvedTs(2)
-	expectedResolvedTs.Mode = model.BatchResolvedMode
-	expectedResolvedTs.BatchID = 1
+	expectedWatermark := model.NewWatermark(2)
+	expectedWatermark.Mode = model.BatchResolvedMode
+	expectedWatermark.BatchID = 1
 	checkpointTs := task.tableSink.getCheckpointTs()
-	require.Equal(suite.T(), expectedResolvedTs, checkpointTs)
+	require.Equal(suite.T(), expectedWatermark, checkpointTs)
 }
 
 func (suite *tableSinkAdvancerSuite) TestAdvanceTableSink() {
@@ -150,9 +150,9 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTableSink() {
 	err := advanceTableSink(task, 2, 256, memoryQuota)
 	require.NoError(suite.T(), err)
 
-	expectedResolvedTs := model.NewResolvedTs(2)
+	expectedWatermark := model.NewWatermark(2)
 	checkpointTs := task.tableSink.getCheckpointTs()
-	require.Equal(suite.T(), expectedResolvedTs, checkpointTs)
+	require.Equal(suite.T(), expectedWatermark, checkpointTs)
 }
 
 func (suite *tableSinkAdvancerSuite) TestNewTableSinkAdvancer() {
@@ -291,7 +291,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitF
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == model.NewResolvedTs(2)
+		return checkpointTs == model.NewWatermark(2)
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -334,11 +334,11 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithoutComm
 	require.Len(suite.T(), sink.GetEvents(), 3)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(3)
-		expectedResolvedTs.Mode = model.BatchResolvedMode
-		expectedResolvedTs.BatchID = 1
+		expectedWatermark := model.NewWatermark(3)
+		expectedWatermark.Mode = model.BatchResolvedMode
+		expectedWatermark.BatchID = 1
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -385,11 +385,11 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithSplit
 	require.Len(suite.T(), sink.GetEvents(), 3)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(3)
-		expectedResolvedTs.Mode = model.BatchResolvedMode
-		expectedResolvedTs.BatchID = 1
+		expectedWatermark := model.NewWatermark(3)
+		expectedWatermark.Mode = model.BatchResolvedMode
+		expectedWatermark.BatchID = 1
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -442,9 +442,9 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSp
 	require.Len(suite.T(), sink.GetEvents(), 1)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(2)
+		expectedWatermark := model.NewWatermark(2)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(256), advancer.pendingTxnSize)
@@ -498,9 +498,9 @@ func (suite *tableSinkAdvancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsW
 	require.Len(suite.T(), sink.GetEvents(), 1)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(2)
+		expectedWatermark := model.NewWatermark(2)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize,
@@ -556,9 +556,9 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	require.Len(suite.T(), sink.GetEvents(), 4)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(3)
+		expectedWatermark := model.NewWatermark(3)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -606,9 +606,9 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeA
 	require.Len(suite.T(), sink.GetEvents(), 3)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(3)
+		expectedWatermark := model.NewWatermark(3)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -659,9 +659,9 @@ func (suite *tableSinkAdvancerSuite) TestFinish() {
 	require.Len(suite.T(), sink.GetEvents(), 3)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(4)
+		expectedWatermark := model.NewWatermark(4)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -709,9 +709,9 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTx
 	require.Len(suite.T(), sink.GetEvents(), 4)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		expectedResolvedTs := model.NewResolvedTs(3)
+		expectedWatermark := model.NewWatermark(3)
 		checkpointTs := task.tableSink.getCheckpointTs()
-		return checkpointTs == expectedResolvedTs
+		return checkpointTs == expectedWatermark
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -774,9 +774,9 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 		// Wait the blocked acquire is aborted, otherwise the test data race.
 		<-down
 		require.Eventually(suite.T(), func() bool {
-			expectedResolvedTs := model.NewResolvedTs(3)
+			expectedWatermark := model.NewWatermark(3)
 			checkpointTs := task.tableSink.getCheckpointTs()
-			return checkpointTs == expectedResolvedTs
+			return checkpointTs == expectedWatermark
 		}, 5*time.Second, 10*time.Millisecond)
 		require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 		require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)

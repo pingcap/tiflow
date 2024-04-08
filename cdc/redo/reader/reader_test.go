@@ -89,16 +89,16 @@ func TestReadLogs(t *testing.T) {
 
 	meta := &common.LogMeta{
 		CheckpointTs: 11,
-		ResolvedTs:   100,
+		Watermark:    100,
 	}
 	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
 		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
 		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
 		genLogFile(ctx, t, dir, logType, 12, 12)
-		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.ResolvedTs)
+		genLogFile(ctx, t, dir, logType, meta.Watermark, meta.Watermark)
 	}
-	expectedRows := []uint64{12, meta.ResolvedTs}
-	expectedDDLs := []uint64{meta.CheckpointTs, meta.CheckpointTs, 12, meta.ResolvedTs}
+	expectedRows := []uint64{12, meta.Watermark}
+	expectedDDLs := []uint64{meta.CheckpointTs, meta.CheckpointTs, 12, meta.Watermark}
 
 	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
 	require.NoError(t, err)
@@ -140,13 +140,13 @@ func TestLogReaderClose(t *testing.T) {
 
 	meta := &common.LogMeta{
 		CheckpointTs: 11,
-		ResolvedTs:   100,
+		Watermark:    100,
 	}
 	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
 		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
 		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
 		genLogFile(ctx, t, dir, logType, 12, 12)
-		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.Watermark, meta.CheckpointTs)
 	}
 
 	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
@@ -177,24 +177,24 @@ func TestNewLogReaderAndReadMeta(t *testing.T) {
 	dir := t.TempDir()
 	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 11,
-		ResolvedTs:   22,
+		Watermark:    22,
 	})
 	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 12,
-		ResolvedTs:   21,
+		Watermark:    21,
 	})
 
 	tests := []struct {
-		name                             string
-		dir                              string
-		wantCheckpointTs, wantResolvedTs uint64
-		wantErr                          string
+		name                            string
+		dir                             string
+		wantCheckpointTs, wantWatermark uint64
+		wantErr                         string
 	}{
 		{
 			name:             "happy",
 			dir:              dir,
 			wantCheckpointTs: 12,
-			wantResolvedTs:   22,
+			wantWatermark:    22,
 		},
 		{
 			name:    "no meta file",
@@ -210,7 +210,7 @@ func TestNewLogReaderAndReadMeta(t *testing.T) {
 			name:             "context cancel",
 			dir:              dir,
 			wantCheckpointTs: 12,
-			wantResolvedTs:   22,
+			wantWatermark:    22,
 			wantErr:          context.Canceled.Error(),
 		},
 	}
@@ -236,7 +236,7 @@ func TestNewLogReaderAndReadMeta(t *testing.T) {
 			cts, rts, err := l.ReadMeta(ctx)
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.wantCheckpointTs, cts, tt.name)
-			require.Equal(t, tt.wantResolvedTs, rts, tt.name)
+			require.Equal(t, tt.wantWatermark, rts, tt.name)
 		}
 	}
 }

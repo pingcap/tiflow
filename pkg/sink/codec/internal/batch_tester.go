@@ -221,8 +221,8 @@ var (
 		Type:      3,
 	}}, {}}
 
-	// CodecResolvedTSCases defines test cases for resolved ts events.
-	CodecResolvedTSCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
+	// CodecWatermarkCases defines test cases for watermark events.
+	CodecWatermarkCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
 )
 
 type columnsArray []*model.Column
@@ -250,17 +250,17 @@ func SortColumnArrays(arrays ...[]*model.Column) {
 
 // BatchTester is a tester for batch encoders.
 type BatchTester struct {
-	RowCases        [][]*RowTestData
-	DDLCases        [][]*model.DDLEvent
-	ResolvedTsCases [][]uint64
+	RowCases       [][]*RowTestData
+	DDLCases       [][]*model.DDLEvent
+	WatermarkCases [][]uint64
 }
 
 // NewDefaultBatchTester creates a default BatchTester.
 func NewDefaultBatchTester() *BatchTester {
 	return &BatchTester{
-		RowCases:        CodecRowTestData,
-		DDLCases:        CodecDDLCases,
-		ResolvedTsCases: CodecResolvedTSCases,
+		RowCases:       CodecRowTestData,
+		DDLCases:       CodecDDLCases,
+		WatermarkCases: CodecWatermarkCases,
 	}
 }
 
@@ -354,7 +354,7 @@ func (s *BatchTester) TestBatchCodec(
 		}
 	}
 
-	for _, cs := range s.ResolvedTsCases {
+	for _, cs := range s.WatermarkCases {
 		encoder := encoderBuilder.Build()
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)

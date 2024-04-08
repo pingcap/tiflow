@@ -30,8 +30,8 @@ import (
 
 // MemConsumeRecord is used to trace memory usage.
 type MemConsumeRecord struct {
-	ResolvedTs model.ResolvedTs
-	Size       uint64
+	Watermark model.Watermark
+	Size      uint64
 }
 
 // MemQuota is used to trace memory usage.
@@ -162,7 +162,7 @@ func (m *MemQuota) AddTable(span tablepb.Span) {
 }
 
 // Record records the memory usage of a table.
-func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
+func (m *MemQuota) Record(span tablepb.Span, resolved model.Watermark, nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
@@ -184,15 +184,15 @@ func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes u
 		return
 	}
 	m.tableMemory.ReplaceOrInsert(span, append(m.tableMemory.GetV(span), &MemConsumeRecord{
-		ResolvedTs: resolved,
-		Size:       nBytes,
+		Watermark: resolved,
+		Size:      nBytes,
 	}))
 }
 
-// Release try to use resolvedTs to release the memory quota.
+// Release try to use watermark to release the memory quota.
 // Because we append records in order, we can use binary search to find the first record
-// that is greater than resolvedTs, and release the memory quota of the records before it.
-func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
+// that is greater than watermark, and release the memory quota of the records before it.
+func (m *MemQuota) Release(span tablepb.Span, resolved model.Watermark) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory.Get(span); !ok {
@@ -203,7 +203,7 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 	}
 	records := m.tableMemory.GetV(span)
 	i := sort.Search(len(records), func(i int) bool {
-		return records[i].ResolvedTs.Greater(resolved)
+		return records[i].Watermark.Greater(resolved)
 	})
 	var toRelease uint64 = 0
 	for j := 0; j < i; j++ {

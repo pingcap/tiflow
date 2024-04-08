@@ -310,7 +310,7 @@ type ChangeFeedInfo struct {
 	Error          *RunningError  `json:"error,omitempty"`
 	CreatorVersion string         `json:"creator_version,omitempty"`
 
-	ResolvedTs     uint64              `json:"resolved_ts"`
+	Watermark      uint64              `json:"resolved_ts"`
 	CheckpointTs   uint64              `json:"checkpoint_ts"`
 	CheckpointTime JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []CaptureTaskStatus `json:"task_status,omitempty"`

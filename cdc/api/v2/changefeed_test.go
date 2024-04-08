@@ -1020,11 +1020,11 @@ func TestChangefeedSynced(t *testing.T) {
 	statusProvider.changefeedInfo = cfInfo
 	{
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
-		// case3: pd is offline，resolvedTs - checkpointTs > 15s
+		// case3: pd is offline，watermark - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279 << 18,
-			LastSyncedTs:     1701153217279 << 18,
-			PullerResolvedTs: 1701153247279 << 18,
+			CheckpointTs:    1701153217279 << 18,
+			LastSyncedTs:    1701153217279 << 18,
+			PullerWatermark: 1701153247279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1045,11 +1045,11 @@ func TestChangefeedSynced(t *testing.T) {
 
 	{
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
-		// case4: pd is offline，resolvedTs - checkpointTs < 15s
+		// case4: pd is offline，watermark - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279 << 18,
-			LastSyncedTs:     1701153217279 << 18,
-			PullerResolvedTs: 1701153217479 << 18,
+			CheckpointTs:    1701153217279 << 18,
+			LastSyncedTs:    1701153217279 << 18,
+			PullerWatermark: 1701153217479 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1077,9 +1077,9 @@ func TestChangefeedSynced(t *testing.T) {
 	{
 		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217209 << 18,
-			LastSyncedTs:     1701152217279 << 18,
-			PullerResolvedTs: 1701153217229 << 18,
+			CheckpointTs:    1701153217209 << 18,
+			LastSyncedTs:    1701152217279 << 18,
+			PullerWatermark: 1701153217229 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1098,11 +1098,11 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
-		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
+		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, watermark - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153201279 << 18,
-			LastSyncedTs:     1701152217279 << 18,
-			PullerResolvedTs: 1701153201379 << 18,
+			CheckpointTs:    1701153201279 << 18,
+			LastSyncedTs:    1701152217279 << 18,
+			PullerWatermark: 1701153201379 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1120,17 +1120,17 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, "Please check whether PD is online and TiKV Regions are all available. "+
 			"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. "+
 			"To check whether TiKV regions are all available, you can view "+
-			"'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. "+
+			"'TiKV-Details' > 'Watermark' > 'Max Leader Watermark gap' on Grafana. "+
 			"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. "+
 			"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait", resp.Info)
 	}
 
 	{
-		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
+		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, watermark - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153201279 << 18,
-			LastSyncedTs:     1701152207279 << 18,
-			PullerResolvedTs: 1701153218279 << 18,
+			CheckpointTs:    1701153201279 << 18,
+			LastSyncedTs:    1701152207279 << 18,
+			PullerWatermark: 1701153218279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1151,9 +1151,9 @@ func TestChangefeedSynced(t *testing.T) {
 	{
 		// case8: pdTs - lastSyncedTs < 5min
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279 << 18,
-			LastSyncedTs:     1701153213279 << 18,
-			PullerResolvedTs: 1701153217279 << 18,
+			CheckpointTs:    1701153217279 << 18,
+			LastSyncedTs:    1701153213279 << 18,
+			PullerWatermark: 1701153217279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(

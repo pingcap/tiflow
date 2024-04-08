@@ -59,8 +59,8 @@ func (s *EventSorter) IsTableBased() bool {
 
 // AddTable implements sorter.SortEngine.
 func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
-	resolvedTs := startTs
-	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
+	watermark := startTs
+	if _, exists := s.tables.LoadOrStore(span, &tableSorter{watermark: &watermark}); exists {
 		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}
 }
@@ -79,12 +79,12 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
 	}
 
-	resolvedTs, hasNewResolved := value.(*tableSorter).add(events...)
+	watermark, hasNewResolved := value.(*tableSorter).add(events...)
 	if hasNewResolved {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		for _, onResolve := range s.onResolves {
-			onResolve(span, resolvedTs)
+			onResolve(span, watermark)
 		}
 	}
 }
@@ -178,27 +178,27 @@ func (s *EventIter) Close() error {
 type tableSorter struct {
 	// All following fields are protected by mu.
 	mu         sync.RWMutex
-	resolvedTs *model.Ts
+	watermark  *model.Ts
 	unresolved eventHeap
 	resolved   []*model.PolymorphicEvent
 }
 
-func (s *tableSorter) add(events ...*model.PolymorphicEvent) (resolvedTs model.Ts, hasNewResolved bool) {
+func (s *tableSorter) add(events ...*model.PolymorphicEvent) (watermark model.Ts, hasNewResolved bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, event := range events {
 		heap.Push(&s.unresolved, event)
 		if event.IsResolved() {
-			if s.resolvedTs == nil {
-				s.resolvedTs = new(model.Ts)
+			if s.watermark == nil {
+				s.watermark = new(model.Ts)
 				hasNewResolved = true
-			} else if *s.resolvedTs < event.CRTs {
+			} else if *s.watermark < event.CRTs {
 				hasNewResolved = true
 			}
 			if hasNewResolved {
-				*s.resolvedTs = event.CRTs
-				resolvedTs = event.CRTs
+				*s.watermark = event.CRTs
+				watermark = event.CRTs
 			}
 
 			for s.unresolved.Len() > 0 {
@@ -220,7 +220,7 @@ func (s *tableSorter) fetch(
 	defer s.mu.RUnlock()
 
 	iter := &EventIter{}
-	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
+	if s.watermark == nil || upperBound.CommitTs > *s.watermark {
 		log.Panic("fetch unresolved events", zap.Stringer("span", &span))
 	}
 
@@ -241,7 +241,7 @@ func (s *tableSorter) fetch(
 func (s *tableSorter) clean(span tablepb.Span, upperBound sorter.Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
+	if s.watermark == nil || upperBound.CommitTs > *s.watermark {
 		log.Panic("clean unresolved events", zap.Stringer("span", &span))
 	}
 
