@@ -114,7 +114,7 @@ func newProcessor4Test(
 
 // nolint
 func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
-	globalVars *vars.GlobalVars, changefeedVars *vars.ChangefeedVars,
+	globalVars *vars.GlobalVars, changefeedVars *model.ChangeFeedInfo,
 ) (*processor, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState) {
 	changefeedInfo := `
 {
@@ -152,7 +152,7 @@ func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
 }
 `
 	changefeed := orchestrator.NewChangefeedReactorState(
-		etcd.DefaultCDCClusterID, changefeedVars.ID)
+		etcd.DefaultCDCClusterID, model.DefaultChangeFeedID(changefeedVars.ID))
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
 
@@ -164,10 +164,10 @@ func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
 			captureID): `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
 		fmt.Sprintf("%s/changefeed/info/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
-			changefeedID.ID): changefeedInfo,
+			changefeedID): changefeedInfo,
 		fmt.Sprintf("%s/changefeed/status/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
-			changefeedVars.ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
+			changefeedVars.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
 	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo, nil, globalVars)
 
@@ -217,7 +217,7 @@ func (a *mockAgent) Close() error {
 }
 
 func TestTableExecutorAddingTableIndirectly(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -306,7 +306,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 }
 
 func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, true, globalVars, changefeedVars)
@@ -405,7 +405,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 }
 
 func TestProcessorError(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -454,7 +454,7 @@ func TestProcessorError(t *testing.T) {
 }
 
 func TestProcessorExit(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// var err error
@@ -479,7 +479,7 @@ func TestProcessorExit(t *testing.T) {
 }
 
 func TestProcessorClose(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -564,7 +564,7 @@ func TestProcessorClose(t *testing.T) {
 }
 
 func TestPositionDeleted(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -608,7 +608,7 @@ func TestPositionDeleted(t *testing.T) {
 }
 
 func TestSchemaGC(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -671,10 +671,10 @@ func TestIgnorableError(t *testing.T) {
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedInfo)
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 5
 		return status, true, nil
@@ -725,7 +725,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 }
 
 func TestProcessorLiveness(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
@@ -761,7 +761,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 			Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError")
 	}()
 
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedVars4Test()
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
