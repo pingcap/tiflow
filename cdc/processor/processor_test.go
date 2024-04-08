@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -105,6 +106,7 @@ func newProcessor4Test(
 		p.initialized.Store(true)
 		return nil
 	}
+	p.initializer = async.NewInitializer(p.lazyInit)
 
 	p.ddlHandler.r = &ddlHandler{
 		schemaStorage: &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64},
