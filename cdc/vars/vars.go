@@ -86,11 +86,13 @@ func NewGlobalVarsAndChangefeedVars4Test() (*GlobalVars, *ChangefeedVars) {
 // It is used in tests to avoid the overhead of asynchronous task scheduling.
 type NonAsyncPool struct{}
 
+// Go runs the task synchronously.
 func (f *NonAsyncPool) Go(_ context.Context, fn func()) error {
 	fn()
 	return nil
 }
 
+// Run does nothing.
 func (f *NonAsyncPool) Run(_ context.Context) error {
 	return nil
 }
