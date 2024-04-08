@@ -278,16 +278,6 @@ func (m *mounter) decodeRow(
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
-
-	//colIDs := make([]int64, 0, len(datums))
-	//columns := make([]types.Datum, 0, len(datums))
-	//for colID, datum := range datums {
-	//	colIDs = append(colIDs, colID)
-	//	columns = append(columns, datum)
-	//}
-	//var encoder rowcodec.Encoder
-	//encoder.Encode(m.tz, colIDs, columns, nil, tablecodec.EncodeRecordKey(recordPrefix, recordID))
-	// todo: when encode datum back to raw bytes, handle key datums should not be included.
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
@@ -505,7 +495,10 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
-		return types.NewDecimalDatum(mysqlDecimal), nil
+		datum := types.NewDecimalDatum(mysqlDecimal)
+		datum.SetLength(ft.GetFlen())
+		datum.SetFrac(ft.GetDecimal())
+		return datum, nil
 	case mysql.TypeEnum:
 		enum, err := types.ParseEnumValue(ft.GetElems(), value.(uint64))
 		if err != nil {
@@ -552,7 +545,7 @@ func verifyRawBytesChecksum(
 	}
 	var (
 		columnIDs []int64
-		datums    []types.Datum
+		datums    []*types.Datum
 	)
 	for _, col := range columns {
 		columnID := col.ColumnID
@@ -571,12 +564,10 @@ func verifyRawBytesChecksum(
 		}, &datum); skip {
 			continue
 		}
-		datums = append(datums, datum)
+		datums = append(datums, &datum)
 		columnIDs = append(columnIDs, columnID)
 	}
-	// todo: make this encoder reusable, by set it as a field of the mounter.
-	encoder := &rowcodec.Encoder{}
-	obtained, err := encoder.CalculateRawChecksum(tz, columnIDs, datums, nil, key)
+	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, key, nil)
 	if err != nil {
 		return 0, false, errors.Trace(err)
 	}

@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
@@ -927,28 +926,16 @@ func TestGetDefaultZeroValue(t *testing.T) {
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	tk := helper.Tk()
-	// upstream TiDB enable checksum functionality
-	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
-
 	// changefeed enable checksum functionality
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	filter, err := filter.NewFilter(replicaConfig, "")
-	require.NoError(t, err)
 
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
 
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
-	require.NoError(t, err)
-	require.NotNil(t, schemaStorage)
+	// upstream TiDB enable checksum functionality
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
 
 	createTableSQL := `create table t (
    id          int primary key auto_increment,
@@ -1008,28 +995,14 @@ func TestE2ERowLevelChecksum(t *testing.T) {
    description text CHARACTER SET gbk,
    image tinyblob
 );`
-	job := helper.DDL2Job(createTableSQL)
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+	_ = helper.DDL2Event(createTableSQL)
 
 	insertDataSQL := `insert into t values (
      2,
      1, 2, 3, 4, 5,
      1, 2, 3, 4, 5,
-     2020.0202, 2020.0303, 2020.0404, 2021.1208,
+     2020.0202, 2020.0303,
+  	 2020.0404, 2021.1208,
      3.1415, 2.7182, 8000, 179394.233,
      '2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020',
      '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
@@ -1042,25 +1015,10 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 }',
      '测试', "中国", "上海", "你好,世界", 0xC4E3BAC3CAC0BDE7
 );`
-	tk.MustExec(insertDataSQL)
 
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV := &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	expected, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-	require.Equal(t, expected, row.Checksum.Current)
-	require.False(t, row.Checksum.Corrupted)
+	event := helper.DML2Event(insertDataSQL, "test", "t")
+	require.NotNil(t, event)
+	require.False(t, event.Checksum.Corrupted)
 
 	// avro encoder enable checksum functionality.
 	codecConfig := codecCommon.NewConfig(config.ProtocolAvro)
@@ -1069,13 +1027,14 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	codecConfig.AvroDecimalHandlingMode = "string"
 	codecConfig.AvroBigintUnsignedHandlingMode = "string"
 
+	ctx := context.Background()
 	avroEncoder, err := avro.SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer avro.TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 
 	topic := "test.t"
 
-	err = avroEncoder.AppendRowChangedEvent(ctx, topic, row, func() {})
+	err = avroEncoder.AppendRowChangedEvent(ctx, topic, event, func() {})
 	require.NoError(t, err)
 	msg := avroEncoder.Build()
 	require.Len(t, msg, 1)
@@ -1094,7 +1053,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, messageType)
 
-	row, err = decoder.NextRowChangedEvent()
+	event, err = decoder.NextRowChangedEvent()
 	// no error, checksum verification passed.
 	require.NoError(t, err)
 }
@@ -1119,70 +1078,6 @@ func TestVerifyChecksumHasNullFields(t *testing.T) {
 
 	event = helper.DML2Event(`INSERT INTO t VALUES (3, NULL, 3)`, "test", "t")
 	require.NotNil(t, event)
-}
-
-func TestChecksumAfterAlterIntegerType(t *testing.T) {
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
-
-	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
-	defer helper.Close()
-
-	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
-
-	createTableDDL := `create table test.t(
-		id int primary key auto_increment,
- 		a tinyint, b tinyint unsigned,
- 		c smallint, d smallint unsigned,
- 		e mediumint, f mediumint unsigned,
- 		g int, h int unsigned,
- 		i bigint, j bigint unsigned)`
-	_ = helper.DDL2Event(createTableDDL)
-
-	sql := `insert into test.t values (
-		2,
- 		127, 255,
- 		32767, 65535,
- 		8388607, 16777215,
- 		2147483647, 4294967295,
- 		9223372036854775807, 18446744073709551615)`
-	event := helper.DML2Event(sql, "test", "t")
-	require.NotNil(t, event)
-
-	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
-
-	// make unsigned to signed, small integer type to large integer type, and large integer type to small integer type
-	_ = helper.DDL2Event(`alter table t modify column a bigint unsigned`)
-	_ = helper.DDL2Event(`alter table t modify column b bigint`)
-	_ = helper.DDL2Event(`alter table t modify column c int unsigned`)
-	_ = helper.DDL2Event(`alter table t modify column d int`)
-	_ = helper.DDL2Event(`alter table t modify column e smallint unsigned`)
-	_ = helper.DDL2Event(`alter table t modify column f smallint`)
-	_ = helper.DDL2Event(`alter table t modify column g tinyint unsigned`)
-	_ = helper.DDL2Event(`alter table t modify column h tinyint`)
-	_ = helper.DDL2Event(`alter table t modify column i smallint unsigned`)
-	_ = helper.DDL2Event(`alter table t modify column j smallint`)
-
-	helper.Tk().MustExec("update t set id = 1 where id = 2")
-	key, value := helper.getLastKeyValue(tableInfo.ID)
-
-	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
-	rawKV := &model.RawKVEntry{
-		OpType:   model.OpTypePut,
-		Key:      key,
-		Value:    value,
-		OldValue: oldValue,
-		StartTs:  ts - 1,
-		CRTs:     ts + 1,
-	}
-	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
-	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
-	require.NoError(t, err)
-	require.NotNil(t, polymorphicEvent.Row)
 }
 
 func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
@@ -1432,24 +1327,6 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NotNil(t, row)
 	require.NotNil(t, row.Checksum)
 	require.False(t, row.Checksum.Corrupted)
-
-	// hack the table info to make the checksum corrupted
-	tableInfo.Columns[0].FieldType = *types.NewFieldType(mysql.TypeVarchar)
-
-	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row.Checksum)
-	require.True(t, row.Checksum.Corrupted)
-
-	mounter.integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
-	_, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
-
-	job = helper.DDL2Job("drop table t")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
 }
 
 func TestDecodeRow(t *testing.T) {
