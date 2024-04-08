@@ -423,4 +423,4 @@ replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appda
 
 replace blainsmith.com/go/seahash => github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140
 
-replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240329083420-078714d648fc
+replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240408070253-a0478378b633
