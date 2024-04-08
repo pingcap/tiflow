@@ -370,7 +370,6 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
 			return nil, err
 		}
-
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
