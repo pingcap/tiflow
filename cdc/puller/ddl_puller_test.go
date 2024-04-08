@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -132,12 +131,10 @@ func newMockDDLJobPuller(
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
 		ts := helper.GetCurrentMeta().StartTS
-		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
-		require.Nil(t, err)
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
-			meta,
+			kvStorage,
 			ts,
 			false,
 			model.DefaultChangeFeedID("test"),

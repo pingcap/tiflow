@@ -190,7 +190,7 @@ func verifyIndices(table *model.TableInfo, retainedColumns map[string]struct{}) 
 	primaryKeyColumns := table.GetPrimaryKeyColumnNames()
 
 	retained := true
-	for name := range primaryKeyColumns {
+	for _, name := range primaryKeyColumns {
 		if _, ok := retainedColumns[name]; !ok {
 			retained = false
 			break

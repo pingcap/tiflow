@@ -264,10 +264,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.Columns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+
 		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 	} else if handleKeyOnlyEvent.IsDelete() {
@@ -275,10 +273,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+
 		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	} else if handleKeyOnlyEvent.IsUpdate() {
@@ -286,10 +282,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.Columns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+
 		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 
@@ -297,10 +291,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+
 		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	}
