@@ -106,7 +106,7 @@ func newSink(ctx context.Context, backends []backend,
 	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.WorkerOption{
 		WorkerCount: len(backends),
 		Size:        1024,
-		IsBlock:     false,
+		IsBlock:     true,
 	})
 
 	g, ctx1 := errgroup.WithContext(ctx)
