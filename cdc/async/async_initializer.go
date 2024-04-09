@@ -56,17 +56,13 @@ func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpo
 	if initializer.initialized.Load() {
 		return true, nil
 	}
-	if !initializer.initializing.Load() {
-		initializer.initializing.Store(true)
+	if initializer.initializing.CompareAndSwap(false, true) {
 		initialCtx, cancelInitialize := context.WithCancel(ctx)
 		initializer.initialWaitGroup.Add(1)
 		initializer.cancelInitialize = cancelInitialize
 		log.Info("submit async initializer task to the worker pool")
 		err := pool.Go(initialCtx, func() {
-			defer func() {
-				initializer.initialWaitGroup.Done()
-				initializer.initializing.Store(false)
-			}()
+			defer initializer.initialWaitGroup.Done()
 			if err := initializer.initFunc(initialCtx); err != nil {
 				initializer.initError.Store(errors.Trace(err))
 			} else {
@@ -76,14 +72,13 @@ func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpo
 		if err != nil {
 			log.Error("failed to submit async initializer task to the worker pool", zap.Error(err))
 			initializer.initialWaitGroup.Done()
-			initializer.initializing.Store(false)
 			return false, errors.Trace(err)
 		}
 	}
 	if initializer.initError.Load() != nil {
 		return false, errors.Trace(initializer.initError.Load())
 	}
-	return !initializer.initialized.Load(), nil
+	return initializer.initialized.Load(), nil
 }
 
 // Terminate terminates the initializer.

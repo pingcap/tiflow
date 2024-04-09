@@ -60,10 +60,12 @@ func TestTryInitialize(t *testing.T) {
 	initialized, err = initializer.TryInitialize(context.Background(), pool)
 	require.NotNil(t, err)
 	require.False(t, initializer.initialized.Load())
+	require.True(t, initializer.initializing.Load())
 	require.False(t, initialized)
 	initialized, err = initializer.TryInitialize(context.Background(), pool)
 	require.NotNil(t, err)
 	require.False(t, initializer.initialized.Load())
+	require.True(t, initializer.initializing.Load())
 	require.False(t, initialized)
 
 	// test submit error
@@ -73,7 +75,8 @@ func TestTryInitialize(t *testing.T) {
 	initialized, err = initializer.TryInitialize(context.Background(), &fakePool{submitErr: errors.New("submit error")})
 	require.NotNil(t, err)
 	require.False(t, initialized)
-	require.False(t, initializer.initializing.Load())
+	require.False(t, initializer.initialized.Load())
+	require.True(t, initializer.initializing.Load())
 }
 
 func TestTerminate(t *testing.T) {
