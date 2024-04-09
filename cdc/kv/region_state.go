@@ -31,33 +31,60 @@ const (
 	stateRemoved uint32 = 2
 )
 
-type singleRegionInfo struct {
-	verID  tikv.RegionVerID
+type regionInfo struct {
+	verID tikv.RegionVerID
+	// The span of the region.
+	// Note(dongmen): The span doesn't always represent the whole span of a region.
+	// Instead, it is the portion of the region that belongs the subcribed table.
+	// Multiple tables can belong to the same region.
+	// For instance, consider region-1 with a span of [a, d).
+	// It contains 3 tables: t1[a, b), t2[b,c), and t3[c,d).
+	// If only table t1 is subscribed to, then the span of interest is [a,b).
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	requestedTable *requestedTable
-	lockedRange    *regionlock.LockedRange
+	// The table that the region belongs to.
+	subscribedTable *subscribedTable
+	lockedRange     *regionlock.LockedRange
 }
 
-func newSingleRegionInfo(
+func (s regionInfo) isStoped() bool {
+	// lockedRange only nil when the region's subscribedTable is stopped.
+	return s.lockedRange == nil
+}
+
+func newRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,
 	rpcCtx *tikv.RPCContext,
-) singleRegionInfo {
-	return singleRegionInfo{
-		verID:  verID,
-		span:   span,
-		rpcCtx: rpcCtx,
+	subscribedTable *subscribedTable,
+) regionInfo {
+	return regionInfo{
+		verID:           verID,
+		span:            span,
+		rpcCtx:          rpcCtx,
+		subscribedTable: subscribedTable,
 	}
 }
 
-func (s singleRegionInfo) resolvedTs() uint64 {
+func (s regionInfo) resolvedTs() uint64 {
 	return s.lockedRange.ResolvedTs.Load()
 }
 
+type regionErrorInfo struct {
+	regionInfo
+	err error
+}
+
+func newRegionErrorInfo(info regionInfo, err error) regionErrorInfo {
+	return regionErrorInfo{
+		regionInfo: info,
+		err:        err,
+	}
+}
+
 type regionFeedState struct {
-	sri       singleRegionInfo
+	region    regionInfo
 	requestID uint64
 	matcher   *matcher
 
@@ -75,9 +102,9 @@ type regionFeedState struct {
 	}
 }
 
-func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
+func newRegionFeedState(region regionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
-		sri:       sri,
+		region:    region,
 		requestID: requestID,
 	}
 }
@@ -122,24 +149,24 @@ func (s *regionFeedState) takeError() (err error) {
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.sri.lockedRange.Initialzied.Load()
+	return s.region.lockedRange.Initialzied.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.sri.lockedRange.Initialzied.Store(true)
+	s.region.lockedRange.Initialzied.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
-	return s.sri.verID.GetID()
+	return s.region.verID.GetID()
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return s.sri.lockedRange.ResolvedTs.Load()
+	return s.region.lockedRange.ResolvedTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	state := s.sri.lockedRange
+	state := s.region.lockedRange
 	for {
 		last := state.ResolvedTs.Load()
 		if last > resolvedTs {
@@ -149,22 +176,22 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
-	if s.sri.requestedTable != nil {
-		s.sri.requestedTable.postUpdateRegionResolvedTs(
-			s.sri.verID.GetID(),
-			s.sri.verID.GetVer(),
+	if s.region.subscribedTable != nil {
+		s.region.subscribedTable.postUpdateRegionResolvedTs(
+			s.region.verID.GetID(),
+			s.region.verID.GetVer(),
 			state,
-			s.sri.span,
+			s.region.span,
 		)
 	}
 }
 
-func (s *regionFeedState) getRegionInfo() singleRegionInfo {
-	return s.sri
+func (s *regionFeedState) getRegionInfo() regionInfo {
+	return s.region
 }
 
 func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, string) {
-	return s.sri.verID.GetID(), s.sri.span, s.sri.rpcCtx.Addr
+	return s.region.verID.GetID(), s.region.span, s.region.rpcCtx.Addr
 }
 
 type syncRegionFeedStateMap struct {

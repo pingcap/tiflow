@@ -121,7 +121,7 @@ func NewDDLJobPuller(
 	)
 
 	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
-	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, ddlJobPuller.Input, slots, hasher, 1)
+	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, up.PDClock, ddlJobPuller.Input, slots, hasher, 1)
 	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName)
 
 	return ddlJobPuller

@@ -78,6 +78,7 @@ type SortEngine interface {
 
 	// SlotsAndHasher returns how many slots contained by the Engine, and
 	// a hasher for table spans.
+	// The hasher should return a slot index for the given table span.
 	SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int)
 }
 
