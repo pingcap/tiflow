@@ -36,6 +36,8 @@ type Initializer struct {
 	initialWaitGroup sync.WaitGroup
 
 	initFunc func(ctx context.Context) error
+
+	lck sync.Mutex
 }
 
 // NewInitializer creates a new initializer.
@@ -52,6 +54,8 @@ func NewInitializer(initFunc func(ctx context.Context) error) *Initializer {
 // returns true if the module is already initialized or initialized successfully.
 // returns false if the module is initializing or failed to initialize.
 // returns error if the module failed to initialize.
+// It will only initialize the module once.
+// It's not thread-safe.
 func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpool.AsyncPool) (bool, error) {
 	if initializer.initialized.Load() {
 		return true, nil
@@ -83,6 +87,7 @@ func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpo
 
 // Terminate terminates the initializer.
 // It will cancel the initialization if it is initializing. and wait for the initialization to finish.
+// It's not thread-safe.
 func (initializer *Initializer) Terminate() {
 	if initializer.initializing.Load() {
 		if initializer.cancelInitialize != nil {
