@@ -16,7 +16,9 @@ package causality
 import (
 	"sync/atomic"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"go.uber.org/zap"
 )
 
 type txnEvent interface {
@@ -58,6 +60,9 @@ type WorkerOption struct {
 }
 
 func newWorker[Txn txnEvent](opt WorkerOption) worker[Txn] {
+	log.Info("create new worker in conflict detector",
+		zap.Int("worker_count", opt.WorkerCount),
+		zap.Int("size", opt.Size), zap.Bool("is_block", opt.IsBlock))
 	if opt.Size == 0 {
 		return &unboundedWorker[Txn]{ch: chann.NewDrainableChann[TxnWithNotifier[Txn]]()}
 	}
