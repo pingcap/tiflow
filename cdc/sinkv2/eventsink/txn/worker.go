@@ -16,8 +16,6 @@ package txn
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/log"
@@ -54,13 +52,6 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 	wid := fmt.Sprintf("%d", ID)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	t := os.Getenv("TICDC_FLUSH_BOUND")
-	flushBound, err := strconv.Atoi(t)
-	if err != nil {
-		flushBound = 1024
-	}
-	log.Info("TICDC_FLUSH_BOUND", zap.Int("cnt", flushBound),
-		zap.Int("workerID", ID), zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)))
 	return &worker{
 		ctx:         ctx,
 		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
