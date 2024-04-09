@@ -36,8 +36,6 @@ type Initializer struct {
 	initialWaitGroup sync.WaitGroup
 
 	initFunc func(ctx context.Context) error
-
-	lck sync.Mutex
 }
 
 // NewInitializer creates a new initializer.
