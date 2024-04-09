@@ -83,7 +83,7 @@ func (initializer *Initializer) TryInitialize(ctx context.Context, pool workerpo
 	if initializer.initError.Load() != nil {
 		return false, errors.Trace(initializer.initError.Load())
 	}
-	return !initializer.initializing.Load(), nil
+	return !initializer.initialized.Load(), nil
 }
 
 // Terminate terminates the initializer.
