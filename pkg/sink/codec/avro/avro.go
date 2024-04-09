@@ -93,15 +93,13 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 
 	native, err := a.columns2AvroData(keyColumns)
 	if err != nil {
-		log.Error("avro: key converting to native failed",
-			zap.Error(err), zap.Any("columns", cols), zap.Any("colInfos", colInfos))
+		log.Error("avro: key converting to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		log.Error("avro: key converting to Avro binary failed",
-			zap.Error(err), zap.Any("columns", cols), zap.Any("colInfos", colInfos))
+		log.Error("avro: key converting to Avro binary failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
 	}
 
@@ -180,8 +178,7 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	native, err := a.columns2AvroData(input)
 	if err != nil {
-		log.Error("avro: converting value to native failed",
-			zap.Error(err), zap.Any("columns", input.columns), zap.Any("colInfos", input.colInfos))
+		log.Error("avro: converting value to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	if a.config.EnableTiDBExtension {
@@ -190,8 +187,7 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		log.Error("avro: converting value to Avro binary failed",
-			zap.Error(err), zap.Any("columns", input.columns), zap.Any("colInfos", input.colInfos))
+		log.Error("avro: converting value to Avro binary failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
 	}
 
@@ -218,13 +214,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
+		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
+		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
