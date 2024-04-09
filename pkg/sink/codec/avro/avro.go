@@ -93,13 +93,15 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 
 	native, err := a.columns2AvroData(keyColumns)
 	if err != nil {
-		log.Error("avro: key converting to native failed", zap.Error(err))
+		log.Error("avro: key converting to native failed",
+			zap.Error(err), zap.Any("columns", cols), zap.Any("colInfos", colInfos))
 		return nil, errors.Trace(err)
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		log.Error("avro: key converting to Avro binary failed", zap.Error(err))
+		log.Error("avro: key converting to Avro binary failed",
+			zap.Error(err), zap.Any("columns", cols), zap.Any("colInfos", colInfos))
 		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
 	}
 
