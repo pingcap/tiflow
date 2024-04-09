@@ -20,10 +20,44 @@ import (
 	"time"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDMLEventE2E(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
+
+	_ = helper.DDL2Event(`create table t(a varchar(64) not null, b varchar(64) default null, primary key(a))`)
+
+	event := helper.DML2Event(`insert into t values('a', 'b')`, "test", "t")
+
+	topic := "avro-test-topic"
+	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
+	require.NoError(t, err)
+
+	event = helper.DML2Event(`insert into t(a) values ('b')`, "test", "t")
+	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
+	require.NoError(t, err)
+
+	event = helper.DML2Event(`insert into t(a) values ('')`, "test", "t")
+	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
+	require.NoError(t, err)
+}
 
 func TestDecodeEvent(t *testing.T) {
 	config := &common.Config{
