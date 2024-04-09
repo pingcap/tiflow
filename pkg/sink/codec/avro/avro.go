@@ -180,7 +180,8 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	native, err := a.columns2AvroData(input)
 	if err != nil {
-		log.Error("avro: converting value to native failed", zap.Error(err))
+		log.Error("avro: converting value to native failed",
+			zap.Error(err), zap.Any("columns", input.columns), zap.Any("colInfos", input.colInfos))
 		return nil, errors.Trace(err)
 	}
 	if a.config.EnableTiDBExtension {
@@ -189,7 +190,8 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		log.Error("avro: converting value to Avro binary failed", zap.Error(err))
+		log.Error("avro: converting value to Avro binary failed",
+			zap.Error(err), zap.Any("columns", input.columns), zap.Any("colInfos", input.colInfos))
 		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
 	}
 
