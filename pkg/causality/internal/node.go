@@ -17,10 +17,8 @@ import (
 	"fmt"
 	"sync"
 	stdatomic "sync/atomic"
-	"time"
 
 	"github.com/google/btree"
-	"github.com/pingcap/failpoint"
 	"go.uber.org/atomic"
 )
 
@@ -149,10 +147,6 @@ func (n *Node) Remove() {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
 			stdatomic.AddInt32(&node.removedDependencies, 1)
-			// use to simulate call A's maybeReadyToRun after node A may be removed
-			failpoint.Inject("SleepBeforeCallmaybeReadyToRun", func() {
-				time.Sleep(time.Millisecond * 10)
-			})
 			node.maybeReadyToRun()
 			return true
 		})
@@ -181,8 +175,8 @@ func (n *Node) Free() {
 	// or not.
 }
 
-// assigns a node to a worker. Returns `true` on success.
-func (n *Node) assign() bool {
+// assignTo assigns a node to a worker. Returns `true` on success.
+func (n *Node) assignTo(workerID int64) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -190,8 +184,6 @@ func (n *Node) assign() bool {
 		// Already handled by some other guys.
 		return false
 	}
-
-	workerID := n.RandWorkerID()
 
 	n.assignedTo = workerID
 	if n.SendToWorker != nil {
@@ -202,15 +194,10 @@ func (n *Node) assign() bool {
 	return true
 }
 
-// Please attention that maybeReadyToRun maybe called after the node is removed.
-// Consider the following scenario:
-// A only depends B, and B call B's remove first, and reduce A's removedDependencies to 0
-// Then A just call A's maybeReadyToRun, and assign to a worker and remove itself
-// Simultaneously, B call A's maybeReadyToRun.
-// Thus maybeReadyToRun maybe called after the node is removed.
 func (n *Node) maybeReadyToRun() {
 	if ok := n.checkReadiness(); ok {
-		n.assign()
+		// Assign the node to the worker directly.
+		n.assignTo(n.RandWorkerID())
 	}
 }
 
