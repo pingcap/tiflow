@@ -16,6 +16,7 @@ package model
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
@@ -369,11 +370,11 @@ func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
 	}, {
 		Name:      "a2",
 		Type:      mysql.TypeVarchar,
-		Collation: mysql.UTF8DefaultCollation,
+		Collation: mysql.UTF8MB4DefaultCollation,
 	}, {
 		Name:    "a4",
 		Type:    mysql.TypeTinyBlob,
-		Charset: mysql.Latin1Charset,
+		Charset: charset.CharsetLatin1,
 	}}
 	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0}})
 	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
@@ -393,12 +394,12 @@ func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
 	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
 	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
 	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
-	require.Equal(t, mysql.UTF8DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
+	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
 	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
 
 	require.Equal(t, columns[2].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[2].ID))
 	require.Equal(t, columns[2].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetType())
-	require.Equal(t, mysql.Latin1Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCharset())
+	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCharset())
 	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCollate())
 	require.Equal(t, columns[2].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[2].ID))
 }
@@ -411,7 +412,7 @@ func TestBuildTiDBTableInfoWithCommonPrimaryKey(t *testing.T) {
 	}, {
 		Name:    "a2",
 		Type:    mysql.TypeTinyBlob,
-		Charset: mysql.Latin1Charset,
+		Charset: charset.CharsetLatin1,
 		Flag:    UniqueKeyFlag | UnsignedFlag | MultipleKeyFlag,
 	}, {
 		Name: "a4",
@@ -439,7 +440,7 @@ func TestBuildTiDBTableInfoWithCommonPrimaryKey(t *testing.T) {
 
 	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
 	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
-	require.Equal(t, mysql.Latin1Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
+	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
 	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
 	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
 
@@ -464,7 +465,7 @@ func TestBuildTiDBTableInfoWithUniqueKey(t *testing.T) {
 	}, {
 		Name:    "a2",
 		Type:    mysql.TypeTinyBlob,
-		Charset: mysql.Latin1Charset,
+		Charset: charset.CharsetLatin1,
 		Flag:    UniqueKeyFlag | MultipleKeyFlag,
 	}, {
 		Name: "a4",
@@ -492,7 +493,7 @@ func TestBuildTiDBTableInfoWithUniqueKey(t *testing.T) {
 
 	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
 	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
-	require.Equal(t, mysql.Latin1Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
+	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
 	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
 	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
 
