@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -35,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestEncodeCheckpoint(t *testing.T) {
@@ -884,6 +886,11 @@ func TestEncodeIntegerTypes(t *testing.T) {
 			for _, column := range decodedRow.Columns {
 				decodedColumns[column.Name] = column
 			}
+			log.Info(
+				"fizz decodedColumns", zap.Any("decodedColumns", decodedColumns),
+				zap.Any("eventColumns", event.Columns),
+				zap.Any("decodedRow", decodedRow),
+			)
 
 			for _, expected := range event.Columns {
 				decoded, ok := decodedColumns[expected.Name]
