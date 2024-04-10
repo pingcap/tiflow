@@ -77,7 +77,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		TiDBSourceID:                     1,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
-	},
+		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
+		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
+		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition)},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
 		MaxLogSize:            redo.DefaultMaxLogSize,

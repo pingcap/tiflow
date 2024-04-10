@@ -58,6 +58,9 @@ var defaultAPIConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
