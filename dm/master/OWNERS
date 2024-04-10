@@ -5,4 +5,4 @@ filters:
   # file: config.go
   "^config[.]go$":
     approvers:
-      - sig-critical-approvers-cdc
+      - sig-critical-approvers-dm
