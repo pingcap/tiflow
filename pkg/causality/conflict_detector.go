@@ -57,8 +57,13 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 		workers:       workers,
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
+<<<<<<< HEAD
 		notifiedNodes: chann.NewDrainableChann[func()](),
 		garbageNodes:  chann.NewDrainableChann[txnFinishedEvent](),
+=======
+		notifiedNodes: chann.NewAutoDrainChann[func()](),
+		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
+>>>>>>> e47549bd72 (sink(ticdc): Revert changes related to the conflict detector (#10897))
 		closeCh:       make(chan struct{}),
 	}
 
