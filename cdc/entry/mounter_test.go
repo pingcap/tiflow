@@ -876,11 +876,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-<<<<<<< HEAD
-		val = GetDDLDefaultDefinition(&tc.ColInfo)
-		require.Equal(t, tc.Default, val, tc.Name)
-=======
->>>>>>> 99b3eb43e1 (mounter(ticdc): default value convert to the correct data type (#10804))
 	}
 
 	colInfo := timodel.ColumnInfo{
