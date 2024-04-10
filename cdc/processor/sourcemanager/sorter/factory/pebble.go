@@ -39,8 +39,8 @@ func createPebbleDBs(
 	for id := 0; id < cfg.Count; id++ {
 		ws := writeStalls[id]
 		adjust := func(opts *pebble.Options) {
-            listener := new(pebble.EventListener)
-            *listener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
+			listener := new(pebble.EventListener)
+			*listener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
 			opts.EventListener = listener
 
 			opts.EventListener.WriteStallBegin = func(_ pebble.WriteStallBeginInfo) {

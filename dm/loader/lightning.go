@@ -24,12 +24,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/dumpling/export"
 	lserver "github.com/pingcap/tidb/lightning/pkg/server"
 	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/lightning/errormanager"
-	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -367,10 +367,10 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
 		cfg.TikvImporter.IncrementalImport = true
 	} else {
-        err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical))
-        if err != nil {
-            return nil, errors.Trace(err)
-        }
+		err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:

@@ -82,10 +82,10 @@ func iterTable(
 			return uint64(tableMaxCRTs) >= lowerBound.CommitTs && uint64(tableMinCRTs) <= upperBound.CommitTs
 		},
 	})
-    if err != nil {
-        log.Panic("fail to create iterator")
-        return nil
-    }
+	if err != nil {
+		log.Panic("fail to create iterator")
+		return nil
+	}
 	iter.First()
 	return iter
 }
