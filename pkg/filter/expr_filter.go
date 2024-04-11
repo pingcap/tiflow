@@ -326,7 +326,7 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 
 	row := chunk.MutRowFromDatums(rowData).ToRow()
 
-	d, err := expr.Eval(r.sessCtx.GetBuildPBCtx().GetExprCtx().GetEvalCtx(), row)
+	d, err := expr.Eval(r.sessCtx.GetBuildPBCtx().ExprCtx.GetEvalCtx(), row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)
