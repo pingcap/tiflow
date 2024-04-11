@@ -14,18 +14,24 @@
 package redo
 
 import (
+	"net/http"
+	_ "net/http/pprof"
 	"net/url"
+	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/applier"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // applyRedoOptions defines flags for the `redo apply` command.
 type applyRedoOptions struct {
 	options
-	sinkURI string
+	sinkURI         string
+	enableProfiling bool
 }
 
 // newapplyRedoOptions creates new applyRedoOptions for the `redo apply` command.
@@ -39,6 +45,7 @@ func (o *applyRedoOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.sinkURI, "sink-uri", "", "target database sink-uri")
 	// the possible error returned from MarkFlagRequired is `no such flag`
 	cmd.MarkFlagRequired("sink-uri") //nolint:errcheck
+	cmd.Flags().BoolVar(&o.enableProfiling, "enable-profiling", true, "enable pprof profiling")
 }
 
 //nolint:unparam
@@ -61,6 +68,19 @@ func (o *applyRedoOptions) complete(cmd *cobra.Command) error {
 // run runs the `redo apply` command.
 func (o *applyRedoOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
+
+	if o.enableProfiling {
+		go func() {
+			server := &http.Server{
+				Addr:              ":6060",
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			log.Info("Start http pprof server", zap.String("addr", server.Addr))
+			if err := server.ListenAndServe(); err != nil {
+				log.Fatal("http pprof", zap.Error(err))
+			}
+		}()
+	}
 
 	cfg := &applier.RedoApplierConfig{
 		Storage: o.storage,
