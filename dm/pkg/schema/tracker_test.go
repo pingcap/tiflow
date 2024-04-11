@@ -788,8 +788,6 @@ func TestTimeTypes(t *testing.T) {
 }
 
 func TestNeedRestrictedSQLExecutor(t *testing.T) {
-	t.Skip("mock.Context.ExecRestrictedSQL returns an error")
-
 	ctx := context.Background()
 	p := parser.New()
 
