@@ -188,7 +188,7 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 	}
 	r := chunk.MutRowFromDatums(data).ToRow()
 
-	d, err := expr.Eval(ctx.GetBuildPBCtx().ExprCtx.GetEvalCtx(), r)
+	d, err := expr.Eval(ctx.GetExprCtx().GetEvalCtx(), r)
 	if err != nil {
 		return false, err
 	}
