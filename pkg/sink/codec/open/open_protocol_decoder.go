@@ -208,7 +208,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	event := b.nextEvent
 	if b.nextKey.OnlyHandleKey {
 		var err error
-		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
+		event = b.assembleHandleKeyOnlyEvent(ctx, event)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -252,7 +252,7 @@ func (b *BatchDecoder) buildColumns(
 
 func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
-) (*model.RowChangedEvent, error) {
+) *model.RowChangedEvent {
 	var (
 		schema   = handleKeyOnlyEvent.Table.Schema
 		table    = handleKeyOnlyEvent.Table.Table
@@ -297,7 +297,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		handleKeyOnlyEvent.PreColumns = preColumns
 	}
 
-	return handleKeyOnlyEvent, nil
+	return handleKeyOnlyEvent
 }
 
 func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {

@@ -79,7 +79,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
-		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition)},
+		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
+	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
 		MaxLogSize:            redo.DefaultMaxLogSize,

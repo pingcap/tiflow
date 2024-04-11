@@ -23,7 +23,12 @@ import (
 )
 
 // NewLargeEvent4Test creates large events for test
-func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*model.DDLEvent, *model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+func NewLargeEvent4Test(
+	t *testing.T,
+	replicaConfig *config.ReplicaConfig,
+) (*model.DDLEvent, *model.RowChangedEvent,
+	*model.RowChangedEvent, *model.RowChangedEvent,
+) {
 	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 

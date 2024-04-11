@@ -632,7 +632,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
-					EncodingFormat:                 oldConfig.EncodingFormat}
+					EncodingFormat:                 oldConfig.EncodingFormat,
+				}
 			}
 
 			var largeMessageHandle *LargeMessageHandleConfig
