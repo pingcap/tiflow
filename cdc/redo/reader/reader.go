@@ -37,7 +37,7 @@ import (
 const (
 	emitBatch             = mysql.DefaultMaxTxnRow
 	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
-	maxTotalMemoryUsage   = 90.0
+	maxTotalMemoryUsage   = 80.0
 	maxWaitDuration       = time.Minute * 2
 )
 
@@ -205,7 +205,7 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 				case l.rowCh <- row:
 				}
 			}
-			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
+			err := util.WaitMemoryAvailable(egCtx, maxTotalMemoryUsage, maxWaitDuration)
 			if err != nil {
 				return errors.Trace(err)
 			}
