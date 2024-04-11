@@ -221,11 +221,6 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 				case l.rowCh <- row:
 				}
 			}
-			err := util.WaitMemoryAvailable(egCtx, maxTotalMemoryUsage, maxWaitDuration)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
