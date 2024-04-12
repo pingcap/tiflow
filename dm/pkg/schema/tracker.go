@@ -91,6 +91,10 @@ type executorContext struct {
 
 var _ sqlexec.RestrictedSQLExecutor = executorContext{}
 
+func (se executorContext) GetRestrictedSQLExecutor() sqlexec.RestrictedSQLExecutor {
+	return se
+}
+
 func (se executorContext) ParseWithParams(context.Context, string, ...interface{}) (ast.StmtNode, error) {
 	return nil, nil
 }
