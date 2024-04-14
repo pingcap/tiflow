@@ -14,7 +14,6 @@
 package main
 
 import (
-	_ "github.com/pingcap/tidb/pkg/planner/core" // init expression.EvalSimpleAst related function
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/pingcap/tiflow/pkg/cmd"
 )
