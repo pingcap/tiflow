@@ -194,6 +194,11 @@ type SinkConfig struct {
 
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
+
+	// OpenProtocol related configurations
+	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
+	// Debezium related configurations
+	Debezium *DebeziumConfig `toml:"debezium" json:"debezium,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -923,4 +928,12 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 // NoCredentials returns true if no credentials are set.
 func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
+}
+
+type OpenProtocolConfig struct {
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
+}
+
+type DebeziumConfig struct {
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }
