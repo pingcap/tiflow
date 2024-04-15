@@ -16,7 +16,7 @@ package syncer
 import (
 	"strings"
 
-	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/model"
 )
 
 type Cond struct {

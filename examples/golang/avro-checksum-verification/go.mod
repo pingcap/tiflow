@@ -5,13 +5,8 @@ go 1.21
 require (
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-<<<<<<< HEAD
-	github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80
-	github.com/pingcap/tidb/parser v0.0.0-20230505070356-cb609bb39c80
-=======
 	github.com/pingcap/tidb v1.1.0-beta.0.20240219052425-e3e0f7e1bc44
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240219043455-3ceeb3ff70bf
->>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	go.uber.org/zap v1.26.0
 )

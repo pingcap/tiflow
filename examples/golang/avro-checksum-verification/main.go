@@ -28,8 +28,8 @@ import (
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )

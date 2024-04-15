@@ -20,25 +20,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/chunk"
-	tfilter "github.com/pingcap/tidb/util/table-filter"
-=======
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
-	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
->>>>>>> 71b5a0ad7b (mounter(ticdc): calculate row level checksum for timestmap by using UTC time zone (#10564))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -250,7 +239,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 	if err != nil {
 		// If an expression contains an unknown column,
 		// we return an error and stop the changefeed.
-		if plannererrors.ErrUnknownColumn.Equal(err) {
+		if core.ErrUnknownColumn.Equal(err) {
 			log.Error("meet unknown column when generating expression",
 				zap.String("expression", expr),
 				zap.Error(err))
@@ -355,7 +344,7 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 }
 
 func getColumnFromError(err error) string {
-	if !plannererrors.ErrUnknownColumn.Equal(err) {
+	if !core.ErrUnknownColumn.Equal(err) {
 		return err.Error()
 	}
 	column := strings.TrimSpace(strings.TrimPrefix(err.Error(),

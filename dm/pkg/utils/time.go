@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
