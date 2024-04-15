@@ -35,6 +35,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
@@ -873,8 +874,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		},
 	}
 
+	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	require.NoError(t, err)
 	for _, tc := range testCases {
-		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo, tz)
 		require.Equal(t, tc.Res, val, tc.Name)
 	}
 
@@ -882,9 +885,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "-3.14", // no float
 		FieldType:          *ftTypeNewDecimalNotNull,
 	}
-	_, val, _, _, _ := getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ := getDefaultOrZeroValue(&colInfo, tz)
 	decimal := new(types.MyDecimal)
-	err := decimal.FromString([]byte("-3.14"))
+	err = decimal.FromString([]byte("-3.14"))
 	require.NoError(t, err)
 	require.Equal(t, decimal.String(), val, "mysql.TypeNewDecimal + notnull + default")
 
@@ -892,9 +895,11 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "2020-11-19 12:12:12",
 		FieldType:          *ftTypeTimestampNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
+	sc := new(stmtctx.StatementContext)
+	sc.TimeZone = tz
 	expected, err := types.ParseTimeFromFloatString(
-		types.DefaultStmtNoWarningContext,
+		sc,
 		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + notnull + default")
@@ -903,9 +908,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "2020-11-19 12:12:12",
 		FieldType:          *ftTypeTimestampNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err = types.ParseTimeFromFloatString(
-		types.DefaultStmtNoWarningContext,
+		sc,
 		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + null + default")
@@ -914,7 +919,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "e1",
 		FieldType:          *ftTypeEnumNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expectedEnum, err := types.ParseEnumName(colInfo.FieldType.GetElems(), "e1", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
 	require.Equal(t, expectedEnum.Value, val, "mysql.TypeEnum + notnull + default")
@@ -923,7 +928,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "1,e",
 		FieldType:          *ftTypeSetNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expectedSet, err := types.ParseSetName(colInfo.FieldType.GetElems(), "1,e", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
 	require.Equal(t, expectedSet.Value, val, "mysql.TypeSet + notnull + default")
@@ -1512,6 +1517,8 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 	}
+	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	require.NoError(t, err)
 	p := parser.New()
 	for _, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
@@ -1519,7 +1526,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
