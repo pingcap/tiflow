@@ -633,8 +633,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							partitionID = row.Table.TableID
 						}
 						tableID := c.fakeTableIDGenerator.
-							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-						row.TableInfo.TableName.TableID = tableID
+							generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+						row.Table.TableID = tableID
 
 						group, ok := eventGroups[tableID]
 						if !ok {
@@ -694,8 +694,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					partitionID = row.Table.TableID
 				}
 				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-				row.TableInfo.TableName.TableID = tableID
+					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = tableID
 
 				group, ok := eventGroups[tableID]
 				if !ok {
