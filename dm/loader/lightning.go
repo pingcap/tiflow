@@ -366,14 +366,16 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
 		cfg.TikvImporter.IncrementalImport = true
 	} else {
-		cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+		if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
+			return nil, err
+		}
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
-		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgReplace
+		cfg.TikvImporter.DuplicateResolution = lcfg.ReplaceOnDup
 		cfg.App.TaskInfoSchemaName = GetTaskInfoSchemaName(subtaskCfg.MetaSchema, subtaskCfg.Name)
 	case config.OnDuplicateNone:
-		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
+		cfg.TikvImporter.DuplicateResolution = lcfg.NoneOnDup
 	}
 	switch subtaskCfg.ChecksumPhysical {
 	case config.OpLevelRequired:
