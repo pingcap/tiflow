@@ -114,6 +114,7 @@ func (d *Decoder) HasNext() (model.MessageType, bool, error) {
 	d.value = nil
 
 	if d.msg.Data != nil || d.msg.Old != nil {
+		log.Debug("row changed event message found", zap.Any("message", d.msg))
 		return model.MessageTypeRow, true, nil
 	}
 
@@ -168,7 +169,10 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	event.Table = &model.TableName{
+		Schema: tableInfo.TableName.Schema,
+		Table:  tableInfo.TableName.Table,
+	}
 	d.msg = nil
 	return event, nil
 }

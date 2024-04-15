@@ -69,6 +69,7 @@ func (e *encoder) AppendRowChangedEvent(
 
 	if e.config.LargeMessageHandle.Disabled() {
 		log.Error("Single message is too large for simple",
+			zap.Stringer("changefeedID", e.config.ChangefeedID),
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", event.TableInfo.TableName))
@@ -97,6 +98,7 @@ func (e *encoder) AppendRowChangedEvent(
 
 	if result.Length() <= e.config.MaxMessageBytes {
 		log.Warn("Single message is too large for simple, only encode handle key columns",
+			zap.Stringer("changefeedID", e.config.ChangefeedID),
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("originLength", length),
 			zap.Int("length", result.Length()),
@@ -106,6 +108,7 @@ func (e *encoder) AppendRowChangedEvent(
 	}
 
 	log.Error("Single message is still too large for simple after only encode handle key columns",
+		zap.Stringer("changefeedID", e.config.ChangefeedID),
 		zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 		zap.Int("length", result.Length()),
 		zap.Any("table", event.TableInfo.TableName))
@@ -153,6 +156,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 
 	if result.Length() > e.config.MaxMessageBytes {
 		log.Error("DDL message is too large for simple",
+			zap.Stringer("changefeedID", e.config.ChangefeedID),
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("length", result.Length()),
 			zap.Any("table", event.TableInfo.TableName))

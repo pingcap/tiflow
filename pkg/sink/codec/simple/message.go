@@ -786,6 +786,10 @@ func decodeColumn(value interface{}, fieldType *types.FieldType) *model.Column {
 		return result
 	}
 
+	if mysql.HasPriKeyFlag(fieldType.GetFlag()) {
+		result.Flag.SetIsHandleKey()
+	}
+
 	var err error
 	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
 		switch v := value.(type) {

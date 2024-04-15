@@ -22,11 +22,9 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -38,7 +36,6 @@ import (
 type decoder struct {
 	config *common.Config
 	topic  string
-	sc     *stmtctx.StatementContext
 
 	schemaM SchemaManager
 
@@ -51,13 +48,11 @@ func NewDecoder(
 	config *common.Config,
 	schemaM SchemaManager,
 	topic string,
-	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      &stmtctx.StatementContext{TimeZone: tz},
 	}
 }
 

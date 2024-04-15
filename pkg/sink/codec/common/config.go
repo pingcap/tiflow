@@ -145,6 +145,9 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+	// EncodingFormatType is only works for the simple protocol,
+	// can be `json` and `avro`, default to `json`.
+	EncodingFormatType *string `form:"encoding-format"`
 }
 
 // Apply fill the Config
@@ -228,6 +231,23 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
+
+	if c.Protocol == config.ProtocolSimple {
+		if urlParameter.EncodingFormatType != nil {
+			s := *urlParameter.EncodingFormatType
+			if s != "" {
+				encodingFormat := EncodingFormatType(s)
+				switch encodingFormat {
+				case EncodingFormatJSON, EncodingFormatAvro:
+					c.EncodingFormat = encodingFormat
+				default:
+					return cerror.ErrCodecInvalidConfig.GenWithStack(
+						"unsupported encoding format type: %s for the simple protocol", encodingFormat)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -248,6 +268,7 @@ func mergeConfig(
 				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
 		}
 	}
