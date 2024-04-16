@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
@@ -86,11 +85,6 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
-
-	// encoder is used to calculate the checksum.
-	encoder *rowcodec.Encoder
-	// sctx hold some information can be used by the encoder to calculate the checksum.
-	sctx *stmtctx.StatementContext
 }
 
 // NewMounter creates a mounter
@@ -110,11 +104,6 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz:        tz,
 		integrity: integrity,
-
-		encoder: &rowcodec.Encoder{},
-		sctx: &stmtctx.StatementContext{
-			TimeZone: tz,
-		},
 	}
 }
 
@@ -669,7 +658,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(types.DefaultStmtNoWarningContext)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
@@ -728,9 +717,7 @@ func getDefaultOrZeroValue(
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		datum := types.NewDatum(col.GetOriginDefaultValue())
-		sctx := new(stmtctx.StatementContext)
-		sctx.TimeZone = tz
-		d, err = datum.ConvertTo(sctx, &col.FieldType)
+		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
 		}

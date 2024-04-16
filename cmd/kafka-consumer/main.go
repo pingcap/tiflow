@@ -596,7 +596,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		if err != nil {
 			return errors.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
+		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
