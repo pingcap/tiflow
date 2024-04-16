@@ -64,6 +64,19 @@ type rowKVEntry struct {
 	PreRowExist bool
 }
 
+// ddlTableInfo contains the tableInfo about tidb_ddl_job and tidb_ddl_history
+// and the column id of `job_meta` in these two tables.
+type DDLTableInfo struct {
+	// ddlJobsTable use to parse all ddl jobs except `create table`
+	DDLJobTable *model.TableInfo
+	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
+	JobMetaColumnIDinJobTable int64
+	// ddlHistoryTable only use to parse `create table` ddl job
+	DDLHistoryTable *model.TableInfo
+	// It holds the column id of `job_meta` in table `tidb_ddl_history`.
+	JobMetaColumnIDinHistoryTable int64
+}
+
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
@@ -299,31 +312,47 @@ func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
 }
 
 // ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
-func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64, fromHistoryTable bool) (*timodel.Job, error) {
+func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.Job, error) {
 	var v []byte
-	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+	if bytes.HasPrefix(rawKV.Key, metaPrefix) { // need to remove
 		// old queue base job.
 		v = rawKV.Value
-	} else {
-		// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
-		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		datum := row[id]
-		v = datum.GetBytes()
+		return parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
+	}
+	// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
+	recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	return parseJob(v, rawKV.StartTs, rawKV.CRTs, fromHistoryTable)
+	// first parse it with tidb_ddl_job, if failed, parse it with tidb_ddl_history
+	var datum types.Datum
+	row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLJobTable, time.UTC)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	datum = row[ddlTableInfo.JobMetaColumnIDinJobTable]
+	v = datum.GetBytes()
+
+	job, err := parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
+	if err != nil {
+		// parse it with tidb_ddl_history
+		row, err = decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLHistoryTable, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		datum = row[ddlTableInfo.JobMetaColumnIDinHistoryTable]
+		v = datum.GetBytes()
+
+		return parseJob(v, rawKV.StartTs, rawKV.CRTs, true)
+	}
+
+	return job, err
 }
 
 // parseJob unmarshal the job from "v".
-// we use fromHistoryTable to distinguish the job is from tidb_dd_job or tidb_ddl_history
-// then, to do different distinguish.
+// fromHistoryTable is used to distinguish the job is from tidb_dd_job or tidb_ddl_history
+// then to do different actions on the job.
 func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.Job, error) {
 	var job timodel.Job
 	err := json.Unmarshal(v, &job)
@@ -341,7 +370,9 @@ func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.J
 		}
 		job.State = timodel.JobStateDone
 	} else {
-		if !job.IsDone() {
+		// For tidb_ddl_job, we need to filter `create table` ddl.
+		// In that way, even if the ddl use the old version, we can deal with it correctly
+		if !job.IsDone() || job.Type == timodel.ActionCreateTable {
 			return nil, nil
 		}
 	}
