@@ -64,8 +64,9 @@ func newWorkerForTest() *workerForTest {
 	return ret
 }
 
-func (w *workerForTest) Add(txn *txnForTest, unlock func()) {
+func (w *workerForTest) Add(txn *txnForTest, unlock func()) bool {
 	w.txnQueue.Push(txnWithUnlock{txnForTest: txn, unlock: unlock})
+	return true
 }
 
 func (w *workerForTest) Close() {

@@ -16,17 +16,19 @@ package causality
 import (
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // ConflictDetector implements a logic that dispatches transaction
 // to different workers in a way that transactions modifying the same
 // keys are never executed concurrently and have their original orders
 // preserved.
-type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
-	workers []Worker
+type ConflictDetector[Txn txnEvent] struct {
+	workers []workerCache[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -38,28 +40,25 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 
 	// Used to run a background goroutine to GC or notify nodes.
 	notifiedNodes *chann.DrainableChann[func()]
-	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
+	garbageNodes  *chann.DrainableChann[*internal.Node]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
 }
 
-type txnFinishedEvent struct {
-	node           *internal.Node
-	sortedKeysHash []uint64
-}
-
 // NewConflictDetector creates a new ConflictDetector.
-func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
-	workers []Worker,
-	numSlots uint64,
-) *ConflictDetector[Worker, Txn] {
-	ret := &ConflictDetector[Worker, Txn]{
-		workers:       workers,
+func NewConflictDetector[Txn txnEvent](
+	numSlots uint64, opt WorkerOption,
+) *ConflictDetector[Txn] {
+	ret := &ConflictDetector[Txn]{
+		workers:       make([]workerCache[Txn], opt.WorkerCount),
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
 		notifiedNodes: chann.NewAutoDrainChann[func()](),
-		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
+		garbageNodes:  chann.NewAutoDrainChann[*internal.Node](),
 		closeCh:       make(chan struct{}),
+	}
+	for i := 0; i < opt.WorkerCount; i++ {
+		ret.workers[i] = newWorker[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -75,12 +74,12 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 //
 // NOTE: if multiple threads access this concurrently,
 // Txn.GenSortedDedupKeysHash must be sorted by the slot index.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
+func (d *ConflictDetector[Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
-	node := internal.NewNode()
-	node.OnResolved = func(workerID int64) {
-		// This callback is called after the transaction is executed.
-		postTxnExecuted := func() {
+	node := internal.NewNode(sortedKeysHash)
+	txnWithNotifier := TxnWithNotifier[Txn]{
+		TxnEvent: txn,
+		PostTxnExecuted: func() {
 			// After this transaction is executed, we can remove the node from the graph,
 			// and resolve related dependencies for these transacitons which depend on this
 			// executed transaction.
@@ -88,23 +87,25 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 
 			// Send this node to garbageNodes to GC it from the slots if this node is still
 			// occupied related slots.
-			d.garbageNodes.In() <- txnFinishedEvent{node, sortedKeysHash}
-		}
-		// Send this txn to related worker as soon as all dependencies are resolved.
-		d.sendToWorker(txn, postTxnExecuted, workerID)
+			d.garbageNodes.In() <- node
+		},
+	}
+	node.TrySendToWorker = func(workerID int64) bool {
+		// Try sending this txn to related worker as soon as all dependencies are resolved.
+		return d.sendToWorker(txnWithNotifier, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
-	d.slots.Add(node, sortedKeysHash)
+	d.slots.Add(node)
 }
 
 // Close closes the ConflictDetector.
-func (d *ConflictDetector[Worker, Txn]) Close() {
+func (d *ConflictDetector[Txn]) Close() {
 	close(d.closeCh)
 	d.wg.Wait()
 }
 
-func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.CloseAndDrain()
 		d.garbageNodes.CloseAndDrain()
@@ -117,20 +118,31 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 			if notifyCallback != nil {
 				notifyCallback()
 			}
-		case event := <-d.garbageNodes.Out():
-			if event.node != nil {
-				d.slots.Free(event.node, event.sortedKeysHash)
+		case node := <-d.garbageNodes.Out():
+			if node != nil {
+				d.slots.Free(node)
 			}
 		}
 	}
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, postTxnExecuted func(), workerID int64) {
+func (d *ConflictDetector[Txn]) sendToWorker(txn TxnWithNotifier[Txn], workerID int64) bool {
 	if workerID < 0 {
-		panic("must assign with a valid workerID")
+		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
 	}
-	txn.OnConflictResolved()
 	worker := d.workers[workerID]
-	worker.Add(txn, postTxnExecuted)
+	ok := worker.add(txn)
+	if ok {
+		txn.TxnEvent.OnConflictResolved()
+	}
+	return ok
+}
+
+// GetOutChByWorkerID returns the output channel of the worker.
+func (d *ConflictDetector[Txn]) GetOutChByWorkerID(workerID int64) <-chan TxnWithNotifier[Txn] {
+	if workerID < 0 {
+		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
+	}
+	return d.workers[workerID].out()
 }
