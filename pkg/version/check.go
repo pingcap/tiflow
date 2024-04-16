@@ -40,13 +40,13 @@ var (
 	minPDVersion = semver.New("5.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
-	maxPDVersion = semver.New("8.0.0")
+	maxPDVersion = semver.New("9.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
 	MinTiKVVersion = semver.New("5.1.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
-	maxTiKVVersion = semver.New("8.0.0")
+	maxTiKVVersion = semver.New("9.0.0")
 
 	// CaptureInfo.Version is added since v4.0.11,
 	// we use the minimal release version as default.
@@ -56,7 +56,7 @@ var (
 	MinTiCDCVersion = semver.New("6.3.0-alpha")
 	// MaxTiCDCVersion is the version of the maximum allowed TiCDC version.
 	// for version `x.y.z`, max allowed `x+2.0.0`
-	MaxTiCDCVersion = semver.New("8.0.0-alpha")
+	MaxTiCDCVersion = semver.New("9.0.0-alpha")
 )
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
