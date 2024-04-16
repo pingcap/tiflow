@@ -19,6 +19,7 @@ import (
 	"database/sql/driver"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"

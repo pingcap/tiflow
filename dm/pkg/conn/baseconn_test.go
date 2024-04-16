@@ -17,6 +17,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/errno"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
