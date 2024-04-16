@@ -64,7 +64,7 @@ type rowKVEntry struct {
 	PreRowExist bool
 }
 
-// ddlTableInfo contains the tableInfo about tidb_ddl_job and tidb_ddl_history
+// DDLTableInfo contains the tableInfo about tidb_ddl_job and tidb_ddl_history
 // and the column id of `job_meta` in these two tables.
 type DDLTableInfo struct {
 	// ddlJobsTable use to parse all ddl jobs except `create table`
