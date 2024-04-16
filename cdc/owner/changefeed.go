@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -97,7 +98,9 @@ type changefeed struct {
 	wg sync.WaitGroup
 
 	// state related fields
-	initialized bool
+	initialized *atomic.Bool
+	initializer *async.Initializer
+
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
@@ -178,9 +181,11 @@ func newChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
+		initialized:           atomic.NewBool(false),
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
+	c.initializer = async.NewInitializer(c.initialize)
 	return c
 }
 
@@ -249,7 +254,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	err := c.tick(ctx, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
-	if c.initialized {
+	if c.initialized.Load() {
 		costTime := time.Since(startTime)
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long",
@@ -340,8 +345,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	if err := c.initialize(ctx); err != nil {
-		return errors.Trace(err)
+	if !c.initialized.Load() {
+		initialized, err := c.initializer.TryInitialize(ctx, ctx.GlobalVars().ChangefeedThreadPool)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !initialized {
+			return nil
+		}
 	}
 
 	select {
@@ -463,7 +474,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
-	if c.initialized || c.state.Status == nil {
+	if c.initialized.Load() || c.state.Status == nil {
 		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
@@ -674,7 +685,7 @@ LOOP2:
 
 	c.initMetrics()
 
-	c.initialized = true
+	c.initialized.Store(true)
 	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
@@ -717,6 +728,7 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	c.initializer.Terminate()
 	c.cleanupMetrics()
 	if c.isReleased {
 		return
@@ -726,7 +738,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	c.cancel = func() {}
 
 	if c.ddlPuller != nil {
@@ -757,7 +771,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.schema = nil
 	c.barriers = nil
-	c.initialized = false
+	c.initialized.Store(false)
 	c.isReleased = true
 
 	log.Info("changefeed closed",
