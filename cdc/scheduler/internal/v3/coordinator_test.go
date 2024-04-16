@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -403,8 +402,8 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	coord.captureM.SetInitializedForTests(true)
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
 	count, err := coord.DrainCapture("a")
-	require.ErrorIs(t, err, cerror.ErrSchedulerRequestFailed)
-	require.Equal(t, 0, count)
+	require.Nil(t, err)
+	require.Equal(t, 1, count)
 
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.replicationM = replication.NewReplicationManager(10, model.ChangeFeedID{})

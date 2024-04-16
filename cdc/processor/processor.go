@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
@@ -44,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -90,7 +92,8 @@ type processor struct {
 
 	sinkManager component[*sinkmanager.SinkManager]
 
-	initialized bool
+	initialized *atomic.Bool
+	initializer *async.Initializer
 
 	lazyInit func(ctx context.Context) error
 	newAgent func(
@@ -438,6 +441,8 @@ func NewProcessor(
 		latestInfo:      info,
 		latestStatus:    status,
 
+		initialized: atomic.NewBool(false),
+
 		ownerCaptureInfoClient: ownerCaptureInfoClient,
 		globalVars:             globalVars,
 
@@ -455,6 +460,7 @@ func NewProcessor(
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
 	p.cfg = cfg
+	p.initializer = async.NewInitializer(p.lazyInit)
 	return p
 }
 
@@ -556,8 +562,15 @@ func (p *processor) tick(ctx context.Context) error {
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
-	if err := p.lazyInit(ctx); err != nil {
-		return errors.Trace(err)
+
+	if !p.initialized.Load() {
+		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !initialized {
+			return nil
+		}
 	}
 
 	barrier, err := p.agent.Tick(ctx)
@@ -575,7 +588,7 @@ func (p *processor) tick(ctx context.Context) error {
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
-	if p.initialized {
+	if p.initialized.Load() {
 		return nil
 	}
 
@@ -650,7 +663,7 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		return err
 	}
 
-	p.initialized = true
+	p.initialized.Store(true)
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -823,7 +836,7 @@ func (p *processor) doGCSchemaStorage() {
 func (p *processor) refreshMetrics() {
 	// Before the processor is initialized, we should not refresh metrics.
 	// Otherwise, it will cause panic.
-	if !p.initialized {
+	if !p.initialized.Load() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
@@ -834,7 +847,7 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
-
+	p.initializer.Terminate()
 	// clean up metrics first to avoid some metrics are not cleaned up
 	// when error occurs during closing the processor
 	p.cleanupMetrics()

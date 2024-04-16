@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -120,7 +121,9 @@ type changefeed struct {
 	wg sync.WaitGroup
 
 	// state related fields
-	initialized bool
+	initialized *atomic.Bool
+	initializer *async.Initializer
+
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
@@ -215,11 +218,13 @@ func NewChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
+		initialized:           atomic.NewBool(false),
 
 		globalVars: globalVars,
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
+	c.initializer = async.NewInitializer(c.initialize)
 	return c
 }
 
@@ -289,7 +294,7 @@ func (c *changefeed) Tick(ctx context.Context,
 	checkpointTs, minTableBarrierTs, err := c.tick(ctx, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
-	if c.initialized {
+	if c.initialized.Load() {
 		costTime := time.Since(startTime)
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long",
@@ -391,8 +396,14 @@ func (c *changefeed) tick(ctx context.Context,
 		return 0, 0, nil
 	}
 
-	if err := c.initialize(ctx); err != nil {
-		return 0, 0, errors.Trace(err)
+	if !c.initialized.Load() {
+		initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return 0, 0, errors.Trace(err)
+		}
+		if !initialized {
+			return 0, 0, nil
+		}
 	}
 
 	select {
@@ -512,7 +523,7 @@ func (c *changefeed) tick(ctx context.Context,
 }
 
 func (c *changefeed) initialize(ctx context.Context) (err error) {
-	if c.initialized || c.latestStatus == nil {
+	if c.initialized.Load() || c.latestStatus == nil {
 		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
@@ -704,7 +715,7 @@ LOOP2:
 
 	c.initMetrics()
 
-	c.initialized = true
+	c.initialized.Store(true)
 	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
@@ -747,6 +758,7 @@ func (c *changefeed) initMetrics() {
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx context.Context) {
+	c.initializer.Terminate()
 	c.cleanupMetrics()
 	if c.isReleased {
 		return
@@ -756,7 +768,9 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	c.cancel = func() {}
 
 	if c.ddlPuller != nil {
@@ -788,7 +802,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.schema = nil
 	c.barriers = nil
 	c.resolvedTs = 0
-	c.initialized = false
+	c.initialized.Store(false)
 	c.isReleased = true
 
 	log.Info("changefeed closed",

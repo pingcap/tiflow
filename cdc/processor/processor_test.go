@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -63,7 +64,7 @@ func newProcessor4Test(
 	// Some cases want to send errors to the processor without initializing it.
 	p.sinkManager.errors = make(chan error, 16)
 	p.lazyInit = func(ctx context.Context) error {
-		if p.initialized {
+		if p.initialized.Load() {
 			return nil
 		}
 
@@ -102,9 +103,10 @@ func newProcessor4Test(
 		// otherwise the sinkManager will not receive the resolvedTs.
 		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
 
-		p.initialized = true
+		p.initialized.Store(true)
 		return nil
 	}
+	p.initializer = async.NewInitializer(p.lazyInit)
 
 	p.ddlHandler.r = &ddlHandler{
 		schemaStorage: &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64},
@@ -224,6 +226,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -313,6 +316,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -411,6 +415,7 @@ func TestProcessorError(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// init tick
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -435,6 +440,7 @@ func TestProcessorError(t *testing.T) {
 
 	p, tester, changefeed = initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -457,9 +463,9 @@ func TestProcessorExit(t *testing.T) {
 	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
-	// var err error
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(context.Background()))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -485,6 +491,7 @@ func TestProcessorClose(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -524,6 +531,7 @@ func TestProcessorClose(t *testing.T) {
 	p, tester, changefeed = initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -570,6 +578,7 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
@@ -616,6 +625,7 @@ func TestSchemaGC(t *testing.T) {
 	var err error
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -683,6 +693,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	// init tick
 	checkChangefeedNormal(changefeed)
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
@@ -731,6 +742,7 @@ func TestProcessorLiveness(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// First tick for creating position.
+	require.Nil(t, p.lazyInit(ctx))
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -765,6 +777,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
+	require.Nil(t, p.lazyInit(ctx))
 
 	// First tick for creating position.
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
