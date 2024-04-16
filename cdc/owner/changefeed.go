@@ -24,7 +24,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/errno"
+=======
+	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/cdc/async"
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -97,7 +102,9 @@ type changefeed struct {
 	wg sync.WaitGroup
 
 	// state related fields
-	initialized bool
+	initialized *atomic.Bool
+	initializer *async.Initializer
+
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
@@ -178,9 +185,16 @@ func newChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
+<<<<<<< HEAD
+=======
+		initialized:           atomic.NewBool(false),
+
+		globalVars: globalVars,
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
+	c.initializer = async.NewInitializer(c.initialize)
 	return c
 }
 
@@ -249,7 +263,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	err := c.tick(ctx, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
-	if c.initialized {
+	if c.initialized.Load() {
 		costTime := time.Since(startTime)
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long",
@@ -340,8 +354,19 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
+<<<<<<< HEAD
 	if err := c.initialize(ctx); err != nil {
 		return errors.Trace(err)
+=======
+	if !c.initialized.Load() {
+		initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return 0, 0, errors.Trace(err)
+		}
+		if !initialized {
+			return 0, 0, nil
+		}
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	}
 
 	select {
@@ -462,9 +487,15 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	return nil
 }
 
+<<<<<<< HEAD
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
 	if c.initialized || c.state.Status == nil {
 		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
+=======
+func (c *changefeed) initialize(ctx context.Context) (err error) {
+	if c.initialized.Load() || c.latestStatus == nil {
+		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
 		// And then it can continue to initialize.
@@ -674,8 +705,13 @@ LOOP2:
 
 	c.initMetrics()
 
+<<<<<<< HEAD
 	c.initialized = true
 	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
+=======
+	c.initialized.Store(true)
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
@@ -716,7 +752,12 @@ func (c *changefeed) initMetrics() {
 }
 
 // releaseResources is idempotent.
+<<<<<<< HEAD
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+=======
+func (c *changefeed) releaseResources(ctx context.Context) {
+	c.initializer.Terminate()
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	c.cleanupMetrics()
 	if c.isReleased {
 		return
@@ -726,7 +767,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	c.cancel = func() {}
 
 	if c.ddlPuller != nil {
@@ -757,7 +800,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.schema = nil
 	c.barriers = nil
+<<<<<<< HEAD
 	c.initialized = false
+=======
+	c.resolvedTs = 0
+	c.initialized.Store(false)
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	c.isReleased = true
 
 	log.Info("changefeed closed",

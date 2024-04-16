@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -48,7 +49,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const cleanMetaDuration = 10 * time.Second
+const (
+	cleanMetaDuration = 10 * time.Second
+	// changefeedAsyncInitWorkerCount is the size of the worker pool for changefeed initialization processing.
+	changefeedAsyncInitWorkerCount = 8
+)
 
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
@@ -96,6 +101,9 @@ type captureImpl struct {
 	EtcdClient etcd.CDCEtcdClient
 
 	sortEngineFactory *factory.SortEngineFactory
+
+	// ChangefeedThreadPool is the thread pool for changefeed initialization
+	ChangefeedThreadPool workerpool.AsyncPool
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -263,6 +271,20 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	messageClientConfig.AdvertisedAddr = advertiseAddr
 
 	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
+<<<<<<< HEAD
+=======
+	c.ChangefeedThreadPool = workerpool.NewDefaultAsyncPool(changefeedAsyncInitWorkerCount)
+	globalVars := &vars.GlobalVars{
+		CaptureInfo:          c.info,
+		EtcdClient:           c.EtcdClient,
+		MessageServer:        c.MessageServer,
+		MessageRouter:        c.MessageRouter,
+		SortEngineFactory:    c.sortEngineFactory,
+		ChangefeedThreadPool: c.ChangefeedThreadPool,
+	}
+	c.processorManager = c.newProcessorManager(
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
@@ -398,6 +420,14 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
 	})
 
+	poolCtx, cancelPool := context.WithCancel(stdCtx)
+	defer func() {
+		cancelPool()
+		log.Info("workerpool exited", zap.Error(err))
+	}()
+	g.Go(func() error {
+		return c.ChangefeedThreadPool.Run(poolCtx)
+	})
 	return errors.Trace(g.Wait())
 }
 

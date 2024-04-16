@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -190,10 +189,17 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 			"since not all captures initialized",
 			zap.String("target", target),
 			zap.String("namespace", c.changefeedID.Namespace),
+<<<<<<< HEAD
 			zap.String("changefeed", c.changefeedID.ID))
 		// return false to let client retry.
 		return 0, cerror.ErrSchedulerRequestFailed.
 			GenWithStack("not all captures initialized")
+=======
+			zap.String("changefeed", c.changefeedID.ID),
+			zap.String("target", target))
+		// return count 1 to let client retry.
+		return 1, nil
+>>>>>>> 72646f6825 (*(ticdc): Initialize changefeed/processor asynchronously (#10832))
 	}
 
 	var count int
