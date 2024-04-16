@@ -29,6 +29,8 @@ import (
 const (
 	// JobTableID is the id of `tidb_ddl_job`.
 	JobTableID = ddl.JobTableID
+	// JobHistoryID is the id of `tidb_ddl_history`
+	JobHistoryID = ddl.HistoryTableID
 )
 
 // UpperBoundKey represents the maximum value.
@@ -86,6 +88,11 @@ func GetAllDDLSpan() []tablepb.Span {
 		EndKey:   ToComparableKey(end),
 	})
 	start, end = GetTableRange(JobTableID)
+	spans = append(spans, tablepb.Span{
+		StartKey: ToComparableKey(start),
+		EndKey:   ToComparableKey(end),
+	})
+	start, end = GetTableRange(JobHistoryID)
 	spans = append(spans, tablepb.Span{
 		StartKey: ToComparableKey(start),
 		EndKey:   ToComparableKey(end),

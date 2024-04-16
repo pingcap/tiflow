@@ -299,7 +299,7 @@ func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
 }
 
 // ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
-func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
+func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64, fromHistoryTable bool) (*timodel.Job, error) {
 	var v []byte
 	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
 		// old queue base job.
@@ -318,19 +318,34 @@ func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*
 		v = datum.GetBytes()
 	}
 
-	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
+	return parseJob(v, rawKV.StartTs, rawKV.CRTs, fromHistoryTable)
 }
 
 // parseJob unmarshal the job from "v".
-func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
+// we use fromHistoryTable to distinguish the job is from tidb_dd_job or tidb_ddl_history
+// then, to do different distinguish.
+func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.Job, error) {
 	var job timodel.Job
 	err := json.Unmarshal(v, &job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !job.IsDone() {
-		return nil, nil
+
+	if fromHistoryTable {
+		// we only want to get `create table` ddl from tidb_ddl_history, so we just throw out others ddls.
+		// Besides, from tidb_ddl_history, we don't need to filter out whether the job is done.
+		// Because only `create table` done, then the ddl will insert into tidb_ddl_history
+		// We also need to set the job to be Done to make it will replay in schemaStorage
+		if job.Type != timodel.ActionCreateTable {
+			return nil, nil
+		}
+		job.State = timodel.JobStateDone
+	} else {
+		if !job.IsDone() {
+			return nil, nil
+		}
 	}
+
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
 	job.StartTS = startTs
