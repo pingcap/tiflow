@@ -1091,7 +1091,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.AlterTable, err
 	}
 	// handle column options
-	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
 		ddl.logger.Warn("process column options failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
@@ -1102,10 +1102,10 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	switch {
 	case mysql.HasAutoIncrementFlag(oldCol.GetFlag()) && !mysql.HasAutoIncrementFlag(newCol.GetFlag()):
 		return bf.RemoveAutoIncrement, nil
-	case mysql.HasPriKeyFlag(oldCol.GetFlag()) != mysql.HasPriKeyFlag(newCol.GetFlag()):
-		return bf.ModifyPK, nil
-	case mysql.HasUniKeyFlag(oldCol.GetFlag()) != mysql.HasUniKeyFlag(newCol.GetFlag()):
-		return bf.ModifyUK, nil
+	case mysql.HasPriKeyFlag(oldCol.GetFlag()) && !mysql.HasPriKeyFlag(newCol.GetFlag()):
+		return bf.DropPrimaryKey, nil
+	case mysql.HasUniKeyFlag(oldCol.GetFlag()) && !mysql.HasUniKeyFlag(newCol.GetFlag()):
+		return bf.DropUniqueKey, nil
 	case oldCol.GetDefaultValue() != newCol.GetDefaultValue():
 		return bf.ModifyDefaultValue, nil
 	case oldCol.GetCharset() != newCol.GetCharset():
@@ -1115,7 +1115,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	case spec.Position != nil && spec.Position.Tp != ast.ColumnPositionNone:
 		return bf.ModifyColumnsOrder, nil
 	case oldCol.Name.L != newCol.Name.L:
-		return bf.Rename, nil
+		return bf.RenameColumn, nil
 	default:
 		return bf.AlterTable, nil
 	}
@@ -1142,14 +1142,22 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					ddl.logger.Warn("handle modify column failed", zap.Error(err))
 				}
 				return et
-			case ast.AlterTableRenameColumn, ast.AlterTableRenameIndex, ast.AlterTableRenameTable:
-				return bf.Rename
-			case ast.AlterTableDropColumn, ast.AlterTableDropIndex, ast.AlterTableDropPartition:
-				return bf.Drop
+			case ast.AlterTableRenameColumn:
+				return bf.RenameColumn
+			case ast.AlterTableRenameIndex:
+				return bf.RenameIndex
+			case ast.AlterTableRenameTable:
+				return bf.RenameTable
+			case ast.AlterTableDropColumn:
+				return bf.DropColumn
+			case ast.AlterTableDropIndex:
+				return bf.DropIndex
+			case ast.AlterTableDropPartition:
+				return bf.DropTablePartition
 			case ast.AlterTableDropPrimaryKey:
-				return bf.ModifyPK
+				return bf.DropPrimaryKey
 			case ast.AlterTableTruncatePartition:
-				return bf.Truncate
+				return bf.TruncateTablePartition
 			case ast.AlterTableAlterColumn:
 				return bf.ModifyDefaultValue
 			case ast.AlterTableAddConstraint:
@@ -1166,7 +1174,7 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					}
 				}
 			case ast.AlterTableReorganizePartition:
-				return bf.ReorganizePartion
+				return bf.ReorganizePartition
 			case ast.AlterTableRebuildPartition:
 				return bf.RebuildPartition
 			case ast.AlterTableCoalescePartitions:

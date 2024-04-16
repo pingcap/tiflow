@@ -563,7 +563,8 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// encoded as bytes if binary flag set to true, else string
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:
 			buf = appendLengthValue(buf, []byte(a))
