@@ -30,16 +30,31 @@ import (
 func createPebbleDBs(
 	dir string, cfg *config.DBConfig,
 	memQuotaInBytes uint64,
-) ([]*pebble.DB, []writeStall, error) {
-	dbs := make([]*pebble.DB, 0, cfg.Count)
-	writeStalls := make([]writeStall, cfg.Count)
+) (dbs []*pebble.DB, cache *pebble.Cache, writeStalls []writeStall, err error) {
+	dbs = make([]*pebble.DB, 0, cfg.Count)
+	writeStalls = make([]writeStall, cfg.Count)
+	defer func() {
+		if err != nil {
+			for _, db := range dbs {
+				db.Close()
+			}
+			dbs = nil
+			if cache != nil {
+				cache.Unref()
+				cache = nil
+			}
+			writeStalls = nil
+		}
+	}()
 
-	cache := pebble.NewCache(int64(memQuotaInBytes))
+	cache = pebble.NewCache(int64(memQuotaInBytes))
 	defer cache.Unref()
 	for id := 0; id < cfg.Count; id++ {
 		ws := writeStalls[id]
 		adjust := func(opts *pebble.Options) {
-			opts.EventListener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
+			listener := new(pebble.EventListener)
+			*listener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
+			opts.EventListener = listener
 
 			opts.EventListener.WriteStallBegin = func(_ pebble.WriteStallBeginInfo) {
 				atomic.AddUint64(&ws.counter, 1)
@@ -59,20 +74,18 @@ func createPebbleDBs(
 			}
 		}
 
-		db, err := epebble.OpenPebble(id, dir, cfg, cache, adjust)
+		var db *pebble.DB
+		db, err = epebble.OpenPebble(id, dir, cfg, cache, adjust)
 		if err != nil {
 			log.Error("create pebble fails", zap.String("dir", dir), zap.Int("id", id), zap.Error(err))
-			for _, db := range dbs {
-				db.Close()
-			}
-			return nil, nil, err
+			return
 		}
 		log.Info("create pebble instance success",
 			zap.Int("id", id+1),
 			zap.Uint64("sharedCacheSize", memQuotaInBytes))
 		dbs = append(dbs, db)
 	}
-	return dbs, writeStalls, nil
+	return
 }
 
 type pebbleLogger struct{ id int }

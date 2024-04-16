@@ -73,7 +73,7 @@ func iterTable(
 	start := encoding.EncodeTsKey(uniqueID, uint64(tableID), lowerBound.CommitTs, lowerBound.StartTs)
 	end := encoding.EncodeTsKey(uniqueID, uint64(tableID), upperBoundNext.CommitTs, upperBoundNext.StartTs)
 
-	iter := db.NewIter(&pebble.IterOptions{
+	iter, err := db.NewIter(&pebble.IterOptions{
 		LowerBound: start,
 		UpperBound: end,
 		TableFilter: func(userProps map[string]string) bool {
@@ -82,6 +82,10 @@ func iterTable(
 			return uint64(tableMaxCRTs) >= lowerBound.CommitTs && uint64(tableMinCRTs) <= upperBound.CommitTs
 		},
 	})
+	if err != nil {
+		log.Panic("failed to create iterator", zap.Error(err))
+		return nil
+	}
 	iter.First()
 	return iter
 }
@@ -113,11 +117,11 @@ func buildPebbleOption(cfg *config.DBConfig) (opts *pebble.Options) {
 	opts.ErrorIfExists = true
 	opts.DisableWAL = false // Delete range requires WAL.
 	opts.MaxOpenFiles = cfg.MaxOpenFiles / cfg.Count
-	opts.MaxConcurrentCompactions = 6
+	opts.MaxConcurrentCompactions = func() int { return 6 }
 	opts.L0CompactionThreshold = cfg.CompactionL0Trigger
 	opts.L0StopWritesThreshold = cfg.WriteL0PauseTrigger
 	opts.LBaseMaxBytes = 64 << 20 // 64 MB
-	opts.MemTableSize = cfg.WriterBufferSize
+	opts.MemTableSize = uint64(cfg.WriterBufferSize)
 	opts.MemTableStopWritesThreshold = 4
 	opts.Levels = make([]pebble.LevelOptions, 7)
 	opts.TablePropertyCollectors = append(opts.TablePropertyCollectors,
