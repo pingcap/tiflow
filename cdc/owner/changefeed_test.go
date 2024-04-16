@@ -598,7 +598,7 @@ func testChangefeedReleaseResource(
 	// initialize
 	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
-	require.Equal(t, cf.initialized, expectedInitialized)
+	require.Equal(t, cf.initialized.Load(), expectedInitialized)
 
 	// redo's metaManager:Run() will call preStart, which will clean up the redo log dir.
 	// Run() is another background goroutine called in tick()
