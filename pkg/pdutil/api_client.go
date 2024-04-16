@@ -314,7 +314,7 @@ func (pc *pdAPIClient) ListGcServiceSafePoint(
 }
 
 func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
-	url := pc.grpcClient.GetLeaderAddr() + regionLabelPrefix
+	url := pc.grpcClient.GetLeaderURL() + regionLabelPrefix
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
 
@@ -326,7 +326,7 @@ func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
 func (pc *pdAPIClient) listGcServiceSafePoint(
 	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
-	url := pc.grpcClient.GetLeaderAddr() + gcServiceSafePointURL
+	url := pc.grpcClient.GetLeaderURL() + gcServiceSafePointURL
 
 	respData, err := pc.httpClient.DoRequest(ctx, url, http.MethodGet,
 		nil, nil)

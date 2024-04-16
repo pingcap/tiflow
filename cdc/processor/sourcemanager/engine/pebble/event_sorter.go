@@ -330,7 +330,12 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			return
 		}
 		valid = s.iter.Next()
+<<<<<<< HEAD:cdc/processor/sourcemanager/engine/pebble/event_sorter.go
 		if s.headItem != nil {
+=======
+
+		if s.currentEvent != nil {
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899)):cdc/processor/sourcemanager/sorter/pebble/event_sorter.go
 			break
 		}
 		s.headItem, event = event, nil

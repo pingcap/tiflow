@@ -332,7 +332,11 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 
 	row := chunk.MutRowFromDatums(rowData).ToRow()
 
+<<<<<<< HEAD
 	d, err := expr.Eval(row)
+=======
+	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)

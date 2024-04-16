@@ -22,7 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +36,7 @@ func genValidateTableInfo(t *testing.T, creatSQL string) *model.TableInfo {
 	)
 	parser2 = parser.New()
 	require.NoError(t, err)
-	tableInfo, err = dbutil.GetTableInfoBySQL(creatSQL, parser2)
+	tableInfo, err = dbutiltest.GetTableInfoBySQL(creatSQL, parser2)
 	require.NoError(t, err)
 	return tableInfo
 }
