@@ -14,6 +14,7 @@
 package vars
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -21,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -40,6 +42,9 @@ type GlobalVars struct {
 	// MessageServer and MessageRouter are for peer-messaging
 	MessageServer *p2p.MessageServer
 	MessageRouter p2p.MessageRouter
+
+	// ChangefeedThreadPool is the thread pool for changefeed initialization
+	ChangefeedThreadPool workerpool.AsyncPool
 }
 
 // NewGlobalVars4Test returns a GlobalVars for test,
@@ -54,6 +59,7 @@ func NewGlobalVars4Test() *GlobalVars {
 		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
+		ChangefeedThreadPool: &NonAsyncPool{},
 	}
 }
 
@@ -65,4 +71,19 @@ func NewGlobalVarsAndChangefeedInfo4Test() (*GlobalVars, *model.ChangeFeedInfo) 
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
 		}
+}
+
+// NonAsyncPool is a dummy implementation of workerpool.AsyncPool, which runs tasks synchronously.
+// It is used in tests to avoid the overhead of asynchronous task scheduling.
+type NonAsyncPool struct{}
+
+// Go runs the task synchronously.
+func (f *NonAsyncPool) Go(_ context.Context, fn func()) error {
+	fn()
+	return nil
+}
+
+// Run does nothing.
+func (f *NonAsyncPool) Run(_ context.Context) error {
+	return nil
 }
