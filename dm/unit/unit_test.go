@@ -21,8 +21,13 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+=======
+	"github.com/pingcap/tidb/pkg/lightning/common"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"

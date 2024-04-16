@@ -319,14 +319,20 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	var value []byte
 	for valid {
 		nextStart := time.Now()
-		value, valid = s.iter.Value(), s.iter.Next()
+		value = s.iter.Value()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return
 		}
+<<<<<<< HEAD:cdc/processor/sourcemanager/engine/pebble/event_sorter.go
 		if s.headItem != nil {
+=======
+		valid = s.iter.Next()
+
+		if s.currentEvent != nil {
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899)):cdc/processor/sourcemanager/sorter/pebble/event_sorter.go
 			break
 		}
 		s.headItem, event = event, nil

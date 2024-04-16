@@ -23,12 +23,22 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/schemacmp"
+=======
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/util/schemacmp"
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -890,7 +900,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 				c.reMu.Unlock()
 			}
 
-			ti, err := dbutil.GetTableInfoBySQL(statement, p)
+			ti, err := dbutiltest.GetTableInfoBySQL(statement, p)
 			if err != nil {
 				return err
 			}

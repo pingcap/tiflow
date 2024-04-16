@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	"github.com/docker/go-units"
-	"github.com/pingcap/tidb/br/pkg/lightning/importer"
-	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
+	"github.com/pingcap/tidb/lightning/pkg/importer"
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
