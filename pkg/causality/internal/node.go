@@ -108,7 +108,7 @@ func (n *Node) NodeID() int64 {
 	return n.id
 }
 
-// Hashs implements interface internal.SlotNode.
+// Hashes implements interface internal.SlotNode.
 func (n *Node) Hashes() []uint64 {
 	return n.sortedDedupKeysHash
 }
