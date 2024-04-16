@@ -187,7 +187,11 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 	}
 	r := chunk.MutRowFromDatums(data).ToRow()
 
+<<<<<<< HEAD
 	d, err := expr.Eval(r)
+=======
+	d, err := expr.Eval(ctx.GetExprCtx().GetEvalCtx(), r)
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	if err != nil {
 		return false, err
 	}

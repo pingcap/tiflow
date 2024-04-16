@@ -172,8 +172,13 @@ func (pc *PDAPIClient) ListGcServiceSafePoint(
 	return resp, err
 }
 
+<<<<<<< HEAD
 func (pc *PDAPIClient) patchMetaLabel(ctx context.Context) error {
 	url := pc.grpcClient.GetLeaderAddr() + regionLabelPrefix
+=======
+func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
+	url := pc.grpcClient.GetLeaderURL() + regionLabelPrefix
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
 
@@ -185,7 +190,7 @@ func (pc *PDAPIClient) patchMetaLabel(ctx context.Context) error {
 func (pc *PDAPIClient) listGcServiceSafePoint(
 	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
-	url := pc.grpcClient.GetLeaderAddr() + gcServiceSafePointURL
+	url := pc.grpcClient.GetLeaderURL() + gcServiceSafePointURL
 
 	respData, err := pc.httpClient.DoRequest(ctx, url, http.MethodGet,
 		nil, nil)

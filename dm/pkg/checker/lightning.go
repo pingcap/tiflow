@@ -16,7 +16,14 @@ package checker
 import (
 	"context"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+=======
+	"github.com/docker/go-units"
+	"github.com/pingcap/tidb/lightning/pkg/importer"
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 )
 
 func convertLightningPrecheck(

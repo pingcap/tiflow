@@ -17,7 +17,11 @@ import (
 	"context"
 	"testing"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+=======
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )

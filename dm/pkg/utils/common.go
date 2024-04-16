@@ -315,6 +315,13 @@ func (se *session) GetSessionVars() *variable.SessionVars {
 	return se.vars
 }
 
+<<<<<<< HEAD
+=======
+func (se *session) GetExprCtx() exprctx.ExprContext {
+	return se.exprctx
+}
+
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 // SetValue implements the sessionctx.Context interface.
 func (se *session) SetValue(key fmt.Stringer, value interface{}) {
 	se.mu.Lock()
@@ -331,7 +338,11 @@ func (se *session) Value(key fmt.Stringer) interface{} {
 }
 
 // GetInfoSchema implements the sessionctx.Context interface.
+<<<<<<< HEAD
 func (se *session) GetInfoSchema() sessionctx.InfoschemaMetaVersion {
+=======
+func (se *session) GetInfoSchema() infoschema.MetaOnlyInfoSchema {
+>>>>>>> c8ed99f639 (*: update dependencies tidb and pebbledb  (#10899))
 	return nil
 }
 
