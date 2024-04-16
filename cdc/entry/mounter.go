@@ -314,11 +314,8 @@ func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
 // ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
 func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.Job, error) {
 	var v []byte
-	if bytes.HasPrefix(rawKV.Key, metaPrefix) { // need to remove
-		// old queue base job.
-		v = rawKV.Value
-		return parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
-	}
+	var datum types.Datum
+
 	// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
 	recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
 	if err != nil {
@@ -326,7 +323,6 @@ func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.
 	}
 
 	// first parse it with tidb_ddl_job, if failed, parse it with tidb_ddl_history
-	var datum types.Datum
 	row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLJobTable, time.UTC)
 	if err != nil {
 		return nil, errors.Trace(err)
