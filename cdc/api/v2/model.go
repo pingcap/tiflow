@@ -436,6 +436,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
+		var debeziumConfig *config.DebeziumConfig
+		if c.Sink.DebeziumConfig != nil {
+			debeziumConfig = &config.DebeziumConfig{
+				OutputOldValue: c.Sink.DebeziumConfig.OutputOldValue,
+			}
+		}
+		var openProtocolConfig *config.OpenProtocolConfig
+		if c.Sink.OpenProtocolConfig != nil {
+			openProtocolConfig = &config.OpenProtocolConfig{
+				OutputOldValue: c.Sink.OpenProtocolConfig.OutputOldValue,
+			}
+		}
 
 		res.Sink = &config.SinkConfig{
 			DispatchRules:                    dispatchRules,
@@ -457,6 +469,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         c.Sink.SafeMode,
+			OpenProtocol:                     openProtocolConfig,
+			Debezium:                         debeziumConfig,
 		}
 
 		if c.Sink.TxnAtomicity != nil {
@@ -717,7 +731,18 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
-
+		var debeziumConfig *DebeziumConfig
+		if cloned.Sink.Debezium != nil {
+			debeziumConfig = &DebeziumConfig{
+				OutputOldValue: cloned.Sink.Debezium.OutputOldValue,
+			}
+		}
+		var openProtocolConfig *OpenProtocolConfig
+		if cloned.Sink.OpenProtocol != nil {
+			openProtocolConfig = &OpenProtocolConfig{
+				OutputOldValue: cloned.Sink.Debezium.OutputOldValue,
+			}
+		}
 		res.Sink = &SinkConfig{
 			Protocol:                         cloned.Sink.Protocol,
 			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
@@ -738,6 +763,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
+			DebeziumConfig:                   debeziumConfig,
+			OpenProtocolConfig:               openProtocolConfig,
 		}
 
 		if cloned.Sink.TxnAtomicity != nil {
@@ -925,6 +952,8 @@ type SinkConfig struct {
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
 	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
+	DebeziumConfig                   *DebeziumConfig     `json:"debezium,omitempty"`
+	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -1266,4 +1295,14 @@ type GlueSchemaRegistryConfig struct {
 	// SecretAccessKey of the schema registry
 	SecretAccessKey string `json:"secret_access_key,omitempty"`
 	Token           string `json:"token,omitempty"`
+}
+
+// OpenProtocolConfig represents the configurations for open protocol encoding
+type OpenProtocolConfig struct {
+	OutputOldValue bool `json:"output_old_value"`
+}
+
+// DebeziumConfig represents the configurations for debezium protocol encoding
+type DebeziumConfig struct {
+	OutputOldValue bool `json:"output_old_value"`
 }

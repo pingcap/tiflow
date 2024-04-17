@@ -197,7 +197,8 @@ type SinkConfig struct {
 
 	// OpenProtocol related configurations
 	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
-	// Debezium related configurations
+
+	// DebeziumConfig related configurations
 	Debezium *DebeziumConfig `toml:"debezium" json:"debezium,omitempty"`
 }
 
@@ -930,10 +931,12 @@ func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
 }
 
+// OpenProtocolConfig represents the configurations for open protocol encoding
 type OpenProtocolConfig struct {
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }
 
+// DebeziumConfig represents the configurations for debezium protocol encoding
 type DebeziumConfig struct {
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }

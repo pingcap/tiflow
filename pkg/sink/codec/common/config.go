@@ -85,6 +85,11 @@ type Config struct {
 
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema bool
+	// Debezium only. Whether before value should be included in the output.
+	DebeziumOutputOldValue bool
+
+	// Open	protocol only. Whether old value should be excluded in the output.
+	OpenOutputOldValue bool
 }
 
 // EncodingFormatType is the type of encoding format
@@ -120,6 +125,11 @@ func NewConfig(protocol config.Protocol) *Config {
 		EncodingFormat: EncodingFormatJSON,
 
 		TimeZone: time.Local,
+
+		// default value is true
+		DebeziumOutputOldValue: true,
+		OpenOutputOldValue:     true,
+		DebeziumDisableSchema:  false,
 	}
 }
 
@@ -232,6 +242,12 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
 				c.LargeMessageHandle.LargeMessageHandleOption)
+		}
+		if replicaConfig.Sink.OpenProtocol != nil {
+			c.OpenOutputOldValue = replicaConfig.Sink.OpenProtocol.OutputOldValue
+		}
+		if replicaConfig.Sink.Debezium != nil {
+			c.DebeziumOutputOldValue = replicaConfig.Sink.Debezium.OutputOldValue
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

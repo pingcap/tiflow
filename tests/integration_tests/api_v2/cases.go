@@ -78,6 +78,8 @@ var customReplicaConfig = &ReplicaConfig{
 		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition: util.AddressOf(true),
 		DebeziumDisableSchema:       util.AddressOf(true),
+		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
+		DebeziumConfig:              &DebeziumConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -129,6 +131,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition: util.AddressOf(true),
 		DebeziumDisableSchema:       util.AddressOf(false),
+		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
+		DebeziumConfig:              &DebeziumConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
