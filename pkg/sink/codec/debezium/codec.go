@@ -35,10 +35,9 @@ import (
 )
 
 type dbzCodec struct {
-	config         *common.Config
-	outputOldValue bool
-	clusterID      string
-	nowFunc        func() time.Time
+	config    *common.Config
+	clusterID string
+	nowFunc   func() time.Time
 }
 
 func (c *dbzCodec) writeDebeziumFieldValues(
@@ -585,7 +584,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 			} else if e.IsUpdate() {
 				jWriter.WriteStringField("op", "u")
-				if c.outputOldValue {
+				if c.config.OutputOldValue {
 					err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 				}
 				if err == nil {
