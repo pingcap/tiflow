@@ -77,7 +77,9 @@ func TestBatchCodec(
 	sql := "create table test.t(a varchar(255), b text, c date, d timestamp, " +
 		"e datetime, f float, g bigint, h int, primary key(a))"
 	_ = helper.DDL2Event(sql)
-	insertEvent := helper.DML2Event(`insert into test.t values ("varchar1", "string1", "2021-01-02", "2021-01-02 00:00:00", "2021-01-02 00:00:00", 2.0, 2000, null)`, "test", "t")
+
+	sql = `insert into test.t values ("varchar1", "string1", "2021-01-02", "2021-01-02 00:00:00", "2021-01-02 00:00:00", 2.0, 2000, null)`
+	insertEvent := helper.DML2Event(sql, "test", "t")
 	insertEvent.PreColumns = insertEvent.Columns
 
 	dmlCases := [][]*model.RowChangedEvent{

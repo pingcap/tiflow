@@ -125,9 +125,9 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return event, nil
 }
 
-func newBatchDecoder(bits []byte) (codec.RowEventDecoder, error) {
+func newBatchDecoder(_, value []byte) (codec.RowEventDecoder, error) {
 	decoder := NewBatchDecoderWithAllocator(NewSliceAllocator(64))
-	err := decoder.AddKeyValue(nil, bits)
+	err := decoder.AddKeyValue(nil, value)
 	return decoder, err
 }
 

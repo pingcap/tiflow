@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/require"
@@ -82,7 +81,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := newBatchDecoder(msg.Value)
+		decoder, err := newBatchDecoder(nil, msg.Value)
 		require.Nil(t, err)
 		count := 0
 		for {
@@ -113,108 +112,11 @@ func TestBuildCraftBatchEncoder(t *testing.T) {
 	require.NotNil(t, encoder.config)
 }
 
-func testBatchCodec(
-	t *testing.T,
-	encoderBuilder codec.RowEventEncoderBuilder,
-	newDecoder func(value []byte) (codec.RowEventDecoder, error),
-) {
-	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*internal.RowTestData) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
-			if !hasNext {
-				break
-			}
-			require.Equal(t, model.MessageTypeRow, tp)
-			row, err := decoder.NextRowChangedEvent()
-			require.NoError(t, err)
-			srcRow := internal.CreateRowChangedEventFromTestData(cs[index])
-			require.Equal(t, srcRow, row)
-			index++
-		}
-	}
-	checkDDLDecoder := func(decoder codec.RowEventDecoder, cs []*model.DDLEvent) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
-			if !hasNext {
-				break
-			}
-			require.Equal(t, model.MessageTypeDDL, tp)
-			ddl, err := decoder.NextDDLEvent()
-			require.Nil(t, err)
-			require.Equal(t, cs[index], ddl)
-			index++
-		}
-	}
-	checkTSDecoder := func(decoder codec.RowEventDecoder, cs []uint64) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
-			if !hasNext {
-				break
-			}
-			require.Equal(t, model.MessageTypeResolved, tp)
-			ts, err := decoder.NextResolvedEvent()
-			require.Nil(t, err)
-			require.Equal(t, cs[index], ts)
-			index++
-		}
-	}
-
-	encoder := encoderBuilder.Build()
-	s := internal.NewDefaultBatchTester()
-
-	for _, cs := range s.RowCases {
-		events := 0
-		for _, data := range cs {
-			row := internal.CreateRowChangedEventFromTestData(data)
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
-			events++
-			require.Nil(t, err)
-		}
-		// test normal decode
-		if len(cs) > 0 {
-			res := encoder.Build()
-			require.Len(t, res, 1)
-			decoder, err := newDecoder(res[0].Value)
-			require.Nil(t, err)
-			checkRowDecoder(decoder, cs)
-		}
-	}
-
-	encoder = encoderBuilder.Build()
-	for _, cs := range s.DDLCases {
-		for i, ddl := range cs {
-			msg, err := encoder.EncodeDDLEvent(ddl)
-			require.Nil(t, err)
-			require.NotNil(t, msg)
-			decoder, err := newDecoder(msg.Value)
-			require.Nil(t, err)
-			checkDDLDecoder(decoder, cs[i:i+1])
-		}
-	}
-
-	encoder = encoderBuilder.Build()
-	for _, cs := range s.ResolvedTsCases {
-		for i, ts := range cs {
-			msg, err := encoder.EncodeCheckpointEvent(ts)
-			require.Nil(t, err)
-			require.NotNil(t, msg)
-			decoder, err := newDecoder(msg.Value)
-			require.Nil(t, err)
-			checkTSDecoder(decoder, cs[i:i+1])
-		}
-	}
-}
-
 func TestDefaultCraftBatchCodec(t *testing.T) {
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
 	cfg.MaxBatchSize = 64
-	testBatchCodec(t, NewBatchEncoderBuilder(cfg), newBatchDecoder)
+	builder := NewBatchEncoderBuilder(cfg)
+	internal.TestBatchCodec(t, builder, newBatchDecoder)
 }
 
 func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
