@@ -102,7 +102,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	for _, cs := range rowCases {
@@ -162,7 +162,7 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	row := &model.RowChangedEvent{

@@ -63,7 +63,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
-	job := helper.DDL2Job(initialCreateTableDDL, timodel.JobStateSynced)
+	job := helper.DDL2Job(initialCreateTableDDL, timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 

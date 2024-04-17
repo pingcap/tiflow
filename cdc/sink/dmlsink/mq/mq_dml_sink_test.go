@@ -85,7 +85,7 @@ func TestWriteEvents(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	tableStatus := state.TableSinkSinking

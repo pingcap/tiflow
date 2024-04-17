@@ -1009,7 +1009,7 @@ func TestGetPrimaryKey(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b int)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
 
 	names := tableInfo.GetPrimaryKeyColumnNames()
@@ -1017,7 +1017,7 @@ func TestGetPrimaryKey(t *testing.T) {
 	require.Containsf(t, names, "a", "names: %v", names)
 
 	sql = `create table test.t2(a int, b int, c int, primary key(a, b))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
 
 	names = tableInfo.GetPrimaryKeyColumnNames()

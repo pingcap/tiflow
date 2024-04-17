@@ -40,7 +40,7 @@ func TestInsert(t *testing.T) {
 		tiny tinyint,
 		comment text,
 		bb blob)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{
@@ -121,7 +121,7 @@ func TestUpdate(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key, name varchar(32))`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{
@@ -203,7 +203,7 @@ func TestDelete(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{

@@ -45,14 +45,14 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableIDs, 0)
 	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateDone)
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
 	require.Equal(t, tableIDs, []model.TableID{tableIDT1})
 	// add ineligible table
-	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateDone)
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
@@ -71,7 +71,7 @@ func TestAllPhysicalTables(t *testing.T) {
 			PARTITION p1 VALUES LESS THAN (10),
 			PARTITION p2 VALUES LESS THAN (15),
 			PARTITION p3 VALUES LESS THAN (20)
-		)`, timodel.JobStateSynced)
+		)`, timodel.JobStateDone)
 	require.Nil(t, schema.HandleDDLJob(job))
 	expectedTableIDs := []model.TableID{tableIDT1}
 	for _, p := range job.BinlogInfo.TableInfo.GetPartitionInfo().Definitions {
@@ -103,7 +103,7 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 0)
 	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateDone)
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
@@ -115,7 +115,7 @@ func TestAllTables(t *testing.T) {
 		TableID: 104,
 	}, tableName)
 	// add ineligible table
-	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateDone)
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
@@ -139,11 +139,11 @@ func TestIsIneligibleTableID(t *testing.T) {
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateDone)
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	require.Nil(t, schema.HandleDDLJob(job))
 	// add ineligible table
-	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.t2(id int)", timodel.JobStateDone)
 	tableIDT2 := job.BinlogInfo.TableInfo.ID
 
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -157,7 +157,7 @@ func TestIsIneligibleTableID(t *testing.T) {
 	require.True(t, ignore)
 
 	// test we get the right snapshot to check ineligible table
-	job = helper.DDL2Job("create table test.t3(id int)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.t3(id int)", timodel.JobStateDone)
 	tableIDT3 := job.BinlogInfo.TableInfo.ID
 	snapshotTsWithoutPK := job.BinlogInfo.FinishedTS
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -198,7 +198,7 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	require.Nil(t, err)
 	// add normal table
 	ctx := context.Background()
-	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -281,7 +281,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	require.Nil(t, schema.HandleDDLJob(job))
 	schemaID := job.SchemaID
 	// add test.t1
-	job = helper.DDL2Job("create table test1.t1(id int primary key)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test1.t1(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -290,7 +290,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	t1TableID := job.TableID
 
 	// add test.t2
-	job = helper.DDL2Job("create table test1.t2(id int primary key)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test1.t2(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -402,7 +402,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	require.Nil(t, err)
 	// add test.t1
 	ctx := context.Background()
-	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.t1(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -410,7 +410,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.t2
-	job = helper.DDL2Job("create table test.t2(id int primary key)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.t2(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -505,7 +505,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	require.Nil(t, err)
 	ctx := context.Background()
 	// add test.tb1
-	job := helper.DDL2Job("create table test.tb1(id int primary key)", timodel.JobStateSynced)
+	job := helper.DDL2Job("create table test.tb1(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -513,7 +513,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.tb2
-	job = helper.DDL2Job("create table test.tb2(id int primary key)", timodel.JobStateSynced)
+	job = helper.DDL2Job("create table test.tb2(id int primary key)", timodel.JobStateDone)
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)

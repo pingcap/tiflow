@@ -201,11 +201,11 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	execCreateStmt("database", "create database test1",
 		"create database test1", timodel.JobStateDone)
 	execCreateStmt("table", "create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)", timodel.JobStateSynced)
+		"create table test1.tb1(id int primary key)", timodel.JobStateDone)
 	execCreateStmt("database", "create database test2",
 		"create database test2", timodel.JobStateDone)
 	execCreateStmt("table", "create table test2.tb2(id int primary key)",
-		"create table test2.tb2(id int primary key)", timodel.JobStateSynced)
+		"create table test2.tb2(id int primary key)", timodel.JobStateDone)
 
 	require.Len(t, oldSchemaIDs, 2)
 	require.Len(t, oldTableIDs, 2)
@@ -292,9 +292,9 @@ func TestExecDropTablesDDL(t *testing.T) {
 	execCreateStmt("create database test1",
 		"create database test1", timodel.JobStateDone)
 	execCreateStmt("create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)", timodel.JobStateSynced)
+		"create table test1.tb1(id int primary key)", timodel.JobStateDone)
 	execCreateStmt("create table test1.tb2(id int primary key)",
-		"create table test1.tb2(id int primary key)", timodel.JobStateSynced)
+		"create table test1.tb2(id int primary key)", timodel.JobStateDone)
 
 	// drop tables is different from rename tables, it will generate
 	// multiple DDL jobs instead of one.

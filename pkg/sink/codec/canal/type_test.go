@@ -34,7 +34,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
     	c smallint,
     	d mediumint,
     	e bigint)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
@@ -103,7 +103,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
     	c smallint unsigned,
     	d mediumint unsigned,
     	e bigint unsigned)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
@@ -215,7 +215,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
     	c smallint(5),
     	d mediumint(8),
     	e bigint(19))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
@@ -259,7 +259,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
     	c smallint(5) unsigned,
     	d mediumint(8) unsigned,
     	e bigint(19) unsigned)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
@@ -303,7 +303,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
     	c smallint unsigned zerofill,
     	d mediumint zerofill,
     	e bigint zerofill)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
@@ -346,7 +346,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 		b bit,
 		c bit(3),
 		d bool)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -384,7 +384,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 		a int primary key,
 		b float,
 		c double)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID := tableInfo.Columns[1].ID
@@ -412,7 +412,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeDOUBLE, javaType)
 
 	sql = `create table test.t2(a int primary key, b float(10, 3), c float(10))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID = tableInfo.Columns[1].ID
@@ -432,7 +432,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.Equal(t, "float", mysqlType)
 
 	sql = `create table test.t3(a int primary key, b double(20, 3))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID = tableInfo.Columns[1].ID
@@ -449,7 +449,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
     	c double unsigned,
     	d float zerofill,
     	e double zerofill)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID = tableInfo.Columns[1].ID
@@ -498,7 +498,7 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b decimal, c numeric)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -516,7 +516,7 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	require.Equal(t, "decimal(10,0)", mysqlType)
 
 	sql = `create table test.t2(a int primary key, b decimal(5), c decimal(5, 2))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -539,7 +539,7 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeDECIMAL, javaType)
 
 	sql = `create table test.t3(a int primary key, b decimal unsigned, c decimal zerofill)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -567,7 +567,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b time, c time(3))`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -590,7 +590,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	require.Equal(t, javaType, internal.JavaSQLTypeTIME)
 
 	sql = `create table test.t2(a int primary key, b datetime, c datetime(3))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -613,7 +613,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	require.Equal(t, javaType, internal.JavaSQLTypeTIMESTAMP)
 
 	sql = `create table test.t3(a int primary key, b timestamp, c timestamp(3))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -636,7 +636,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	require.Equal(t, javaType, internal.JavaSQLTypeTIMESTAMP)
 
 	sql = `create table test.t4(a int primary key, b date)`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID = tableInfo.Columns[1].ID
@@ -652,7 +652,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	require.Equal(t, javaType, internal.JavaSQLTypeDATE)
 
 	sql = `create table test.t5(a int primary key, b year, c year(4))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -680,7 +680,7 @@ func TestGetMySQLType4Char(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a int primary key, b char, c char(123))`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -703,7 +703,7 @@ func TestGetMySQLType4Char(t *testing.T) {
 	require.Equal(t, javaType, internal.JavaSQLTypeCHAR)
 
 	sql = `create table test.t1(a int primary key, b varchar(123))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID = tableInfo.Columns[1].ID
@@ -724,7 +724,7 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b text, c tinytext, d mediumtext, e longtext)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID := tableInfo.Columns[1].ID
@@ -781,7 +781,7 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b binary, c binary(10))`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -803,7 +803,7 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 	require.Equal(t, "binary(10)", mysqlType)
 
 	sql = `create table test.t2(a int primary key, b varbinary(23))`
-	job = helper.DDL2Job(sql, timodel.JobStateSynced)
+	job = helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -823,7 +823,7 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b blob, c tinyblob, d mediumblob, e longblob)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
@@ -876,7 +876,7 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a int primary key, b enum('a', 'b', 'c'), c set('a', 'b', 'c'))`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID := tableInfo.Columns[1].ID
@@ -913,7 +913,7 @@ func TestGetMySQLType4JSON(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a int primary key, b json)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	columnID := tableInfo.Columns[1].ID

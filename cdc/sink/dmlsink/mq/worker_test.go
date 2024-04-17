@@ -72,7 +72,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -275,7 +275,7 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	key1 := model.TopicPartitionKey{
@@ -367,7 +367,7 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	events := []mqEvent{
@@ -513,7 +513,7 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateSynced)
+	job := helper.DDL2Job(sql, timodel.JobStateDone)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	events := []mqEvent{

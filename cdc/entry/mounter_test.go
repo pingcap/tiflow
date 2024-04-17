@@ -1008,7 +1008,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
    description text CHARACTER SET gbk,
    image tinyblob
 );`
-	job := helper.DDL2Job(createTableSQL, timodel.JobStateSynced)
+	job := helper.DDL2Job(createTableSQL, timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1144,7 +1144,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NotNil(t, schemaStorage)
 
 	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL, timodel.JobStateSynced)
+	job := helper.DDL2Job(createTableDDL, timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1273,7 +1273,7 @@ func TestDecodeRow(t *testing.T) {
 
 	// apply ddl to schemaStorage
 	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
-	job := helper.DDL2Job(ddl, timodel.JobStateSynced)
+	job := helper.DDL2Job(ddl, timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1353,7 +1353,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
-		job := helper.DDL2Job(ddl, timodel.JobStateSynced)
+		job := helper.DDL2Job(ddl, timodel.JobStateDone)
 		err = schemaStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}

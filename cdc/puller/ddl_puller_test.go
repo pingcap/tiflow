@@ -398,7 +398,7 @@ func TestHandleJob(t *testing.T) {
 
 	// test create table
 	{
-		job := helper.DDL2Job("create table test1.t1(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateSynced)
+		job := helper.DDL2Job("create table test1.t1(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateDone)
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -408,7 +408,7 @@ func TestHandleJob(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.testStartTs(id int)", timodel.JobStateSynced)
+		job = helper.DDL2Job("create table test1.testStartTs(id int)", timodel.JobStateDone)
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -419,23 +419,23 @@ func TestHandleJob(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.t2(id int)", timodel.JobStateSynced)
+		job = helper.DDL2Job("create table test1.t2(id int)", timodel.JobStateDone)
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.t3(id int)", timodel.JobStateSynced)
+		job = helper.DDL2Job("create table test1.t3(id int)", timodel.JobStateDone)
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		job = helper.DDL2Job("create table test1.t4(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateSynced)
+		job = helper.DDL2Job("create table test1.t4(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateDone)
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
 
 		// make sure no schema not found error
-		job = helper.DDL2Job("create table test3.t1(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateSynced)
+		job = helper.DDL2Job("create table test3.t1(id int) partition by range(id) (partition p0 values less than (10))", timodel.JobStateDone)
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
