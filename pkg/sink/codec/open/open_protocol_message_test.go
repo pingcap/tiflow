@@ -160,8 +160,8 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	require.Contains(t, value.Update, "id")
 	require.NotContains(t, value.Update, "a")
 
-	_ = helper.DDL2Event(`create table test.t1(id int, a int)`)
-	insertEventNoHandleKey := helper.DML2Event(`insert into test.t1 values (1, 1)`, "test", "t")
+	_ = helper.DDL2Event(`create table test.t1(id varchar(10), a varchar(10))`)
+	insertEventNoHandleKey := helper.DML2Event(`insert into test.t1 values ("1", "1")`, "test", "t1")
 	_, _, err = rowChangeToMsg(insertEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
@@ -186,15 +186,18 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	deleteEvent := *insertEvent
-	deleteEvent.PreColumns = nil
+	deleteEvent.PreColumns = deleteEvent.Columns
+	deleteEvent.Columns = nil
 	config.DeleteOnlyHandleKeyColumns = true
 	_, value, err = rowChangeToMsg(&deleteEvent, config, false)
 	require.NoError(t, err)
+	require.Contains(t, value.Delete, "id")
 	require.NotContains(t, value.Delete, "a")
 
 	config.DeleteOnlyHandleKeyColumns = false
 	_, value, err = rowChangeToMsg(&deleteEvent, config, false)
 	require.NoError(t, err)
+	require.Contains(t, value.Delete, "id")
 	require.Contains(t, value.Delete, "a")
 
 	config.DeleteOnlyHandleKeyColumns = false
