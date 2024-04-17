@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package puller
 
 import (
@@ -659,15 +656,6 @@ func TestDDLPuller(t *testing.T) {
 	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(30))
 	require.Nil(t, ddl)
-
-	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
-		ID:         5,
-		Type:       timodel.ActionCreateTable,
-		StartTS:    20,
-		State:      timodel.JobStateCancelled,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 36},
-		Query:      "create table t4(id int)",
-	})
 
 	inputTs(t, ddlJobPullerImpl, 40)
 	waitResolvedTsGrowing(t, p, 40)

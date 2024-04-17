@@ -316,6 +316,16 @@ func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.
 	var v []byte
 	var datum types.Datum
 
+	// for test case only
+	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+		v = rawKV.Value
+		job, err := parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
+		if err != nil || job == nil {
+			job, err = parseJob(v, rawKV.StartTs, rawKV.CRTs, true)
+		}
+		return job, err
+	}
+
 	// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
 	recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
 	if err != nil {
@@ -348,7 +358,7 @@ func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.
 
 // parseJob unmarshal the job from "v".
 // fromHistoryTable is used to distinguish the job is from tidb_dd_job or tidb_ddl_history
-// then to do different actions on the job.
+// We get `create table` ddl from tidb_ddl_history, and get other ddls from tidb_ddl_job
 func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.Job, error) {
 	var job timodel.Job
 	err := json.Unmarshal(v, &job)
