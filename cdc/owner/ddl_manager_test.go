@@ -170,9 +170,9 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 	var newTableNames, oldSchemaNames []timodel.CIStr
 
-	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
+	execCreateStmt := func(tp, actualDDL, expectedDDL string, jobState timodel.JobState) {
 		mockDDLSink.ddlDone = false
-		job := helper.DDL2Job(actualDDL)
+		job := helper.DDL2Job(actualDDL, jobState)
 		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
@@ -199,13 +199,13 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	}
 
 	execCreateStmt("database", "create database test1",
-		"create database test1")
+		"create database test1", timodel.JobStateDone)
 	execCreateStmt("table", "create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
+		"create table test1.tb1(id int primary key)", timodel.JobStateSynced)
 	execCreateStmt("database", "create database test2",
-		"create database test2")
+		"create database test2", timodel.JobStateDone)
 	execCreateStmt("table", "create table test2.tb2(id int primary key)",
-		"create table test2.tb2(id int primary key)")
+		"create table test2.tb2(id int primary key)", timodel.JobStateSynced)
 
 	require.Len(t, oldSchemaIDs, 2)
 	require.Len(t, oldTableIDs, 2)
@@ -228,7 +228,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
 	job := helper.DDL2Job(
-		"rename table test1.tb1 to test2.tb10, test2.tb2 to test1.tb20")
+		"rename table test1.tb1 to test2.tb10, test2.tb2 to test1.tb20", timodel.JobStateDone)
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	job.RawArgs = rawArgs
@@ -268,8 +268,8 @@ func TestExecDropTablesDDL(t *testing.T) {
 	dm := createDDLManagerForTest(t)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
-	execCreateStmt := func(actualDDL, expectedDDL string) {
-		job := helper.DDL2Job(actualDDL)
+	execCreateStmt := func(actualDDL, expectedDDL string, jobState timodel.JobState) {
+		job := helper.DDL2Job(actualDDL, jobState)
 		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
@@ -290,11 +290,11 @@ func TestExecDropTablesDDL(t *testing.T) {
 	}
 
 	execCreateStmt("create database test1",
-		"create database test1")
+		"create database test1", timodel.JobStateDone)
 	execCreateStmt("create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
+		"create table test1.tb1(id int primary key)", timodel.JobStateSynced)
 	execCreateStmt("create table test1.tb2(id int primary key)",
-		"create table test1.tb2(id int primary key)")
+		"create table test1.tb2(id int primary key)", timodel.JobStateSynced)
 
 	// drop tables is different from rename tables, it will generate
 	// multiple DDL jobs instead of one.
@@ -333,8 +333,8 @@ func TestExecDropViewsDDL(t *testing.T) {
 	dm := createDDLManagerForTest(t)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
-	execCreateStmt := func(actualDDL, expectedDDL string) {
-		job := helper.DDL2Job(actualDDL)
+	execCreateStmt := func(actualDDL, expectedDDL string, jobState timodel.JobState) {
+		job := helper.DDL2Job(actualDDL, jobState)
 		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
@@ -354,17 +354,17 @@ func TestExecDropViewsDDL(t *testing.T) {
 	}
 
 	execCreateStmt("create database test1",
-		"create database test1")
+		"create database test1", timodel.JobStateDone)
 	execCreateStmt("create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
+		"create table test1.tb1(id int primary key)", timodel.JobStateSynced)
 	execCreateStmt("create view test1.view1 as "+
 		"select * from test1.tb1 where id > 100",
 		"create view test1.view1 as "+
-			"select * from test1.tb1 where id > 100")
+			"select * from test1.tb1 where id > 100", timodel.JobStateDone)
 	execCreateStmt("create view test1.view2 as "+
 		"select * from test1.tb1 where id > 200",
 		"create view test1.view2 as "+
-			"select * from test1.tb1 where id > 200")
+			"select * from test1.tb1 where id > 200", timodel.JobStateDone)
 
 	// drop views is similar to drop tables, it will also generate
 	// multiple DDL jobs.

@@ -18,6 +18,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	mm "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -39,7 +40,7 @@ func TestInsert(t *testing.T) {
 		tiny tinyint,
 		comment text,
 		bb blob)`
-	job := helper.DDL2Job(sql)
+	job := helper.DDL2Job(sql, timodel.JobStateSynced)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{
@@ -120,7 +121,7 @@ func TestUpdate(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key, name varchar(32))`
-	job := helper.DDL2Job(sql)
+	job := helper.DDL2Job(sql, timodel.JobStateSynced)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{
@@ -202,7 +203,7 @@ func TestDelete(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key)`
-	job := helper.DDL2Job(sql)
+	job := helper.DDL2Job(sql, timodel.JobStateSynced)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	event := &model.RowChangedEvent{

@@ -324,8 +324,8 @@ func TestExecDDL(t *testing.T) {
 	defer helper.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
-	helper.DDL2Job("create database test0")
-	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	helper.DDL2Job("create database test0", timodel.JobStateDone)
+	job := helper.DDL2Job("create table test0.table0(id int primary key)", timodel.JobStateSynced)
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
@@ -351,7 +351,7 @@ func TestExecDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableIDs, 1)
 
-	job = helper.DDL2Job("drop table test0.table0")
+	job = helper.DDL2Job("drop table test0.table0", timodel.JobStateDone)
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
@@ -373,7 +373,7 @@ func TestExecDDL(t *testing.T) {
 	require.Equal(t, mockDDLPuller.resolvedTs, state.Status.CheckpointTs)
 
 	// handle create database
-	job = helper.DDL2Job("create database test1")
+	job = helper.DDL2Job("create database test1", timodel.JobStateDone)
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
@@ -388,7 +388,7 @@ func TestExecDDL(t *testing.T) {
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 
 	// handle create table
-	job = helper.DDL2Job("create table test1.test1(id int primary key)")
+	job = helper.DDL2Job("create table test1.test1(id int primary key)", timodel.JobStateSynced)
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
@@ -409,8 +409,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	defer helper.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
-	helper.DDL2Job("create database test0")
-	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	helper.DDL2Job("create database test0", timodel.JobStateDone)
+	job := helper.DDL2Job("create table test0.table0(id int primary key)", timodel.JobStateSynced)
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
@@ -446,7 +446,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
 
-	job = helper.DDL2Job("drop table test0.table0")
+	job = helper.DDL2Job("drop table test0.table0", timodel.JobStateDone)
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000

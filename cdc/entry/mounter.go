@@ -371,7 +371,7 @@ func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.J
 		// Besides, from tidb_ddl_history, we don't need to filter out whether the job is done.
 		// Because only `create table` done, then the ddl will insert into tidb_ddl_history
 		// We also need to set the job to be Done to make it will replay in schemaStorage
-		if job.Type != timodel.ActionCreateTable {
+		if job.Type != timodel.ActionCreateTable || job.State != timodel.JobStateSynced {
 			return nil, nil
 		}
 		job.State = timodel.JobStateDone

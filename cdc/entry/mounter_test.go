@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package entry
 
 import (
@@ -1011,7 +1008,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
    description text CHARACTER SET gbk,
    image tinyblob
 );`
-	job := helper.DDL2Job(createTableSQL)
+	job := helper.DDL2Job(createTableSQL, timodel.JobStateSynced)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1147,7 +1144,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NotNil(t, schemaStorage)
 
 	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL)
+	job := helper.DDL2Job(createTableDDL, timodel.JobStateSynced)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1204,7 +1201,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 
 	// row with 2 checksum
 	tk.MustExec("insert into t values (3, 30)")
-	job = helper.DDL2Job("alter table t change column a a varchar(10)")
+	job = helper.DDL2Job("alter table t change column a a varchar(10)", timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1248,7 +1245,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
 
-	job = helper.DDL2Job("drop table t")
+	job = helper.DDL2Job("drop table t", timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 }
@@ -1276,7 +1273,7 @@ func TestDecodeRow(t *testing.T) {
 
 	// apply ddl to schemaStorage
 	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
-	job := helper.DDL2Job(ddl)
+	job := helper.DDL2Job(ddl, timodel.JobStateSynced)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1324,7 +1321,7 @@ func TestDecodeRow(t *testing.T) {
 	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 
-	job = helper.DDL2Job("drop table student")
+	job = helper.DDL2Job("drop table student", timodel.JobStateDone)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 }
@@ -1356,7 +1353,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
-		job := helper.DDL2Job(ddl)
+		job := helper.DDL2Job(ddl, timodel.JobStateSynced)
 		err = schemaStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}

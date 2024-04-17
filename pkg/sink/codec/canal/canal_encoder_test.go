@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -101,7 +102,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql)
+	job := helper.DDL2Job(sql, timodel.JobStateSynced)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	for _, cs := range rowCases {
@@ -161,7 +162,7 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql)
+	job := helper.DDL2Job(sql, timodel.JobStateSynced)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	row := &model.RowChangedEvent{

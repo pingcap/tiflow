@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package debezium
 
 import (
@@ -24,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -65,7 +63,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
-	job := helper.DDL2Job(initialCreateTableDDL)
+	job := helper.DDL2Job(initialCreateTableDDL, timodel.JobStateSynced)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
