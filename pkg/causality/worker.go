@@ -20,11 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	_ workerCache[txnEvent] = &boundedWorkerCache[txnEvent]{}
-	_ workerCache[txnEvent] = &boundedWorkerWithBlockCache[txnEvent]{}
-)
-
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
 	OnConflictResolved()
@@ -73,16 +68,20 @@ func newWorker[Txn txnEvent](opt WorkerOption) workerCache[Txn] {
 	}
 
 	if opt.IsBlock {
-		return &boundedWorkerWithBlockCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+		return &boundedWorkerCacheWithBlock[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
 	}
-	return &boundedWorkerCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+	return nil
+	// return &boundedWorkerCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
 }
 
 // boundedWorkerCache is a worker which has a limit on the number of txns it can hold.
+//
+//nolint:unused
 type boundedWorkerCache[Txn txnEvent] struct {
 	ch chan TxnWithNotifier[Txn]
 }
 
+//nolint:unused
 func (w *boundedWorkerCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	select {
 	case w.ch <- txn:
@@ -92,18 +91,21 @@ func (w *boundedWorkerCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	}
 }
 
+//nolint:unused
 func (w *boundedWorkerCache[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
 
-// boundedWorkerWithBlockCache is a special boundedWorker. Once the worker
+// boundedWorkerCacheWithBlock is a special boundedWorker. Once the worker
 // is full, it will block until all cached txns are consumed.
-type boundedWorkerWithBlockCache[Txn txnEvent] struct {
-	ch        chan TxnWithNotifier[Txn]
+type boundedWorkerCacheWithBlock[Txn txnEvent] struct {
+	ch chan TxnWithNotifier[Txn]
+	//nolint:unused
 	isBlocked atomic.Bool
 }
 
-func (w *boundedWorkerWithBlockCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
+//nolint:unused
+func (w *boundedWorkerCacheWithBlock[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	if w.isBlocked.Load() && len(w.ch) <= 0 {
 		w.isBlocked.Store(false)
 	}
@@ -119,7 +121,8 @@ func (w *boundedWorkerWithBlockCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	return false
 }
 
-func (w *boundedWorkerWithBlockCache[Txn]) out() <-chan TxnWithNotifier[Txn] {
+//nolint:unused
+func (w *boundedWorkerCacheWithBlock[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
 
