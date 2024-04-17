@@ -144,7 +144,6 @@ func newSourceManager(
 		}
 		if raw != nil {
 			if isOldUpdateKVEntry(raw, mgr.startTs) {
-				log.Info("split update key")
 				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
 				if err != nil {
 					return err
