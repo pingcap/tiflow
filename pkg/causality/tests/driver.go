@@ -36,15 +36,17 @@ type conflictTestDriver struct {
 func newConflictTestDriver(
 	numWorkers int, numSlots int, workload workloadGenerator,
 ) *conflictTestDriver {
-	workers := make([]*workerForTest, 0, numWorkers)
-	for i := 0; i < numWorkers; i++ {
-		workers = append(workers, newWorkerForTest())
-	}
 	detector := causality.NewConflictDetector[*txnForTest](uint64(numSlots), causality.WorkerOption{
 		WorkerCount: numWorkers,
 		CacheSize:   1024,
 		IsBlock:     true,
 	})
+
+	workers := make([]*workerForTest, 0, numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		id := int64(i)
+		workers = append(workers, newWorkerForTest(detector.GetOutChByWorkerID(id)))
+	}
 	return &conflictTestDriver{
 		workers:          workers,
 		conflictDetector: detector,
