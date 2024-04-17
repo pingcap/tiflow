@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -85,6 +87,23 @@ func NewForTest(
 	}
 }
 
+func isUpdateKVEntry(raw *model.RawKVEntry) bool {
+	return raw != nil && raw.OpType == model.OpTypePut && raw.OldValue != nil && raw.Value != nil
+}
+
+func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
+	if raw == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+	deleteKVEntry := *raw
+	deleteKVEntry.Value = nil
+
+	insertKVEntry := *raw
+	insertKVEntry.OldValue = nil
+
+	return &deleteKVEntry, &insertKVEntry, nil
+}
+
 func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
@@ -120,8 +139,18 @@ func newSourceManager(
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			pEvent := model.NewPolymorphicEvent(raw)
-			mgr.engine.Add(spans[0], pEvent)
+			if isUpdateKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				mgr.engine.Add(spans[0], pEvent)
+			}
 		}
 		return nil
 	}
