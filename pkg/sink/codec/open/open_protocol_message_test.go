@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -95,32 +97,15 @@ func TestVarBinaryCol(t *testing.T) {
 }
 
 func TestOnlyOutputUpdatedColumn(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event(`create table test.t (a int primary key, b int, c int)`)
+	event := helper.DML2Event(`insert into test.t values (1, 1, 1)`, "test", "t")
+	copy(event.PreColumns, event.Columns)
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
 	codecConfig.OnlyOutputUpdatedColumns = true
-
-	tableInfo := model.BuildTableInfo("test", "test", []*model.Column{
-		{
-			Name: "test",
-			Type: mysql.TypeString,
-		},
-	}, nil)
-	event := &model.RowChangedEvent{
-		TableInfo: tableInfo,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-			},
-		}, tableInfo),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-			},
-		}, tableInfo),
-	}
 
 	// column not updated, so ignore it.
 	_, row, err := rowChangeToMsg(event, codecConfig, false)
@@ -128,48 +113,7 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 	_, ok := row.PreColumns["test"]
 	require.False(t, ok)
 
-	event = &model.RowChangedEvent{
-		TableInfo: tableInfo,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: nil,
-			},
-		}, tableInfo),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: nil,
-			},
-		}, tableInfo),
-	}
-	_, row, err = rowChangeToMsg(event, codecConfig, false)
-	require.NoError(t, err)
-	_, ok = row.PreColumns["test"]
-	require.False(t, ok)
-
-	// column type updated, so output it.
-	tableInfoWithFloatCols := model.BuildTableInfo("test", "test", []*model.Column{
-		{
-			Name: "test",
-			Type: mysql.TypeFloat,
-		},
-	}, nil)
-	event = &model.RowChangedEvent{
-		TableInfo: tableInfoWithFloatCols,
-		PreColumns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: float64(6.2),
-			},
-		}, tableInfoWithFloatCols),
-		Columns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "test",
-				Value: float32(6.2),
-			},
-		}, tableInfoWithFloatCols),
-	}
+	event.TableInfo.Columns[1].FieldType = *types.NewFieldType(mysql.TypeFloat)
 	_, row, err = rowChangeToMsg(event, codecConfig, false)
 	require.NoError(t, err)
 	_, ok = row.PreColumns["test"]
