@@ -672,7 +672,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
-			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			wrapMysqlTxnError(execError),
 			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
 		if rbErr := tx.Rollback(); rbErr != nil {
 			if errors.Cause(rbErr) != context.Canceled {
@@ -719,7 +719,7 @@ func (s *mysqlBackend) sequenceExecute(
 		}
 		if execError != nil {
 			err := logDMLTxnErr(
-				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				wrapMysqlTxnError(execError),
 				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 			if rbErr := tx.Rollback(); rbErr != nil {
 				if errors.Cause(rbErr) != context.Canceled {
@@ -762,7 +762,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
@@ -771,7 +771,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			// so we can use it to trace the data source
 			if err = pmysql.SetWriteSource(pctx, s.cfg, tx); err != nil {
 				err := logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed,
 					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
 						s.cfg.SourceID),
@@ -804,7 +804,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 			if err = tx.Commit(); err != nil {
 				return 0, 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
 			return dmls.rowCount, dmls.approximateSize, nil
@@ -821,6 +821,18 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(s.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
+}
+
+func wrapMysqlTxnError(err error) error {
+	errCode, ok := getSQLErrCode(err)
+	if !ok {
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	switch errCode {
+	case mysql.ErrDupEntry:
+		return cerror.WrapError(cerror.ErrMySQLDuplicateEntry, err)
+	}
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
 func logDMLTxnErr(

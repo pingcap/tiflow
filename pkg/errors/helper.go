@@ -83,6 +83,7 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrSinkURIInvalid,
 	ErrKafkaInvalidConfig,
 	ErrMySQLInvalidConfig,
+	ErrMySQLDuplicateEntry,
 	ErrStorageSinkInvalidConfig,
 }
 
