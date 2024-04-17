@@ -45,12 +45,13 @@ type regionInfo struct {
 
 	// The table that the region belongs to.
 	subscribedTable *subscribedTable
-	lockedRange     *regionlock.LockedRange
+	// The state of the locked range of the region.
+	lockedRangeState *regionlock.LockedRangeState
 }
 
 func (s regionInfo) isStoped() bool {
 	// lockedRange only nil when the region's subscribedTable is stopped.
-	return s.lockedRange == nil
+	return s.lockedRangeState == nil
 }
 
 func newRegionInfo(
@@ -68,7 +69,7 @@ func newRegionInfo(
 }
 
 func (s regionInfo) resolvedTs() uint64 {
-	return s.lockedRange.ResolvedTs.Load()
+	return s.lockedRangeState.ResolvedTs.Load()
 }
 
 type regionErrorInfo struct {
@@ -149,11 +150,11 @@ func (s *regionFeedState) takeError() (err error) {
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.region.lockedRange.Initialzied.Load()
+	return s.region.lockedRangeState.Initialzied.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.region.lockedRange.Initialzied.Store(true)
+	s.region.lockedRangeState.Initialzied.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
@@ -161,12 +162,12 @@ func (s *regionFeedState) getRegionID() uint64 {
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return s.region.lockedRange.ResolvedTs.Load()
+	return s.region.lockedRangeState.ResolvedTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	state := s.region.lockedRange
+	state := s.region.lockedRangeState
 	for {
 		last := state.ResolvedTs.Load()
 		if last > resolvedTs {
@@ -176,12 +177,13 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
+
 	if s.region.subscribedTable != nil {
-		s.region.subscribedTable.postUpdateRegionResolvedTs(
+		// When resolvedTs is received, we need to try to resolve the lock of the region.
+		// Because the updated resolvedTs may less than the target resolvedTs we want advance to.
+		s.region.subscribedTable.tryResolveLock(
 			s.region.verID.GetID(),
-			s.region.verID.GetVer(),
 			state,
-			s.region.span,
 		)
 	}
 }

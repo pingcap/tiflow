@@ -41,9 +41,9 @@ func TestSyncRegionFeedStateMapConcurrentAccess(t *testing.T) {
 				return
 			default:
 			}
-			m.setByRequestID(1, &regionFeedState{region: regionInfo{lockedRange: &regionlock.LockedRange{}}})
-			m.setByRequestID(2, &regionFeedState{region: regionInfo{lockedRange: &regionlock.LockedRange{}}})
-			m.setByRequestID(3, &regionFeedState{region: regionInfo{lockedRange: &regionlock.LockedRange{}}})
+			m.setByRequestID(1, &regionFeedState{region: regionInfo{lockedRangeState: &regionlock.LockedRangeState{}}})
+			m.setByRequestID(2, &regionFeedState{region: regionInfo{lockedRangeState: &regionlock.LockedRangeState{}}})
+			m.setByRequestID(3, &regionFeedState{region: regionInfo{lockedRangeState: &regionlock.LockedRangeState{}}})
 		}
 	}()
 	wg.Add(1)
@@ -122,7 +122,7 @@ func benchmarkGetRegionState(b *testing.B, bench func(b *testing.B, sm regionSta
 		&tikv.RPCContext{},
 		nil,
 	), 0)
-	state.region.lockedRange = &regionlock.LockedRange{}
+	state.region.lockedRangeState = &regionlock.LockedRangeState{}
 
 	regionCount := []int{100, 1000, 10000, 20000, 40000, 80000, 160000, 320000}
 	for _, count := range regionCount {

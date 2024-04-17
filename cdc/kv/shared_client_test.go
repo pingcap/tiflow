@@ -115,7 +115,7 @@ func TestSubscribedTable(t *testing.T) {
 	// Lock a range, and then ResolveLock will trigger a task for it.
 	res := table.rangeLock.LockRange(context.Background(), []byte{'b'}, []byte{'c'}, 1, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	res.LockedRange.Initialzied.Store(true)
+	res.LockedRangeState.Initialzied.Store(true)
 
 	s.ResolveLock(SubscriptionID(1), 200)
 	select {
@@ -127,7 +127,7 @@ func TestSubscribedTable(t *testing.T) {
 	// Lock another range, no task will be triggered before initialized.
 	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	state := newRegionFeedState(regionInfo{lockedRange: res.LockedRange, subscribedTable: table}, 1)
+	state := newRegionFeedState(regionInfo{lockedRangeState: res.LockedRangeState, subscribedTable: table}, 1)
 	select {
 	case <-s.resolveLockCh.Out():
 		require.True(t, false, "shouldn't get a resolve lock task")

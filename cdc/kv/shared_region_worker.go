@@ -474,7 +474,7 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 	now := time.Now().UnixMilli()
 	lastAdvance := table.lastAdvanceTime.Load()
 	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && table.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
-		ts := table.rangeLock.CalculateMinResolvedTs()
+		ts := table.rangeLock.ResolvedTs()
 		if ts > table.startTs {
 			revent := model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpans{

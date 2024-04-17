@@ -172,7 +172,7 @@ type SharedClient struct {
 	// The tasks will be handled in `handleRangeTask` goroutine.
 	rangeTaskCh *chann.DrainableChann[rangeTask]
 	// regionCh is used to cache region tasks after ranges locked.
-	// The region will be handled in `handleRegionRequest` goroutine.
+	// The region will be handled in `handleRegions` goroutine.
 	regionCh *chann.DrainableChann[regionInfo]
 	// resolveLockCh is used to retrieve resolve lock tasks.
 	resolveLockCh *chann.DrainableChann[resolveLockTask]
@@ -182,10 +182,10 @@ type SharedClient struct {
 }
 
 type resolveLockTask struct {
-	regionID   uint64
-	maxVersion uint64
-	state      *regionlock.LockedRange
-	enter      time.Time
+	regionID uint64
+	targetTs uint64
+	state    *regionlock.LockedRangeState
+	enter    time.Time
 }
 
 // rangeTask represents a task to subscribe a range span of a table.
@@ -214,20 +214,25 @@ func (rs *requestedStore) getStream() *requestedStream {
 // It contains the span of the table, the startTs of the table, and the output event channel.
 type subscribedTable struct {
 	subscriptionID SubscriptionID
+	startTs        model.Ts
 
-	span      tablepb.Span
-	startTs   model.Ts
-	rangeLock *regionlock.RegionRangeLock
-	eventCh   chan<- MultiplexingEvent
-
-	lastAdvanceTime atomic.Int64
+	// The whole span of the table.
+	span tablepb.Span
+	// The range lock of the table,
+	// it is used to prevent duplicate requests to the same region range,
+	// and it also used to calculate this table's resolvedTs.
+	rangeLock *regionlock.RangeLock
+	// The output event channel of the table.
+	eventCh chan<- MultiplexingEvent
 
 	// To handle table removing.
 	stopped atomic.Bool
 
-	// To handle lock resolvings.
-	postUpdateRegionResolvedTs func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span)
-	staleLocksVersion          atomic.Uint64
+	// To handle stale lock resolvings.
+	tryResolveLock     func(regionID uint64, state *regionlock.LockedRangeState)
+	staleLocksTargetTs atomic.Uint64
+
+	lastAdvanceTime atomic.Int64
 }
 
 // NewSharedClient creates a client.
@@ -279,8 +284,8 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
 // It new a subscribedTable and store it in `s.totalSpans`,
-// and send a rangeTask to `s.requestRangeCh`.
-// The rangeTask will be handled in `handleRequestRanges` goroutine.
+// and send a rangeTask to `s.rangeTaskCh`.
+// The rangeTask will be handled in `handleRangeTasks` goroutine.
 func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
 	if span.TableID == 0 {
 		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
@@ -321,12 +326,12 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 
 // ResolveLock is a function. If outsider subscribers find a span resolved timestamp is
 // advanced slowly or stopped, they can try to resolve locks in the given span.
-func (s *SharedClient) ResolveLock(subID SubscriptionID, maxVersion uint64) {
+func (s *SharedClient) ResolveLock(subID SubscriptionID, targetTs uint64) {
 	s.totalSpans.Lock()
 	rt := s.totalSpans.v[subID]
 	s.totalSpans.Unlock()
 	if rt != nil {
-		rt.updateStaleLocks(s, maxVersion)
+		rt.resolveStaleLocks(s, targetTs)
 	}
 }
 
@@ -335,7 +340,7 @@ func (s *SharedClient) RegionCount(subID SubscriptionID) uint64 {
 	s.totalSpans.RLock()
 	defer s.totalSpans.RUnlock()
 	if rt := s.totalSpans.v[subID]; rt != nil {
-		return rt.rangeLock.RefCount()
+		return uint64(rt.rangeLock.Len())
 	}
 	return 0
 }
@@ -456,7 +461,7 @@ func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region reg
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, region.verID, kvclientv2.ReplicaReadLeader, 0)
 	if rpcCtx != nil {
 		region.rpcCtx = rpcCtx
-		locateTime := time.Since(region.lockedRange.Created).Milliseconds()
+		locateTime := time.Since(region.lockedRangeState.Created).Milliseconds()
 		s.metrics.regionLocateDuration.Observe(float64(locateTime))
 		return region, true
 	}
@@ -614,33 +619,31 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 }
 
 // scheduleRegionRequest locks the region's range and send the region to regionCh,
-// which will be handled by handleRegionRequest.
+// which will be handled by handleRegions.
 func (s *SharedClient) scheduleRegionRequest(ctx context.Context, region regionInfo) {
-	handleLockResult := func(res regionlock.LockRangeResult) {
-		switch res.Status {
-		case regionlock.LockRangeStatusSuccess:
-			region.lockedRange = res.LockedRange
-			lockTime := time.Since(region.lockedRange.Created).Milliseconds()
-			s.metrics.regionLockDuration.Observe(float64(lockTime))
-			select {
-			case s.regionCh.In() <- region:
-			case <-ctx.Done():
-			}
-		case regionlock.LockRangeStatusStale:
-			for _, r := range res.RetryRanges {
-				s.scheduleRangeRequest(ctx, r, region.subscribedTable)
-			}
-		default:
-			return
-		}
+	lockRangeResult := region.subscribedTable.rangeLock.LockRange(
+		ctx, region.span.StartKey, region.span.EndKey, region.verID.GetID(), region.verID.GetVer())
+
+	if lockRangeResult.Status == regionlock.LockRangeStatusWait {
+		lockRangeResult = lockRangeResult.WaitFn()
 	}
 
-	rangeLock := region.subscribedTable.rangeLock
-	res := rangeLock.LockRange(ctx, region.span.StartKey, region.span.EndKey, region.verID.GetID(), region.verID.GetVer())
-	if res.Status == regionlock.LockRangeStatusWait {
-		res = res.WaitFn()
+	switch lockRangeResult.Status {
+	case regionlock.LockRangeStatusSuccess:
+		region.lockedRangeState = lockRangeResult.LockedRangeState
+		lockTime := time.Since(region.lockedRangeState.Created).Milliseconds()
+		s.metrics.regionLockDuration.Observe(float64(lockTime))
+		select {
+		case s.regionCh.In() <- region:
+		case <-ctx.Done():
+		}
+	case regionlock.LockRangeStatusStale:
+		for _, r := range lockRangeResult.RetryRanges {
+			s.scheduleRangeRequest(ctx, r, region.subscribedTable)
+		}
+	default:
+		return
 	}
-	handleLockResult(res)
 }
 
 func (s *SharedClient) scheduleRangeRequest(
@@ -762,7 +765,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		}
 	}
 
-	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
+	doResolve := func(regionID uint64, state *regionlock.LockedRangeState, maxVersion uint64) {
 		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
@@ -797,7 +800,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 			gcResolveLastRun()
 		case task = <-s.resolveLockCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
-			doResolve(task.regionID, task.state, task.maxVersion)
+			doResolve(task.regionID, task.state, task.targetTs)
 		}
 	}
 }
@@ -819,7 +822,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		slowInitializeRegion := 0
 		for subscriptionID, rt := range s.totalSpans.v {
-			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
+			attr := rt.rangeLock.IterAll(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
@@ -843,12 +846,12 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("subscriptionID", subscriptionID),
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
-			if len(attr.Holes) > 0 {
+			if len(attr.UnLockedRanges) > 0 {
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.Any("holes", attr.Holes))
+					zap.Any("holes", attr.UnLockedRanges))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -861,7 +864,7 @@ func (s *SharedClient) newSubscribedTable(
 	eventCh chan<- MultiplexingEvent,
 ) *subscribedTable {
 	cfName := s.changefeed.String()
-	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
+	rangeLock := regionlock.NewRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
 
 	rt := &subscribedTable{
 		subscriptionID: subID,
@@ -871,20 +874,19 @@ func (s *SharedClient) newSubscribedTable(
 		eventCh:        eventCh,
 	}
 
-	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
-		maxVersion := rt.staleLocksVersion.Load()
-		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
+	rt.tryResolveLock = func(regionID uint64, state *regionlock.LockedRangeState) {
+		targetTs := rt.staleLocksTargetTs.Load()
+		if state.ResolvedTs.Load() < targetTs && state.Initialzied.Load() {
 			enter := time.Now()
-			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
+			s.resolveLockCh.In() <- resolveLockTask{regionID, targetTs, state, enter}
 		}
 	}
 	return rt
 }
 
-func (r *subscribedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
-	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
-
-	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
+func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
+	util.MustCompareAndMonotonicIncrease(&r.staleLocksTargetTs, targetTs)
+	res := r.rangeLock.IterAll(r.tryResolveLock)
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
