@@ -122,7 +122,7 @@ func rowChangeToMsg(
 		}
 	} else if e.IsUpdate() {
 		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
-		if !config.OpenOutputOldValue {
+		if config.OpenOutputOldValue {
 			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
 		}
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||

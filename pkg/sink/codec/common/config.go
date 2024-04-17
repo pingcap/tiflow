@@ -76,6 +76,8 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+	// Whether old value should be excluded in the output.
+	OpenOutputOldValue bool
 
 	// for the simple protocol, can be "json" and "avro", default to "json"
 	EncodingFormat EncodingFormatType
@@ -87,9 +89,6 @@ type Config struct {
 	DebeziumDisableSchema bool
 	// Debezium only. Whether before value should be included in the output.
 	DebeziumOutputOldValue bool
-
-	// Open	protocol only. Whether old value should be excluded in the output.
-	OpenOutputOldValue bool
 }
 
 // EncodingFormatType is the type of encoding format
