@@ -20,6 +20,11 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	_ workerCache[txnEvent] = &boundedWorkerCache[txnEvent]{}
+	_ workerCache[txnEvent] = &boundedWorkerWithBlockCache[txnEvent]{}
+)
+
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
 	OnConflictResolved()
@@ -68,17 +73,17 @@ func newWorker[Txn txnEvent](opt WorkerOption) workerCache[Txn] {
 	}
 
 	if opt.IsBlock {
-		return &boundedWorkerWithBlock[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+		return &boundedWorkerWithBlockCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
 	}
-	return &boundedWorker[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+	return &boundedWorkerCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
 }
 
-// boundedWorker is a worker which has a limit on the number of txns it can hold.
-type boundedWorker[Txn txnEvent] struct {
+// boundedWorkerCache is a worker which has a limit on the number of txns it can hold.
+type boundedWorkerCache[Txn txnEvent] struct {
 	ch chan TxnWithNotifier[Txn]
 }
 
-func (w *boundedWorker[Txn]) add(txn TxnWithNotifier[Txn]) bool {
+func (w *boundedWorkerCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	select {
 	case w.ch <- txn:
 		return true
@@ -87,18 +92,18 @@ func (w *boundedWorker[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	}
 }
 
-func (w *boundedWorker[Txn]) out() <-chan TxnWithNotifier[Txn] {
+func (w *boundedWorkerCache[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
 
-// boundedWorkerWithBlock is a special boundedWorker. Once the worker
+// boundedWorkerWithBlockCache is a special boundedWorker. Once the worker
 // is full, it will block until all cached txns are consumed.
-type boundedWorkerWithBlock[Txn txnEvent] struct {
+type boundedWorkerWithBlockCache[Txn txnEvent] struct {
 	ch        chan TxnWithNotifier[Txn]
 	isBlocked atomic.Bool
 }
 
-func (w *boundedWorkerWithBlock[Txn]) add(txn TxnWithNotifier[Txn]) bool {
+func (w *boundedWorkerWithBlockCache[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	if w.isBlocked.Load() && len(w.ch) <= 0 {
 		w.isBlocked.Store(false)
 	}
@@ -114,7 +119,7 @@ func (w *boundedWorkerWithBlock[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 	return false
 }
 
-func (w *boundedWorkerWithBlock[Txn]) out() <-chan TxnWithNotifier[Txn] {
+func (w *boundedWorkerWithBlockCache[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
 
