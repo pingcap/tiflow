@@ -40,7 +40,6 @@ func (t *txnForTest) Finish(err error) {
 
 type txnWithUnlock struct {
 	*txnForTest
-	unlock func()
 }
 
 type workerForTest struct {
