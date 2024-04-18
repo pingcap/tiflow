@@ -130,6 +130,14 @@ func IsDupEntryError(err error) bool {
 	if ErrMySQLDuplicateEntry.Equal(err) {
 		return true
 	}
+	if code, ok := RFCCode(err); ok {
+		if code == ErrMySQLDuplicateEntry.RFCCode() {
+			return true
+		}
+	}
+	if strings.Contains(err.Error(), string(ErrMySQLDuplicateEntry.RFCCode())) {
+		return true
+	}
 	return false
 }
 
