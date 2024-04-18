@@ -42,13 +42,13 @@ type TxnWithNotifier[Txn txnEvent] struct {
 	PostTxnExecuted func()
 }
 
-// WorkerOption is the option for creating a worker.
-type WorkerOption struct {
+// WorkerCacheOption is the option for creating a worker.
+type WorkerCacheOption struct {
 	WorkerCount int
 	// CacheSize controls the max number of txns a worker can hold.
 	CacheSize int
-	// IsBlock indicates whether the worker should block when the cache is full.
-	IsBlock bool
+	// BlockStrategy controls the strategy when the worker cache is full.
+	BlockStrategy BlockStrategy
 }
 
 // In current implementation, the conflict detector will push txn to the workerCache.
@@ -59,19 +59,22 @@ type workerCache[Txn txnEvent] interface {
 	out() <-chan TxnWithNotifier[Txn]
 }
 
-func newWorker[Txn txnEvent](opt WorkerOption) workerCache[Txn] {
+func newWorkerCache[Txn txnEvent](opt WorkerCacheOption) workerCache[Txn] {
 	log.Info("create new worker cache in conflict detector",
 		zap.Int("workerCount", opt.WorkerCount),
-		zap.Int("cacheSize", opt.CacheSize), zap.Bool("isBlock", opt.IsBlock))
+		zap.Int("cacheSize", opt.CacheSize), zap.String("BlockStrategy", string(opt.BlockStrategy)))
 	if opt.CacheSize <= 0 {
 		log.Panic("WorkerOption.CacheSize should be greater than 0, please report a bug")
 	}
 
-	if opt.IsBlock {
+	switch opt.BlockStrategy {
+	case BlockStrategyWaitAvailable:
+		return &boundedWorkerCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+	case BlockStrategyWaitEmpty:
 		return &boundedWorkerCacheWithBlock[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
+	default:
+		return nil
 	}
-	return nil
-	// return &boundedWorkerCache[Txn]{ch: make(chan TxnWithNotifier[Txn], opt.CacheSize)}
 }
 
 // boundedWorkerCache is a worker which has a limit on the number of txns it can hold.
@@ -126,4 +129,13 @@ func (w *boundedWorkerCacheWithBlock[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
 
-// TODO: maybe we can implement a strategy that can automatically adapt to different scenarios
+// BlockStrategy is the strategy to handle the situation when the worker cache is full.
+type BlockStrategy string
+
+const (
+	// BlockStrategyWaitAvailable means the worker will block until there is an available slot.
+	BlockStrategyWaitAvailable BlockStrategy = "waitAvailable"
+	// BlockStrategyWaitEmpty means the worker will block until all cached txns are consumed.
+	BlockStrategyWaitEmpty = "waitAll"
+	// TODO: maybe we can implement a strategy that can automatically adapt to different scenarios
+)

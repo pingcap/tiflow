@@ -97,8 +97,8 @@ func (w *worker) runLoop(conflictDetector *causality.ConflictDetector[*txnEvent]
 				zap.Int("workerID", w.ID))
 			return nil
 		case txn := <-txnCh:
-			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
-			// If no more data in txnCh.out, and also not reach the state that can be flushed,
+			// we get the data from txnCh until no more data here or reach the state that can be flushed.
+			// If no more data in txnCh, and also not reach the state that can be flushed,
 			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
 			if txn.TxnEvent != nil {
 				needFlush := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)

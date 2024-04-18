@@ -36,10 +36,10 @@ type conflictTestDriver struct {
 func newConflictTestDriver(
 	numWorkers int, numSlots int, workload workloadGenerator,
 ) *conflictTestDriver {
-	detector := causality.NewConflictDetector[*txnForTest](uint64(numSlots), causality.WorkerOption{
-		WorkerCount: numWorkers,
-		CacheSize:   1024,
-		IsBlock:     true,
+	detector := causality.NewConflictDetector[*txnForTest](uint64(numSlots), causality.WorkerCacheOption{
+		WorkerCount:   numWorkers,
+		CacheSize:     1024,
+		BlockStrategy: causality.BlockStrategyWaitAvailable,
 	})
 
 	workers := make([]*workerForTest, 0, numWorkers)

@@ -107,10 +107,10 @@ func newSink(ctx context.Context,
 		dead:    make(chan struct{}),
 	}
 
-	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.WorkerOption{
-		WorkerCount: len(backends),
-		CacheSize:   1024,
-		IsBlock:     true,
+	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.WorkerCacheOption{
+		WorkerCount:   len(backends),
+		CacheSize:     1024,
+		BlockStrategy: causality.BlockStrategyWaitEmpty,
 	})
 
 	g, ctx1 := errgroup.WithContext(ctx)

@@ -24,11 +24,13 @@ import (
 )
 
 // ConflictDetector implements a logic that dispatches transaction
-// to different workers in a way that transactions modifying the same
-// keys are never executed concurrently and have their original orders
-// preserved.
+// to different workerCache channels in a way that transactions
+// modifying the same keys are never executed concurrently and
+// have their original orders preserved. Transactions in different
+// channels can be executed concurrently.
 type ConflictDetector[Txn txnEvent] struct {
-	workers []workerCache[Txn]
+	// workerCaches are used to cache resolved transactions.
+	workerCaches []workerCache[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -47,10 +49,10 @@ type ConflictDetector[Txn txnEvent] struct {
 
 // NewConflictDetector creates a new ConflictDetector.
 func NewConflictDetector[Txn txnEvent](
-	numSlots uint64, opt WorkerOption,
+	numSlots uint64, opt WorkerCacheOption,
 ) *ConflictDetector[Txn] {
 	ret := &ConflictDetector[Txn]{
-		workers:       make([]workerCache[Txn], opt.WorkerCount),
+		workerCaches:  make([]workerCache[Txn], opt.WorkerCount),
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
 		notifiedNodes: chann.NewAutoDrainChann[func()](),
@@ -58,7 +60,7 @@ func NewConflictDetector[Txn txnEvent](
 		closeCh:       make(chan struct{}),
 	}
 	for i := 0; i < opt.WorkerCount; i++ {
-		ret.workers[i] = newWorker[Txn](opt)
+		ret.workerCaches[i] = newWorkerCache[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -90,11 +92,11 @@ func (d *ConflictDetector[Txn]) Add(txn Txn) {
 			d.garbageNodes.In() <- node
 		},
 	}
-	node.TrySendToWorker = func(workerID int64) bool {
+	node.TrySendToWorkerCache = func(workerID int64) bool {
 		// Try sending this txn to related worker as soon as all dependencies are resolved.
 		return d.sendToWorker(txnWithNotifier, workerID)
 	}
-	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
+	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workerCaches)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
 	d.slots.Add(node)
 }
@@ -131,7 +133,7 @@ func (d *ConflictDetector[Txn]) sendToWorker(txn TxnWithNotifier[Txn], workerID 
 	if workerID < 0 {
 		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
 	}
-	worker := d.workers[workerID]
+	worker := d.workerCaches[workerID]
 	ok := worker.add(txn)
 	if ok {
 		txn.TxnEvent.OnConflictResolved()
@@ -144,5 +146,5 @@ func (d *ConflictDetector[Txn]) GetOutChByWorkerID(workerID int64) <-chan TxnWit
 	if workerID < 0 {
 		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
 	}
-	return d.workers[workerID].out()
+	return d.workerCaches[workerID].out()
 }

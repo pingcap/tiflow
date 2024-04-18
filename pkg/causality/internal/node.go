@@ -52,7 +52,7 @@ type Node struct {
 	sortedDedupKeysHash []uint64
 
 	// Called when all dependencies are resolved.
-	TrySendToWorker func(id workerID) bool
+	TrySendToWorkerCache func(id workerID) bool
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
 	// Set the callback that the node is notified.
@@ -89,7 +89,7 @@ func NewNode(sortedDedupKeysHash []uint64) (ret *Node) {
 	defer func() {
 		ret.id = genNextNodeID()
 		ret.sortedDedupKeysHash = sortedDedupKeysHash
-		ret.TrySendToWorker = nil
+		ret.TrySendToWorkerCache = nil
 		ret.RandWorkerID = nil
 		ret.totalDependencies = 0
 		ret.resolvedDependencies = 0
@@ -208,8 +208,7 @@ func (n *Node) Free() {
 	}
 
 	n.id = invalidNodeID
-	n.TrySendToWorker = nil
-	// n.RandWorkerID = nil
+	n.TrySendToWorkerCache = nil
 
 	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
 	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
@@ -227,12 +226,12 @@ func (n *Node) tryAssignTo(workerID int64) bool {
 		return true
 	}
 
-	if n.TrySendToWorker != nil {
-		ok := n.TrySendToWorker(workerID)
+	if n.TrySendToWorkerCache != nil {
+		ok := n.TrySendToWorkerCache(workerID)
 		if !ok {
 			return false
 		}
-		n.TrySendToWorker = nil
+		n.TrySendToWorkerCache = nil
 	}
 	n.assignedTo = workerID
 
