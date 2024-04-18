@@ -290,11 +290,14 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Duration("cost", time.Since(start)))
+
+			if errors.Cause(err) == cerror.ErrMySQLDuplicateEntry {
+				return errors.Trace(err)
+			}
 		}
 
 		// If the error is retryable, we should retry to re-establish the internal resources.
-		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled && !cerror.IsDupEntryError(err) {
-			log.Info("sinkmanager run meet error", zap.Any("error", err))
+		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled {
 			select {
 			case <-m.managerCtx.Done():
 			case warnings[0] <- err:
