@@ -291,7 +291,8 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Duration("cost", time.Since(start)))
 
-			if errors.Cause(err) == cerror.ErrMySQLDuplicateEntry {
+			// For duplicate entry error, we fast fail to restart changefeed.
+			if cerror.IsDupEntryError(err) {
 				return errors.Trace(err)
 			}
 		}
