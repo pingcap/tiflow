@@ -174,9 +174,9 @@ type SharedClient struct {
 	// regionCh is used to cache region tasks after ranges locked.
 	// The region will be handled in `handleRegions` goroutine.
 	regionCh *chann.DrainableChann[regionInfo]
-	// resolveLockCh is used to retrieve resolve lock tasks.
-	resolveLockCh *chann.DrainableChann[resolveLockTask]
-	errCh         *chann.DrainableChann[regionErrorInfo]
+	// resolveLockTaskCh is used to retrieve resolve lock tasks.
+	resolveLockTaskCh *chann.DrainableChann[resolveLockTask]
+	errCh             *chann.DrainableChann[regionErrorInfo]
 
 	logRegionDetails func(msg string, fields ...zap.Field)
 }
@@ -258,10 +258,10 @@ func NewSharedClient(
 		pdClock:      pdClock,
 		lockResolver: lockResolver,
 
-		rangeTaskCh:   chann.NewAutoDrainChann[rangeTask](),
-		regionCh:      chann.NewAutoDrainChann[regionInfo](),
-		resolveLockCh: chann.NewAutoDrainChann[resolveLockTask](),
-		errCh:         chann.NewAutoDrainChann[regionErrorInfo](),
+		rangeTaskCh:       chann.NewAutoDrainChann[rangeTask](),
+		regionCh:          chann.NewAutoDrainChann[regionInfo](),
+		resolveLockTaskCh: chann.NewAutoDrainChann[resolveLockTask](),
+		errCh:             chann.NewAutoDrainChann[regionErrorInfo](),
 
 		stores: make(map[string]*requestedStore),
 	}
@@ -376,7 +376,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 func (s *SharedClient) Close() {
 	s.rangeTaskCh.CloseAndDrain()
 	s.regionCh.CloseAndDrain()
-	s.resolveLockCh.CloseAndDrain()
+	s.resolveLockTaskCh.CloseAndDrain()
 	s.errCh.CloseAndDrain()
 	s.clearMetrics()
 
@@ -798,7 +798,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 			return ctx.Err()
 		case <-gcTicker.C:
 			gcResolveLastRun()
-		case task = <-s.resolveLockCh.Out():
+		case task = <-s.resolveLockTaskCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
 			doResolve(task.regionID, task.state, task.targetTs)
 		}
@@ -878,7 +878,7 @@ func (s *SharedClient) newSubscribedTable(
 		targetTs := rt.staleLocksTargetTs.Load()
 		if state.ResolvedTs.Load() < targetTs && state.Initialzied.Load() {
 			enter := time.Now()
-			s.resolveLockCh.In() <- resolveLockTask{regionID, targetTs, state, enter}
+			s.resolveLockTaskCh.In() <- resolveLockTask{regionID, targetTs, state, enter}
 		}
 	}
 	return rt
