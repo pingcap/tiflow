@@ -293,7 +293,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		}
 
 		// If the error is retryable, we should retry to re-establish the internal resources.
-		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled {
+		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled && !cerror.IsDupEntryError(err) {
 			select {
 			case <-m.managerCtx.Done():
 			case warnings[0] <- err:

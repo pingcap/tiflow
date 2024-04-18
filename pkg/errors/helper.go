@@ -122,6 +122,17 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	return RFCCode(cause)
 }
 
+// IsDupEntryError checks if an error is a duplicate entry error.
+func IsDupEntryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ErrMySQLDuplicateEntry.Equal(err) {
+		return true
+	}
+	return false
+}
+
 // IsRetryableError check the error is safe or worth to retry
 func IsRetryableError(err error) bool {
 	if err == nil {
