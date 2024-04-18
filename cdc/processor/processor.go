@@ -924,6 +924,10 @@ func (p *processor) cleanupMetrics() {
 
 // WriteDebugInfo write the debug info to Writer
 func (p *processor) WriteDebugInfo(w io.Writer) error {
+	if !p.initialized.Load() {
+		fmt.Fprintln(w, "processor is not initialized")
+		return nil
+	}
 	fmt.Fprintf(w, "%+v\n%+v\n", *p.latestInfo, *p.latestStatus)
 	spans := p.sinkManager.r.GetAllCurrentTableSpans()
 	for _, span := range spans {
