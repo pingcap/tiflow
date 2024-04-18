@@ -23,6 +23,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// NewDMLTestCases returns a bunch of DML test cases.
+func NewDMLTestCases(t testing.TB) [][]*model.RowChangedEvent {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := "create table test.t(a varchar(255), b text, c date, d timestamp, " +
+		"e datetime, f float, g bigint, h int, primary key(a))"
+	_ = helper.DDL2Event(sql)
+
+	sql = `insert into test.t values ("varchar1", "string1", "2021-01-02", "2021-01-02 00:00:00", "2021-01-02 00:00:00", 2.0, 2000, null)`
+	event := helper.DML2Event(sql, "test", "t")
+	event.PreColumns = event.Columns
+
+	result := [][]*model.RowChangedEvent{
+		{event},
+		{event, event, event, event},
+		{},
+	}
+	return result
+}
+
+func newDDLTestCases(t *testing.T) [][]*model.DDLEvent {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := "create table test.t(a int primary key, b int, c int)"
+	ddlEvent := helper.DDL2Event(sql)
+
+	result := [][]*model.DDLEvent{
+		{ddlEvent},
+		{ddlEvent, ddlEvent, ddlEvent},
+		{},
+	}
+	return result
+}
+
 // TestBatchCodec tests bunch of cases for RowEventDecoder.
 func TestBatchCodec(
 	t *testing.T,
@@ -71,23 +107,7 @@ func TestBatchCodec(
 		}
 	}
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	sql := "create table test.t(a varchar(255), b text, c date, d timestamp, " +
-		"e datetime, f float, g bigint, h int, primary key(a))"
-	_ = helper.DDL2Event(sql)
-
-	sql = `insert into test.t values ("varchar1", "string1", "2021-01-02", "2021-01-02 00:00:00", "2021-01-02 00:00:00", 2.0, 2000, null)`
-	insertEvent := helper.DML2Event(sql, "test", "t")
-	insertEvent.PreColumns = insertEvent.Columns
-
-	dmlCases := [][]*model.RowChangedEvent{
-		{insertEvent},
-		{insertEvent, insertEvent, insertEvent, insertEvent},
-		{},
-	}
-
+	dmlCases := NewDMLTestCases(t)
 	for _, cs := range dmlCases {
 		encoder := encoderBuilder.Build()
 
@@ -107,13 +127,7 @@ func TestBatchCodec(
 		}
 	}
 
-	ddlEvent := helper.DDL2Event(`create table test.t1(a int primary key, b int, c int)`)
-	ddlCases := [][]*model.DDLEvent{
-		{ddlEvent},
-		{ddlEvent, ddlEvent, ddlEvent},
-		{},
-	}
-
+	ddlCases := newDDLTestCases(t)
 	for _, cs := range ddlCases {
 		encoder := encoderBuilder.Build()
 		for _, ddl := range cs {
