@@ -571,6 +571,11 @@ error = '''
 MySQL txn error
 '''
 
+["CDC:ErrMySQLDuplicateEntry"]
+error = '''
+MySQL duplicate entry error
+'''
+
 ["CDC:ErrMySQLWorkerPanic"]
 error = '''
 MySQL worker panic
