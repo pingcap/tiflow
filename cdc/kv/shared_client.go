@@ -882,7 +882,8 @@ func (s *SharedClient) newSubscribedTable(
 				regionID: regionID,
 				targetTs: targetTs,
 				state:    state,
-				create:   time.Now()}
+				create:   time.Now(),
+			}
 		}
 	}
 	return rt
