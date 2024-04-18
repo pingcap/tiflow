@@ -74,7 +74,7 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 }
 
 // Run a loop.
-func (w *worker) runLoop(conflictDetector *causality.ConflictDetector[*txnEvent]) error {
+func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -88,7 +88,6 @@ func (w *worker) runLoop(conflictDetector *causality.ConflictDetector[*txnEvent]
 		zap.Int("workerID", w.ID))
 
 	start := time.Now()
-	txnCh := conflictDetector.GetOutChByWorkerID(int64(w.ID))
 	for {
 		select {
 		case <-w.ctx.Done():

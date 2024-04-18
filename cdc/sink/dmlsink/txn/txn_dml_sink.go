@@ -107,16 +107,17 @@ func newSink(ctx context.Context,
 		dead:    make(chan struct{}),
 	}
 
-	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.WorkerCacheOption{
-		WorkerCount:   len(backends),
-		CacheSize:     1024,
+	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.TxnCacheOption{
+		Count:         len(backends),
+		Size:          1024,
 		BlockStrategy: causality.BlockStrategyWaitEmpty,
 	})
 
 	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
 		w := newWorker(ctx1, changefeedID, i, backend, len(backends))
-		g.Go(func() error { return w.runLoop(sink.alive.conflictDetector) })
+		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
+		g.Go(func() error { return w.runLoop(txnCh) })
 		sink.workers = append(sink.workers, w)
 	}
 

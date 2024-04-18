@@ -74,21 +74,21 @@ func TestNodeSingleDependency(t *testing.T) {
 	// Node B depends on A, without any other resolved dependencies.
 	nodeA := newNodeForTest()
 	nodeB := newNodeForTest()
-	nodeB.RandWorkerID = func() workerID { return 100 }
+	nodeB.RandCacheID = func() cacheID { return 100 }
 	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
 	require.True(t, nodeA.tryAssignTo(1))
-	require.Equal(t, workerID(1), nodeA.assignedWorkerID())
-	require.Equal(t, workerID(1), nodeB.assignedWorkerID())
+	require.Equal(t, cacheID(1), nodeA.assignedWorkerID())
+	require.Equal(t, cacheID(1), nodeB.assignedWorkerID())
 
 	// Node D depends on C, with some other resolved dependencies.
 	nodeC := newNodeForTest()
 	nodeD := newNodeForTest()
-	nodeD.RandWorkerID = func() workerID { return 100 }
+	nodeD.RandCacheID = func() cacheID { return 100 }
 	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
 	require.True(t, nodeC.tryAssignTo(2))
-	require.Equal(t, workerID(2), nodeC.assignedWorkerID())
+	require.Equal(t, cacheID(2), nodeC.assignedWorkerID())
 	nodeC.Remove()
-	require.Equal(t, workerID(100), nodeD.assignedWorkerID())
+	require.Equal(t, cacheID(100), nodeD.assignedWorkerID())
 }
 
 func TestNodeMultipleDependencies(t *testing.T) {
@@ -104,7 +104,7 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeC := newNodeForTest()
 
 	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
-	nodeC.RandWorkerID = func() workerID { return 100 }
+	nodeC.RandCacheID = func() cacheID { return 100 }
 
 	require.True(t, nodeA.tryAssignTo(1))
 	require.True(t, nodeB.tryAssignTo(2))
@@ -121,9 +121,9 @@ func TestNodeResolveImmediately(t *testing.T) {
 
 	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
 	nodeA := newNodeForTest()
-	nodeA.RandWorkerID = func() workerID { return workerID(100) }
+	nodeA.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeA.DependOn(nil, 999)
-	require.Equal(t, workerID(100), nodeA.assignedWorkerID())
+	require.Equal(t, cacheID(100), nodeA.assignedWorkerID())
 
 	// Node D depends on B and C, all of them are assigned to 1.
 	nodeB := newNodeForTest()
@@ -131,17 +131,17 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeC := newNodeForTest()
 	require.True(t, nodeC.tryAssignTo(1))
 	nodeD := newNodeForTest()
-	nodeD.RandWorkerID = func() workerID { return workerID(100) }
+	nodeD.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
-	require.Equal(t, workerID(1), nodeD.assignedWorkerID())
+	require.Equal(t, cacheID(1), nodeD.assignedWorkerID())
 
 	// Node E depends on B and C and some other resolved dependencies.
 	nodeB.Remove()
 	nodeC.Remove()
 	nodeE := newNodeForTest()
-	nodeE.RandWorkerID = func() workerID { return workerID(100) }
+	nodeE.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
-	require.Equal(t, workerID(100), nodeE.assignedWorkerID())
+	require.Equal(t, cacheID(100), nodeE.assignedWorkerID())
 }
 
 func TestNodeDependOnSelf(t *testing.T) {

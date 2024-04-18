@@ -33,9 +33,9 @@ func TestBoundedWorker(t *testing.T) {
 
 	size := 100
 	// Create a worker with 1 worker and 1 cache size.
-	worker := newWorkerCache[txnEvent](WorkerCacheOption{
-		WorkerCount:   1,
-		CacheSize:     size,
+	worker := newTxnCache[txnEvent](TxnCacheOption{
+		Count:         1,
+		Size:          size,
 		BlockStrategy: BlockStrategyWaitAvailable,
 	})
 	for i := 0; i < size; i++ {
@@ -61,9 +61,9 @@ func TestBoundedWorkerWithBlock(t *testing.T) {
 
 	size := 100
 	// Create a worker with 1 worker and 1 cache size.
-	worker := newWorkerCache[txnEvent](WorkerCacheOption{
-		WorkerCount:   1,
-		CacheSize:     size,
+	worker := newTxnCache[txnEvent](TxnCacheOption{
+		Count:         1,
+		Size:          size,
 		BlockStrategy: BlockStrategyWaitEmpty,
 	})
 	for i := 0; i < size; i++ {

@@ -24,13 +24,13 @@ import (
 )
 
 // ConflictDetector implements a logic that dispatches transaction
-// to different workerCache channels in a way that transactions
+// to different worker cache channels in a way that transactions
 // modifying the same keys are never executed concurrently and
 // have their original orders preserved. Transactions in different
 // channels can be executed concurrently.
 type ConflictDetector[Txn txnEvent] struct {
-	// workerCaches are used to cache resolved transactions.
-	workerCaches []workerCache[Txn]
+	// resovedTxnCaches are used to cache resolved transactions.
+	resovedTxnCaches []txnCache[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -49,18 +49,18 @@ type ConflictDetector[Txn txnEvent] struct {
 
 // NewConflictDetector creates a new ConflictDetector.
 func NewConflictDetector[Txn txnEvent](
-	numSlots uint64, opt WorkerCacheOption,
+	numSlots uint64, opt TxnCacheOption,
 ) *ConflictDetector[Txn] {
 	ret := &ConflictDetector[Txn]{
-		workerCaches:  make([]workerCache[Txn], opt.WorkerCount),
-		slots:         internal.NewSlots[*internal.Node](numSlots),
-		numSlots:      numSlots,
-		notifiedNodes: chann.NewAutoDrainChann[func()](),
-		garbageNodes:  chann.NewAutoDrainChann[*internal.Node](),
-		closeCh:       make(chan struct{}),
+		resovedTxnCaches: make([]txnCache[Txn], opt.Count),
+		slots:            internal.NewSlots[*internal.Node](numSlots),
+		numSlots:         numSlots,
+		notifiedNodes:    chann.NewAutoDrainChann[func()](),
+		garbageNodes:     chann.NewAutoDrainChann[*internal.Node](),
+		closeCh:          make(chan struct{}),
 	}
-	for i := 0; i < opt.WorkerCount; i++ {
-		ret.workerCaches[i] = newWorkerCache[Txn](opt)
+	for i := 0; i < opt.Count; i++ {
+		ret.resovedTxnCaches[i] = newTxnCache[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -92,11 +92,11 @@ func (d *ConflictDetector[Txn]) Add(txn Txn) {
 			d.garbageNodes.In() <- node
 		},
 	}
-	node.TrySendToWorkerCache = func(workerID int64) bool {
-		// Try sending this txn to related worker as soon as all dependencies are resolved.
-		return d.sendToWorker(txnWithNotifier, workerID)
+	node.TrySendToTxnCache = func(cacheID int64) bool {
+		// Try sending this txn to related cache as soon as all dependencies are resolved.
+		return d.sendToCache(txnWithNotifier, cacheID)
 	}
-	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workerCaches)) }
+	node.RandCacheID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.resovedTxnCaches)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
 	d.slots.Add(node)
 }
@@ -128,23 +128,24 @@ func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 	}
 }
 
-// sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Txn]) sendToWorker(txn TxnWithNotifier[Txn], workerID int64) bool {
-	if workerID < 0 {
-		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
+// sendToCache should not call txn.Callback if it returns an error.
+func (d *ConflictDetector[Txn]) sendToCache(txn TxnWithNotifier[Txn], id int64) bool {
+	if id < 0 {
+		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
 	}
-	worker := d.workerCaches[workerID]
-	ok := worker.add(txn)
+	cache := d.resovedTxnCaches[id]
+	ok := cache.add(txn)
 	if ok {
 		txn.TxnEvent.OnConflictResolved()
 	}
 	return ok
 }
 
-// GetOutChByWorkerID returns the output channel of the worker.
-func (d *ConflictDetector[Txn]) GetOutChByWorkerID(workerID int64) <-chan TxnWithNotifier[Txn] {
-	if workerID < 0 {
-		log.Panic("must assign with a valid workerID", zap.Int64("workerID", workerID))
+// GetOutChByCacheID returns the output channel by cacheID.
+// Note txns in single cache should be executed sequentially.
+func (d *ConflictDetector[Txn]) GetOutChByCacheID(id int64) <-chan TxnWithNotifier[Txn] {
+	if id < 0 {
+		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
 	}
-	return d.workerCaches[workerID].out()
+	return d.resovedTxnCaches[id].out()
 }

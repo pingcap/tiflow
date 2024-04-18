@@ -23,12 +23,12 @@ import (
 )
 
 type (
-	workerID = int64
+	cacheID = int64
 )
 
 const (
-	unassigned    = workerID(-2)
-	assignedToAny = workerID(-1)
+	unassigned    = cacheID(-2)
+	assignedToAny = cacheID(-1)
 
 	invalidNodeID = int64(-1)
 )
@@ -52,9 +52,9 @@ type Node struct {
 	sortedDedupKeysHash []uint64
 
 	// Called when all dependencies are resolved.
-	TrySendToWorkerCache func(id workerID) bool
+	TrySendToTxnCache func(id cacheID) bool
 	// Set the id generator to get a random ID.
-	RandWorkerID func() workerID
+	RandCacheID func() cacheID
 	// Set the callback that the node is notified.
 	OnNotified func(callback func())
 
@@ -67,7 +67,7 @@ type Node struct {
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
 
-	assignedTo workerID
+	assignedTo cacheID
 	removed    bool
 
 	// dependers is an ordered set for all nodes that
@@ -89,8 +89,8 @@ func NewNode(sortedDedupKeysHash []uint64) (ret *Node) {
 	defer func() {
 		ret.id = genNextNodeID()
 		ret.sortedDedupKeysHash = sortedDedupKeysHash
-		ret.TrySendToWorkerCache = nil
-		ret.RandWorkerID = nil
+		ret.TrySendToTxnCache = nil
+		ret.RandCacheID = nil
 		ret.totalDependencies = 0
 		ret.resolvedDependencies = 0
 		ret.removedDependencies = 0
@@ -140,9 +140,9 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 		defer target.mu.Unlock()
 
 		if target.assignedTo != unassigned {
-			// The target has already been assigned to a worker.
-			// In this case, record the worker ID in `resolvedList`, and this node
-			// probably can be sent to the same worker and executed sequentially.
+			// The target has already been assigned to a cache.
+			// In this case, record the cache ID in `resolvedList`, and this node
+			// probably can be sent to the same cache and executed sequentially.
 			resolvedDependencies = atomic.AddInt32(&n.resolvedDependencies, 1)
 			atomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], target.assignedTo)
 		}
@@ -208,7 +208,7 @@ func (n *Node) Free() {
 	}
 
 	n.id = invalidNodeID
-	n.TrySendToWorkerCache = nil
+	n.TrySendToTxnCache = nil
 
 	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
 	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
@@ -216,8 +216,8 @@ func (n *Node) Free() {
 	// or not.
 }
 
-// tryAssignTo assigns a node to a worker. Returns `true` on success.
-func (n *Node) tryAssignTo(workerID int64) bool {
+// tryAssignTo assigns a node to a cache. Returns `true` on success.
+func (n *Node) tryAssignTo(cacheID int64) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -226,14 +226,14 @@ func (n *Node) tryAssignTo(workerID int64) bool {
 		return true
 	}
 
-	if n.TrySendToWorkerCache != nil {
-		ok := n.TrySendToWorkerCache(workerID)
+	if n.TrySendToTxnCache != nil {
+		ok := n.TrySendToTxnCache(cacheID)
 		if !ok {
 			return false
 		}
-		n.TrySendToWorkerCache = nil
+		n.TrySendToTxnCache = nil
 	}
-	n.assignedTo = workerID
+	n.assignedTo = cacheID
 
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
@@ -249,37 +249,37 @@ func (n *Node) tryAssignTo(workerID int64) bool {
 }
 
 func (n *Node) maybeResolve() {
-	if workerID, ok := n.tryResolve(); ok {
-		if workerID == unassigned {
-			log.Panic("invalid worker ID", zap.Uint64("workerID", uint64(workerID)))
+	if cacheID, ok := n.tryResolve(); ok {
+		if cacheID == unassigned {
+			log.Panic("invalid cache ID", zap.Uint64("cacheID", uint64(cacheID)))
 		}
 
-		if workerID >= 0 {
-			n.tryAssignTo(workerID)
+		if cacheID >= 0 {
+			n.tryAssignTo(cacheID)
 			return
 		}
 
-		workerID := n.RandWorkerID()
-		if !n.tryAssignTo(workerID) {
-			// If the worker is full, we need to try to assign to another worker.
+		cacheID := n.RandCacheID()
+		if !n.tryAssignTo(cacheID) {
+			// If the cache is full, we need to try to assign to another cache.
 			n.OnNotified(n.maybeResolve)
 		}
 	}
 }
 
-// tryResolve try to find a worker to assign the node to.
+// tryResolve try to find a cache to assign the node to.
 // Returns (_, false) if there is a conflict,
 // returns (rand, true) if there is no conflict,
-// returns (N, true) if only worker N can be used.
+// returns (N, true) if only cache N can be used.
 func (n *Node) tryResolve() (int64, bool) {
 	if n.totalDependencies == 0 {
-		// No conflicts, can select any workers.
+		// No conflicts, can select any caches.
 		return assignedToAny, true
 	}
 
 	removedDependencies := atomic.LoadInt32(&n.removedDependencies)
 	if removedDependencies == n.totalDependencies {
-		// All dependcies are removed, so assign the node to any worker is fine.
+		// All dependcies are removed, so assign the node to any cache is fine.
 		return assignedToAny, true
 	}
 
@@ -303,9 +303,9 @@ func (n *Node) tryResolve() (int64, bool) {
 			}
 		}
 		if !hasDiffDep && firstDep != unassigned {
-			// If all dependency nodes are assigned to the same worker, we can assign
-			// this node to the same worker directly, and they will execute sequentially.
-			// On the other hand, if dependency nodes are assigned to different workers,
+			// If all dependency nodes are assigned to the same cache, we can assign
+			// this node to the same cache directly, and they will execute sequentially.
+			// On the other hand, if dependency nodes are assigned to different caches,
 			// This node has to wait all dependency txn executed and all depencecy nodes
 			// are removed.
 			return firstDep, true
@@ -336,9 +336,9 @@ func (n *Node) dependerCount() int {
 	return n.dependers.Len()
 }
 
-// assignedWorkerID returns the worker ID that the node has been assigned to.
+// assignedWorkerID returns the cache ID that the node has been assigned to.
 // NOTE: assignedWorkerID is used for unit tests only.
-func (n *Node) assignedWorkerID() workerID {
+func (n *Node) assignedWorkerID() cacheID {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
