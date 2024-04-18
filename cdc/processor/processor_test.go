@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"sync/atomic"
 	"testing"
 
@@ -794,4 +795,11 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
+}
+
+func TestProcessorNotInitialized(t *testing.T) {
+	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	liveness := model.LivenessCaptureAlive
+	p, _, _ := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
+	require.Nil(t, p.WriteDebugInfo(os.Stdout))
 }
