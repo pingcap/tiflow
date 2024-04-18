@@ -133,11 +133,12 @@ func (d *ConflictDetector[Txn]) sendToCache(txn TxnWithNotifier[Txn], id int64) 
 	if id < 0 {
 		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
 	}
+
+	// Note OnConflictResolved must be called before add to cache. Otherwise, there will
+	// be a data race since the txn may be read before the OnConflictResolved is called.
+	txn.TxnEvent.OnConflictResolved()
 	cache := d.resovedTxnCaches[id]
 	ok := cache.add(txn)
-	if ok {
-		txn.TxnEvent.OnConflictResolved()
-	}
 	return ok
 }
 
