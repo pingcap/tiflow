@@ -308,6 +308,7 @@ func BenchmarkJsonDecoding(b *testing.B) {
 	dmlCases := internal.NewDMLTestCases(b)
 	codecBenchmarkRowChanges := dmlCases[1]
 	codecJSONEncodedRowChanges, err := codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
+	require.NoError(b, err)
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
 			codecConfig := common.NewConfig(config.ProtocolOpen)
