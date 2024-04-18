@@ -759,7 +759,10 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
 		failpoint.Inject("MySQLDuplicateEntryError", func() {
 			log.Warn("inject MySQLDuplicateEntryError")
-			err := logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLDuplicateEntry, errors.New("Duplicate entry")), start, s.changefeed, "failpoint", 0, nil)
+			err := logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLDuplicateEntry, &dmysql.MySQLError{
+				Number:  uint16(mysql.ErrDupEntry),
+				Message: "Duplicate entry",
+			}), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 
