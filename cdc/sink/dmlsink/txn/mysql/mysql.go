@@ -752,11 +752,16 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		writeTimeout += networkDriftDuration
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			fmt.Printf("start to random error")
+			log.Warn("inject MySQLSinkTxnRandomError")
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
+		failpoint.Inject("MySQLDuplicateEntryError", func() {
+			log.Warn("inject MySQLDuplicateEntryError")
+			err := logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLDuplicateEntry, errors.New("Duplicate entry")), start, s.changefeed, "failpoint", 0, nil)
+			failpoint.Return(err)
+		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
