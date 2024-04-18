@@ -868,8 +868,7 @@ func isRetryableDMLError(err error) bool {
 	}
 
 	switch errCode {
-	// when meet dup entry error,
-	// we don't retry and report the error directly to owner to restart the changefeed to enter safe mode.
+	// when meet dup entry error, we don't retry and report the error directly to owner to restart the changefeed.
 	case mysql.ErrNoSuchTable, mysql.ErrBadDB, mysql.ErrDupEntry:
 		return false
 	}
