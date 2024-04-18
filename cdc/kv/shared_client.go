@@ -171,10 +171,11 @@ type SharedClient struct {
 	// rangeTaskCh is used to receive range tasks.
 	// The tasks will be handled in `handleRangeTask` goroutine.
 	rangeTaskCh *chann.DrainableChann[rangeTask]
-	// regionCh is used to cache region tasks after ranges locked.
+	// regionCh is used to receive region tasks have been locked in rangeLock.
 	// The region will be handled in `handleRegions` goroutine.
 	regionCh *chann.DrainableChann[regionInfo]
-	// resolveLockTaskCh is used to retrieve resolve lock tasks.
+	// resolveLockTaskCh is used to receive resolve lock tasks.
+	// The tasks will be handled in `handleResolveLockTasks` goroutine.
 	resolveLockTaskCh *chann.DrainableChann[resolveLockTask]
 	errCh             *chann.DrainableChann[regionErrorInfo]
 
@@ -185,7 +186,7 @@ type resolveLockTask struct {
 	regionID uint64
 	targetTs uint64
 	state    *regionlock.LockedRangeState
-	enter    time.Time
+	create   time.Time
 }
 
 // rangeTask represents a task to subscribe a range span of a table.
@@ -765,8 +766,8 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		}
 	}
 
-	doResolve := func(regionID uint64, state *regionlock.LockedRangeState, maxVersion uint64) {
-		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
+	doResolve := func(regionID uint64, state *regionlock.LockedRangeState, targetTs uint64) {
+		if state.ResolvedTs.Load() > targetTs || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -779,7 +780,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 			s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
 		}()
 
-		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
+		if err := s.lockResolver.Resolve(ctx, regionID, targetTs); err != nil {
 			log.Warn("event feed resolve lock fail",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -799,7 +800,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		case <-gcTicker.C:
 			gcResolveLastRun()
 		case task = <-s.resolveLockTaskCh.Out():
-			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
+			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.create).Milliseconds()))
 			doResolve(task.regionID, task.state, task.targetTs)
 		}
 	}
@@ -877,8 +878,11 @@ func (s *SharedClient) newSubscribedTable(
 	rt.tryResolveLock = func(regionID uint64, state *regionlock.LockedRangeState) {
 		targetTs := rt.staleLocksTargetTs.Load()
 		if state.ResolvedTs.Load() < targetTs && state.Initialzied.Load() {
-			enter := time.Now()
-			s.resolveLockTaskCh.In() <- resolveLockTask{regionID, targetTs, state, enter}
+			s.resolveLockTaskCh.In() <- resolveLockTask{
+				regionID: regionID,
+				targetTs: targetTs,
+				state:    state,
+				create:   time.Now()}
 		}
 	}
 	return rt
