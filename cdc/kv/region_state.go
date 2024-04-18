@@ -22,9 +22,6 @@ import (
 )
 
 const (
-	minRegionStateBucket = 4
-	maxRegionStateBucket = 16
-
 	stateNormal  uint32 = 0
 	stateStopped uint32 = 1
 	stateRemoved uint32 = 2
