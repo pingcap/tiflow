@@ -29,8 +29,8 @@ import (
 // have their original orders preserved. Transactions in different
 // channels can be executed concurrently.
 type ConflictDetector[Txn txnEvent] struct {
-	// resovedTxnCaches are used to cache resolved transactions.
-	resovedTxnCaches []txnCache[Txn]
+	// resolvedTxnCaches are used to cache resolved transactions.
+	resolvedTxnCaches []txnCache[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -52,15 +52,15 @@ func NewConflictDetector[Txn txnEvent](
 	numSlots uint64, opt TxnCacheOption,
 ) *ConflictDetector[Txn] {
 	ret := &ConflictDetector[Txn]{
-		resovedTxnCaches: make([]txnCache[Txn], opt.Count),
-		slots:            internal.NewSlots[*internal.Node](numSlots),
-		numSlots:         numSlots,
-		notifiedNodes:    chann.NewAutoDrainChann[func()](),
-		garbageNodes:     chann.NewAutoDrainChann[*internal.Node](),
-		closeCh:          make(chan struct{}),
+		resolvedTxnCaches: make([]txnCache[Txn], opt.Count),
+		slots:             internal.NewSlots[*internal.Node](numSlots),
+		numSlots:          numSlots,
+		notifiedNodes:     chann.NewAutoDrainChann[func()](),
+		garbageNodes:      chann.NewAutoDrainChann[*internal.Node](),
+		closeCh:           make(chan struct{}),
 	}
 	for i := 0; i < opt.Count; i++ {
-		ret.resovedTxnCaches[i] = newTxnCache[Txn](opt)
+		ret.resolvedTxnCaches[i] = newTxnCache[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -96,7 +96,7 @@ func (d *ConflictDetector[Txn]) Add(txn Txn) {
 		// Try sending this txn to related cache as soon as all dependencies are resolved.
 		return d.sendToCache(txnWithNotifier, cacheID)
 	}
-	node.RandCacheID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.resovedTxnCaches)) }
+	node.RandCacheID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.resolvedTxnCaches)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
 	d.slots.Add(node)
 }
@@ -137,7 +137,7 @@ func (d *ConflictDetector[Txn]) sendToCache(txn TxnWithNotifier[Txn], id int64) 
 	// Note OnConflictResolved must be called before add to cache. Otherwise, there will
 	// be a data race since the txn may be read before the OnConflictResolved is called.
 	txn.TxnEvent.OnConflictResolved()
-	cache := d.resovedTxnCaches[id]
+	cache := d.resolvedTxnCaches[id]
 	ok := cache.add(txn)
 	return ok
 }
@@ -148,5 +148,5 @@ func (d *ConflictDetector[Txn]) GetOutChByCacheID(id int64) <-chan TxnWithNotifi
 	if id < 0 {
 		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
 	}
-	return d.resovedTxnCaches[id].out()
+	return d.resolvedTxnCaches[id].out()
 }
