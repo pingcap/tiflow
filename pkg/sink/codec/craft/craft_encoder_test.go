@@ -17,7 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -26,22 +26,14 @@ import (
 )
 
 func TestCraftMaxMessageBytes(t *testing.T) {
-	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
-		Name: "col1",
-		Type: mysql.TypeVarchar,
-	}}, nil)
-	testEvent := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "col1",
-			Value: []byte("aa"),
-		}}, tableInfo),
-	}
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key)`)
+	testEvent := helper.DML2Event(`insert into test.t values ("aa")`, "test", "t")
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
@@ -55,23 +47,15 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 }
 
 func TestCraftMaxBatchSize(t *testing.T) {
-	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
 	cfg.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
-		Name: "col1",
-		Type: mysql.TypeVarchar,
-	}}, nil)
-	testEvent := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "col1",
-			Value: []byte("aa"),
-		}}, tableInfo),
-	}
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key)`)
+	testEvent := helper.DML2Event(`insert into test.t values ("aa")`, "test", "t")
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
@@ -120,7 +104,6 @@ func TestDefaultCraftBatchCodec(t *testing.T) {
 }
 
 func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
-	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
 	cfg.MaxBatchSize = 2
 	encoder := NewBatchEncoderBuilder(cfg).Build()
@@ -128,18 +111,11 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{
-		Name: "col1",
-		Type: mysql.TypeVarchar,
-	}}, nil)
-	row := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "col1",
-			Value: []byte("aa"),
-		}}, tableInfo),
-	}
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key)`)
+	row := helper.DML2Event(`insert into test.t values ("aa")`, "test", "t")
 
 	tests := []struct {
 		row      *model.RowChangedEvent

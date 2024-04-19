@@ -78,9 +78,11 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	ev.CommitTs = b.headers.GetTs(b.index)
 	if len(preCols) > 0 {
-		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), preCols, nil)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
+		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), preCols, indexColumns)
 	} else {
-		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), cols, nil)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
+		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), cols, indexColumns)
 	}
 	if len(preCols) > 0 {
 		ev.PreColumns = model.Columns2ColumnDatas(preCols, ev.TableInfo)
