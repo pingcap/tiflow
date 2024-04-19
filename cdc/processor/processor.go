@@ -563,16 +563,6 @@ func (p *processor) tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if !p.initialized.Load() {
-		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !initialized {
-			return nil
-		}
-	}
-
 	barrier, err := p.agent.Tick(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -591,7 +581,6 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if p.initialized.Load() {
 		return nil
 	}
-
 	// Here we use a separated context for sub-components, so we can custom the
 	// order of stopping all sub-components when closing the processor.
 	prcCtx := context.Background()
@@ -602,7 +591,11 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	p.filter, err = filter.NewFilter(p.latestInfo.Config, util.GetTimeZoneName(tz))
+
+	// Clone the config to avoid data race
+	cfConfig := p.latestInfo.Config.Clone()
+
+	p.filter, err = filter.NewFilter(cfConfig, util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -615,8 +608,8 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	p.ddlHandler.spawn(prcCtx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
-		p.latestInfo.Config.Mounter.WorkerNum,
-		p.filter, tz, p.changefeedID, p.latestInfo.Config.Integrity)
+		cfConfig.Mounter.WorkerNum,
+		p.filter, tz, p.changefeedID, cfConfig.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(prcCtx)
@@ -625,9 +618,10 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	p.latestInfo.Config.Sink.TiDBSourceID = sourceID
+	log.Info("get sourceID from PD", zap.Uint64("sourceID", sourceID), zap.Stringer("changefeedID", p.changefeedID))
+	cfConfig.Sink.TiDBSourceID = sourceID
 
-	p.redo.r = redo.NewDMLManager(p.changefeedID, p.latestInfo.Config.Consistent)
+	p.redo.r = redo.NewDMLManager(p.changefeedID, cfConfig.Consistent)
 	p.redo.name = "RedoManager"
 	p.redo.changefeedID = p.changefeedID
 	p.redo.spawn(prcCtx)
@@ -643,8 +637,8 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(p.latestInfo.Config.BDRMode),
-		util.GetOrZero(p.latestInfo.Config.EnableTableMonitor))
+		sortEngine, util.GetOrZero(cfConfig.BDRMode),
+		util.GetOrZero(cfConfig.EnableTableMonitor))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
