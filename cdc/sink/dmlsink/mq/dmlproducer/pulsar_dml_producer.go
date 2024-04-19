@@ -168,6 +168,9 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 				log.Error("Pulsar DML producer async send error",
 					zap.String("namespace", p.id.Namespace),
 					zap.String("changefeed", p.id.ID),
+					zap.Int("messageSize", len(m.Payload)),
+					zap.String("topic", topic),
+					zap.String("schema", message.GetSchema()),
 					zap.Error(err))
 				mq.IncPublishedDMLFail(topic, p.id.ID, message.GetSchema())
 				// use this select to avoid send error to a closed channel
