@@ -62,27 +62,21 @@ func TestNodeDependOn(t *testing.T) {
 func TestNodeSingleDependency(t *testing.T) {
 	t.Parallel()
 
-	// Node B depends on A, without any other removed dependencies.
+	// Node B depends on A, without any other resolved dependencies.
 	nodeA := NewNode()
 	nodeB := NewNode()
-	nodeA.RandWorkerID = func() workerID { return 1 }
 	nodeB.RandWorkerID = func() workerID { return 100 }
 	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
-	require.True(t, nodeA.assign())
+	require.True(t, nodeA.assignTo(1))
 	require.Equal(t, workerID(1), nodeA.assignedWorkerID())
-	// Node B should be unassigned before Node A is removed.
-	require.Equal(t, unassigned, nodeB.assignedWorkerID())
-	nodeA.Remove()
-	// Node B should be assigned to random worker after Node A is removed.
-	require.Equal(t, workerID(100), nodeB.assignedWorkerID())
+	require.Equal(t, workerID(1), nodeB.assignedWorkerID())
 
 	// Node D depends on C, with some other resolved dependencies.
 	nodeC := NewNode()
 	nodeD := NewNode()
-	nodeC.RandWorkerID = func() workerID { return 2 }
 	nodeD.RandWorkerID = func() workerID { return 100 }
 	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
-	require.True(t, nodeC.assign())
+	require.True(t, nodeC.assignTo(2))
 	require.Equal(t, workerID(2), nodeC.assignedWorkerID())
 	nodeC.Remove()
 	require.Equal(t, workerID(100), nodeD.assignedWorkerID())
@@ -101,12 +95,10 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeC := NewNode()
 
 	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
-	nodeA.RandWorkerID = func() workerID { return 1 }
-	nodeB.RandWorkerID = func() workerID { return 2 }
 	nodeC.RandWorkerID = func() workerID { return 100 }
 
-	require.True(t, nodeA.assign())
-	require.True(t, nodeB.assign())
+	require.True(t, nodeA.assignTo(1))
+	require.True(t, nodeB.assignTo(2))
 
 	require.Equal(t, unassigned, nodeC.assignedWorkerID())
 
@@ -126,22 +118,17 @@ func TestNodeResolveImmediately(t *testing.T) {
 
 	// Node D depends on B and C, all of them are assigned to 1.
 	nodeB := NewNode()
-	nodeB.RandWorkerID = func() workerID { return 1 }
-	require.True(t, nodeB.assign())
+	require.True(t, nodeB.assignTo(1))
 	nodeC := NewNode()
-	nodeC.RandWorkerID = func() workerID { return 1 }
-	require.True(t, nodeC.assign())
+	require.True(t, nodeC.assignTo(1))
 	nodeD := NewNode()
 	nodeD.RandWorkerID = func() workerID { return workerID(100) }
 	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
-	// NodeD should be unassigned before Node B and C are removed.
-	require.Equal(t, unassigned, nodeD.assignedWorkerID())
-	nodeB.Remove()
-	nodeC.Remove()
-	// NodeD should be assigned to random worker after Node B and C are removed.
-	require.Equal(t, workerID(100), nodeD.assignedWorkerID())
+	require.Equal(t, workerID(1), nodeD.assignedWorkerID())
 
 	// Node E depends on B and C and some other resolved dependencies.
+	nodeB.Remove()
+	nodeC.Remove()
 	nodeE := NewNode()
 	nodeE.RandWorkerID = func() workerID { return workerID(100) }
 	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
@@ -161,6 +148,6 @@ func TestNodeDoubleAssigning(t *testing.T) {
 	t.Parallel()
 
 	nodeA := NewNode()
-	nodeA.RandWorkerID = func() workerID { return 1 }
-	require.True(t, nodeA.assign())
+	require.True(t, nodeA.assignTo(1))
+	require.False(t, nodeA.assignTo(2))
 }
