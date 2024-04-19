@@ -713,11 +713,18 @@ func getDefaultOrZeroValue(
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		datum := types.NewDatum(col.GetOriginDefaultValue())
-		ctx := types.DefaultStmtNoWarningContext
-		ctx = ctx.WithLocation(tz)
-		d, err = datum.ConvertTo(ctx, &col.FieldType)
+		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+		}
+		switch col.GetType() {
+		case mysql.TypeTimestamp:
+			t := d.GetMysqlTime()
+			err = t.ConvertTimeZone(time.UTC, tz)
+			if err != nil {
+				return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+			}
+			d.SetMysqlTime(t)
 		}
 	} else if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
