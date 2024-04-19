@@ -168,7 +168,7 @@ func (se *session) GetSessionVars() *variable.SessionVars {
 	return se.vars
 }
 
-func (se *session) GetExprCtx() exprctx.ExprContext {
+func (se *session) GetExprCtx() exprctx.BuildContext {
 	return se.exprctx
 }
 
@@ -188,7 +188,7 @@ func (se *session) Value(key fmt.Stringer) interface{} {
 }
 
 // GetInfoSchema implements the sessionctx.Context interface.
-func (se *session) GetInfoSchema() infoschema.MetaOnlyInfoSchema {
+func (se *session) GetInfoSchema() infoschema.InfoSchemaMetaVersion {
 	return nil
 }
 

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -891,7 +890,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 				c.reMu.Unlock()
 			}
 
-			ti, err := dbutiltest.GetTableInfoBySQL(statement, p)
+			ti, err := dbutil.GetTableInfoBySQL(statement, p)
 			if err != nil {
 				return err
 			}
