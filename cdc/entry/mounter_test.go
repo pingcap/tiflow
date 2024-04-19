@@ -897,7 +897,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err := types.ParseTimeFromFloatString(
 		types.DefaultStmtNoWarningContext,
-		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + notnull + default")
 
@@ -908,7 +908,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err = types.ParseTimeFromFloatString(
 		types.DefaultStmtNoWarningContext,
-		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + null + default")
 
