@@ -16,7 +16,6 @@ package canal
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -40,7 +39,7 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	// the size of `testEvent` after being encoded by canal-json is 200
@@ -78,7 +77,7 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	cfg := common.NewConfig(config.ProtocolCanalJSON)

@@ -106,7 +106,7 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 }
 
 // DDL2Job executes the DDL stmt and returns the DDL job
-func (s *SchemaTestHelper) DDL2Job(ddl string, jobState timodel.JobState) *timodel.Job {
+func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
 	require.Nil(s.t, err)
@@ -114,7 +114,7 @@ func (s *SchemaTestHelper) DDL2Job(ddl string, jobState timodel.JobState) *timod
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
-	jobs[0].State = jobState
+	jobs[0].State = timodel.JobStateDone
 	res := jobs[0]
 	if res.Type != timodel.ActionRenameTables {
 		return res

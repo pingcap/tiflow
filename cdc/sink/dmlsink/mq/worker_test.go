@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -72,7 +71,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -275,7 +274,7 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	key1 := model.TopicPartitionKey{
@@ -367,7 +366,7 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	events := []mqEvent{
@@ -513,7 +512,7 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	events := []mqEvent{

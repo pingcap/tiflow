@@ -378,7 +378,8 @@ func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.J
 	} else {
 		// For tidb_ddl_job, we need to filter `create table` ddl.
 		// In that way, even if the ddl use the old version, we can deal with it correctly
-		if !job.IsDone() || job.Type == timodel.ActionCreateTable {
+		// todo(hyy):explain reasons
+		if !job.IsDone() {
 			return nil, nil
 		}
 	}

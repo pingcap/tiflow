@@ -16,7 +16,6 @@ package columnselector
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -109,7 +108,7 @@ func TestVerifyTables(t *testing.T) {
     	unique key uk_b_c(b, c),
     	unique key uk_d_e(d, e),
     	key idx_c_d(c, d))`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
 	infos := []*model.TableInfo{tableInfo}
 
@@ -270,7 +269,7 @@ func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t1(a int primary key, b int, c int)`
-	job := helper.DDL2Job(sql, timodel.JobStateDone)
+	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
 	infos := []*model.TableInfo{tableInfo}
 
