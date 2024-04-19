@@ -497,6 +497,16 @@ func (p *processor) Tick(
 	ctx context.Context,
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
+	if !p.initialized.Load() {
+		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if !initialized {
+			return nil, nil
+		}
+	}
+
 	p.latestInfo = info
 	p.latestStatus = status
 
@@ -558,16 +568,6 @@ func (p *processor) handleWarnings() error {
 }
 
 func (p *processor) tick(ctx context.Context) (error, error) {
-	if !p.initialized.Load() {
-		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if !initialized {
-			return nil, nil
-		}
-	}
-
 	warning := p.handleWarnings()
 	if err := p.handleErrorCh(); err != nil {
 		return warning, errors.Trace(err)
