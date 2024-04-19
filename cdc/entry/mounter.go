@@ -717,7 +717,8 @@ func getDefaultOrZeroValue(
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		datum := types.NewDatum(col.GetOriginDefaultValue())
-		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
+		ctx := types.DefaultStmtNoWarningContext.WithLocation(tz)
+		d, err = datum.ConvertTo(ctx, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
 		}
