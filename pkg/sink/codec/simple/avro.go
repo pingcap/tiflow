@@ -346,15 +346,15 @@ func (a *avroMarshaller) collectColumns(
 			continue
 		}
 		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		colName := tableInfo.ForceGetColumnName(col.ColumnID)
 		if onlyHandleKey && !colFlag.IsHandleKey() {
 			continue
 		}
+		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+
 		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
-		result[colName] = holder
+		result[colInfo.Name.O] = holder
 	}
 
 	return map[string]interface{}{
