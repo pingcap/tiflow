@@ -69,8 +69,9 @@ func New(
 	engine sorter.SortEngine,
 	bdrMode bool,
 	enableTableMonitor bool,
+	safeModeAtStart bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor)
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -115,6 +116,7 @@ func newSourceManager(
 	engine sorter.SortEngine,
 	bdrMode bool,
 	enableTableMonitor bool,
+	safeModeAtStart bool,
 ) *SourceManager {
 	mgr := &SourceManager{
 		ready:              make(chan struct{}),
@@ -143,7 +145,7 @@ func newSourceManager(
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			if isOldUpdateKVEntry(raw, mgr.startTs) {
+			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
 				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
 				if err != nil {
 					return err
