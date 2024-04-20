@@ -448,7 +448,7 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Type:      colInfo.GetType(),
 		Charset:   colInfo.GetCharset(),
 		Collation: colInfo.GetCollate(),
-		Flag:      tableInfo.ColumnsFlag[colID],
+		Flag:      *tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
 		Default:   GetColumnDefaultValue(colInfo),
 	}
