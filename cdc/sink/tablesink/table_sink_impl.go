@@ -138,6 +138,9 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 
 	resolvedCallbackableEvents := make([]*dmlsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
+		if err := ev.TrySplitAndSortUpdateEvent(e.backendSink.Scheme()); err != nil {
+			return SinkInternalError{err}
+		}
 		// We have to record the event ID for the callback.
 		postEventFlushFunc := e.progressTracker.addEvent()
 		evCommitTs := ev.GetCommitTs()
