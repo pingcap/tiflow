@@ -488,6 +488,16 @@ func (p *processor) Tick(
 	ctx cdcContext.Context,
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
+	if !p.initialized.Load() {
+		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+		if err != nil {
+			return errors.Trace(err), nil
+		}
+		if !initialized {
+			return nil, nil
+		}
+	}
+
 	p.latestInfo = info
 	p.latestStatus = status
 
@@ -512,8 +522,7 @@ func (p *processor) Tick(
 		return nil, nil
 	}
 	startTime := time.Now()
-	warning := p.handleWarnings()
-	err := p.tick(ctx)
+	err, warning := p.tick(ctx)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
 		log.Warn("processor tick took too long",
@@ -548,24 +557,15 @@ func (p *processor) handleWarnings() error {
 	return err
 }
 
-func (p *processor) tick(ctx cdcContext.Context) error {
+func (p *processor) tick(ctx cdcContext.Context) (error, error) {
+	warning := p.handleWarnings()
 	if err := p.handleErrorCh(); err != nil {
-		return errors.Trace(err)
-	}
-
-	if !p.initialized.Load() {
-		initialized, err := p.initializer.TryInitialize(ctx, ctx.GlobalVars().ChangefeedThreadPool)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !initialized {
-			return nil
-		}
+		return errors.Trace(err), warning
 	}
 
 	barrier, err := p.agent.Tick(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(err), warning
 	}
 
 	if barrier != nil && barrier.GlobalBarrierTs != 0 {
@@ -573,7 +573,7 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	}
 	p.doGCSchemaStorage()
 
-	return nil
+	return nil, warning
 }
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
