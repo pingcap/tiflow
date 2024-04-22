@@ -44,7 +44,7 @@ var _ dmlsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 type dmlSink struct {
 	alive struct {
 		sync.RWMutex
-		conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
+		conflictDetector *causality.ConflictDetector[*txnEvent]
 		isDead           bool
 	}
 
@@ -104,14 +104,19 @@ func newSink(ctx context.Context, backends []backend,
 		dead:    make(chan struct{}),
 	}
 
+	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.TxnCacheOption{
+		Count:         len(backends),
+		Size:          1024,
+		BlockStrategy: causality.BlockStrategyWaitEmpty,
+	})
+
 	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
 		w := newWorker(ctx1, i, backend, len(backends))
-		g.Go(func() error { return w.runLoop() })
+		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
+		g.Go(func() error { return w.runLoop(txnCh) })
 		sink.workers = append(sink.workers, w)
 	}
-
-	sink.alive.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
 
 	sink.wg.Add(1)
 	go func() {
@@ -167,9 +172,6 @@ func (s *dmlSink) Close() {
 	}
 	s.wg.Wait()
 
-	for _, w := range s.workers {
-		w.close()
-	}
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
