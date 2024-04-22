@@ -213,6 +213,12 @@ var (
 			return make(map[string]interface{})
 		},
 	}
+	// rowMapPool return holder for each row
+	rowMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
 
 	// dmlPayloadHolderPool return holder for the payload
 	dmlPayloadHolderPool = sync.Pool{
@@ -320,6 +326,7 @@ func recycleMap(m map[string]interface{}) {
 			clear(colMap)
 			genericMapPool.Put(col)
 		}
+		rowMapPool.Put(dataMap)
 	}
 
 	oldDataMap := eventMap["old"]
@@ -330,6 +337,7 @@ func recycleMap(m map[string]interface{}) {
 			clear(colMap)
 			genericMapPool.Put(col)
 		}
+		rowMapPool.Put(oldDataMap)
 	}
 	holder["payload"] = nil
 	dmlPayloadHolderPool.Put(holder)
@@ -340,7 +348,7 @@ func recycleMap(m map[string]interface{}) {
 func (a *avroMarshaller) collectColumns(
 	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
 ) map[string]interface{} {
-	result := make(map[string]interface{}, len(columns))
+	result := rowMapPool.Get().(map[string]interface{})
 	for _, col := range columns {
 		if col == nil {
 			continue
@@ -350,13 +358,11 @@ func (a *avroMarshaller) collectColumns(
 			continue
 		}
 		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-
 		value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
 		holder := genericMapPool.Get().(map[string]interface{})
 		holder[avroType] = value
 		result[colInfo.Name.O] = holder
 	}
-
 	return map[string]interface{}{
 		"map": result,
 	}
