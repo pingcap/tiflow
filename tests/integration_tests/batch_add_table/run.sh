@@ -88,6 +88,7 @@ function run_without_fast_create_table() {
 
 trap stop_tidb_cluster EXIT
 run_without_fast_create_table $*
+stop_tidb_cluster
 run_with_fast_create_table $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
