@@ -105,7 +105,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 }
 
 func TestSubscribedTable(t *testing.T) {
-	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
+	s := &SharedClient{resolveLockTaskCh: chann.NewAutoDrainChann[resolveLockTask]()}
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newSubscribedTable(SubscriptionID(1), span, 100, nil)
 	s.totalSpans.v = make(map[SubscriptionID]*subscribedTable)
@@ -115,11 +115,11 @@ func TestSubscribedTable(t *testing.T) {
 	// Lock a range, and then ResolveLock will trigger a task for it.
 	res := table.rangeLock.LockRange(context.Background(), []byte{'b'}, []byte{'c'}, 1, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	res.LockedRange.Initialzied.Store(true)
+	res.LockedRangeState.Initialzied.Store(true)
 
 	s.ResolveLock(SubscriptionID(1), 200)
 	select {
-	case <-s.resolveLockCh.Out():
+	case <-s.resolveLockTaskCh.Out():
 	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a resolve lock task")
 	}
@@ -127,9 +127,9 @@ func TestSubscribedTable(t *testing.T) {
 	// Lock another range, no task will be triggered before initialized.
 	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	state := newRegionFeedState(regionInfo{lockedRange: res.LockedRange, subscribedTable: table}, 1)
+	state := newRegionFeedState(regionInfo{lockedRangeState: res.LockedRangeState, subscribedTable: table}, 1)
 	select {
-	case <-s.resolveLockCh.Out():
+	case <-s.resolveLockTaskCh.Out():
 		require.True(t, false, "shouldn't get a resolve lock task")
 	case <-time.After(100 * time.Millisecond):
 	}
@@ -138,12 +138,12 @@ func TestSubscribedTable(t *testing.T) {
 	state.setInitialized()
 	state.updateResolvedTs(101)
 	select {
-	case <-s.resolveLockCh.Out():
+	case <-s.resolveLockTaskCh.Out():
 	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a resolve lock task")
 	}
 
-	s.resolveLockCh.CloseAndDrain()
+	s.resolveLockTaskCh.CloseAndDrain()
 }
 
 func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
