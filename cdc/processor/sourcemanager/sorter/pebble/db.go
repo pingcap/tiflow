@@ -81,6 +81,7 @@ func iterTable(
 			tableMaxCRTs, _ := strconv.Atoi(userProps[maxTableCRTsLabel])
 			return uint64(tableMaxCRTs) >= lowerBound.CommitTs && uint64(tableMinCRTs) <= upperBound.CommitTs
 		},
+		UseL6Filters: true,
 	})
 	if err != nil {
 		log.Panic("fail to create iterator")
@@ -94,6 +95,7 @@ func iterTable(
 func OpenPebble(
 	id int, path string, cfg *config.DBConfig,
 	cache *pebble.Cache,
+	tableCache *pebble.TableCache,
 	adjusts ...func(*pebble.Options),
 ) (db *pebble.DB, err error) {
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
@@ -104,6 +106,7 @@ func OpenPebble(
 
 	opts := buildPebbleOption(cfg)
 	opts.Cache = cache
+	opts.TableCache = tableCache
 	for _, adjust := range adjusts {
 		adjust(opts)
 	}
