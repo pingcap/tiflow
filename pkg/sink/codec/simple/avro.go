@@ -326,6 +326,7 @@ func recycleMap(m map[string]interface{}) {
 			clear(colMap)
 			genericMapPool.Put(col)
 		}
+		clear(dataMap)
 		rowMapPool.Put(dataMap)
 	}
 
@@ -337,6 +338,7 @@ func recycleMap(m map[string]interface{}) {
 			clear(colMap)
 			genericMapPool.Put(col)
 		}
+		clear(oldDataMap)
 		rowMapPool.Put(oldDataMap)
 	}
 	holder["payload"] = nil
