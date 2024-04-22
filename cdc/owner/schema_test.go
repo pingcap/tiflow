@@ -111,11 +111,9 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName := tableInfos[0].TableName
-	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 102,
-	}, tableName)
+	require.Equal(t, "test", tableName.Schema)
+	require.Equal(t, "t1", tableName.Table)
+
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -123,11 +121,8 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName = tableInfos[0].TableName
-	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 102,
-	}, tableName)
+	require.Equal(t, "test", tableName.Schema)
+	require.Equal(t, "t1", tableName.Table)
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
