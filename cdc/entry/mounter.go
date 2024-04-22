@@ -38,6 +38,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -331,18 +332,21 @@ func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.
 		return nil, errors.Trace(err)
 	}
 
-	// first parse it with tidb_ddl_job, if failed, parse it with tidb_ddl_history
-	row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLJobTable, time.UTC)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	datum = row[ddlTableInfo.JobMetaColumnIDinJobTable]
-	v = datum.GetBytes()
+	tableID := tablecodec.DecodeTableID(rawKV.Key)
 
-	job, err := parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
-	if err != nil {
+	// parse it with tidb_ddl_job
+	if tableID == spanz.JobTableID {
+		row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLJobTable, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		datum = row[ddlTableInfo.JobMetaColumnIDinJobTable]
+		v = datum.GetBytes()
+
+		return parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
+	} else if tableID == spanz.JobHistoryID {
 		// parse it with tidb_ddl_history
-		row, err = decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLHistoryTable, time.UTC)
+		row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLHistoryTable, time.UTC)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -352,7 +356,7 @@ func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.
 		return parseJob(v, rawKV.StartTs, rawKV.CRTs, true)
 	}
 
-	return job, err
+	return nil, fmt.Errorf("Unvalid tableID %v in rawKV.Key", tableID)
 }
 
 // parseJob unmarshal the job from "v".
