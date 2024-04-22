@@ -139,6 +139,7 @@ func NewConfig() *Config {
 		BatchDMLEnable:         defaultBatchDMLEnable,
 		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
+		SourceID:               config.DefaultTiDBSourceID,
 	}
 }
 
