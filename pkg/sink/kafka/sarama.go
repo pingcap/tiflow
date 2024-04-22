@@ -221,7 +221,7 @@ func getKafkaVersionFromBroker(config *sarama.Config, addr string) (sarama.Kafka
 		log.Warn("Kafka fail to open broker", zap.String("addr", addr))
 		return KafkaVersion, err
 	}
-	apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{})
+	apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{Version: 3})
 	if err != nil {
 		log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addr))
 		return KafkaVersion, err
