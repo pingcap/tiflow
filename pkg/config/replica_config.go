@@ -38,6 +38,8 @@ const (
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
 	minSyncPointRetention           = time.Hour * 1
 	minChangeFeedErrorStuckDuration = time.Minute * 30
+	// DefaultTiDBSourceID is the default source ID of TiDB cluster.
+	DefaultTiDBSourceID = 1
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -70,7 +72,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
-		TiDBSourceID:                     1,
+		TiDBSourceID:                     DefaultTiDBSourceID,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
@@ -210,7 +212,7 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Clone clones a replication
+// Clone clones a replica config
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	str, err := c.Marshal()
 	if err != nil {
