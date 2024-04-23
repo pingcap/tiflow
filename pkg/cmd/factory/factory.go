@@ -199,7 +199,7 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 		"log level (etc: debug|info|warn|error)")
 
 	cmd.PersistentFlags().StringVar(&c.User, "user", "", "User name for authentication. "+
-		"You can sqpecify it via environment variable TICDC_USER")
+		"You can specify it via environment variable TICDC_USER")
 	cmd.PersistentFlags().StringVar(&c.Password, "password", "", "Password for authentication. "+
 		"You can specify it via environment variable TICDC_PASSWORD")
 }
