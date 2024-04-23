@@ -85,10 +85,10 @@ type Node struct {
 }
 
 // NewNode creates a new node.
-func NewNode(sortedDedupKeysHash []uint64) (ret *Node) {
+func NewNode(hashes []uint64, numSlots uint64) (ret *Node) {
 	defer func() {
 		ret.id = genNextNodeID()
-		ret.sortedDedupKeysHash = sortedDedupKeysHash
+		ret.sortedDedupKeysHash = sortAndDedupHashes(hashes, numSlots)
 		ret.TrySendToTxnCache = nil
 		ret.RandCacheID = nil
 		ret.totalDependencies = 0

@@ -19,10 +19,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
+	DefaultConflictDetectorSlots uint64 = 16 * 1024
+)
+
 var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements SlotNode[*Node].
 
 func newNodeForTest() *Node {
-	node := NewNode(nil)
+	node := NewNode(nil, DefaultConflictDetectorSlots)
 	node.OnNotified = func(callback func()) {
 		// run the callback immediately
 		callback()
