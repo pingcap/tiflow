@@ -75,7 +75,7 @@ func (o *applyRedoOptions) complete(cmd *cobra.Command) error {
 			memoryLimitInBytes = totalMemoryInBytes
 		}
 		debug.SetMemoryLimit(memoryLimitInBytes)
-		log.Info("set memory limit", zap.Int64("memory-limit", memoryLimitInBytes))
+		log.Info("set memory limit", zap.Int64("memoryLimit", memoryLimitInBytes))
 	}
 
 	return nil
