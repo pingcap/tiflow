@@ -322,13 +322,17 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	var value []byte
 	for valid {
 		nextStart := time.Now()
-		value, valid = s.iter.Value(), s.iter.Next()
+		value, err = s.iter.ValueAndErr()
+		if err != nil {
+			return
+		}
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return
 		}
+		valid = s.iter.Next()
 		if s.headItem != nil {
 			break
 		}
