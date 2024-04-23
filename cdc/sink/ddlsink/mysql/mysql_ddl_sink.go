@@ -16,9 +16,11 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"time"
 
+	cerrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -233,7 +235,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID), zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, cerrors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),
