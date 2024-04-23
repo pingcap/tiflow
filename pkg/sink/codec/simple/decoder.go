@@ -168,7 +168,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	log.Debug("row changed event assembled", zap.Any("event", event))
 	d.msg = nil
 	return event, nil
 }
