@@ -220,6 +220,12 @@ var (
 		},
 	}
 
+	dmlMessagePayloadPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+
 	// dmlMessagePool return a map for the dml message
 	dmlMessagePool = sync.Pool{
 		New: func() any {
@@ -239,15 +245,14 @@ func (a *avroMarshaller) newDMLMessageMap(
 	onlyHandleKey bool,
 	claimCheckFileName string,
 ) map[string]interface{} {
-	dmlMessagePayload := map[string]interface{}{
-		"version":       defaultVersion,
-		"database":      event.TableInfo.GetSchemaName(),
-		"table":         event.TableInfo.GetTableName(),
-		"tableID":       event.TableInfo.ID,
-		"commitTs":      int64(event.CommitTs),
-		"buildTs":       time.Now().UnixMilli(),
-		"schemaVersion": int64(event.TableInfo.UpdateTS),
-	}
+	dmlMessagePayload := dmlMessagePayloadPool.Get().(map[string]interface{})
+	dmlMessagePayload["version"] = defaultVersion
+	dmlMessagePayload["database"] = event.TableInfo.GetSchemaName()
+	dmlMessagePayload["table"] = event.TableInfo.GetTableName()
+	dmlMessagePayload["tableID"] = event.TableInfo.ID
+	dmlMessagePayload["commitTs"] = int64(event.CommitTs)
+	dmlMessagePayload["buildTs"] = time.Now().UnixMilli()
+	dmlMessagePayload["schemaVersion"] = int64(event.TableInfo.UpdateTS)
 
 	if !a.config.LargeMessageHandle.Disabled() && onlyHandleKey {
 		dmlMessagePayload["handleKeyOnly"] = map[string]interface{}{
@@ -308,8 +313,7 @@ func (a *avroMarshaller) newDMLMessageMap(
 
 func recycleMap(m map[string]interface{}) {
 	dmlMessage := m["com.pingcap.simple.avro.Message"].(map[string]interface{})
-	payload := dmlMessage["payload"].(map[string]interface{})
-	dml := payload["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	dml := dmlMessage["payload"].(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksum := dml["com.pingcap.simple.avro.Checksum"]
 	if checksum != nil {
@@ -328,7 +332,6 @@ func recycleMap(m map[string]interface{}) {
 		}
 		clear(dataMap)
 		rowMapPool.Put(dataMap)
-		dml["data"] = nil
 	}
 
 	oldDataMap := dml["old"]
@@ -341,12 +344,15 @@ func recycleMap(m map[string]interface{}) {
 		}
 		clear(oldDataMap)
 		rowMapPool.Put(oldDataMap)
-		dml["old"] = nil
 	}
 
-	dmlMessage["payload"] = nil
+	clear(dml)
+	dmlMessagePayloadPool.Put(dml)
+
+	clear(dmlMessage)
 	dmlMessagePool.Put(dmlMessage)
-	m["com.pingcap.simple.avro.Message"] = nil
+
+	clear(m)
 	messageHolderPool.Put(m)
 }
 
