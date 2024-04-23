@@ -16,10 +16,15 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"time"
 
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
 	"github.com/pingcap/errors"
+=======
+	cerrors "github.com/pingcap/errors"
+>>>>>>> cd065d3f56 (log(ticdc): Add more error query information to the returned error to facilitate users to know the cause of the failure (#10945)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -189,7 +194,7 @@ func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error 
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID), zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, cerrors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),

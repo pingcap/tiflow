@@ -156,7 +156,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "create sync table: begin Tx fail;"))
 	}
 	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		if err2 != nil {
 			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 	}
 	_, err = tx.Exec("USE " + database)
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		if err2 != nil {
 			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 	}
 	query := `CREATE TABLE IF NOT EXISTS %s
 	(
@@ -191,10 +191,10 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		if err2 != nil {
 			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 	}
 	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 }
 
 func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
@@ -204,7 +204,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("sync table: begin Tx fail", zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "sync table: begin Tx fail;"))
 	}
 	row := tx.QueryRow("select @@tidb_current_ts")
 	var secondaryTs string
@@ -215,7 +215,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		if err2 != nil {
 			log.Error("failed to write syncpoint table", zap.Error(err))
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to write syncpoint table;"))
 	}
 	// insert ts map
 	query := "insert ignore into " + filter.TiCDCSystemSchema + "." + filter.SyncPointTable +
@@ -226,7 +226,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		if err2 != nil {
 			log.Error("failed to write syncpoint table", zap.Error(err2))
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to write syncpoint table;"))
 	}
 
 	// set global tidb_external_ts to secondary ts
@@ -242,7 +242,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			if err2 != nil {
 				log.Error("failed to write syncpoint table", zap.Error(err2))
 			}
-			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+			return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to write syncpoint table;"))
 		}
 	}
 
@@ -267,7 +267,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	}
 
 	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to write syncpoint table;"))
 }
 
 func (s *mysqlSyncPointStore) Close() error {
