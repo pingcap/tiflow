@@ -24,7 +24,7 @@ type mockTxnEvent struct{}
 func (m mockTxnEvent) OnConflictResolved() {
 }
 
-func (m mockTxnEvent) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
+func (m mockTxnEvent) ConflictKeys() []uint64 {
 	return nil
 }
 
