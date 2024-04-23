@@ -30,7 +30,7 @@ func TestSlotsTrivial(t *testing.T) {
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
-		node := NewNode([]uint64{1, 2, 3, 4, 5})
+		node := NewNode([]uint64{1, 2, 3, 4, 5}, DefaultConflictDetectorSlots)
 		node.RandCacheID = func() cacheID { return 100 }
 		slots.Add(node)
 		nodes = append(nodes, node)
@@ -55,7 +55,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
 	newNode := func() *Node {
-		node := NewNode([]uint64{1, 9, 17, 25, 33})
+		node := NewNode([]uint64{1, 9, 17, 25, 33}, DefaultConflictDetectorSlots)
 		node.RandCacheID = func() cacheID { return 100 }
 		return node
 	}
@@ -99,4 +99,31 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestSortAndDedupHash(t *testing.T) {
+	// If a transaction contains multiple rows, these rows may generate the same hash
+	// in some rare cases. We should dedup these hashes to avoid unnecessary self cyclic
+	// dependency in the causality dependency graph.
+	t.Parallel()
+	testCases := []struct {
+		hashes   []uint64
+		expected []uint64
+	}{{
+		// No duplicate hashes
+		hashes:   []uint64{1, 2, 3, 4, 5},
+		expected: []uint64{1, 2, 3, 4, 5},
+	}, {
+		// Duplicate hashes
+		hashes:   []uint64{1, 2, 3, 4, 5, 1, 2, 3, 4, 5},
+		expected: []uint64{1, 2, 3, 4, 5},
+	}, {
+		// Has hash value larger than slots count, should sort by `hash % numSlots` first.
+		hashes:   []uint64{4, 9, 9, 3},
+		expected: []uint64{9, 3, 4},
+	}}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, sortAndDedupHashes(tc.hashes, 8))
+	}
 }

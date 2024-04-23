@@ -75,10 +75,10 @@ func NewConflictDetector[Txn txnEvent](
 // Add pushes a transaction to the ConflictDetector.
 //
 // NOTE: if multiple threads access this concurrently,
-// Txn.GenSortedDedupKeysHash must be sorted by the slot index.
+// Txn.ConflictKeys must be sorted by the slot index.
 func (d *ConflictDetector[Txn]) Add(txn Txn) {
-	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
-	node := internal.NewNode(sortedKeysHash)
+	sortedKeysHash := txn.ConflictKeys()
+	node := internal.NewNode(sortedKeysHash, d.numSlots)
 	txnWithNotifier := TxnWithNotifier[Txn]{
 		TxnEvent: txn,
 		PostTxnExecuted: func() {

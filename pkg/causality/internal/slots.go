@@ -15,6 +15,7 @@ package internal
 
 import (
 	"math"
+	"sort"
 	"sync"
 )
 
@@ -122,4 +123,37 @@ func (s *Slots[E]) Free(elem E) {
 
 func getSlot(hash, numSlots uint64) uint64 {
 	return hash % numSlots
+}
+
+// Sort and dedup hashes.
+// Sort hashes by `hash % numSlots` to avoid deadlock, and then dedup
+// hashes, so the same node will not check confict with the same hash
+// twice to prevent potential cyclic self dependency in the causality
+// dependency graph.
+func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	// Sort hashes by `hash % numSlots` to avoid deadlock.
+	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
+
+	// Dedup hashes
+	last := hashes[0]
+	j := 1
+	for i, hash := range hashes {
+		if i == 0 {
+			// skip first one, start checking duplication from 2nd one
+			continue
+		}
+		if hash == last {
+			continue
+		}
+		last = hash
+		hashes[j] = hash
+		j++
+	}
+	hashes = hashes[:j]
+
+	return hashes
 }
