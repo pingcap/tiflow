@@ -842,7 +842,7 @@ func logDMLTxnErr(
 			zap.String("query", query), zap.Int("count", count),
 			zap.String("changefeed", changefeed))
 	}
-	return err
+	return fmt.Errorf("%v; Query info: %s", err, query)
 }
 
 func isRetryableDMLError(err error) bool {
