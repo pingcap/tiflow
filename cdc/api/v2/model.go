@@ -740,7 +740,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var openProtocolConfig *OpenProtocolConfig
 		if cloned.Sink.OpenProtocol != nil {
 			openProtocolConfig = &OpenProtocolConfig{
-				OutputOldValue: cloned.Sink.Debezium.OutputOldValue,
+				OutputOldValue: cloned.Sink.OpenProtocol.OutputOldValue,
 			}
 		}
 		res.Sink = &SinkConfig{
