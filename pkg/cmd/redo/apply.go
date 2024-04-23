@@ -15,7 +15,7 @@ package redo
 
 import (
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // init pprof
 	"net/url"
 	"runtime/debug"
 	"time"
