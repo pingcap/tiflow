@@ -514,7 +514,8 @@ func (s *EventSorter) cleanTable(
 	var start, end []byte
 
 	if len(upperBound) == 1 {
-		toClean = upperBound[0]
+		window := encoding.ExtractTsWindow(upperBound[0].CommitTs) - 5
+		toClean = sorter.GenCommitFence(encoding.MinTsInWindow(window + 1))
 	} else {
 		toClean = sorter.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}
