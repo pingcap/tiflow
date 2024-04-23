@@ -157,11 +157,6 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 		}
 	}
 
-	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
-	// pending in slots after it's created.
-	// ?: why gen new ID here?
-	n.id = genNextNodeID()
-
 	// `totalDependencies` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
 	n.resolvedList = make([]int64, 0, n.totalDependencies)
