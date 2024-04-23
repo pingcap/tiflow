@@ -18,28 +18,56 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
 const (
+	// Let Delete < Update < Insert.
 	typeDelete = iota + 1
 	typeUpdate
 	typeInsert
+
+	uniqueIDLen int = 4
+	tsWindowLen int = 8
+	tableIDLen  int = 8
+	tsLen       int = 8
+
+	tsWindowInSeconds = 10
 )
+
+// ExtractTsWindow extracts the window from the given timestamp.
+func ExtractTsWindow(ts uint64) uint64 {
+	return uint64(oracle.ExtractPhysical(ts) / 1000 / 10)
+}
+
+// MinTsInWindow returns the min ts in a window.
+func MinTsInWindow(tsWindow uint64) uint64 {
+	return oracle.ComposeTS(int64(tsWindow)*10*1000, 0)
+}
 
 // DecodeKey decodes a key to uniqueID, tableID, startTs, CRTs.
 func DecodeKey(key []byte) (uniqueID uint32, tableID uint64, startTs, CRTs uint64) {
-	// uniqueID, tableID, CRTs, startTs, Key, Put/Delete
+	// uniqueID, TsWindow, tableID, CRTs, startTs, Key, Put/Delete
+	offset := 0
+
 	// uniqueID
-	uniqueID = binary.BigEndian.Uint32(key)
+	uniqueID = binary.BigEndian.Uint32(key[offset:])
+	offset += (uniqueIDLen + tsWindowLen)
+
 	// table ID
-	tableID = binary.BigEndian.Uint64(key[4:])
+	tableID = binary.BigEndian.Uint64(key[offset:])
+	offset += tableIDLen
+
 	// CRTs
-	CRTs = binary.BigEndian.Uint64(key[12:])
-	if len(key) >= 28 {
-		// startTs
-		startTs = binary.BigEndian.Uint64(key[20:])
+	CRTs = binary.BigEndian.Uint64(key[offset:])
+	offset += tsLen
+
+	// startTs
+	if len(key) > offset {
+		startTs = binary.BigEndian.Uint64(key[offset:])
 	}
+
 	return
 }
 
@@ -48,35 +76,20 @@ func DecodeCRTs(key []byte) uint64 {
 	return binary.BigEndian.Uint64(key[12:])
 }
 
-// EncodeTsKey encodes uniqueID, tableID, CRTs and StartTs.
+// EncodeTsKey encodes uniqueID, tsWindow, tableID, CRTs and StartTs.
 // StartTs is optional.
 func EncodeTsKey(uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64) []byte {
 	var buf []byte
 	if len(startTs) == 0 {
-		// uniqueID, tableID, CRTs.
-		buf = make([]byte, 0, 4+8+8)
+		// uniqueID, tsWindow, tableID, CRTs.
+		buf = make([]byte, uniqueIDLen+tsWindowLen+tableIDLen+tsLen)
 	} else if len(startTs) == 1 {
-		// uniqueID, tableID, CRTs and startTs.
-		buf = make([]byte, 0, 4+8+8+8)
+		// uniqueID, tsWindowLen, tableID, CRTs and startTs.
+		buf = make([]byte, uniqueIDLen+tsWindowLen+tableIDLen+2*tsLen)
 	} else {
 		log.Panic("EncodeTsKey retrieve one startTs at most")
 	}
-
-	uint64Buf := [8]byte{}
-	// uniqueID
-	binary.BigEndian.PutUint32(uint64Buf[:], uniqueID)
-	buf = append(buf, uint64Buf[:4]...)
-	// tableID
-	binary.BigEndian.PutUint64(uint64Buf[:], tableID)
-	buf = append(buf, uint64Buf[:]...)
-	// CRTs
-	binary.BigEndian.PutUint64(uint64Buf[:], CRTs)
-	buf = append(buf, uint64Buf[:]...)
-	if len(startTs) > 0 {
-		// startTs
-		binary.BigEndian.PutUint64(uint64Buf[:], startTs[0])
-		buf = append(buf, uint64Buf[:]...)
-	}
+	encodeTsKey(buf, uniqueID, tableID, CRTs, startTs...)
 	return buf
 }
 
@@ -86,27 +99,43 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 	if event.RawKV == nil {
 		log.Panic("rawkv must not be nil", zap.Any("event", event))
 	}
-	// uniqueID, tableID, CRTs, startTs, Put/Delete, Key
-	length := 4 + 8 + 8 + 8 + 2 + len(event.RawKV.Key)
-	buf := make([]byte, 0, length)
-	uint64Buf := [8]byte{}
+
+	prefixLen := uniqueIDLen + tsWindowLen + tableIDLen + 2*tsLen
+	keyLen := prefixLen + 2 + len(event.RawKV.Key)
+	buf := make([]byte, keyLen)
+	encodeTsKey(buf, uniqueID, tableID, event.CRTs, event.StartTs)
+
+	binary.BigEndian.PutUint16(buf[prefixLen:], getDMLOrder(event.RawKV))
+	copy(buf[prefixLen+2:], event.RawKV.Key)
+	return buf
+}
+
+func encodeTsKey(buf []byte, uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64) {
+	offset := 0
+
 	// uniqueID
-	binary.BigEndian.PutUint32(uint64Buf[:], uniqueID)
-	buf = append(buf, uint64Buf[:4]...)
-	// table ID
-	binary.BigEndian.PutUint64(uint64Buf[:], tableID)
-	buf = append(buf, uint64Buf[:]...)
+	binary.BigEndian.PutUint32(buf[offset:], uniqueID)
+	offset += uniqueIDLen
+
+	// tsWindow
+	tsWindow := ExtractTsWindow(CRTs)
+	binary.BigEndian.PutUint64(buf[offset:], tsWindow)
+	offset += tsWindowLen
+
+	// tableID
+	binary.BigEndian.PutUint64(buf[offset:], tableID)
+	offset += tableIDLen
+
 	// CRTs
-	binary.BigEndian.PutUint64(uint64Buf[:], event.CRTs)
-	buf = append(buf, uint64Buf[:]...)
+	binary.BigEndian.PutUint64(buf[offset:], CRTs)
+	offset += tsLen
+
 	// startTs
-	binary.BigEndian.PutUint64(uint64Buf[:], event.StartTs)
-	buf = append(buf, uint64Buf[:]...)
-	// Let Delete < Update < Insert
-	binary.BigEndian.PutUint16(uint64Buf[:], getDMLOrder(event.RawKV))
-	buf = append(buf, uint64Buf[:2]...)
-	// key
-	return append(buf, event.RawKV.Key...)
+	if len(startTs) > 0 {
+		binary.BigEndian.PutUint64(buf[offset:], startTs[0])
+	}
+
+	return
 }
 
 // getDMLOrder returns the order of the dml types: delete<update<insert

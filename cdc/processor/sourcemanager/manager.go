@@ -165,9 +165,12 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 func (m *SourceManager) FetchByTable(
 	span tablepb.Span, lowerBound, upperBound sorter.Position,
 	quota *memquota.MemQuota,
-) *sorter.MountedEventIter {
-	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
-	return sorter.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
+) (*sorter.MountedEventIter, error) {
+	iter, err := m.engine.FetchByTable(span, lowerBound, upperBound)
+	if err != nil {
+		return nil, err
+	}
+	return sorter.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota), nil
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.

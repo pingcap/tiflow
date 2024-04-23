@@ -46,7 +46,7 @@ type SortEngine interface {
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(span tablepb.Span, lowerBound, upperBound Position) EventIterator
+	FetchByTable(span tablepb.Span, lowerBound, upperBound Position) (EventIterator, error)
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
@@ -122,10 +122,12 @@ func (p Position) Valid() bool {
 
 // Next can only be called on a valid Position.
 func (p Position) Next() Position {
-	return Position{
-		StartTs:  p.StartTs + 1, // it will never overflow.
-		CommitTs: p.CommitTs,
+	next := Position{StartTs: p.StartTs + 1, CommitTs: p.CommitTs}
+	if next.StartTs == next.CommitTs {
+		next.StartTs = 0
+		next.CommitTs += 1
 	}
+	return next
 }
 
 // Prev can only be called on a valid Position.

@@ -166,7 +166,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}()
 
 	// lowerBound and upperBound are both closed intervals.
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+	iter, iterErr := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+	if iterErr != nil {
+		log.Panic("FetchByTable fails",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Stringer("span", &task.span),
+			zap.Error(iterErr))
+	}
 	defer func() {
 		if err := iter.Close(); err != nil {
 			log.Error("sink worker fails to close iterator",

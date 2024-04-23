@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
@@ -175,7 +176,13 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements sorter.SortEngine.
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) (sorter.EventIterator, error) {
+	tsWindow1 := encoding.ExtractTsWindow(lowerBound.CommitTs)
+	tsWindow2 := encoding.ExtractTsWindow(upperBound.CommitTs)
+	if tsWindow1 != tsWindow2 {
+		return nil, errors.New("unexpected FetchByTable boundariers: different TsWindows")
+	}
+
 	iterReadDur := sorter.IterReadDuration()
 	eventIter := &EventIter{
 		tableID:      span.TableID,
@@ -187,7 +194,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sor
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
 	if !exists {
-		return eventIter
+		return eventIter, nil
 	}
 
 	sortedResolved := state.sortedResolved.Load()
@@ -209,7 +216,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sor
 		Observe(time.Since(seekStart).Seconds())
 
 	eventIter.iter = iter
-	return eventIter
+	return eventIter, nil
 }
 
 // FetchAllTables implements sorter.SortEngine.
