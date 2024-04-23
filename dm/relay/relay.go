@@ -1145,7 +1145,6 @@ func (r *Relay) setSyncConfig() error {
 			util.WithCAContent(r.cfg.From.Security.SSLCABytes),
 			util.WithCertAndKeyContent(r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(r.cfg.From.Security.CertAllowedCN),
-			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
