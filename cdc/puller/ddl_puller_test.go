@@ -745,3 +745,64 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
 	require.Nil(t, err)
 }
+
+func TestCcheckIneligibleTableDDL(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+
+	startTs := uint64(10)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
+	cfg := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+
+	ddl := helper.DDL2Job("CREATE DATABASE test1")
+	skip, err := ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// case 1: create a table only has a primary key and drop it, expect an error.
+	// It is because the table is not eligible after the drop primary key DDL.
+	ddl = helper.DDL2Job(`CREATE TABLE test1.t1 (
+		id INT PRIMARY KEY /*T![clustered_index] NONCLUSTERED */,
+		name VARCHAR(255),
+		email VARCHAR(255) UNIQUE
+		);`)
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	ddl = helper.DDL2Job("ALTER TABLE test1.t1 DROP PRIMARY KEY;")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.Error(t, err)
+	require.False(t, skip)
+	require.Contains(t, err.Error(), "An eligible table become ineligible after DDL")
+
+	// case 2: create a table has a primary key and another not null unique key,
+	// and drop the primary key, expect no error.
+	// It is because the table is still eligible after the drop primary key DDL.
+	ddl = helper.DDL2Job(`CREATE TABLE test1.t2 (
+		id INT PRIMARY KEY /*T![clustered_index] NONCLUSTERED */,
+		name VARCHAR(255),
+		email VARCHAR(255) NOT NULL UNIQUE
+		);`)
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	ddl = helper.DDL2Job("ALTER TABLE test1.t2 DROP PRIMARY KEY;")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// case 3: continue to drop the unique key, expect an error.
+	// It is because the table is not eligible after the drop unique key DDL.
+	ddl = helper.DDL2Job("ALTER TABLE test1.t2 DROP INDEX email;")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.Error(t, err)
+	require.False(t, skip)
+	require.Contains(t, err.Error(), "An eligible table become ineligible after DDL")
+}
