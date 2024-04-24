@@ -19,13 +19,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newNodeForTest() *Node {
-	node := &Node{}
-	node.OnNotified = func(callback func()) {
-		// run the callback immediately
-		callback()
+func newNodeForTest(hashes ...uint64) *Node {
+	return &Node{
+		id:                  genNextNodeID(),
+		sortedDedupKeysHash: sortAndDedupHashes(hashes, 8),
+		assignedTo:          unassigned,
+		RandCacheID:         func() cacheID { return 100 },
+		OnNotified: func(callback func()) {
+			// run the callback immediately
+			callback()
+		},
 	}
-	return node
 }
 
 func TestNodefree(t *testing.T) {
@@ -72,7 +76,6 @@ func TestNodeSingleDependency(t *testing.T) {
 	// Node B depends on A, without any other resolved dependencies.
 	nodeA := newNodeForTest()
 	nodeB := newNodeForTest()
-	nodeB.RandCacheID = func() cacheID { return 100 }
 	nodeB.dependOn(map[int64]*Node{nodeA.nodeID(): nodeA}, 0)
 	require.True(t, nodeA.tryAssignTo(1))
 	require.Equal(t, cacheID(1), nodeA.assignedWorkerID())
@@ -81,7 +84,6 @@ func TestNodeSingleDependency(t *testing.T) {
 	// Node D depends on C, with some other resolved dependencies.
 	nodeC := newNodeForTest()
 	nodeD := newNodeForTest()
-	nodeD.RandCacheID = func() cacheID { return 100 }
 	nodeD.dependOn(map[int64]*Node{nodeA.nodeID(): nodeC}, 999)
 	require.True(t, nodeC.tryAssignTo(2))
 	require.Equal(t, cacheID(2), nodeC.assignedWorkerID())
@@ -102,7 +104,6 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeC := newNodeForTest()
 
 	nodeC.dependOn(map[int64]*Node{nodeA.nodeID(): nodeA, nodeB.nodeID(): nodeB}, 999)
-	nodeC.RandCacheID = func() cacheID { return 100 }
 
 	require.True(t, nodeA.tryAssignTo(1))
 	require.True(t, nodeB.tryAssignTo(2))
@@ -119,7 +120,6 @@ func TestNodeResolveImmediately(t *testing.T) {
 
 	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
 	nodeA := newNodeForTest()
-	nodeA.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeA.dependOn(nil, 999)
 	require.Equal(t, cacheID(100), nodeA.assignedWorkerID())
 
@@ -129,7 +129,6 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeC := newNodeForTest()
 	require.True(t, nodeC.tryAssignTo(1))
 	nodeD := newNodeForTest()
-	nodeD.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeD.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB, nodeC.nodeID(): nodeC}, 0)
 	require.Equal(t, cacheID(1), nodeD.assignedWorkerID())
 
@@ -137,7 +136,6 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeB.Remove()
 	nodeC.Remove()
 	nodeE := newNodeForTest()
-	nodeE.RandCacheID = func() cacheID { return cacheID(100) }
 	nodeE.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB, nodeC.nodeID(): nodeC}, 999)
 	require.Equal(t, cacheID(100), nodeE.assignedWorkerID())
 }
@@ -154,9 +152,11 @@ func TestNodeDependOnSelf(t *testing.T) {
 func TestNodeDoubleAssigning(t *testing.T) {
 	t.Parallel()
 
-	// nodeA := newNodeForTest()
-	// require.True(t, nodeA.tryAssignTo(1))
-	// require.False(t, nodeA.tryAssignTo(2))
-
-	require.True(t, -1 == assignedToAny)
+	nodeA := newNodeForTest()
+	nodeA.TrySendToTxnCache = func(id cacheID) bool {
+		return id == 2
+	}
+	require.False(t, nodeA.tryAssignTo(1))
+	require.True(t, nodeA.tryAssignTo(2))
+	require.True(t, nodeA.tryAssignTo(2))
 }
