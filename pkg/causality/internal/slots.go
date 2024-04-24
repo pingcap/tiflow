@@ -61,7 +61,6 @@ func (s *Slots) AllocNode(hashes []uint64) *Node {
 func (s *Slots) Add(elem *Node) {
 	hashes := elem.sortedDedupKeysHash
 	dependencyNodes := make(map[int64]*Node, len(hashes))
-	noDependecyCnt := 0
 
 	var lastSlot uint64 = math.MaxUint64
 	for _, hash := range hashes {
@@ -79,8 +78,6 @@ func (s *Slots) Add(elem *Node) {
 			// If there are multiple hashes conflicts with the same node, we only need to
 			// depend on the node once.
 			dependencyNodes[prevID] = prevNode
-		} else {
-			noDependecyCnt += 1
 		}
 		// Add this node to the slot, make sure new coming nodes with the same hash should
 		// depend on this node.
@@ -89,7 +86,7 @@ func (s *Slots) Add(elem *Node) {
 
 	// Construct the dependency graph based on collected `dependencyNodes` and with corresponding
 	// slots locked.
-	elem.dependOn(dependencyNodes, noDependecyCnt)
+	elem.dependOn(dependencyNodes)
 
 	// Lock those slots one by one and then unlock them one by one, so that
 	// we can avoid 2 transactions get executed interleaved.

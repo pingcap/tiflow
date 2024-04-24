@@ -29,8 +29,6 @@ type (
 const (
 	unassigned    = cacheID(-2)
 	assignedToAny = cacheID(-1)
-
-	invalidNodeID = int64(-1)
 )
 
 var (
@@ -60,8 +58,8 @@ type Node struct {
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependencies    int32
-	resolvedDependencies int32
 	removedDependencies  int32
+	resolvedDependencies int32
 	resolvedList         []int64
 
 	// Following fields are protected by `mu`.
@@ -88,22 +86,13 @@ func (n *Node) nodeID() int64 {
 	return n.id
 }
 
-func (n *Node) dependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
+func (n *Node) dependOn(dependencyNodes map[int64]*Node) {
 	resolvedDependencies := int32(0)
 
 	depend := func(target *Node) {
 		if target == nil {
-			// For a given Node, every dependency corresponds to a target.
-			// If target is nil it means the dependency doesn't conflict
-			// with any other nodes. However it's still necessary to track
-			// it because Node.tryResolve needs to counting the number of
-			// resolved dependencies.
-			resolvedDependencies = atomic.AddInt32(&n.resolvedDependencies, 1)
-			atomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], assignedToAny)
-			atomic.AddInt32(&n.removedDependencies, 1)
-			return
+			log.Panic("node cannot depend on nil")
 		}
-
 		if target.id == n.id {
 			log.Panic("node cannot depend on itself")
 		}
@@ -132,7 +121,7 @@ func (n *Node) dependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 	}
 
 	// `totalDependencies` and `resolvedList` must be initialized before depending on any targets.
-	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
+	n.totalDependencies = int32(len(dependencyNodes))
 	n.resolvedList = make([]int64, 0, n.totalDependencies)
 	for i := 0; i < int(n.totalDependencies); i++ {
 		n.resolvedList = append(n.resolvedList, unassigned)
@@ -140,9 +129,6 @@ func (n *Node) dependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 
 	for _, node := range dependencyNodes {
 		depend(node)
-	}
-	for i := 0; i < noDependencyKeyCnt; i++ {
-		depend(nil)
 	}
 
 	n.maybeResolve()
@@ -238,9 +224,6 @@ func (n *Node) tryResolve() (int64, bool) {
 		hasDiffDep := false
 		for i := 1; i < int(n.totalDependencies); i++ {
 			curr := atomic.LoadInt64(&n.resolvedList[i])
-			// Todo: simplify assign to logic, only resolve dependencies nodes after
-			// corresponding transactions are executed.
-			//
 			// In DependOn, depend(nil) set resolvedList[i] to assignedToAny
 			// for these no dependecy keys.
 			if curr == assignedToAny {
