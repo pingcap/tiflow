@@ -500,7 +500,7 @@ func (p *processor) Tick(
 	if !p.initialized.Load() {
 		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err), nil
 		}
 		if !initialized {
 			return nil, nil
