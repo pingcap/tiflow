@@ -307,6 +307,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 			util.WithCAContent(c.sourceCfg.Security.SSLCABytes),
 			util.WithCertAndKeyContent(c.sourceCfg.Security.SSLCertBytes, c.sourceCfg.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(c.sourceCfg.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			markCheckError(result, err)
