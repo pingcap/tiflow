@@ -36,7 +36,7 @@ func TestSlotsTrivial(t *testing.T) {
 	}
 
 	for i := 0; i < count; i++ {
-		slots.Free(nodes[i])
+		slots.Remove(nodes[i])
 	}
 
 	require.Equal(t, 0, len(slots.slots[1].nodes))
@@ -86,7 +86,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 				return
 			case node := <-inuseNodeChan:
 				// keys belong to the same slot after hash, since slot num is 8
-				slots.Free(node)
+				slots.Remove(node)
 				freeNodeChan <- newNodeForTest(1, 9, 17, 25, 33)
 			}
 		}

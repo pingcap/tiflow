@@ -148,8 +148,7 @@ func (n *Node) dependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 	n.maybeResolve()
 }
 
-// Remove implements interface internal.SlotNode.
-func (n *Node) Remove() {
+func (n *Node) remove() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -164,23 +163,6 @@ func (n *Node) Remove() {
 		n.dependers.Clear(true)
 		n.dependers = nil
 	}
-}
-
-// free must be called if a node is no longer used.
-func (n *Node) free() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.id == invalidNodeID {
-		log.Panic("double free")
-	}
-
-	n.id = invalidNodeID
-	n.TrySendToTxnCache = nil
-
-	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
-	// The reason is a node can step functions `assignTo`, `Remove`, `free`, then `assignTo`.
-	// again. In the last `assignTo`, it can never know whether the node has been reused
-	// or not.
 }
 
 // tryAssignTo assigns a node to a cache. Returns `true` on success.
