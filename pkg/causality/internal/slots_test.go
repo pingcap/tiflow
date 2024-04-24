@@ -26,7 +26,7 @@ func TestSlotsTrivial(t *testing.T) {
 	t.Parallel()
 
 	const count = 1000
-	slots := NewSlots[*Node](8)
+	slots := NewSlots(8)
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
@@ -51,7 +51,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	t.Parallel()
 
 	const N = 256
-	slots := NewSlots[*Node](8)
+	slots := NewSlots(8)
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
 	newNode := func() *Node {

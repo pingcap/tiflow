@@ -103,18 +103,11 @@ func NewNode(hashes []uint64, numSlots uint64) (ret *Node) {
 	return
 }
 
-// NodeID implements interface internal.SlotNode.
-func (n *Node) NodeID() int64 {
+func (n *Node) nodeID() int64 {
 	return n.id
 }
 
-// Hashes implements interface internal.SlotNode.
-func (n *Node) Hashes() []uint64 {
-	return n.sortedDedupKeysHash
-}
-
-// DependOn implements interface internal.SlotNode.
-func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
+func (n *Node) dependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
 	resolvedDependencies := int32(0)
 
 	depend := func(target *Node) {
@@ -192,10 +185,8 @@ func (n *Node) Remove() {
 	}
 }
 
-// Free implements interface internal.SlotNode.
-// It must be called if a node is no longer used.
-// We are using sync.Pool to lessen the burden of GC.
-func (n *Node) Free() {
+// free must be called if a node is no longer used.
+func (n *Node) free() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.id == invalidNodeID {
@@ -206,7 +197,7 @@ func (n *Node) Free() {
 	n.TrySendToTxnCache = nil
 
 	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
-	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
+	// The reason is a node can step functions `assignTo`, `Remove`, `free`, then `assignTo`.
 	// again. In the last `assignTo`, it can never know whether the node has been reused
 	// or not.
 }
