@@ -214,6 +214,8 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
 		DebeziumDisableSchema:            util.AddressOf(false),
+		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
+		Debezium:                         &config.DebeziumConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
 
@@ -252,6 +254,8 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
 		DebeziumDisableSchema:            util.AddressOf(false),
+		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
+		Debezium:                         &config.DebeziumConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
 

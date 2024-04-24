@@ -584,7 +584,9 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
 			} else if e.IsUpdate() {
 				jWriter.WriteStringField("op", "u")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
+				if c.config.DebeziumOutputOldValue {
+					err = c.writeDebeziumFieldValues(jWriter, "before", e.GetPreColumns(), e.TableInfo)
+				}
 				if err == nil {
 					err = c.writeDebeziumFieldValues(jWriter, "after", e.GetColumns(), e.TableInfo)
 				}
