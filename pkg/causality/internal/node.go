@@ -84,25 +84,6 @@ type Node struct {
 	dependers *btree.BTreeG[*Node]
 }
 
-// NewNode creates a new node.
-func NewNode(hashes []uint64, numSlots uint64) (ret *Node) {
-	defer func() {
-		ret.id = genNextNodeID()
-		ret.sortedDedupKeysHash = sortAndDedupHashes(hashes, numSlots)
-		ret.TrySendToTxnCache = nil
-		ret.RandCacheID = nil
-		ret.totalDependencies = 0
-		ret.resolvedDependencies = 0
-		ret.removedDependencies = 0
-		ret.resolvedList = nil
-		ret.assignedTo = unassigned
-		ret.removed = false
-	}()
-
-	ret = new(Node)
-	return
-}
-
 func (n *Node) nodeID() int64 {
 	return n.id
 }
