@@ -85,6 +85,9 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
+
+	// encoder is used to calculate the checksum.
+	encoder *rowcodec.Encoder
 }
 
 // NewMounter creates a mounter
@@ -104,6 +107,8 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz:        tz,
 		integrity: integrity,
+
+		encoder: &rowcodec.Encoder{},
 	}
 }
 
@@ -393,8 +398,9 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
-// return error when calculate the checksum.
+// return error if cannot get the expected checksum from the decoder
 // return false if the checksum is not matched
+// return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, int, bool, error) {
@@ -437,7 +443,7 @@ func (m *mounter) verifyChecksum(
 
 	checksum, err := calculator.Checksum(m.tz)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
+		log.Error("failed to calculate the checksum", zap.Error(err))
 		return 0, version, false, errors.Trace(err)
 	}
 
