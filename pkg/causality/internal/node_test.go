@@ -24,8 +24,6 @@ const (
 	DefaultConflictDetectorSlots uint64 = 16 * 1024
 )
 
-var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements SlotNode[*Node].
-
 func newNodeForTest() *Node {
 	node := NewNode(nil, DefaultConflictDetectorSlots)
 	node.OnNotified = func(callback func()) {
@@ -35,20 +33,20 @@ func newNodeForTest() *Node {
 	return node
 }
 
-func TestNodeFree(t *testing.T) {
+func TestNodefree(t *testing.T) {
 	// This case should not be run parallel to
 	// others, for fear that the use-after-free
 	// will race with newNodeForTest() in other cases.
 
 	nodeA := newNodeForTest()
-	nodeA.Free()
+	nodeA.free()
 
 	nodeA = newNodeForTest()
-	nodeA.Free()
+	nodeA.free()
 
 	// Double freeing should panic.
 	require.Panics(t, func() {
-		nodeA.Free()
+		nodeA.free()
 	})
 }
 
@@ -57,8 +55,8 @@ func TestNodeEquals(t *testing.T) {
 
 	nodeA := newNodeForTest()
 	nodeB := newNodeForTest()
-	require.False(t, nodeA.NodeID() == nodeB.NodeID())
-	require.True(t, nodeA.NodeID() == nodeA.NodeID())
+	require.False(t, nodeA.nodeID() == nodeB.nodeID())
+	require.True(t, nodeA.nodeID() == nodeA.nodeID())
 }
 
 func TestNodeDependOn(t *testing.T) {
@@ -68,7 +66,7 @@ func TestNodeDependOn(t *testing.T) {
 	nodeA := newNodeForTest()
 	nodeB := newNodeForTest()
 
-	nodeA.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB}, 999)
+	nodeA.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB}, 999)
 	require.Equal(t, nodeA.dependerCount(), 0)
 	require.Equal(t, nodeB.dependerCount(), 1)
 }
@@ -80,7 +78,7 @@ func TestNodeSingleDependency(t *testing.T) {
 	nodeA := newNodeForTest()
 	nodeB := newNodeForTest()
 	nodeB.RandCacheID = func() cacheID { return 100 }
-	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
+	nodeB.dependOn(map[int64]*Node{nodeA.nodeID(): nodeA}, 0)
 	require.True(t, nodeA.tryAssignTo(1))
 	require.Equal(t, cacheID(1), nodeA.assignedWorkerID())
 	require.Equal(t, cacheID(1), nodeB.assignedWorkerID())
@@ -89,7 +87,7 @@ func TestNodeSingleDependency(t *testing.T) {
 	nodeC := newNodeForTest()
 	nodeD := newNodeForTest()
 	nodeD.RandCacheID = func() cacheID { return 100 }
-	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
+	nodeD.dependOn(map[int64]*Node{nodeA.nodeID(): nodeC}, 999)
 	require.True(t, nodeC.tryAssignTo(2))
 	require.Equal(t, cacheID(2), nodeC.assignedWorkerID())
 	nodeC.Remove()
@@ -108,7 +106,7 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeB := newNodeForTest()
 	nodeC := newNodeForTest()
 
-	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
+	nodeC.dependOn(map[int64]*Node{nodeA.nodeID(): nodeA, nodeB.nodeID(): nodeB}, 999)
 	nodeC.RandCacheID = func() cacheID { return 100 }
 
 	require.True(t, nodeA.tryAssignTo(1))
@@ -127,7 +125,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
 	nodeA := newNodeForTest()
 	nodeA.RandCacheID = func() cacheID { return cacheID(100) }
-	nodeA.DependOn(nil, 999)
+	nodeA.dependOn(nil, 999)
 	require.Equal(t, cacheID(100), nodeA.assignedWorkerID())
 
 	// Node D depends on B and C, all of them are assigned to 1.
@@ -137,7 +135,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	require.True(t, nodeC.tryAssignTo(1))
 	nodeD := newNodeForTest()
 	nodeD.RandCacheID = func() cacheID { return cacheID(100) }
-	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
+	nodeD.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB, nodeC.nodeID(): nodeC}, 0)
 	require.Equal(t, cacheID(1), nodeD.assignedWorkerID())
 
 	// Node E depends on B and C and some other resolved dependencies.
@@ -145,7 +143,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeC.Remove()
 	nodeE := newNodeForTest()
 	nodeE.RandCacheID = func() cacheID { return cacheID(100) }
-	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
+	nodeE.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB, nodeC.nodeID(): nodeC}, 999)
 	require.Equal(t, cacheID(100), nodeE.assignedWorkerID())
 }
 
@@ -154,7 +152,7 @@ func TestNodeDependOnSelf(t *testing.T) {
 
 	nodeA := newNodeForTest()
 	require.Panics(t, func() {
-		nodeA.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 999)
+		nodeA.dependOn(map[int64]*Node{nodeA.nodeID(): nodeA}, 999)
 	})
 }
 
