@@ -30,7 +30,7 @@ func TestSlotsTrivial(t *testing.T) {
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
-		node := NewNode([]uint64{1, 2, 3, 4, 5}, DefaultConflictDetectorSlots)
+		node := slots.AllocNode([]uint64{1, 2, 3, 4, 5})
 		node.RandCacheID = func() cacheID { return 100 }
 		slots.Add(node)
 		nodes = append(nodes, node)
@@ -55,7 +55,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
 	newNode := func() *Node {
-		node := NewNode([]uint64{1, 9, 17, 25, 33}, DefaultConflictDetectorSlots)
+		node := slots.AllocNode([]uint64{1, 9, 17, 25, 33})
 		node.RandCacheID = func() cacheID { return 100 }
 		return node
 	}

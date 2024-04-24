@@ -44,6 +44,19 @@ func NewSlots(numSlots uint64) *Slots {
 	}
 }
 
+// AllocNode allocates a new node and initializes it with the given hashes.
+// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
+// The reason is a node can step functions `assignTo`, `Remove`, `free`, then `assignTo`.
+// again. In the last `assignTo`, it can never know whether the node has been reused
+// or not.
+func (s *Slots) AllocNode(hashes []uint64) *Node {
+	return &Node{
+		id:                  genNextNodeID(),
+		sortedDedupKeysHash: sortAndDedupHashes(hashes, s.numSlots),
+		assignedTo:          unassigned,
+	}
+}
+
 // Add adds an elem to the slots and calls DependOn for elem.
 func (s *Slots) Add(elem *Node) {
 	hashes := elem.sortedDedupKeysHash
@@ -92,6 +105,7 @@ func (s *Slots) Add(elem *Node) {
 
 // Free removes an element from the Slots.
 func (s *Slots) Free(elem *Node) {
+	elem.Remove()
 	hashes := elem.sortedDedupKeysHash
 	for _, hash := range hashes {
 		slotIdx := getSlot(hash, s.numSlots)
