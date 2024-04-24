@@ -205,6 +205,30 @@ var (
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  timodel.ActionCreateTable,
 	}
+	updateEvent = &model.RowChangedEvent{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("aa"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("bb"),
+			},
+		}, tableInfo),
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("aaa"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("bbb"),
+			},
+		}, tableInfo),
+	}
 )
 
 func TestMaxMessageBytes(t *testing.T) {
@@ -575,13 +599,6 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 }
 
 func TestOutputOldValueFalse(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key, b varchar(10))`)
-	event := helper.DML2Event(`insert into test.t values ("aa", "bb")`, "test", "t")
-	event.PreColumns = event.Columns
-
 	ctx := context.Background()
 	topic := "test"
 
@@ -591,7 +608,7 @@ func TestOutputOldValueFalse(t *testing.T) {
 	require.NoError(t, err)
 	encoder := builder.Build()
 
-	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
+	err = encoder.AppendRowChangedEvent(ctx, topic, updateEvent, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]
