@@ -126,6 +126,16 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
 							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
 							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+<<<<<<< HEAD
+=======
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
+							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
+							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
+							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
+							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
+							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 						},
 						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
@@ -189,6 +199,16 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
 							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
 							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+<<<<<<< HEAD
+=======
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
+							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
+							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
+							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
+							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
+							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 						},
 						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
@@ -258,6 +278,16 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
 							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
 							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+<<<<<<< HEAD
+=======
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
+							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
+							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
+							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
+							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
+							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 						},
 						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,

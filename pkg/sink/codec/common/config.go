@@ -70,6 +70,22 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+<<<<<<< HEAD
+=======
+	// Whether old value should be excluded in the output.
+	OpenOutputOldValue bool
+
+	// for the simple protocol, can be "json" and "avro", default to "json"
+	EncodingFormat EncodingFormatType
+
+	// Currently only Debezium protocol is aware of the time zone
+	TimeZone *time.Location
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema bool
+	// Debezium only. Whether before value should be included in the output.
+	DebeziumOutputOldValue bool
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 }
 
 // NewConfig return a Config for codec
@@ -91,6 +107,18 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+<<<<<<< HEAD
+=======
+
+		EncodingFormat: EncodingFormatJSON,
+
+		TimeZone: time.Local,
+
+		// default value is true
+		DebeziumOutputOldValue: true,
+		OpenOutputOldValue:     true,
+		DebeziumDisableSchema:  false,
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 	}
 }
 
@@ -195,6 +223,12 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
 				c.LargeMessageHandle.LargeMessageHandleOption)
+		}
+		if replicaConfig.Sink.OpenProtocol != nil {
+			c.OpenOutputOldValue = replicaConfig.Sink.OpenProtocol.OutputOldValue
+		}
+		if replicaConfig.Sink.Debezium != nil {
+			c.DebeziumOutputOldValue = replicaConfig.Sink.Debezium.OutputOldValue
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

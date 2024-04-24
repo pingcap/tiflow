@@ -58,6 +58,11 @@ definitions:
           type: string
         type: array
     type: object
+  config.DebeziumConfig:
+    properties:
+      output-old-value:
+        type: boolean
+    type: object
   config.DispatchRule:
     properties:
       columns:
@@ -238,6 +243,11 @@ definitions:
         description: OAuth2Scope scope
         type: string
     type: object
+  config.OpenProtocolConfig:
+    properties:
+      output-old-value:
+        type: boolean
+    type: object
   config.PulsarConfig:
     properties:
       auth-tls-certificate-path:
@@ -328,6 +338,15 @@ definitions:
       date-separator:
         description: DateSeparator is only available when the downstream is Storage.
         type: string
+<<<<<<< HEAD
+=======
+      debezium:
+        $ref: '#/definitions/config.DebeziumConfig'
+        description: DebeziumConfig related configurations
+      debezium-disable-schema:
+        description: Debezium only. Whether schema should be excluded in the output.
+        type: boolean
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
       delete-only-output-handle-key-columns:
         description: DeleteOnlyOutputHandleKeyColumns is only available when the downstream
           is MQ.
@@ -360,6 +379,9 @@ definitions:
         description: OnlyOutputUpdatedColumns is only available when the downstream
           is MQ.
         type: boolean
+      open:
+        $ref: '#/definitions/config.OpenProtocolConfig'
+        description: OpenProtocol related configurations
       protocol:
         description: Protocol is NOT available when the downstream is DB.
         type: string
@@ -769,6 +791,11 @@ definitions:
       memory_quota_percentage:
         type: integer
     type: object
+  v2.DebeziumConfig:
+    properties:
+      output_old_value:
+        type: boolean
+    type: object
   v2.DispatchRule:
     properties:
       columns:
@@ -1003,6 +1030,11 @@ definitions:
       write_timeout:
         type: string
     type: object
+  v2.OpenProtocolConfig:
+    properties:
+      output_old_value:
+        type: boolean
+    type: object
   v2.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -1172,6 +1204,13 @@ definitions:
         $ref: '#/definitions/v2.CSVConfig'
       date_separator:
         type: string
+<<<<<<< HEAD
+=======
+      debezium:
+        $ref: '#/definitions/v2.DebeziumConfig'
+      debezium_disable_schema:
+        type: boolean
+>>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
       delete_only_output_handle_key_columns:
         type: boolean
       dispatchers:
@@ -1192,6 +1231,8 @@ definitions:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
         type: boolean
+      open:
+        $ref: '#/definitions/v2.OpenProtocolConfig'
       protocol:
         type: string
       pulsar_config:
