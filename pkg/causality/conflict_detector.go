@@ -34,7 +34,7 @@ type ConflictDetector[Txn txnEvent] struct {
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
-	slots    *internal.Slots[*internal.Node]
+	slots    *internal.Slots
 	numSlots uint64
 
 	// nextWorkerID is used to dispatch transactions round-robin.
@@ -53,7 +53,7 @@ func NewConflictDetector[Txn txnEvent](
 ) *ConflictDetector[Txn] {
 	ret := &ConflictDetector[Txn]{
 		resolvedTxnCaches: make([]txnCache[Txn], opt.Count),
-		slots:             internal.NewSlots[*internal.Node](numSlots),
+		slots:             internal.NewSlots(numSlots),
 		numSlots:          numSlots,
 		notifiedNodes:     chann.NewAutoDrainChann[func()](),
 		garbageNodes:      chann.NewAutoDrainChann[*internal.Node](),
