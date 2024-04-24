@@ -83,7 +83,7 @@ func (d *ConflictDetector[Txn]) Add(txn Txn) {
 			// After this transaction is executed, we can remove the node from the graph,
 			// and resolve related dependencies for these transacitons which depend on this
 			// executed transaction.
-			d.slots.Free(node)
+			d.slots.Remove(node)
 		},
 	}
 	node.TrySendToTxnCache = func(cacheID int64) bool {

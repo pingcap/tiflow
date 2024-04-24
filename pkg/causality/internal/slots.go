@@ -103,9 +103,9 @@ func (s *Slots) Add(elem *Node) {
 	}
 }
 
-// Free removes an element from the Slots.
-func (s *Slots) Free(elem *Node) {
-	elem.Remove()
+// Remove removes an element from the Slots.
+func (s *Slots) Remove(elem *Node) {
+	elem.remove()
 	hashes := elem.sortedDedupKeysHash
 	for _, hash := range hashes {
 		slotIdx := getSlot(hash, s.numSlots)
@@ -118,7 +118,6 @@ func (s *Slots) Free(elem *Node) {
 		}
 		s.slots[slotIdx].mu.Unlock()
 	}
-	elem.free()
 }
 
 func getSlot(hash, numSlots uint64) uint64 {

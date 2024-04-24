@@ -32,23 +32,6 @@ func newNodeForTest(hashes ...uint64) *Node {
 	}
 }
 
-func TestNodefree(t *testing.T) {
-	// This case should not be run parallel to
-	// others, for fear that the use-after-free
-	// will race with newNodeForTest() in other cases.
-
-	nodeA := newNodeForTest()
-	nodeA.free()
-
-	nodeA = newNodeForTest()
-	nodeA.free()
-
-	// Double freeing should panic.
-	require.Panics(t, func() {
-		nodeA.free()
-	})
-}
-
 func TestNodeEquals(t *testing.T) {
 	t.Parallel()
 
@@ -87,7 +70,7 @@ func TestNodeSingleDependency(t *testing.T) {
 	nodeD.dependOn(map[int64]*Node{nodeA.nodeID(): nodeC}, 999)
 	require.True(t, nodeC.tryAssignTo(2))
 	require.Equal(t, cacheID(2), nodeC.assignedWorkerID())
-	nodeC.Remove()
+	nodeC.remove()
 	require.Equal(t, cacheID(100), nodeD.assignedWorkerID())
 }
 
@@ -110,8 +93,8 @@ func TestNodeMultipleDependencies(t *testing.T) {
 
 	require.Equal(t, unassigned, nodeC.assignedWorkerID())
 
-	nodeA.Remove()
-	nodeB.Remove()
+	nodeA.remove()
+	nodeB.remove()
 	require.Equal(t, int64(100), nodeC.assignedWorkerID())
 }
 
@@ -133,8 +116,8 @@ func TestNodeResolveImmediately(t *testing.T) {
 	require.Equal(t, cacheID(1), nodeD.assignedWorkerID())
 
 	// Node E depends on B and C and some other resolved dependencies.
-	nodeB.Remove()
-	nodeC.Remove()
+	nodeB.remove()
+	nodeC.remove()
 	nodeE := newNodeForTest()
 	nodeE.dependOn(map[int64]*Node{nodeB.nodeID(): nodeB, nodeC.nodeID(): nodeC}, 999)
 	require.Equal(t, cacheID(100), nodeE.assignedWorkerID())
