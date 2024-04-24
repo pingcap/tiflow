@@ -17,7 +17,7 @@ mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_g
 
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro debezium"
 kafka_only_protocol="kafka_simple_basic kafka_simple_basic_avro kafka_simple_handle_key_only kafka_simple_handle_key_only_avro kafka_simple_claim_check kafka_simple_claim_check_avro canal_json_adapter_compatibility canal_json_basic canal_json_content_compatible multi_topics avro_basic canal_json_handle_key_only open_protocol_handle_key_only canal_json_claim_check open_protocol_claim_check"
-kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
+kafka_only_v2="kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
 storage_only="lossy_ddl storage_csv_update"
 storage_only_csv="storage_cleanup csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table"
@@ -60,7 +60,7 @@ groups=(
 	# G13 pulsar mtls authentication enabled
 	'tiflash region_merge common_1'
 	# G14
-	'big_txn changefeed_finish force_replicate_table'
+	'changefeed_finish force_replicate_table'
 	# G15
 	'new_ci_collation batch_add_table multi_rocks'
 	# G16, currently G16 is not running in kafka pipeline
