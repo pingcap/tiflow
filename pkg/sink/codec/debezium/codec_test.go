@@ -33,6 +33,7 @@ func TestEncodeInsert(t *testing.T) {
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
+	codec.config.DebeziumOutputOldValue = false
 
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
@@ -356,6 +357,40 @@ func TestEncodeUpdate(t *testing.T) {
 		}
 	}
 	`, buf.String())
+
+	codec.config.DebeziumOutputOldValue = false
+	codec.config.DebeziumDisableSchema = true
+	buf.Reset()
+	err = codec.EncodeRowChangedEvent(e, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test-cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "test",
+				"table": "table1",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 1,
+				"cluster_id": "test-cluster"
+			},
+			"ts_ms": 1701326309000,
+			"transaction": null,
+			"op": "u",
+			"after": { "tiny": 1 }
+		}
+	}
+	`, buf.String())
 }
 
 func TestEncodeDelete(t *testing.T) {
@@ -364,6 +399,7 @@ func TestEncodeDelete(t *testing.T) {
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
+	codec.config.DebeziumOutputOldValue = false
 	codec.config.DebeziumDisableSchema = true
 
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
