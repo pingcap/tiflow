@@ -221,7 +221,7 @@ func (n *Node) maybeResolve() {
 			log.Panic("invalid cache ID", zap.Uint64("cacheID", uint64(cacheID)))
 		}
 
-		if cacheID >= 0 {
+		if cacheID != assignedToAny {
 			n.tryAssignTo(cacheID)
 			return
 		}

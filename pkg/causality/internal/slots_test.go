@@ -30,8 +30,7 @@ func TestSlotsTrivial(t *testing.T) {
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
-		node := slots.AllocNode([]uint64{1, 2, 3, 4, 5})
-		node.RandCacheID = func() cacheID { return 100 }
+		node := newNodeForTest(1, 2, 3, 4, 5)
 		slots.Add(node)
 		nodes = append(nodes, node)
 	}
@@ -54,13 +53,8 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	slots := NewSlots(8)
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
-	newNode := func() *Node {
-		node := slots.AllocNode([]uint64{1, 9, 17, 25, 33})
-		node.RandCacheID = func() cacheID { return 100 }
-		return node
-	}
 	for i := 0; i < N; i++ {
-		freeNodeChan <- newNode()
+		freeNodeChan <- newNodeForTest(1, 9, 17, 25, 33)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -93,7 +87,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 			case node := <-inuseNodeChan:
 				// keys belong to the same slot after hash, since slot num is 8
 				slots.Free(node)
-				freeNodeChan <- newNode()
+				freeNodeChan <- newNodeForTest(1, 9, 17, 25, 33)
 			}
 		}
 	}()
