@@ -568,7 +568,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		// Determine whether to use batch dml feature here.
-		if s.cfg.BatchDMLEnable {
+		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > 1 {
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
