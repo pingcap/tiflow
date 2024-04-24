@@ -461,7 +461,7 @@ func TestProcessorExit(t *testing.T) {
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
 	checkChangefeedNormal(changefeed)
-	require.Nil(t, p.lazyInit(context.Background()))
+	require.Nil(t, p.lazyInit(ctx))
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
@@ -787,8 +787,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 }
 
 func TestProcessorNotInitialized(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	liveness := model.LivenessCaptureAlive
-	p, _, _ := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
+	p, _, _ := initProcessor4Test(cdcContext.NewContext4Test(context.Background(), true), t, &liveness, false)
 	require.Nil(t, p.WriteDebugInfo(os.Stdout))
 }
