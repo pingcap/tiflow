@@ -450,9 +450,9 @@ func (o *ownerImpl) updateMetrics() {
 	o.lastTickTime = now
 
 	for cfID, cf := range o.changefeeds {
-		if cf.latestInfo != nil {
+		if cf.cfInfo != nil {
 			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
-				Set(float64(cf.latestInfo.State.ToInt()))
+				Set(float64(cf.cfInfo.State.ToInt()))
 		}
 	}
 }
@@ -496,7 +496,7 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 	)
 	for _, changefeed := range o.changefeeds {
 		// Only count normal changefeed.
-		state := changefeed.latestInfo.State
+		state := changefeed.cfInfo.State
 		if state != model.StateNormal {
 			log.Info("skip drain changefeed",
 				zap.String("state", string(state)),
@@ -593,7 +593,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		ret := &model.ChangeFeedStatusForAPI{}
 		ret.ResolvedTs = cfReactor.resolvedTs
-		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.CheckpointTs = cfReactor.cfStatus.CheckpointTs
 		query.Data = ret
 	case QueryChangeFeedSyncedStatus:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
@@ -603,15 +603,15 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		ret := &model.ChangeFeedSyncedStatusForAPI{}
 		ret.LastSyncedTs = cfReactor.lastSyncedTs
-		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.CheckpointTs = cfReactor.cfStatus.CheckpointTs
 		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
 
-		if cfReactor.latestInfo == nil {
+		if cfReactor.cfInfo == nil {
 			ret.CheckpointInterval = 0
 			ret.SyncedCheckInterval = 0
 		} else {
-			ret.CheckpointInterval = cfReactor.latestInfo.Config.SyncedStatus.CheckpointInterval
-			ret.SyncedCheckInterval = cfReactor.latestInfo.Config.SyncedStatus.SyncedCheckInterval
+			ret.CheckpointInterval = cfReactor.cfInfo.Config.SyncedStatus.CheckpointInterval
+			ret.SyncedCheckInterval = cfReactor.cfInfo.Config.SyncedStatus.SyncedCheckInterval
 		}
 		query.Data = ret
 	case QueryChangefeedInfo:
@@ -620,11 +620,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			query.Data = nil
 			return nil
 		}
-		if cfReactor.latestInfo == nil {
+		if cfReactor.cfInfo == nil {
 			query.Data = &model.ChangeFeedInfo{}
 		} else {
 			var err error
-			query.Data, err = cfReactor.latestInfo.Clone()
+			query.Data, err = cfReactor.cfInfo.Clone()
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -699,14 +699,14 @@ func (o *ownerImpl) isHealthy() bool {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {
-		if changefeed.latestInfo == nil {
+		if changefeed.cfInfo == nil {
 			continue
 		}
-		if changefeed.latestInfo.State != model.StateNormal {
+		if changefeed.cfInfo.State != model.StateNormal {
 			log.Warn("isHealthy: changefeed not normal",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID),
-				zap.Any("state", changefeed.latestInfo.State))
+				zap.Any("state", changefeed.cfInfo.State))
 			continue
 		}
 
