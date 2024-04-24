@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -86,6 +85,7 @@ func validateAndAdjustBound(
 	changefeedID model.ChangeFeedID,
 	span *tablepb.Span,
 	lowerBound, upperBound sorter.Position,
+	useTsWindow ...sorter.TsWindow,
 ) (sorter.Position, sorter.Position) {
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
@@ -96,12 +96,14 @@ func validateAndAdjustBound(
 		upperBound = sorter.GenCommitFence(newUpperCommitTs)
 	}
 
-	// FIXME: if ts window is too small and there are too many tables,
-	// the issue may be triggered again: https://github.com/pingcap/tiflow/issues/10169.
-	tsWindow1 := encoding.ExtractTsWindow(lowerBound.CommitTs)
-	tsWindow2 := encoding.ExtractTsWindow(upperBound.CommitTs)
-	if tsWindow1 != tsWindow2 {
-		upperBound = sorter.GenCommitFence(encoding.MinTsInWindow(tsWindow1+1) - 1)
+	if len(useTsWindow) > 0 {
+		// NOTE: if ts window is too small and there are too many tables,
+		// the issue may be triggered again: https://github.com/pingcap/tiflow/issues/10169.
+		tsWindow1 := useTsWindow[0].ExtractTsWindow(lowerBound.CommitTs)
+		tsWindow2 := useTsWindow[0].ExtractTsWindow(upperBound.CommitTs)
+		if tsWindow1 != tsWindow2 {
+			upperBound = sorter.GenCommitFence(useTsWindow[0].MinTsInWindow(tsWindow1+1) - 1)
+		}
 	}
 
 	if !upperBound.IsCommitFence() {

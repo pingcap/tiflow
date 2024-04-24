@@ -32,17 +32,25 @@ const (
 	tsWindowLen int = 8
 	tableIDLen  int = 8
 	tsLen       int = 8
-
-	tsWindowInSeconds = 10
 )
 
-// ExtractTsWindow extracts the window from the given timestamp.
-func ExtractTsWindow(ts uint64) uint64 {
+// TsWindow implements cdc/processor/sourcemanager/sorter.TsWindow.
+type TsWindow struct {
+	sizeInSeconds int
+}
+
+// TS_WINDOW returns a TsWindow instance.
+func TS_WINDOW() TsWindow {
+	return TsWindow{sizeInSeconds: 30}
+}
+
+// ExtractTsWindow implements cdc/processor/sourcemanager/sorter.TsWindow.
+func (t TsWindow) ExtractTsWindow(ts uint64) uint64 {
 	return uint64(oracle.ExtractPhysical(ts) / 1000 / 10)
 }
 
-// MinTsInWindow returns the min ts in a window.
-func MinTsInWindow(tsWindow uint64) uint64 {
+// MinTsInWindow implements cdc/processor/sourcemanager/sorter.TsWindow.
+func (t TsWindow) MinTsInWindow(tsWindow uint64) uint64 {
 	return oracle.ComposeTS(int64(tsWindow)*10*1000, 0)
 }
 
@@ -118,7 +126,7 @@ func encodeTsKey(buf []byte, uniqueID uint32, tableID uint64, CRTs uint64, start
 	offset += uniqueIDLen
 
 	// tsWindow
-	tsWindow := ExtractTsWindow(CRTs)
+	tsWindow := TS_WINDOW().ExtractTsWindow(CRTs)
 	binary.BigEndian.PutUint64(buf[offset:], tsWindow)
 	offset += tsWindowLen
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -68,4 +69,18 @@ func TestValidateAndAdjustBound(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateAndAdjustBoundWithTsWindow(t *testing.T) {
+	changefeedID := model.DefaultChangeFeedID("1")
+	span := spanz.TableIDToComparableSpan(1)
+	window := encoding.TS_WINDOW()
+	lowerPhs := sorter.Position{CommitTs: window.MinTsInWindow(100)}
+	upperPhs := sorter.Position{CommitTs: window.MinTsInWindow(102)}
+	newLowerPhs, newUpperPhs := validateAndAdjustBound(changefeedID, &span, lowerPhs, upperPhs, window)
+	require.Equal(t, lowerPhs, newLowerPhs)
+	newCommitTs := window.MinTsInWindow(101) - 1
+	require.Equal(t, newUpperPhs.CommitTs, newCommitTs)
+	require.Equal(t, newUpperPhs.StartTs, newCommitTs-1)
+	require.Equal(t, uint64(100), window.ExtractTsWindow(newUpperPhs.CommitTs))
 }

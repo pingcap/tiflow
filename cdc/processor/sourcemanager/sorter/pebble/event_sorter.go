@@ -57,6 +57,8 @@ type EventSorter struct {
 	isClosed   bool
 	onResolves []func(tablepb.Span, model.Ts)
 	tables     *spanz.HashMap[*tableState]
+
+	tsWindow encoding.TsWindow
 }
 
 // EventIter implements sorter.EventIterator.
@@ -82,6 +84,7 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		channs:       channs,
 		closed:       make(chan struct{}),
 		tables:       spanz.NewHashMap[*tableState](),
+		tsWindow:     encoding.TS_WINDOW(),
 	}
 
 	for i := range eventSorter.dbs {
@@ -177,8 +180,8 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable implements sorter.SortEngine.
 func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) (sorter.EventIterator, error) {
-	tsWindow1 := encoding.ExtractTsWindow(lowerBound.CommitTs)
-	tsWindow2 := encoding.ExtractTsWindow(upperBound.CommitTs)
+	tsWindow1 := s.tsWindow.ExtractTsWindow(lowerBound.CommitTs)
+	tsWindow2 := s.tsWindow.ExtractTsWindow(upperBound.CommitTs)
 	if tsWindow1 != tsWindow2 {
 		return nil, errors.New("unexpected FetchByTable boundariers: different TsWindows")
 	}
@@ -514,8 +517,8 @@ func (s *EventSorter) cleanTable(
 	var start, end []byte
 
 	if len(upperBound) == 1 {
-		window := encoding.ExtractTsWindow(upperBound[0].CommitTs) - 5
-		toClean = sorter.GenCommitFence(encoding.MinTsInWindow(window + 1))
+		window := s.tsWindow.ExtractTsWindow(upperBound[0].CommitTs) - 5
+		toClean = sorter.GenCommitFence(s.tsWindow.MinTsInWindow(window + 1))
 	} else {
 		toClean = sorter.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}

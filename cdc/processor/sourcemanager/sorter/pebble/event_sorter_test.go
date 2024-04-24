@@ -72,7 +72,8 @@ func TestNoResolvedTs(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
+		iter, err := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
+		require.Nil(t, err)
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -136,7 +137,8 @@ func TestEventFetch(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
+		iter, err := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
+		require.Nil(t, err)
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)

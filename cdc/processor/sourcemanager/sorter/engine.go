@@ -173,3 +173,11 @@ type TableStats struct {
 	ReceivedMaxCommitTs   model.Ts
 	ReceivedMaxResolvedTs model.Ts
 }
+
+// TsWindow specifies how to group timestamps into different windows.
+type TsWindow interface {
+	// ExtractTsWindow extracts the window from the given timestamp.
+	ExtractTsWindow(ts uint64) uint64
+	// MinTsInWindow returns the min ts in a window.
+	MinTsInWindow(tsWindow uint64) uint64
+}
