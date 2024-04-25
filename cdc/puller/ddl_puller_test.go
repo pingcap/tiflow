@@ -316,7 +316,7 @@ func TestHandleRenameTable(t *testing.T) {
 
 		// since test1.t100 is in filter rule, replicate it
 		job = helper.DDL2Job("rename table test1.t1000 to test1.t100")
-		skip, err = ddlJobPullerImpl.handleJob(job)
+		_, err = ddlJobPullerImpl.handleJob(job)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), fmt.Sprintf("table's old name is not in filter rule, and its new name in filter rule "+
 			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
@@ -339,7 +339,7 @@ func TestHandleRenameTable(t *testing.T) {
 		// but now it will throw an error since schema ignore1 are not in schemaStorage
 		// ref: https://github.com/pingcap/tiflow/issues/9488
 		job = helper.DDL2Job("rename table test1.t202308081 to ignore1.ignore1, test1.t202308082 to ignore1.dongmen")
-		skip, err = ddlJobPullerImpl.handleJob(job)
+		_, err = ddlJobPullerImpl.handleJob(job)
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "ErrSnapshotSchemaNotFound")
 	}
