@@ -183,8 +183,8 @@ type changefeed struct {
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
-	cfInfo   *model.ChangeFeedInfo
-	cfStatus *model.ChangeFeedStatus
+	latestInfo   *model.ChangeFeedInfo
+	latestStatus *model.ChangeFeedStatus
 }
 
 func (c *changefeed) GetScheduler() scheduler.Scheduler {
@@ -202,9 +202,9 @@ func NewChangefeed(
 	globalVars *vars.GlobalVars,
 ) *changefeed {
 	c := &changefeed{
-		id:       id,
-		cfInfo:   cfInfo,
-		cfStatus: cfStatus,
+		id:           id,
+		latestInfo:   cfInfo,
+		latestStatus: cfStatus,
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
@@ -769,7 +769,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	}
 	// Must clean redo manager before calling cancel, otherwise
 	// the manager can be closed internally.
-	c.cleanupRedoManager(ctx, c.cfInfo)
+	c.cleanupRedoManager(ctx, c.latestInfo)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
 	if c.cancel != nil {
