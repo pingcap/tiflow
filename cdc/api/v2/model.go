@@ -457,12 +457,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
-		var debeziumConfig *config.DebeziumConfig
-		if c.Sink.DebeziumConfig != nil {
-			debeziumConfig = &config.DebeziumConfig{
-				OutputOldValue: c.Sink.DebeziumConfig.OutputOldValue,
-			}
-		}
 		var openProtocolConfig *config.OpenProtocolConfig
 		if c.Sink.OpenProtocolConfig != nil {
 			openProtocolConfig = &config.OpenProtocolConfig{
@@ -490,7 +484,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         c.Sink.SafeMode,
 			OpenProtocol:                     openProtocolConfig,
-			Debezium:                         debeziumConfig,
 		}
 
 		if c.Sink.TxnAtomicity != nil {
@@ -760,12 +753,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
-		var debeziumConfig *DebeziumConfig
-		if cloned.Sink.Debezium != nil {
-			debeziumConfig = &DebeziumConfig{
-				OutputOldValue: cloned.Sink.Debezium.OutputOldValue,
-			}
-		}
 		var openProtocolConfig *OpenProtocolConfig
 		if cloned.Sink.OpenProtocol != nil {
 			openProtocolConfig = &OpenProtocolConfig{
@@ -791,7 +778,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
-			DebeziumConfig:                   debeziumConfig,
 			OpenProtocolConfig:               openProtocolConfig,
 		}
 
@@ -974,15 +960,7 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
-<<<<<<< HEAD
-=======
-	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
-	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
-	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
-	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
-	DebeziumConfig                   *DebeziumConfig     `json:"debezium,omitempty"`
 	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 }
 
 // CSVConfig denotes the csv config
@@ -1326,10 +1304,5 @@ type GlueSchemaRegistryConfig struct {
 
 // OpenProtocolConfig represents the configurations for open protocol encoding
 type OpenProtocolConfig struct {
-	OutputOldValue bool `json:"output_old_value"`
-}
-
-// DebeziumConfig represents the configurations for debezium protocol encoding
-type DebeziumConfig struct {
 	OutputOldValue bool `json:"output_old_value"`
 }

@@ -76,22 +76,10 @@ var customReplicaConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
-<<<<<<< HEAD
 		DateSeparator:            "day",
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
-=======
-		DateSeparator:               "day",
-		EncoderConcurrency:          util.AddressOf(32),
-		EnablePartitionSeparator:    util.AddressOf(true),
-		ContentCompatible:           util.AddressOf(true),
-		SendBootstrapIntervalInSec:  util.AddressOf(int64(120)),
-		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
-		SendBootstrapToAllPartition: util.AddressOf(true),
-		DebeziumDisableSchema:       util.AddressOf(true),
-		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
-		DebeziumConfig:              &DebeziumConfig{OutputOldValue: true},
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
+		OpenProtocolConfig:       &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -134,24 +122,11 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
-<<<<<<< HEAD
 		Terminator:               "\r\n",
 		DateSeparator:            "day",
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
-=======
-		Terminator:                  "\r\n",
-		DateSeparator:               "day",
-		EncoderConcurrency:          util.AddressOf(32),
-		EnablePartitionSeparator:    util.AddressOf(true),
-		ContentCompatible:           util.AddressOf(false),
-		SendBootstrapIntervalInSec:  util.AddressOf(int64(120)),
-		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
-		SendBootstrapToAllPartition: util.AddressOf(true),
-		DebeziumDisableSchema:       util.AddressOf(false),
-		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
-		DebeziumConfig:              &DebeziumConfig{OutputOldValue: true},
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
+		OpenProtocolConfig:       &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

@@ -233,36 +233,17 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-<<<<<<< HEAD
-	Protocol                 string            `json:"protocol,omitempty"`
-	SchemaRegistry           string            `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig        `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors,omitempty"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       *int              `json:"encoder_concurrency,omitempty"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
-=======
-	Protocol                    string              `json:"protocol,omitempty"`
-	SchemaRegistry              string              `json:"schema_registry,omitempty"`
-	CSVConfig                   *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules               []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors             []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                string              `json:"transaction_atomicity"`
-	EncoderConcurrency          *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                  string              `json:"terminator"`
-	DateSeparator               string              `json:"date_separator,omitempty"`
-	EnablePartitionSeparator    *bool               `json:"enable_partition_separator,omitempty"`
-	ContentCompatible           *bool               `json:"content_compatible"`
-	SendBootstrapIntervalInSec  *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
-	SendBootstrapInMsgCount     *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
-	SendBootstrapToAllPartition *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
-	DebeziumDisableSchema       *bool               `json:"debezium_disable_schema,omitempty"`
-	DebeziumConfig              *DebeziumConfig     `json:"debezium,omitempty"`
-	OpenProtocolConfig          *OpenProtocolConfig `json:"open,omitempty"`
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
+	Protocol                 string              `json:"protocol,omitempty"`
+	SchemaRegistry           string              `json:"schema_registry,omitempty"`
+	CSVConfig                *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity             string              `json:"transaction_atomicity"`
+	EncoderConcurrency       *int                `json:"encoder_concurrency,omitempty"`
+	Terminator               string              `json:"terminator"`
+	DateSeparator            string              `json:"date_separator,omitempty"`
+	EnablePartitionSeparator *bool               `json:"enable_partition_separator,omitempty"`
+	OpenProtocolConfig       *OpenProtocolConfig `json:"open,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -402,10 +383,5 @@ type Capture struct {
 
 // OpenProtocolConfig represents the configurations for open protocol encoding
 type OpenProtocolConfig struct {
-	OutputOldValue bool `json:"output_old_value"`
-}
-
-// DebeziumConfig represents the configurations for debezium protocol encoding
-type DebeziumConfig struct {
 	OutputOldValue bool `json:"output_old_value"`
 }

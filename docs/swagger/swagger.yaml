@@ -58,11 +58,6 @@ definitions:
           type: string
         type: array
     type: object
-  config.DebeziumConfig:
-    properties:
-      output-old-value:
-        type: boolean
-    type: object
   config.DispatchRule:
     properties:
       columns:
@@ -338,15 +333,6 @@ definitions:
       date-separator:
         description: DateSeparator is only available when the downstream is Storage.
         type: string
-<<<<<<< HEAD
-=======
-      debezium:
-        $ref: '#/definitions/config.DebeziumConfig'
-        description: DebeziumConfig related configurations
-      debezium-disable-schema:
-        description: Debezium only. Whether schema should be excluded in the output.
-        type: boolean
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
       delete-only-output-handle-key-columns:
         description: DeleteOnlyOutputHandleKeyColumns is only available when the downstream
           is MQ.
@@ -791,11 +777,6 @@ definitions:
       memory_quota_percentage:
         type: integer
     type: object
-  v2.DebeziumConfig:
-    properties:
-      output_old_value:
-        type: boolean
-    type: object
   v2.DispatchRule:
     properties:
       columns:
@@ -1204,13 +1185,6 @@ definitions:
         $ref: '#/definitions/v2.CSVConfig'
       date_separator:
         type: string
-<<<<<<< HEAD
-=======
-      debezium:
-        $ref: '#/definitions/v2.DebeziumConfig'
-      debezium_disable_schema:
-        type: boolean
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
       delete_only_output_handle_key_columns:
         type: boolean
       dispatchers:

@@ -121,18 +121,12 @@ func rowChangeToMsg(
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
 		}
 	} else if e.IsUpdate() {
-<<<<<<< HEAD
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
-		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
-=======
-		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
 		if config.OpenOutputOldValue {
-			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
+			value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
 		}
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
 			(len(value.PreColumns) == 0 && !config.OpenOutputOldValue)) {
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
 		if config.OnlyOutputUpdatedColumns {

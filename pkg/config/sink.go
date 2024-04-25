@@ -162,30 +162,9 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
-<<<<<<< HEAD
-=======
-
-	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
-	// Note: When one of the following conditions is set to negative value,
-	// bootstrap sending function will be disabled.
-	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
-	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
-	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
-	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
-	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
-	// If set to false, bootstrap message will only be sent to the first partition of each topic.
-	// Default value is true.
-	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
-
-	// Debezium only. Whether schema should be excluded in the output.
-	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 
 	// OpenProtocol related configurations
 	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
-
-	// DebeziumConfig related configurations
-	Debezium *DebeziumConfig `toml:"debezium" json:"debezium,omitempty"`
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -893,10 +872,5 @@ func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 
 // OpenProtocolConfig represents the configurations for open protocol encoding
 type OpenProtocolConfig struct {
-	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
-}
-
-// DebeziumConfig represents the configurations for debezium protocol encoding
-type DebeziumConfig struct {
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }

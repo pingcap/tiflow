@@ -14,9 +14,6 @@
 package common
 
 import (
-	"net/http"
-	"net/url"
-
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
@@ -26,6 +23,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+	"net/http"
+	"net/url"
 )
 
 // defaultMaxBatchSize sets the default value for max-batch-size
@@ -70,22 +69,10 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
-<<<<<<< HEAD
-=======
 	// Whether old value should be excluded in the output.
 	OpenOutputOldValue bool
-
-	// for the simple protocol, can be "json" and "avro", default to "json"
-	EncodingFormat EncodingFormatType
-
-	// Currently only Debezium protocol is aware of the time zone
-	TimeZone *time.Location
-
-	// Debezium only. Whether schema should be excluded in the output.
-	DebeziumDisableSchema bool
 	// Debezium only. Whether before value should be included in the output.
 	DebeziumOutputOldValue bool
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 }
 
 // NewConfig return a Config for codec
@@ -107,18 +94,10 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
-<<<<<<< HEAD
-=======
-
-		EncodingFormat: EncodingFormatJSON,
-
-		TimeZone: time.Local,
 
 		// default value is true
 		DebeziumOutputOldValue: true,
 		OpenOutputOldValue:     true,
-		DebeziumDisableSchema:  false,
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 	}
 }
 
@@ -226,9 +205,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		}
 		if replicaConfig.Sink.OpenProtocol != nil {
 			c.OpenOutputOldValue = replicaConfig.Sink.OpenProtocol.OutputOldValue
-		}
-		if replicaConfig.Sink.Debezium != nil {
-			c.DebeziumOutputOldValue = replicaConfig.Sink.Debezium.OutputOldValue
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

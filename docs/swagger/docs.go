@@ -1481,14 +1481,6 @@ var doc = `{
                 }
             }
         },
-        "config.DebeziumConfig": {
-            "type": "object",
-            "properties": {
-                "output-old-value": {
-                    "type": "boolean"
-                }
-            }
-        },
         "config.DispatchRule": {
             "type": "object",
             "properties": {
@@ -1857,17 +1849,6 @@ var doc = `{
                     "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
-<<<<<<< HEAD
-=======
-                "debezium": {
-                    "description": "DebeziumConfig related configurations",
-                    "$ref": "#/definitions/config.DebeziumConfig"
-                },
-                "debezium-disable-schema": {
-                    "description": "Debezium only. Whether schema should be excluded in the output.",
-                    "type": "boolean"
-                },
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
                 "delete-only-output-handle-key-columns": {
                     "description": "DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.",
                     "type": "boolean"
@@ -2513,14 +2494,6 @@ var doc = `{
                 }
             }
         },
-        "v2.DebeziumConfig": {
-            "type": "object",
-            "properties": {
-                "output_old_value": {
-                    "type": "boolean"
-                }
-            }
-        },
         "v2.DispatchRule": {
             "type": "object",
             "properties": {
@@ -3137,15 +3110,6 @@ var doc = `{
                 "date_separator": {
                     "type": "string"
                 },
-<<<<<<< HEAD
-=======
-                "debezium": {
-                    "$ref": "#/definitions/v2.DebeziumConfig"
-                },
-                "debezium_disable_schema": {
-                    "type": "boolean"
-                },
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
                 "delete_only_output_handle_key_columns": {
                     "type": "boolean"
                 },

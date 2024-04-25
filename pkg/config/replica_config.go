@@ -77,15 +77,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		TiDBSourceID:                     1,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
-<<<<<<< HEAD
-=======
-		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
-		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
-		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
-		DebeziumDisableSchema:            util.AddressOf(false),
 		OpenProtocol:                     &OpenProtocolConfig{OutputOldValue: true},
-		Debezium:                         &DebeziumConfig{OutputOldValue: true},
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
