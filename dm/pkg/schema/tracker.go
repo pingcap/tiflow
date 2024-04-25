@@ -142,9 +142,6 @@ func (tr *Tracker) Init(
 	}
 	// TODO: need to use upstream timezone to correctly check literal is in [1970, 2038]
 	sctx := mock.NewContext()
-	if err != nil {
-		return err
-	}
 	se := executorContext{Context: sctx}
 	tr.Lock()
 	defer tr.Unlock()
