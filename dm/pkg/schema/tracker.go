@@ -302,11 +302,6 @@ func (tr *Tracker) Close() {
 	// other components are getting/setting table info
 	tr.Lock()
 	defer tr.Unlock()
-	if tr.se != nil {
-		if store := tr.se.GetStore(); store != nil {
-			store.Close()
-		}
-	}
 	tr.closed.Store(true)
 }
 
