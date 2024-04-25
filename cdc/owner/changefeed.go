@@ -529,7 +529,8 @@ func (c *changefeed) tick(ctx context.Context,
 
 func (c *changefeed) initialize(ctx context.Context,
 	cfInfo *model.ChangeFeedInfo,
-	cfStatus *model.ChangeFeedStatus) (err error) {
+	cfStatus *model.ChangeFeedStatus,
+) (err error) {
 	if c.initialized.Load() || cfStatus == nil {
 		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
