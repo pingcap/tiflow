@@ -14,6 +14,9 @@
 package common
 
 import (
+	"net/http"
+	"net/url"
+
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
@@ -23,8 +26,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-	"net/http"
-	"net/url"
 )
 
 // defaultMaxBatchSize sets the default value for max-batch-size
