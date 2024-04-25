@@ -64,21 +64,10 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-<<<<<<< HEAD
     "advance-timeout-in-sec": 150
-=======
-    "advance-timeout-in-sec": 150,
-    "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000,
-    "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
-    },
-    "debezium": {
-      "output-old-value": true
     }
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
   },
   "consistent": {
     "level": "none",
@@ -319,21 +308,10 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-<<<<<<< HEAD
     "advance-timeout-in-sec": 150
-=======
-    "advance-timeout-in-sec": 150,
-    "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000,
-    "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
-    },
-    "debezium": {
-      "output-old-value": true
     }
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
   },
   "consistent": {
     "level": "none",
@@ -493,21 +471,10 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-<<<<<<< HEAD
-    "advance-timeout-in-sec": 150
-=======
     "advance-timeout-in-sec": 150,
-    "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000,
-    "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
-    },
-    "debezium": {
-      "output-old-value": true
     }
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
   },
   "consistent": {
     "level": "none",

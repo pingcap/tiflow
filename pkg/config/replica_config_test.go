@@ -141,9 +141,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		FileSize:       aws.Int(1024),
 		OutputColumnID: aws.Bool(false),
 	}
-	conf.Sink.Debezium = &DebeziumConfig{
-		OutputOldValue: true,
-	}
 	conf.Sink.OpenProtocol = &OpenProtocolConfig{
 		OutputOldValue: true,
 	}

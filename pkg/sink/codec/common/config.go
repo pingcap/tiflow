@@ -71,8 +71,6 @@ type Config struct {
 	OnlyOutputUpdatedColumns bool
 	// Whether old value should be excluded in the output.
 	OpenOutputOldValue bool
-	// Debezium only. Whether before value should be included in the output.
-	DebeziumOutputOldValue bool
 }
 
 // NewConfig return a Config for codec
@@ -96,8 +94,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
 
 		// default value is true
-		DebeziumOutputOldValue: true,
-		OpenOutputOldValue:     true,
+		OpenOutputOldValue: true,
 	}
 }
 

@@ -58,15 +58,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
-<<<<<<< HEAD
-=======
-		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
-		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
-		SendBootstrapToAllPartition:      util.AddressOf(true),
-		DebeziumDisableSchema:            util.AddressOf(false),
 		OpenProtocolConfig:               &OpenProtocolConfig{OutputOldValue: true},
-		DebeziumConfig:                   &DebeziumConfig{OutputOldValue: true},
->>>>>>> 295a39aec3 (sink(ticdc):  Add output-old-value config (#10915))
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
