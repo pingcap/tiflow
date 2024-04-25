@@ -443,16 +443,32 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	return ignore, nil
 }
 
+// checkIneligibleTableDDL checks if the table is ineligible before and after the DDL.
+//  1. If it is not a table DDL, we shouldn't check it.
+//  2. If the table after the DDL is ineligible:
+//     a. If the table is not exist before the DDL, we should ignore the DDL.
+//     b. If the table is ineligible before the DDL, we should ignore the DDL.
+//     c. If the table is eligible before the DDL, we should return an error.
 func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, job *timodel.Job) (skip bool, err error) {
 	if filter.IsSchemaDDL(job.Type) {
 		return false, nil
 	}
+
 	ineligible := p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(job.TableID)
 	if !ineligible {
 		return false, nil
 	}
+
+	// If the table is not in the snapshot before the DDL,
+	// we should ignore the DDL.
+	_, ok := snapBefore.PhysicalTableByID(job.TableID)
+	if !ok {
+		return true, nil
+	}
+
 	// If the table after the DDL is ineligible, we should check if it is not ineligible before the DDL.
-	// If so, we should return an error to inform the user that it is a dangerous operation and should be handled manually.
+	// If so, we should return an error to inform the user that it is a
+	// dangerous operation and should be handled manually.
 	isBeforeineligible := snapBefore.IsIneligibleTableID(job.TableID)
 	if isBeforeineligible {
 		log.Warn("ignore the DDL event of ineligible table",

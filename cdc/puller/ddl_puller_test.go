@@ -166,23 +166,23 @@ func TestHandleRenameTable(t *testing.T) {
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t1(id int)")
+		job = helper.DDL2Job("create table test1.t1(id int primary key)")
 		remainTables[0] = job.TableID
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t2(id int)")
+		job = helper.DDL2Job("create table test1.t2(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t3(id int)")
+		job = helper.DDL2Job("create table test1.t3(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t5(id int)")
+		job = helper.DDL2Job("create table test1.t5(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -192,7 +192,7 @@ func TestHandleRenameTable(t *testing.T) {
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table ignore1.a(id int)")
+		job = helper.DDL2Job("create table ignore1.a(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -207,7 +207,7 @@ func TestHandleRenameTable(t *testing.T) {
 	}
 
 	{
-		_ = helper.DDL2Job("create table test1.t6(id int)")
+		_ = helper.DDL2Job("create table test1.t6(id int primary key)")
 		job := helper.DDL2Job("rename table test1.t2 to test1.t22, test1.t6 to test1.t66")
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.Error(t, err)
@@ -224,17 +224,17 @@ func TestHandleRenameTable(t *testing.T) {
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test2.t1(id int)")
+		job = helper.DDL2Job("create table test2.t1(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test2.t2(id int)")
+		job = helper.DDL2Job("create table test2.t2(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test2.t3(id int)")
+		job = helper.DDL2Job("create table test2.t3(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -252,13 +252,13 @@ func TestHandleRenameTable(t *testing.T) {
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table Test3.t1(id int)")
+		job = helper.DDL2Job("create table Test3.t1(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// skip this table
-		job = helper.DDL2Job("create table Test3.t2(id int)")
+		job = helper.DDL2Job("create table Test3.t2(id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -274,34 +274,34 @@ func TestHandleRenameTable(t *testing.T) {
 
 	// test rename table
 	{
-		job := helper.DDL2Job("create table test1.t99 (id int)")
+		job := helper.DDL2Job("create table test1.t99 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
-		job = helper.DDL2Job("create table test1.t1000 (id int)")
+		job = helper.DDL2Job("create table test1.t1000 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		// this ddl should be skipped
-		job = helper.DDL2Job("create table test1.t888 (id int)")
+		job = helper.DDL2Job("create table test1.t888 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t20230808 (id int)")
+		job = helper.DDL2Job("create table test1.t20230808 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t202308081 (id int)")
+		job = helper.DDL2Job("create table test1.t202308081 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("create table test1.t202308082 (id int)")
+		job = helper.DDL2Job("create table test1.t202308082 (id int primary key)")
 		inputDDL(t, ddlJobPullerImpl, job)
 		inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -315,7 +315,6 @@ func TestHandleRenameTable(t *testing.T) {
 		job = helper.DDL2Job("rename table test1.t1000 to test1.t100")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.Error(t, err)
-		require.True(t, skip)
 		require.Contains(t, err.Error(), fmt.Sprintf("table's old name is not in filter rule, and its new name in filter rule "+
 			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
 			"if you want to replicate this table, please add its old name to filter rule.", job.TableID, job.Query))
@@ -339,7 +338,6 @@ func TestHandleRenameTable(t *testing.T) {
 		job = helper.DDL2Job("rename table test1.t202308081 to ignore1.ignore1, test1.t202308082 to ignore1.dongmen")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NotNil(t, err)
-		require.True(t, skip)
 		require.Contains(t, err.Error(), "ErrSnapshotSchemaNotFound")
 	}
 }
@@ -398,7 +396,7 @@ func TestHandleJob(t *testing.T) {
 
 	// test create table
 	{
-		job := helper.DDL2Job("create table test1.t1(id int) partition by range(id) (partition p0 values less than (10))")
+		job := helper.DDL2Job("create table test1.t1(id int primary key) partition by range(id) (partition p0 values less than (10))")
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -408,7 +406,7 @@ func TestHandleJob(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.testStartTs(id int)")
+		job = helper.DDL2Job("create table test1.testStartTs(id int primary key)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -419,23 +417,23 @@ func TestHandleJob(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.t2(id int)")
+		job = helper.DDL2Job("create table test1.t2(id int primary key)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
 
-		job = helper.DDL2Job("create table test1.t3(id int)")
+		job = helper.DDL2Job("create table test1.t3(id int primary key)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		job = helper.DDL2Job("create table test1.t4(id int) partition by range(id) (partition p0 values less than (10))")
+		job = helper.DDL2Job("create table test1.t4(id int primary key) partition by range(id) (partition p0 values less than (10))")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
 
 		// make sure no schema not found error
-		job = helper.DDL2Job("create table test3.t1(id int) partition by range(id) (partition p0 values less than (10))")
+		job = helper.DDL2Job("create table test3.t1(id int primary key) partition by range(id) (partition p0 values less than (10))")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
@@ -598,7 +596,7 @@ func TestDDLPuller(t *testing.T) {
 		StartTS:    5,
 		State:      timodel.JobStateDone,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, FinishedTS: 18},
-		Query:      "create table test.t1(id int)",
+		Query:      "create table test.t1(id int primary key)",
 	})
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         1,
@@ -606,7 +604,7 @@ func TestDDLPuller(t *testing.T) {
 		StartTS:    5,
 		State:      timodel.JobStateDone,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 16},
-		Query:      "create table t2(id int)",
+		Query:      "create table t2(id int primary key)",
 	})
 	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(15))
@@ -631,7 +629,7 @@ func TestDDLPuller(t *testing.T) {
 		StartTS:    20,
 		State:      timodel.JobStateDone,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
-		Query:      "create table t3(id int)",
+		Query:      "create table t3(id int primary key)",
 	})
 
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
@@ -640,7 +638,7 @@ func TestDDLPuller(t *testing.T) {
 		StartTS:    20,
 		State:      timodel.JobStateDone,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
-		Query:      "create table t3(id int)",
+		Query:      "create table t3(id int primary key)",
 	})
 
 	inputTs(t, ddlJobPullerImpl, 30)
@@ -663,7 +661,7 @@ func TestDDLPuller(t *testing.T) {
 		StartTS:    20,
 		State:      timodel.JobStateCancelled,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 36},
-		Query:      "create table t4(id int)",
+		Query:      "create table t4(id int primary key)",
 	})
 
 	inputTs(t, ddlJobPullerImpl, 40)
