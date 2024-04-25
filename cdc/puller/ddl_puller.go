@@ -435,12 +435,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
 	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
-	ignore, err := p.checkIneligibleTableDDL(snap, job)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	return ignore, nil
+	return p.checkIneligibleTableDDL(snap, job)
 }
 
 // checkIneligibleTableDDL checks if the table is ineligible before and after the DDL.
@@ -461,8 +456,8 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 
 	// If the table is not in the snapshot before the DDL,
 	// we should ignore the DDL.
-	_, ok := snapBefore.PhysicalTableByID(job.TableID)
-	if !ok {
+	_, exist := snapBefore.PhysicalTableByID(job.TableID)
+	if !exist {
 		return true, nil
 	}
 
@@ -476,10 +471,10 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		return true, nil
 	}
 	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
-		"it is a dangerous operation. If you want to replicate this ddl, "+
+		"it is a dangerous operation and may casue data loss. If you want to replicate this ddl safely, "+
 		"pelase pause the changefeed and update the `force-replicate=true` "+
 		"in the changefeed configuration, "+
-		"then resume the changefeed. Otherwise, will cause data loss.", job.Query))
+		"then resume the changefeed.", job.Query))
 }
 
 // handleRenameTables gets all the tables that are renamed
