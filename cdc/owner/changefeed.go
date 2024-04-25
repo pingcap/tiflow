@@ -224,9 +224,7 @@ func NewChangefeed(
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
-	c.initializer = async.NewInitializer(func(ctx context.Context) error {
-		return c.initialize(ctx, cfInfo, cfStatus)
-	})
+	c.initializer = async.NewInitializer()
 	return c
 }
 
@@ -273,8 +271,6 @@ func (c *changefeed) Tick(ctx context.Context,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (model.Ts, model.Ts) {
 	startTime := time.Now()
-	c.cfInfo = cfInfo
-	c.cfStatus = cfStatus
 	// Handle all internal warnings.
 	noMoreWarnings := false
 	for !noMoreWarnings {
@@ -402,7 +398,11 @@ func (c *changefeed) tick(ctx context.Context,
 	}
 
 	if !c.initialized.Load() {
-		initialized, err := c.initializer.TryInitialize(ctx, c.globalVars.ChangefeedThreadPool)
+		initialized, err := c.initializer.TryInitialize(ctx,
+			func(ctx context.Context) error {
+				return c.initialize(ctx, cfInfo, cfStatus)
+			},
+			c.globalVars.ChangefeedThreadPool)
 		if err != nil {
 			return 0, 0, errors.Trace(err)
 		}

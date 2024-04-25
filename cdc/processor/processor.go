@@ -460,7 +460,7 @@ func NewProcessor(
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
 	p.cfg = cfg
-	p.initializer = async.NewInitializer(p.lazyInit)
+	p.initializer = async.NewInitializer()
 	return p
 }
 
@@ -498,7 +498,7 @@ func (p *processor) Tick(
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
 	if !p.initialized.Load() {
-		initialized, err := p.initializer.TryInitialize(ctx, p.globalVars.ChangefeedThreadPool)
+		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, p.globalVars.ChangefeedThreadPool)
 		if err != nil {
 			return errors.Trace(err), nil
 		}
