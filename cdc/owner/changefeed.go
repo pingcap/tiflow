@@ -271,6 +271,8 @@ func (c *changefeed) Tick(ctx context.Context,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (model.Ts, model.Ts) {
 	startTime := time.Now()
+	c.latestInfo = cfInfo
+	c.latestStatus = cfStatus
 	// Handle all internal warnings.
 	noMoreWarnings := false
 	for !noMoreWarnings {
