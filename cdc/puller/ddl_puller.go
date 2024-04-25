@@ -471,7 +471,7 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		return true, nil
 	}
 	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
-		"it is a dangerous operation and may casue data loss. If you want to replicate this ddl safely, "+
+		"it is a dangerous operation and may cause data loss. If you want to replicate this ddl safely, "+
 		"pelase pause the changefeed and update the `force-replicate=true` "+
 		"in the changefeed configuration, "+
 		"then resume the changefeed.", job.Query))
