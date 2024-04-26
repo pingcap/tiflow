@@ -93,7 +93,7 @@ func NewForTest(
 }
 
 func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.OpType == model.OpTypePut && raw.OldValue != nil && raw.Value != nil && raw.CRTs < thresholdTs
+	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
 }
 
 func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {

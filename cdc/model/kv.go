@@ -93,6 +93,10 @@ type RawKVEntry struct {
 	RegionID uint64 `msg:"region_id"`
 }
 
+func (v *RawKVEntry) IsUpdate() bool {
+	return v.OpType == OpTypePut && v.OldValue != nil && v.Value != nil
+}
+
 func (v *RawKVEntry) String() string {
 	// TODO: redact values.
 	return fmt.Sprintf(
