@@ -332,7 +332,8 @@ func (w *writer) Write(ctx context.Context) error {
 
 // Decode try to decode kafka message to event.
 func (w *writer) Decode(ctx context.Context, option *consumerOption, partition int32,
-	key []byte, value []byte, eventGroups map[int64]*eventsGroup) error {
+	key []byte, value []byte, eventGroups map[int64]*eventsGroup,
+) error {
 	// move to writer
 	w.sinksMu.Lock()
 	sink := w.sinks[partition]
