@@ -90,9 +90,6 @@ func (n *Node) dependOn(dependencyNodes map[int64]*Node) {
 	resolvedDependencies := int32(0)
 
 	depend := func(target *Node) {
-		if target == nil {
-			log.Panic("node cannot depend on nil")
-		}
 		if target.id == n.id {
 			log.Panic("node cannot depend on itself")
 		}
