@@ -78,7 +78,6 @@ func kafkaGoWaitTopicCreated(address []string, topic string) error {
 }
 
 type KafkaGoConsumer struct {
-	ready  chan bool
 	option *ConsumerOption
 	writer *Writer
 }
