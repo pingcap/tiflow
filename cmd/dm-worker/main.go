@@ -34,7 +34,7 @@ import (
 
 func main() {
 	collate.SetNewCollationEnabledForTest(false)
-	
+
 	cfg := worker.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
