@@ -52,39 +52,16 @@ func kafkaGoGetPartitionNum(address []string, topic string) (int32, error) {
 	return 0, cerror.Errorf("wait the topic(%s) created timeout", topic)
 }
 
-func kafkaGoWaitTopicCreated(address []string, topic string) error {
-	client := &kafka.Client{
-		Addr: kafka.TCP(address...),
-		// todo: make this configurable
-		Timeout: 10 * time.Second,
-		// Transport: cfg. transport,
-	}
-	for i := 0; i <= 30; i++ {
-		resp, err := client.Metadata(context.Background(), &kafka.MetadataRequest{})
-		if err != nil {
-			return cerror.Trace(err)
-		}
-		topics := resp.Topics
-		for i := 0; i < len(topics); i++ {
-			if topics[i].Name == topic {
-				return nil
-			}
-		}
-		log.Info("wait the topic created", zap.String("topic", topic))
-		time.Sleep(1 * time.Second)
-	}
-	return cerror.Errorf("wait the topic(%s) created timeout", topic)
+type kafkaGoConsumer struct {
+	option *consumerOption
+	writer *writer
 }
 
-type KafkaGoConsumer struct {
-	option *ConsumerOption
-	writer *Writer
-}
+var _ KakfaConsumer = (*kafkaGoConsumer)(nil)
 
-var _ KakfaConsumer = (*KafkaGoConsumer)(nil)
-
-func NewkafkaGoConsumer(ctx context.Context, o *ConsumerOption) KakfaConsumer {
-	c := new(KafkaGoConsumer)
+// NewkafkaGoConsumer will create a consumer client.
+func NewkafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
+	c := new(kafkaGoConsumer)
 	w, err := NewWriter(ctx, o)
 	if err != nil {
 		log.Panic("Error creating writer", zap.Error(err))
@@ -101,7 +78,8 @@ func NewkafkaGoConsumer(ctx context.Context, o *ConsumerOption) KakfaConsumer {
 	return c
 }
 
-func (c *KafkaGoConsumer) Consume(ctx context.Context) error {
+// Consume will read message from Kafka.
+func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 	topics := strings.Split(c.option.topic, ",")
 	if len(topics) == 0 {
 		log.Panic("Error no topics provided")
@@ -142,29 +120,34 @@ func (c *KafkaGoConsumer) Consume(ctx context.Context) error {
 					defer reader.Close()
 
 					// seek to the last committed offset for this partition.
-					reader.SetOffset(offset)
-					eventGroups := make(map[int64]*EventsGroup)
+					if err := reader.SetOffset(offset); err != nil {
+						log.Panic("Error set offset", zap.Error(err))
+					}
+
+					eventGroups := make(map[int64]*eventsGroup)
 					for {
 						msg, err := reader.ReadMessage(ctx)
 						if err != nil {
 							if errors.Is(err, kafka.ErrGenerationEnded) {
-								// generation has ended.  commit offsets.  in a real app,
-								// offsets would be committed periodically.
-								gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}})
+								// generation has ended.  commit offsets.
+								// in a real app, offsets would be committed periodically.
+								if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
+									log.Panic("Error commit offsets", zap.Error(err))
+								}
 								return
-							} else {
-								log.Panic("Error reading message", zap.Error(err))
 							}
-						} else {
-							if err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value, eventGroups); err != nil {
-								log.Panic("Error decode message", zap.Error(err))
-							}
-							// sync write to downstream
-							if err := c.writer.Write(ctx); err != nil {
-								log.Panic("Error write to downstream", zap.Error(err))
-							}
-							offset = msg.Offset
-							gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}})
+							log.Panic("Error reading message", zap.Error(err))
+						}
+						if err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value, eventGroups); err != nil {
+							log.Panic("Error decode message", zap.Error(err))
+						}
+						// sync write to downstream
+						if err := c.writer.Write(ctx); err != nil {
+							log.Panic("Error write to downstream", zap.Error(err))
+						}
+						offset = msg.Offset
+						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
+							log.Panic("Error commit offsets", zap.Error(err))
 						}
 					}
 				})
@@ -173,7 +156,9 @@ func (c *KafkaGoConsumer) Consume(ctx context.Context) error {
 	}
 }
 
-// async write to downsteam
-func (c *KafkaGoConsumer) AsyncWrite(ctx context.Context) {
-	c.writer.AsyncWrite(ctx)
+// AsyncWrite call writer to write to the downsteam asynchronously.
+func (c *kafkaGoConsumer) AsyncWrite(ctx context.Context) {
+	if err := c.writer.AsyncWrite(ctx); err != nil {
+		log.Info("async write break", zap.Error(err))
+	}
 }

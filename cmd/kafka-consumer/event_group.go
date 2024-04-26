@@ -19,21 +19,25 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-type EventsGroup struct {
+// EventsGroup could store change event message.
+type eventsGroup struct {
 	events []*model.RowChangedEvent
 }
 
-func NewEventsGroup() *EventsGroup {
-	return &EventsGroup{
+// NewEventsGroup will create new event group.
+func NewEventsGroup() *eventsGroup {
+	return &eventsGroup{
 		events: make([]*model.RowChangedEvent, 0),
 	}
 }
 
-func (g *EventsGroup) Append(e *model.RowChangedEvent) {
+// Append will append a event to event groups.
+func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 	g.events = append(g.events, e)
 }
 
-func (g *EventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
+// Resolve will get events where CommitTs is less than resolveTs.
+func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 	sort.Slice(g.events, func(i, j int) bool {
 		return g.events[i].CommitTs < g.events[j].CommitTs
 	})

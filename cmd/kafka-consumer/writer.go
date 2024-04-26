@@ -43,7 +43,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewDecoder(ctx context.Context, option *ConsumerOption, upstreamTiDB *sql.DB) (codec.RowEventDecoder, error) {
+// NewDecoder will create a new event decoder
+func NewDecoder(ctx context.Context, option *consumerOption, upstreamTiDB *sql.DB) (codec.RowEventDecoder, error) {
 	var (
 		decoder codec.RowEventDecoder
 		err     error
@@ -70,7 +71,7 @@ func NewDecoder(ctx context.Context, option *ConsumerOption, upstreamTiDB *sql.D
 	return decoder, err
 }
 
-type Writer struct {
+type writer struct {
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
 	ddlWithMaxCommitTs   *model.DDLEvent
@@ -90,8 +91,9 @@ type Writer struct {
 	upstreamTiDB *sql.DB
 }
 
-func NewWriter(ctx context.Context, o *ConsumerOption) (*Writer, error) {
-	w := new(Writer)
+// NewWriter will create a writer to decode kafka message and write to the downstream.
+func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
+	w := new(writer)
 
 	tz, err := util.GetTimezone(o.timezone)
 	if err != nil {
@@ -155,7 +157,7 @@ func NewWriter(ctx context.Context, o *ConsumerOption) (*Writer, error) {
 
 // append DDL wait to be handled, only consider the constraint among DDLs.
 // for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
-func (w *Writer) appendDDL(ddl *model.DDLEvent) {
+func (w *writer) appendDDL(ddl *model.DDLEvent) {
 	w.ddlListMu.Lock()
 	defer w.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
@@ -181,7 +183,7 @@ func (w *Writer) appendDDL(ddl *model.DDLEvent) {
 	w.ddlWithMaxCommitTs = ddl
 }
 
-func (w *Writer) getFrontDDL() *model.DDLEvent {
+func (w *writer) getFrontDDL() *model.DDLEvent {
 	w.ddlListMu.Lock()
 	defer w.ddlListMu.Unlock()
 	if len(w.ddlList) > 0 {
@@ -190,18 +192,15 @@ func (w *Writer) getFrontDDL() *model.DDLEvent {
 	return nil
 }
 
-func (w *Writer) popDDL() *model.DDLEvent {
+func (w *writer) popDDL() {
 	w.ddlListMu.Lock()
 	defer w.ddlListMu.Unlock()
 	if len(w.ddlList) > 0 {
-		ddl := w.ddlList[0]
 		w.ddlList = w.ddlList[1:]
-		return ddl
 	}
-	return nil
 }
 
-func (w *Writer) forEachSink(fn func(sink *partitionSinks) error) error {
+func (w *writer) forEachSink(fn func(sink *partitionSinks) error) error {
 	w.sinksMu.Lock()
 	defer w.sinksMu.Unlock()
 	for _, sink := range w.sinks {
@@ -212,7 +211,7 @@ func (w *Writer) forEachSink(fn func(sink *partitionSinks) error) error {
 	return nil
 }
 
-func (w *Writer) getMinPartitionResolvedTs() (result uint64, err error) {
+func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 	result = uint64(math.MaxUint64)
 	err = w.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
@@ -224,7 +223,8 @@ func (w *Writer) getMinPartitionResolvedTs() (result uint64, err error) {
 	return result, err
 }
 
-func (w *Writer) AsyncWrite(ctx context.Context) error {
+// AsyncWrite will write data downstream asynchronously.
+func (w *writer) AsyncWrite(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -282,7 +282,8 @@ func (w *Writer) AsyncWrite(ctx context.Context) error {
 	}
 }
 
-func (w *Writer) Write(ctx context.Context) error {
+// Write will write data downstream synchronously.
+func (w *writer) Write(ctx context.Context) error {
 	minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
 	if err != nil {
 		return cerror.Trace(err)
@@ -329,7 +330,9 @@ func (w *Writer) Write(ctx context.Context) error {
 	return nil
 }
 
-func (w *Writer) Decode(ctx context.Context, option *ConsumerOption, partition int32, key []byte, value []byte, eventGroups map[int64]*EventsGroup) error {
+// Decode try to decode kafka message to event.
+func (w *writer) Decode(ctx context.Context, option *consumerOption, partition int32,
+	key []byte, value []byte, eventGroups map[int64]*eventsGroup) error {
 	// move to writer
 	w.sinksMu.Lock()
 	sink := w.sinks[partition]

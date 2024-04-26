@@ -138,5 +138,7 @@ package main
 
 // // async write to downsteam
 // func (c *ConfluentConsumer) AsyncWrite(ctx context.Context) {
-// 	c.writer.AsyncWrite(ctx)
+// 	if err := c.writer.AsyncWrite(ctx); err != nil {
+// 		log.Info("async write break", zap.Error(err))
+// 	}
 // }

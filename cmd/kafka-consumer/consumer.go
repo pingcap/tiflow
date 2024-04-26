@@ -15,6 +15,7 @@ package main
 
 import "context"
 
+// KakfaConsumer is the interface for message consumer and write to the downstream.
 type KakfaConsumer interface {
 	// get data from Kafka
 	Consume(ctx context.Context) error

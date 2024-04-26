@@ -29,16 +29,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewConsumerOption() *ConsumerOption {
-	return &ConsumerOption{
-		version: "2.4.0",
-
-		maxMessageBytes: math.MaxInt64,
-		maxBatchSize:    math.MaxInt64,
-	}
-}
-
-type ConsumerOption struct {
+type consumerOption struct {
 	address      []string
 	version      string
 	topic        string
@@ -70,8 +61,18 @@ type ConsumerOption struct {
 	enableProfiling bool
 }
 
+// NewConsumerOption will create a new consumer option
+func NewConsumerOption() *consumerOption {
+	return &consumerOption{
+		version: "2.4.0",
+
+		maxMessageBytes: math.MaxInt64,
+		maxBatchSize:    math.MaxInt64,
+	}
+}
+
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
+func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		o.version = s
@@ -83,11 +84,6 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 
 	s = upstreamURI.Query().Get("partition-num")
 	if s != "" {
-		// partition, err := getPartitionNum(o.address, o.topic)
-		// if err != nil {
-		// 	log.Panic("can not get partition number", zap.String("topic", o.topic), zap.Error(err))
-		// }
-		// o.partitionNum = partition
 		c, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
 			log.Panic("invalid partition-num of upstream-uri")
