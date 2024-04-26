@@ -356,7 +356,6 @@ func convertBinaryToString(cols []*model.ColumnData, tableInfo *model.TableInfo)
 func (s *mysqlBackend) groupRowsByType(
 	event *dmlsink.TxnCallbackableEvent,
 	tableInfo *model.TableInfo,
-	spiltUpdate bool,
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
 	preAllocateSize := len(event.Event.Rows)
 	if preAllocateSize > s.cfg.MaxTxnRow {
@@ -392,29 +391,12 @@ func (s *mysqlBackend) groupRowsByType(
 		}
 
 		if row.IsUpdate() {
-			if spiltUpdate {
-				deleteRow = append(
-					deleteRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
-				if len(deleteRow) >= s.cfg.MaxTxnRow {
-					deleteRows = append(deleteRows, deleteRow)
-					deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
-				insertRow = append(
-					insertRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
-				if len(insertRow) >= s.cfg.MaxTxnRow {
-					insertRows = append(insertRows, insertRow)
-					insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
-			} else {
-				updateRow = append(
-					updateRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.cfg.MaxMultiUpdateRowCount {
-					updateRows = append(updateRows, updateRow)
-					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
+			updateRow = append(
+				updateRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+			if len(updateRow) >= s.cfg.MaxMultiUpdateRowCount {
+				updateRows = append(updateRows, updateRow)
+				updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 			}
 		}
 	}
@@ -437,7 +419,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	tableInfo *model.TableInfo,
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
-	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
+	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo)
 
 	// handle delete
 	if len(deleteRows) > 0 {
@@ -586,9 +568,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
-			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
-			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
-			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+			// Update Event
+			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(
 					quoteTable,
 					row.GetPreColumns(),
@@ -602,12 +583,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				continue
 			}
 
-			// Case for update event or delete event.
-			// For update event:
-			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-			// So we will prepare a DELETE SQL here.
-			// For delete event:
-			// It will be translated directly into a DELETE SQL.
+			// Delete Event
 			if len(row.PreColumns) != 0 {
 				query, args = prepareDelete(quoteTable, row.GetPreColumns(), s.cfg.ForceReplicate)
 				if query != "" {
@@ -616,14 +592,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				}
 			}
 
-			// Case for update event or insert event.
-			// For update event:
-			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-			// So we will prepare a REPLACE SQL here.
-			// For insert event:
+			// Insert Event
 			// It will be translated directly into a
-			// INSERT(old value is enabled and not in safe mode)
-			// or REPLACE(old value is disabled or in safe mode) SQL.
+			// INSERT(not in safe mode)
+			// or REPLACE(in safe mode) SQL.
 			if len(row.Columns) != 0 {
 				query, args = prepareReplace(
 					quoteTable,
