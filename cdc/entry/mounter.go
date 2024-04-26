@@ -736,6 +736,15 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo, tz *time.Location) (types.Da
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
 		}
+		switch col.GetType() {
+		case mysql.TypeTimestamp:
+			t := d.GetMysqlTime()
+			err = t.ConvertTimeZone(time.UTC, tz)
+			if err != nil {
+				return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+			}
+			d.SetMysqlTime(t)
+		}
 	} else if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
 		// ref: https://github.com/pingcap/ticdc/issues/3929
