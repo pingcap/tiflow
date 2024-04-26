@@ -127,7 +127,7 @@ function incompatible_ddl() {
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 add constraint c_int_unique unique(c_int)"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event modify constaint" 1
+		"event modify constaints" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
