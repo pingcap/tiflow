@@ -74,7 +74,6 @@ func kafkaGoWaitTopicCreated(address []string, topic string) error {
 		time.Sleep(1 * time.Second)
 	}
 	return cerror.Errorf("wait the topic(%s) created timeout", topic)
-
 }
 
 type KafkaGoConsumer struct {
