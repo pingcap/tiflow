@@ -341,7 +341,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 }
 
 func datum2Column(
-	tableInfo *model.TableInfo, datums map[int64]types.Datum,
+	tableInfo *model.TableInfo, datums map[int64]types.Datum, tz *time.Location,
 ) ([]*model.ColumnData, []types.Datum, []*timodel.ColumnInfo, error) {
 	cols := make([]*model.ColumnData, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -368,7 +368,7 @@ func datum2Column(
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatum, colInfo)
 		} else {
-			colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo, tz)
 		}
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
@@ -504,7 +504,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow)
+		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow, m.tz)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -536,7 +536,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		currentChecksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row)
+		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, m.tz)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -698,7 +698,9 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // TODO: Check default expr support
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, string, error) {
+func getDefaultOrZeroValue(
+	col *timodel.ColumnInfo, tz *time.Location,
+) (types.Datum, any, int, string, error) {
 	var (
 		d   types.Datum
 		err error
@@ -714,6 +716,15 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+		}
+		switch col.GetType() {
+		case mysql.TypeTimestamp:
+			t := d.GetMysqlTime()
+			err = t.ConvertTimeZone(time.UTC, tz)
+			if err != nil {
+				return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+			}
+			d.SetMysqlTime(t)
 		}
 	} else if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
