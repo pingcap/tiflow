@@ -35,17 +35,14 @@ type Initializer struct {
 	// func to cancel the changefeed initialization
 	cancelInitialize context.CancelFunc
 	initialWaitGroup sync.WaitGroup
-
-	initFunc func(ctx cdcContext.Context) error
 }
 
 // NewInitializer creates a new initializer.
-func NewInitializer(initFunc func(ctx cdcContext.Context) error) *Initializer {
+func NewInitializer() *Initializer {
 	return &Initializer{
 		initialized:  atomic.NewBool(false),
 		initializing: atomic.NewBool(false),
 		initError:    atomic.NewError(nil),
-		initFunc:     initFunc,
 	}
 }
 
@@ -55,7 +52,10 @@ func NewInitializer(initFunc func(ctx cdcContext.Context) error) *Initializer {
 // returns error if the module failed to initialize.
 // It will only initialize the module once.
 // It's not thread-safe.
-func (initializer *Initializer) TryInitialize(ctx cdcContext.Context, pool workerpool.AsyncPool) (bool, error) {
+func (initializer *Initializer) TryInitialize(ctx cdcContext.Context,
+	initFunc func(ctx cdcContext.Context) error,
+	pool workerpool.AsyncPool,
+) (bool, error) {
 	if initializer.initialized.Load() {
 		return true, nil
 	}
@@ -66,7 +66,7 @@ func (initializer *Initializer) TryInitialize(ctx cdcContext.Context, pool worke
 		log.Info("submit async initializer task to the worker pool")
 		err := pool.Go(initialCtx, func() {
 			defer initializer.initialWaitGroup.Done()
-			if err := initializer.initFunc(initialCtx); err != nil {
+			if err := initFunc(initialCtx); err != nil {
 				initializer.initError.Store(errors.Trace(err))
 			} else {
 				initializer.initialized.Store(true)

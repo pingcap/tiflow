@@ -185,7 +185,7 @@ func newChangefeed(
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
-	c.initializer = async.NewInitializer(c.initialize)
+	c.initializer = async.NewInitializer()
 	return c
 }
 
@@ -346,7 +346,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	if !c.initialized.Load() {
-		initialized, err := c.initializer.TryInitialize(ctx, ctx.GlobalVars().ChangefeedThreadPool)
+		initialized, err := c.initializer.TryInitialize(ctx,
+			func(ctx cdcContext.Context) error {
+				return c.initialize(ctx, c.state.Info, c.state.Status)
+			},
+			ctx.GlobalVars().ChangefeedThreadPool)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -473,8 +477,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	return nil
 }
 
-func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
-	if c.initialized.Load() || c.state.Status == nil {
+func (c *changefeed) initialize(ctx cdcContext.Context,
+	info *model.ChangeFeedInfo,
+	status *model.ChangeFeedStatus) (err error) {
+	if c.initialized.Load() || status == nil {
 		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
@@ -503,12 +509,12 @@ LOOP2:
 		}
 	}
 
-	checkpointTs := c.state.Status.CheckpointTs
+	checkpointTs := status.CheckpointTs
 	if c.resolvedTs == 0 {
 		c.resolvedTs = checkpointTs
 	}
 
-	minTableBarrierTs := c.state.Status.MinTableBarrierTs
+	minTableBarrierTs := status.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -517,7 +523,7 @@ LOOP2:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 
-	if c.state.Info.Config.CheckGCSafePoint {
+	if info.Config.CheckGCSafePoint {
 		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
 		// We update TTL to 10 minutes,
@@ -571,19 +577,19 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
+	if util.GetOrZero(info.Config.EnableSyncPoint) {
 		c.barriers.Update(syncPointBarrier, c.resolvedTs)
 	}
-	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+	c.barriers.Update(finishBarrier, info.GetTargetTs())
 
-	filter, err := pfilter.NewFilter(c.state.Info.Config, "")
+	filter, err := pfilter.NewFilter(info.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.schema, err = newSchemaWrap4Owner(
 		c.upstream.KVStorage,
 		ddlStartTs,
-		c.state.Info.Config,
+		info.Config,
 		c.id,
 		filter)
 	if err != nil {
@@ -597,14 +603,14 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.state.Info.Config.Sink.TiDBSourceID = sourceID
+	info.Config.Sink.TiDBSourceID = sourceID
 	log.Info("set source id",
 		zap.Uint64("sourceID", sourceID),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
+	c.ddlSink = c.newSink(c.id, info, ctx.Throw, func(err error) {
 		select {
 		case <-ctx.Done():
 		case c.warningCh <- err:
@@ -634,7 +640,7 @@ LOOP2:
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	c.redoDDLMgr = redo.NewDDLManager(c.id, c.state.Info.Config.Consistent, ddlStartTs)
+	c.redoDDLMgr = redo.NewDDLManager(c.id, info.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -643,7 +649,7 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, checkpointTs)
+	c.redoMetaMgr = redo.NewMetaManager(c.id, info.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -655,7 +661,7 @@ LOOP2:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	downstreamType, err := c.state.Info.DownstreamType()
+	downstreamType, err := info.DownstreamType()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -663,7 +669,7 @@ LOOP2:
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
-		c.state.Status.CheckpointTs,
+		status.CheckpointTs,
 		c.ddlSink,
 		filter,
 		c.ddlPuller,
@@ -671,7 +677,7 @@ LOOP2:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		downstreamType,
-		util.GetOrZero(c.state.Info.Config.BDRMode),
+		util.GetOrZero(info.Config.BDRMode),
 	)
 
 	// create scheduler
@@ -694,7 +700,7 @@ LOOP2:
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.resolvedTs),
-		zap.String("info", c.state.Info.String()))
+		zap.String("info", info.String()))
 
 	return nil
 }
