@@ -107,7 +107,7 @@ func newProcessor4Test(
 		p.initialized.Store(true)
 		return nil
 	}
-	p.initializer = async.NewInitializer(p.lazyInit)
+	p.initializer = async.NewInitializer()
 
 	p.ddlHandler.r = &ddlHandler{
 		schemaStorage: &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64},
