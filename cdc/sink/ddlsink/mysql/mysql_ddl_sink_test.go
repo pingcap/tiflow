@@ -54,13 +54,13 @@ func TestWriteDDLEvent(t *testing.T) {
 
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 0").WillReturnResult(sqlmock.NewResult(1, 0))
+		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 1").WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 0").WillReturnResult(sqlmock.NewResult(1, 0))
+		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 1").WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").
 			WillReturnError(&dmysql.MySQLError{
 				Number: uint16(infoschema.ErrColumnExists.Code()),
