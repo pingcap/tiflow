@@ -126,7 +126,7 @@ func rowChangeToMsg(
 			value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
 		}
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
-			(len(value.PreColumns) == 0 && !config.OpenOutputOldValue)) {
+			(len(value.PreColumns) == 0 && config.OpenOutputOldValue)) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
 		if config.OnlyOutputUpdatedColumns {
