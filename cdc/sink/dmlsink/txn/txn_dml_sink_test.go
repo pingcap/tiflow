@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
@@ -56,6 +57,78 @@ func (b *blackhole) MaxFlushInterval() time.Duration {
 
 func (b *blackhole) Close() error {
 	return nil
+}
+
+func TestConflicts(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	createTableDDL := `create table test.t(a int primary key, b int);`
+	ddlEvent := helper.DDL2Event(createTableDDL)
+	require.NotNil(t, ddlEvent)
+
+	sinkState := new(state.TableSinkState)
+	*sinkState = state.TableSinkSinking
+	var handled uint32 = 0
+
+	insertSQL := `insert into test.t values(1, 1);`
+	insertEvent := helper.DML2Event(insertSQL, "test", "t")
+	require.NotNil(t, insertEvent)
+
+	insertTxn := &dmlsink.CallbackableEvent[*model.SingleTableTxn]{
+		Event: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{insertEvent},
+		},
+		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		SinkState: sinkState,
+	}
+
+	updateEvent := *insertEvent
+	updateEvent.PreColumns = updateEvent.Columns
+	updateEvent.PreColumns[1].Value = 2
+
+	updateTxn := &dmlsink.CallbackableEvent[*model.SingleTableTxn]{
+		Event: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{insertEvent},
+		},
+		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		SinkState: sinkState,
+	}
+
+	deleteEvent := *insertEvent
+	deleteEvent.PreColumns = deleteEvent.Columns
+	deleteEvent.Columns = nil
+
+	deleteTxn := &dmlsink.CallbackableEvent[*model.SingleTableTxn]{
+		Event: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{insertEvent},
+		},
+		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		SinkState: sinkState,
+	}
+
+	txns := []*dmlsink.CallbackableEvent[*model.SingleTableTxn]{insertTxn, updateTxn, deleteTxn}
+
+	bes := make([]backend, 0, 4)
+	for i := 0; i < 4; i++ {
+		bes = append(bes, &blackhole{blockOnEvents: 1})
+	}
+	errCh := make(chan error, 1)
+	sink := newSink(context.Background(),
+		model.DefaultChangeFeedID("test"), bes, errCh, DefaultConflictDetectorSlots)
+
+	err := sink.WriteEvents(txns...)
+	require.NoError(t, err)
+
+	time.Sleep(time.Second)
+	require.Equal(t, uint32(0), atomic.LoadUint32(&handled))
+
+	for _, be := range bes {
+		atomic.StoreInt32(&be.(*blackhole).blockOnEvents, 0)
+	}
+	time.Sleep(time.Second)
+	require.Equal(t, uint32(3), atomic.LoadUint32(&handled))
+	sink.Close()
 }
 
 // TestTxnSinkNolocking checks TxnSink must be nonblocking even if the associated
