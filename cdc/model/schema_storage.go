@@ -17,12 +17,11 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/table/tables"
-	tiTypes "github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table/tables"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"go.uber.org/zap"
 )
 

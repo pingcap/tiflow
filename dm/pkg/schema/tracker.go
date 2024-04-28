@@ -21,22 +21,22 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/ddl/schematracker"
-	"github.com/pingcap/tidb/executor"
-	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tidb/util/sqlexec"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/ddl/schematracker"
+	"github.com/pingcap/tidb/pkg/executor"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/util/mock"
+	"github.com/pingcap/tidb/pkg/util/sqlexec"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
@@ -94,6 +94,10 @@ func (se executorContext) ParseWithParams(context.Context, string, ...interface{
 	return nil, nil
 }
 
+func (se executorContext) GetRestrictedSQLExecutor() sqlexec.RestrictedSQLExecutor {
+	return se
+}
+
 func (se executorContext) ExecRestrictedStmt(context.Context, ast.StmtNode, ...sqlexec.OptionFuncAlias) ([]chunk.Row, []*ast.ResultField, error) {
 	return nil, nil, nil
 }
@@ -134,7 +138,7 @@ func (tr *Tracker) Init(
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
-	dsSession.GetSessionVars().StrictSQLMode = false
+	dsSession.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
 	downTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
 		se:             dsSession,
@@ -467,13 +471,12 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	}
 
 	// suppress ErrTooLongKey
-	strictSQLModeBackup := dt.se.GetSessionVars().StrictSQLMode
-	dt.se.GetSessionVars().StrictSQLMode = false
+	dt.se.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
 	// support drop PK
 	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
 	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
 	defer func() {
-		dt.se.GetSessionVars().StrictSQLMode = strictSQLModeBackup
+		dt.se.ClearValue(ddl.SuppressErrorTooLongKeyKey)
 		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
 	}()
 

@@ -23,9 +23,9 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"

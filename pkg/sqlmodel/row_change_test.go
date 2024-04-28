@@ -16,12 +16,13 @@ package sqlmodel
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	timock "github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	_ "github.com/pingcap/tidb/pkg/planner/core" // init expression.EvalSimpleAst related function
+	timock "github.com/pingcap/tidb/pkg/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"

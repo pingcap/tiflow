@@ -22,9 +22,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	schema "github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"

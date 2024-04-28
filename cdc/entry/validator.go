@@ -15,7 +15,7 @@ package entry
 
 import (
 	"github.com/pingcap/errors"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"

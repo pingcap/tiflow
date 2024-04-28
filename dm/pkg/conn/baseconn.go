@@ -24,7 +24,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/pkg/errno"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"

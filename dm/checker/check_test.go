@@ -20,8 +20,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/parser/mysql"
-	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"

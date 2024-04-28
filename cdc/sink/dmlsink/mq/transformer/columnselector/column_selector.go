@@ -14,7 +14,7 @@
 package columnselector
 
 import (
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
