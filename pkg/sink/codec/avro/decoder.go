@@ -558,13 +558,11 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeBit encoded as bytes
 	case mysql.TypeBit:
 		// bit is store as bytes, convert to uint64.
-		v, err := common.BinaryLiteralToInt(value.([]byte))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		v := common.MustBinaryLiteralToInt(value.([]byte))
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// encoded as bytes if binary flag set to true, else string
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob,
+	case mysql.TypeVarchar, mysql.TypeVarString,
+		mysql.TypeString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:

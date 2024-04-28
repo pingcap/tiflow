@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -103,7 +104,7 @@ type ddlManager struct {
 	// use to pull DDL jobs from TiDB
 	ddlPuller puller.DDLPuller
 	// schema store multiple version of schema, it is used by scheduler
-	schema *schemaWrap4Owner
+	schema entry.SchemaStorage
 	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
 	redoDDLManager  redo.DDLManager
 	redoMetaManager redo.MetaManager
@@ -141,7 +142,7 @@ func newDDLManager(
 	ddlSink DDLSink,
 	filter filter.Filter,
 	ddlPuller puller.DDLPuller,
-	schema *schemaWrap4Owner,
+	schema entry.SchemaStorage,
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	sinkType model.DownstreamType,

@@ -33,7 +33,7 @@ func VerifyTables(
 	eligibleTables []model.TableName,
 	err error,
 ) {
-	meta, err := kv.GetSnapshotMeta(storage, startTs)
+	meta := kv.GetSnapshotMeta(storage, startTs)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}

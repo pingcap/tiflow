@@ -208,7 +208,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	event := b.nextEvent
 	if b.nextKey.OnlyHandleKey {
 		var err error
-		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
+		event = b.assembleHandleKeyOnlyEvent(ctx, event)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -252,7 +252,7 @@ func (b *BatchDecoder) buildColumns(
 
 func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
-) (*model.RowChangedEvent, error) {
+) *model.RowChangedEvent {
 	var (
 		schema   = handleKeyOnlyEvent.Table.Schema
 		table    = handleKeyOnlyEvent.Table.Table
@@ -264,10 +264,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.Columns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+
 		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 	} else if handleKeyOnlyEvent.IsDelete() {
@@ -275,10 +273,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+
 		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	} else if handleKeyOnlyEvent.IsUpdate() {
@@ -286,10 +282,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.Columns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+
 		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 
@@ -297,15 +291,13 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			conditions[col.Name] = col.Value
 		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+
 		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	}
 
-	return handleKeyOnlyEvent, nil
+	return handleKeyOnlyEvent
 }
 
 func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {

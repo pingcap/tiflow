@@ -457,3 +457,31 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, 456, c.MaxBatchSize)
 	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
 }
+
+func TestConfig4Simple(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=simple"
+	sinkURL, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatJSON, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=avro"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatAvro, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=xxx"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
+}
