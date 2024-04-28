@@ -610,7 +610,7 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	if err = p.initDDLHandler(prcCtx); err != nil {
+	if err = p.initDDLHandler(); err != nil {
 		return err
 	}
 	p.ddlHandler.name = "ddlHandler"
@@ -720,7 +720,7 @@ func (p *processor) handleErrorCh() (err error) {
 	return cerror.ErrReactorFinished
 }
 
-func (p *processor) initDDLHandler(ctx context.Context) error {
+func (p *processor) initDDLHandler() error {
 	checkpointTs := p.latestInfo.GetCheckpointTs(p.latestStatus)
 	minTableBarrierTs := p.latestStatus.MinTableBarrierTs
 	forceReplicate := p.latestInfo.Config.ForceReplicate
@@ -733,13 +733,8 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	} else {
 		ddlStartTs = checkpointTs - 1
 	}
-
-	f, err := filter.NewFilter(p.latestInfo.Config, "")
-	if err != nil {
-		return errors.Trace(err)
-	}
 	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, f)
+		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -747,7 +742,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	serverCfg := config.GetGlobalServerConfig()
 	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
 	ddlPuller := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
+		p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
 	)
 	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
 	return nil
