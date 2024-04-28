@@ -62,16 +62,16 @@ var _ KakfaConsumer = (*kafkaGoConsumer)(nil)
 // NewkafkaGoConsumer will create a consumer client.
 func NewkafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c := new(kafkaGoConsumer)
-	w, err := NewWriter(ctx, o)
-	if err != nil {
-		log.Panic("Error creating writer", zap.Error(err))
-	}
 	partitionNum, err := kafkaGoGetPartitionNum(o.address, o.topic)
 	if err != nil {
 		log.Panic("Error get partition number", zap.String("topic", o.topic), zap.Error(err))
 	}
 	if o.partitionNum == 0 {
 		o.partitionNum = partitionNum
+	}
+	w, err := NewWriter(ctx, o)
+	if err != nil {
+		log.Panic("Error creating writer", zap.Error(err))
 	}
 	c.writer = w
 	c.option = o
