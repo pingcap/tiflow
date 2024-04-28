@@ -254,12 +254,14 @@ func (a *avroMarshaller) newDMLMessageMap(
 	dmlMessagePayload["buildTs"] = time.Now().UnixMilli()
 	dmlMessagePayload["schemaVersion"] = int64(event.TableInfo.UpdateTS)
 
+	// both `handleKeyOnly` and `enableClaimCheck` should encode this field.
 	if !a.config.LargeMessageHandle.Disabled() && onlyHandleKey {
 		dmlMessagePayload["handleKeyOnly"] = map[string]interface{}{
 			"boolean": true,
 		}
 	}
 
+	// the caller should make sure the `claimCheckFileName` is set, not empty.
 	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
 		dmlMessagePayload["claimCheckLocation"] = map[string]interface{}{
 			"string": claimCheckFileName,

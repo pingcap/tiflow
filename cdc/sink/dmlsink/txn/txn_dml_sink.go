@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn/mysql"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -159,6 +161,7 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 			continue
 		}
 		s.alive.conflictDetector.Add(newTxnEvent(txn))
+		log.Info("dml sink write events", zap.Any("events", txn.Event.Rows))
 	}
 	return nil
 }

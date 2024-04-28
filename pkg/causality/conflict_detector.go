@@ -139,6 +139,8 @@ func (d *ConflictDetector[Txn]) sendToCache(txn TxnWithNotifier[Txn], id int64) 
 	txn.TxnEvent.OnConflictResolved()
 	cache := d.resolvedTxnCaches[id]
 	ok := cache.add(txn)
+	log.Info("send txn to cache",
+		zap.Int64("cacheID", id), zap.Bool("ok", ok), zap.Any("event", txn.TxnEvent))
 	return ok
 }
 
