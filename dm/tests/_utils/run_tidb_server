@@ -49,3 +49,4 @@ mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "CREATE USER 
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'"
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
+mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
