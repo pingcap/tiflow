@@ -803,12 +803,12 @@ github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d h1:y3EueKVfVykdpTyfU
 github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
-github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4 h1:ABG15lJCeFLVhCLtJZ7FEkddtdr7yI2/vdHUSDn5Nzg=
-github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4/go.mod h1:q7rWac5/DO6wMdzLiXyhZgq/jxl9fkFA7+/rsXKNJko=
+github.com/pingcap/tidb v1.1.0-beta.0.20240425142112-54ba0ed68407 h1:/DVwF37RFQ2Jz/aKL88okE4pE0jajWGRO8n6OJLMaEg=
+github.com/pingcap/tidb v1.1.0-beta.0.20240425142112-54ba0ed68407/go.mod h1:EKK9Vq80W5+ooOtI672OwrW+vrBv4s8+vji/R11TV9U=
 github.com/pingcap/tidb-tools v0.0.0-20240408054520-d28ee6cd546e h1:jQ6mMtYHtJ1mcrYzAvc0bIdP6Mn5uBZzM+ehem6msJ8=
 github.com/pingcap/tidb-tools v0.0.0-20240408054520-d28ee6cd546e/go.mod h1:FupVn04P2/dkvzK4Tt5URj5z2Y4ILcULw7dU3GnJXgQ=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20240415145106-cd9c676e9ba4 h1:MZXOJ24G1r8sL3N75R4rp4VNmPWzcYnGFvknOc3XHzg=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20240415145106-cd9c676e9ba4/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240425142112-54ba0ed68407 h1:/0ypHxEe1KDpTygZU71yoFmyl5+EOKWEHHyFV8KbdFE=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240425142112-54ba0ed68407/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50 h1:fVNBE06Rjec+EIHaYAKAHa/bIt5lnu3Zh9O6kV7ZAdg=
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
@@ -834,8 +834,8 @@ github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:
 github.com/prometheus/client_model v0.6.1 h1:ZKSh/rekM+n3CeS952MLRAdFwIKqeY8b62p8ais2e9E=
 github.com/prometheus/client_model v0.6.1/go.mod h1:OrxVMOVHjw3lKMa8+x6HeMGkHMQyHDk9E3jmP2AmGiY=
 github.com/prometheus/common v0.0.0-20181020173914-7e9e6cabbd39/go.mod h1:daVV7qP5qjZbuso7PdcryaAu0sAZbrN9i7WWcTMWvro=
-github.com/prometheus/common v0.52.2 h1:LW8Vk7BccEdONfrJBDffQGRtpSzi5CQaRZGtboOO2ck=
-github.com/prometheus/common v0.52.2/go.mod h1:lrWtQx+iDfn2mbH5GUzlH9TSHyfZpHkSiG1W7y3sF2Q=
+github.com/prometheus/common v0.53.0 h1:U2pL9w9nmJwJDa4qqLQ3ZaePJ6ZTwt7cMD3AG3+aLCE=
+github.com/prometheus/common v0.53.0/go.mod h1:BrxBKv3FWBIGXw89Mg1AeBq7FSyRzXWI3l3e7W3RN5U=
 github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d/go.mod h1:c3At6R/oaqEKCNdg8wHV1ftS6bRYblBhIjjI8uT2IGk=
 github.com/prometheus/procfs v0.13.0 h1:GqzLlQyfsPbaEHaQkO7tbDlriv/4o5Hudv6OXHGKX7o=
 github.com/prometheus/procfs v0.13.0/go.mod h1:cd4PFCR54QLnGKPaKGA6l+cfuNXtht43ZKY6tow0Y1g=
@@ -874,8 +874,6 @@ github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46/go.mod h1:uAQ5PCi+MFsC7HjREoAz1BU+Mq60+05gifQSsHSDG/8=
 github.com/sasha-s/go-deadlock v0.3.1 h1:sqv7fDNShgjcaxkO0JNcOAlr8B9+cV5Ey/OB71efZx0=
 github.com/sasha-s/go-deadlock v0.3.1/go.mod h1:F73l+cr82YSh10GxyRI6qZiCgK64VaZjwesgfQ1/iLM=
-github.com/scalalang2/golang-fifo v0.1.5 h1:cl70TQhlMGGpI2DZGcr+7/GFTJOjHMeor0t7wynEEoA=
-github.com/scalalang2/golang-fifo v0.1.5/go.mod h1:IK3OZBg7iHbVdQVGPDjcW1MWPb6JcWjaS/w0iRBS8gs=
 github.com/segmentio/asm v1.2.0 h1:9BQrFxC+YOHJlTlHGkTrFWf59nbL3XnCoFLTwDCI7ys=
 github.com/segmentio/asm v1.2.0/go.mod h1:BqMnlJP91P8d+4ibuonYZw9mfnzI9HfxselHZr5aAcs=
 github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd h1:CbnW6aq72OewxTOe0wpF3Igpg4KYKCDbonzfqPzJfG0=
@@ -963,8 +961,8 @@ github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a h1:J/YdBZ46WKpXsxsW
 github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a/go.mod h1:h4xBhSNtOeEosLJ4P7JyKXX7Cabg7AVkWCK5gV2vOrM=
 github.com/tidwall/btree v1.7.0 h1:L1fkJH/AuEh5zBnnBbmTwQ5Lt+bRJ5A8EWecslvo9iI=
 github.com/tidwall/btree v1.7.0/go.mod h1:twD9XRA5jj9VUQGELzDO4HPQTNJsoWWfYEL+EUQ2cKY=
-github.com/tikv/client-go/v2 v2.0.8-0.20240409022718-714958ccd4d5 h1:NIYXG5l8JrDyc7k0zO17ppKJkRlUfKMWFOnjIQT5Tc4=
-github.com/tikv/client-go/v2 v2.0.8-0.20240409022718-714958ccd4d5/go.mod h1:+vXk4Aex17GnI8gfSMPxrL0SQLbBYgP3Db4FvHiImwM=
+github.com/tikv/client-go/v2 v2.0.8-0.20240424052342-0229f4077f0c h1:M97Y/RO0vGpX0FplwGTk02idZDmSPEJlO6fTCPaxkCI=
+github.com/tikv/client-go/v2 v2.0.8-0.20240424052342-0229f4077f0c/go.mod h1:+vXk4Aex17GnI8gfSMPxrL0SQLbBYgP3Db4FvHiImwM=
 github.com/tikv/pd v1.1.0-beta.0.20230203015356-248b3f0be132 h1:vCVu7LxFou5WuaY6jHDMHKVeJTtwr5o2i1xWgGAdDo4=
 github.com/tikv/pd v1.1.0-beta.0.20230203015356-248b3f0be132/go.mod h1:jb9oq6rN4U0U3FZdvqWlpi9rZzFJxiOlvZ3aj5BTpg8=
 github.com/tikv/pd/client v0.0.0-20240322051414-fb9e2d561b6e h1:u2OoEvmh3qyjIiAKXUPRiFCOSwznByMINDx2fsorjAo=
