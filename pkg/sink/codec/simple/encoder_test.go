@@ -86,7 +86,9 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	createTableDDL, insertEvent, _, _ := utils.NewLargeEvent4Test(t, replicaConfig)
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDL.TableInfo.Columns), func(i, j int) {
-		createTableDDL.TableInfo.Columns[i], createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j], createTableDDL.TableInfo.Columns[i]
+		createTableDDL.TableInfo.Columns[i],
+			createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j],
+			createTableDDL.TableInfo.Columns[i]
 	})
 
 	ctx := context.Background()
@@ -176,7 +178,8 @@ func TestEncodeDDLSequence(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			createTableDDLEvent := helper.DDL2Event("CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
+			createTableDDLEvent := helper.DDL2Event(
+				"CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
 
@@ -516,7 +519,8 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			partitionTableDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 PARTITION BY RANGE (id2) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
+			partitionTableDDLEvent := helper.DDL2Event(
+				"ALTER TABLE TBL2 PARTITION BY RANGE (id2) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
 			m, err = enc.EncodeDDLEvent(partitionTableDDLEvent)
 			require.NoError(t, err)
 
@@ -580,7 +584,8 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			reorganizePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
+			reorganizePartitionDDLEvent := helper.DDL2Event(
+				"ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
 			m, err = enc.EncodeDDLEvent(reorganizePartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -674,7 +679,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			createTableSQL := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
+			createTableSQL := `create table test.t(id int primary key, 
+				name varchar(255) not null, gender enum('male', 'female'), 
+				email varchar(255) not null, key idx_name_email(name, email))`
 			createTableDDLEvent := helper.DDL2Event(createTableSQL)
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
