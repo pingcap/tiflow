@@ -21,18 +21,18 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	tidbddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/types"
-	tablefilter "github.com/pingcap/tidb/util/filter"
-	tidbmock "github.com/pingcap/tidb/util/mock"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/table/tables"
+	"github.com/pingcap/tidb/pkg/types"
+	tablefilter "github.com/pingcap/tidb/pkg/util/filter"
+	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -1091,7 +1091,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.AlterTable, err
 	}
 	// handle column options
-	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
 		ddl.logger.Warn("process column options failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
@@ -1102,10 +1102,10 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	switch {
 	case mysql.HasAutoIncrementFlag(oldCol.GetFlag()) && !mysql.HasAutoIncrementFlag(newCol.GetFlag()):
 		return bf.RemoveAutoIncrement, nil
-	case mysql.HasPriKeyFlag(oldCol.GetFlag()) != mysql.HasPriKeyFlag(newCol.GetFlag()):
-		return bf.ModifyPK, nil
-	case mysql.HasUniKeyFlag(oldCol.GetFlag()) != mysql.HasUniKeyFlag(newCol.GetFlag()):
-		return bf.ModifyUK, nil
+	case mysql.HasPriKeyFlag(oldCol.GetFlag()) && !mysql.HasPriKeyFlag(newCol.GetFlag()):
+		return bf.DropPrimaryKey, nil
+	case mysql.HasUniKeyFlag(oldCol.GetFlag()) && !mysql.HasUniKeyFlag(newCol.GetFlag()):
+		return bf.DropUniqueKey, nil
 	case oldCol.GetDefaultValue() != newCol.GetDefaultValue():
 		return bf.ModifyDefaultValue, nil
 	case oldCol.GetCharset() != newCol.GetCharset():
@@ -1115,7 +1115,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	case spec.Position != nil && spec.Position.Tp != ast.ColumnPositionNone:
 		return bf.ModifyColumnsOrder, nil
 	case oldCol.Name.L != newCol.Name.L:
-		return bf.Rename, nil
+		return bf.RenameColumn, nil
 	default:
 		return bf.AlterTable, nil
 	}
@@ -1142,14 +1142,22 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					ddl.logger.Warn("handle modify column failed", zap.Error(err))
 				}
 				return et
-			case ast.AlterTableRenameColumn, ast.AlterTableRenameIndex, ast.AlterTableRenameTable:
-				return bf.Rename
-			case ast.AlterTableDropColumn, ast.AlterTableDropIndex, ast.AlterTableDropPartition:
-				return bf.Drop
+			case ast.AlterTableRenameColumn:
+				return bf.RenameColumn
+			case ast.AlterTableRenameIndex:
+				return bf.RenameIndex
+			case ast.AlterTableRenameTable:
+				return bf.RenameTable
+			case ast.AlterTableDropColumn:
+				return bf.DropColumn
+			case ast.AlterTableDropIndex:
+				return bf.DropIndex
+			case ast.AlterTableDropPartition:
+				return bf.DropTablePartition
 			case ast.AlterTableDropPrimaryKey:
-				return bf.ModifyPK
+				return bf.DropPrimaryKey
 			case ast.AlterTableTruncatePartition:
-				return bf.Truncate
+				return bf.TruncateTablePartition
 			case ast.AlterTableAlterColumn:
 				return bf.ModifyDefaultValue
 			case ast.AlterTableAddConstraint:
@@ -1166,7 +1174,7 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					}
 				}
 			case ast.AlterTableReorganizePartition:
-				return bf.ReorganizePartion
+				return bf.ReorganizePartition
 			case ast.AlterTableRebuildPartition:
 				return bf.RebuildPartition
 			case ast.AlterTableCoalescePartitions:

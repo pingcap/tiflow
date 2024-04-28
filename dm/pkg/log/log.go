@@ -20,8 +20,8 @@ import (
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
-	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
-	"github.com/pingcap/tidb/util/logutil"
+	lightningLog "github.com/pingcap/tidb/pkg/lightning/log"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tiflow/dm/pkg/helper"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"

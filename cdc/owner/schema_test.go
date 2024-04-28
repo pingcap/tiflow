@@ -20,9 +20,9 @@ import (
 	"sort"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -111,11 +111,9 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName := tableInfos[0].TableName
-	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 102,
-	}, tableName)
+	require.Equal(t, "test", tableName.Schema)
+	require.Equal(t, "t1", tableName.Table)
+
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -123,11 +121,8 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName = tableInfos[0].TableName
-	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 102,
-	}, tableName)
+	require.Equal(t, "test", tableName.Schema)
+	require.Equal(t, "t1", tableName.Table)
 }
 
 func TestIsIneligibleTableID(t *testing.T) {

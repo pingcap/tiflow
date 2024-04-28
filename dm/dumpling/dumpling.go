@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"sync"
@@ -23,8 +24,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
-	tidbpromutil "github.com/pingcap/tidb/util/promutil"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -417,6 +418,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
+	dumpConfig.MinTLSVersion = tls.VersionTLS10
 
 	return dumpConfig, nil
 }

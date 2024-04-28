@@ -14,8 +14,8 @@
 package filter
 
 import (
-	timodel "github.com/pingcap/tidb/parser/model"
-	tfilter "github.com/pingcap/tidb/util/table-filter"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 )

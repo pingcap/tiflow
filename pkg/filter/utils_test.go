@@ -19,10 +19,10 @@ import (
 
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/parser"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	tifilter "github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -129,7 +129,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		err      error
 	}
 
-	ddlWithTab := `CREATE TABLE if not exists sbtest25 
+	ddlWithTab := `CREATE TABLE if not exists sbtest25
 	(
 		id bigint NOT NULL,
 		k bigint NOT NULL DEFAULT '0',
@@ -138,7 +138,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		PRIMARY KEY (id),
 	    KEY k_1 (k)
 	) 	ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
-	ddlWithTwoTab := `		CREATE TABLE if not exists sbtest25 
+	ddlWithTwoTab := `		CREATE TABLE if not exists sbtest25
 	(
 		id bigint NOT NULL,
 		k bigint NOT NULL DEFAULT '0',
@@ -148,11 +148,11 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		KEY k_1 (k)
 		)
 		ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
-	ddlWithNewLine := `CREATE TABLE finish_mark 
+	ddlWithNewLine := `CREATE TABLE finish_mark
 	(
-		
+
 		id INT AUTO_INCREMENT PRIMARY KEY,
-		val INT DEFAULT 0,                     
+		val INT DEFAULT 0,
 		col0 INT NOT NULL)`
 
 	cases := []c{

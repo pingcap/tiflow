@@ -25,21 +25,20 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/executor"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/executor"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/store/mockstore"
+	"github.com/pingcap/tidb/pkg/testkit"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -896,10 +895,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		FieldType:          *ftTypeTimestampNotNull,
 	}
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
-	sc := new(stmtctx.StatementContext)
-	sc.TimeZone = tz
 	expected, err := types.ParseTimeFromFloatString(
-		sc,
+		types.DefaultStmtNoWarningContext,
 		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + notnull + default")
@@ -910,7 +907,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err = types.ParseTimeFromFloatString(
-		sc,
+		types.DefaultStmtNoWarningContext,
 		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + null + default")
@@ -1039,7 +1036,8 @@ func TestE2ERowLevelChecksum(t *testing.T) {
      1, 2, 3, 4, 5,
      2020.0202, 2020.0303, 2020.0404, 2021.1208,
      3.1415, 2.7182, 8000, 179394.233,
-     '2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020',
+     '2020-02-20', '2020-02-20 02:20:20',
+     '2020-02-20 02:20:20', '02:20:20', '2020',
      '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
      x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
      '89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
@@ -1093,7 +1091,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	// decoder enable checksum functionality.
-	decoder := avro.NewDecoder(codecConfig, schemaM, topic, time.Local)
+	decoder := avro.NewDecoder(codecConfig, schemaM, topic)
 	err = decoder.AddKeyValue(msg[0].Key, msg[0].Value)
 	require.NoError(t, err)
 
@@ -1517,6 +1515,7 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 	}
+
 	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
 	require.NoError(t, err)
 	p := parser.New()
