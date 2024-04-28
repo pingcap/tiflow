@@ -64,7 +64,7 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
     "open": {
       "output-old-value": true
     }
@@ -308,7 +308,7 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
     "open": {
       "output-old-value": true
     }
