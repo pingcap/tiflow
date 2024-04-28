@@ -64,6 +64,7 @@ func (e *encoder) AppendRowChangedEvent(
 	length := result.Length()
 	if length <= e.config.MaxMessageBytes {
 		e.messages = append(e.messages, result)
+		log.Info("simple append normal message", zap.Int("length", length))
 		return nil
 	}
 

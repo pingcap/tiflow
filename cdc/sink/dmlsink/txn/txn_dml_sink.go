@@ -161,7 +161,9 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 			continue
 		}
 		s.alive.conflictDetector.Add(newTxnEvent(txn))
-		log.Info("dml sink write events", zap.Any("events", txn.Event.Rows))
+		for _, row := range txn.Event.Rows {
+			log.Info("dml sink write events", zap.Uint64("commitTs", row.CommitTs))
+		}
 	}
 	return nil
 }

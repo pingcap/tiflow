@@ -79,6 +79,7 @@ func NewConflictDetector[Txn txnEvent](
 func (d *ConflictDetector[Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
 	node := internal.NewNode(sortedKeysHash)
+	log.Info("one new node add to the conflict detector", zap.Uint64s("hash", sortedKeysHash))
 	txnWithNotifier := TxnWithNotifier[Txn]{
 		TxnEvent: txn,
 		PostTxnExecuted: func() {
@@ -90,6 +91,7 @@ func (d *ConflictDetector[Txn]) Add(txn Txn) {
 			// Send this node to garbageNodes to GC it from the slots if this node is still
 			// occupied related slots.
 			d.garbageNodes.In() <- node
+			log.Info("one node is removed from the conflict detector", zap.Uint64s("hash", sortedKeysHash))
 		},
 	}
 	node.TrySendToTxnCache = func(cacheID int64) bool {
