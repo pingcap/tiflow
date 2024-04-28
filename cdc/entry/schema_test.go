@@ -26,7 +26,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -123,16 +122,8 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName = tableInfos[0].TableName
-<<<<<<< HEAD:cdc/entry/schema_test.go
-	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 104,
-	}, tableName)
-=======
 	require.Equal(t, "test", tableName.Schema)
 	require.Equal(t, "t1", tableName.Table)
->>>>>>> upstream/release-7.5:cdc/owner/schema_test.go
 }
 
 func TestIsIneligibleTableID(t *testing.T) {

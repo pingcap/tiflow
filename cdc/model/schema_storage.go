@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
+	datumTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -441,6 +442,6 @@ func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
 	if defaultValue == nil {
 		defaultValue = col.GetOriginDefaultValue()
 	}
-	defaultDatum := tiTypes.NewDatum(defaultValue)
+	defaultDatum := datumTypes.NewDatum(defaultValue)
 	return defaultDatum.GetValue()
 }

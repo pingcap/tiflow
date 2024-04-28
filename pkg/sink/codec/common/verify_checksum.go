@@ -130,7 +130,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
+			number = MustBinaryLiteralToInt(v)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}

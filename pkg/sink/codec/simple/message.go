@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	tiTypes "github.com/pingcap/tidb/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	tiTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -409,12 +409,12 @@ func buildRowChangedEvent(
 			previousCorrupted bool
 			currentCorrupted  bool
 		)
-		err := common.VerifyChecksum(result.PreColumns, tableInfo.Columns, msg.Checksum.Previous)
+		err := common.VerifyChecksum(result.PreColumns, msg.Checksum.Previous)
 		if err != nil {
 			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
 			previousCorrupted = true
 		}
-		err = common.VerifyChecksum(result.Columns, tableInfo.Columns, msg.Checksum.Current)
+		err = common.VerifyChecksum(result.Columns, msg.Checksum.Current)
 		if err != nil {
 			log.Info("checksum corrupted on the current columns", zap.Any("message", msg))
 			currentCorrupted = true
