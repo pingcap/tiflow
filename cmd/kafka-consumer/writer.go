@@ -573,11 +573,13 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 		}
 	}
 }
+
 func getDefaultReplicaConfig() *config.ReplicaConfig {
 	defaultReplicaConfig := config.GetDefaultReplicaConfig()
 	defaultReplicaConfig.Sink.TiDBSourceID = config.DefaultTiDBSourceID
 	return defaultReplicaConfig
 }
+
 func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
