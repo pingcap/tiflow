@@ -72,6 +72,8 @@ func NewDecoder(ctx context.Context, option *consumerOption, upstreamTiDB *sql.D
 }
 
 type writer struct {
+	mu sync.Mutex
+
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
 	ddlWithMaxCommitTs   *model.DDLEvent
@@ -284,6 +286,8 @@ func (w *writer) AsyncWrite(ctx context.Context) error {
 
 // Write will write data downstream synchronously.
 func (w *writer) Write(ctx context.Context) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
 	if err != nil {
 		return cerror.Trace(err)
