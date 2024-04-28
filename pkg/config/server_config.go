@@ -251,14 +251,14 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 
 	if c.Security != nil {
-		if c.Security.ClientUserRequired || len(c.Security.ClientAllowedUser) > 0 {
+		if c.Security.ClientUserRequired {
 			if len(c.Security.ClientAllowedUser) == 0 {
 				log.Error("client-allowed-user should not be empty when client-user-required is true")
 				return cerror.ErrInvalidServerOption.GenWithStack("client-allowed-user should not be empty when client-user-required is true")
 			}
 			if !c.Security.IsTLSEnabled() {
-				log.Error("client user required but TLS is not enabled")
-				return cerror.ErrInvalidServerOption.GenWithStack("TLS should be enabled when client-user-required is true")
+				log.Warn("client-allowed-user is true, but tls is not enabled." +
+					"It's highly recommended to enable TLS to secure the communication")
 			}
 		}
 		if c.Security.IsTLSEnabled() {
