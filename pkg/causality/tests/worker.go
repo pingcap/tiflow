@@ -38,6 +38,7 @@ func (t *txnForTest) Finish(err error) {
 	}
 }
 
+//nolint:unused
 type txnWithUnlock struct {
 	*txnForTest
 }
