@@ -9,6 +9,9 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
+export TICDC_USER=ticdc
+export TICDC_PASSWORD=ticdc_secret
+
 function check_changefeed_count() {
 	pd_addr=$1
 	expected=$2
@@ -24,6 +27,7 @@ function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
+	run_sql "CREATE USER 'ticdc'@'%' IDENTIFIED BY 'ticdc_secret';"
 
 	cd $WORK_DIR
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
@@ -33,7 +37,13 @@ function run() {
 	run_sql "CREATE table test.simple(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	echo " \
+  [security]
+   client-user-required = true
+   client-allowed-user = [\"ticdc\"]
+  " >$WORK_DIR/server.toml
+
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config "$WORK_DIR/server.toml"
 
 	TOPIC_NAME="ticdc-cli-test-$RANDOM"
 	case $SINK_TYPE in

@@ -10,7 +10,7 @@ SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
 export TICDC_USER=ticdc
-export TICDC_PASSWORD=ticdc_password
+export TICDC_PASSWORD=ticdc_secret
 export TICDC_CA_PATH=$TLS_DIR/ca.pem
 export TICDC_CERT_PATH=$TLS_DIR/client.pem
 export TICDC_KEY_PATH=$TLS_DIR/client-key.pem
@@ -31,6 +31,10 @@ function run() {
 
 	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 	start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
+	run_sql "CREATE USER 'ticdc'@'%' IDENTIFIED BY 'ticdc_secret';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
 
 	cd $WORK_DIR
 	pd_addr="https://$TLS_PD_HOST:$TLS_PD_PORT"
@@ -53,6 +57,8 @@ function run() {
    cert-path = \"$TLS_DIR/server.pem\"
    key-path = \"$TLS_DIR/server-key.pem\"
    cert-allowed-cn = [\"fake_cn\"]
+   client-user-required = true
+   client-allowed-user = [\"ticdc\"]
   " >$WORK_DIR/server.toml
 	run_cdc_server \
 		--workdir $WORK_DIR \
@@ -180,7 +186,6 @@ EOF
 }
 
 trap stop_tidb_cluster EXIT
-# TODO(CharlesCheung): enable this test after release-8.0
-# run $*
+run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
