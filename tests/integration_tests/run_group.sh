@@ -50,7 +50,7 @@ groups=(
 	# G08
 	'processor_err_chan changefeed_reconstruct multi_capture synced_status_with_redo'
 	# G09
-	'gc_safepoint changefeed_pause_resume cli savepoint synced_status'
+	'gc_safepoint changefeed_pause_resume cli_with_auth savepoint synced_status'
 	# G10
 	'default_value simple cdc_server_tips event_filter sql_mode'
 	# G11
