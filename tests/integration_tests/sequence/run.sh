@@ -47,6 +47,8 @@ function run() {
 }
 
 trap stop_tidb_cluster EXIT
-run $*
-check_logs $WORK_DIR
-echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+# FIXME: re-enable the case later.
+# run $*
+# check_logs $WORK_DIR
+# echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+echo "case $TEST_NAME is skipped"

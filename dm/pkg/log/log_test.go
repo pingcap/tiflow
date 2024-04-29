@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
-	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
+	lightningLog "github.com/pingcap/tidb/pkg/lightning/log"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
