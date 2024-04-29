@@ -80,23 +80,6 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-<<<<<<< HEAD
-=======
-	topic = sanitizeTopic(topic)
-
-	key, err := a.encodeKey(ctx, topic, e)
-	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
-		return errors.Trace(err)
-	}
-
-	value, err := a.encodeValue(ctx, topic, e)
-	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
-		return errors.Trace(err)
-	}
-
->>>>>>> ba6db077a8 (codec(ticdc): add more logs to the avro encoding to help detect potential key encoding failed issure (#10901))
 	message := common.NewMsg(
 		config.ProtocolAvro,
 		nil,
@@ -112,7 +95,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	if !e.IsDelete() {
 		res, err := a.avroEncode(ctx, e, topic, false)
 		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err), zap.Any("event", e))
 			return errors.Trace(err)
 		}
 
@@ -129,7 +112,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	res, err := a.avroEncode(ctx, e, topic, true)
 	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
