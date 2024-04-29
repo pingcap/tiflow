@@ -165,7 +165,7 @@ cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
 
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go

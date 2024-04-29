@@ -53,8 +53,8 @@ func newDialer(o *consumerOption) (*kafka.Dialer, error) {
 		},
 	}
 	return dialer, nil
-
 }
+
 func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
 	transport := kafka.DefaultTransport
 	if len(o.ca) != 0 {
