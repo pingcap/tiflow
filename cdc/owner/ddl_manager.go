@@ -213,22 +213,6 @@ func (m *ddlManager) tick(
 			break
 		}
 
-<<<<<<< HEAD
-		if job != nil && job.BinlogInfo != nil {
-			log.Info("handle a ddl job",
-				zap.String("namespace", m.changfeedID.Namespace),
-				zap.String("ID", m.changfeedID.ID),
-				zap.Int64("tableID", job.TableID),
-				zap.Int64("jobID", job.ID),
-				zap.String("query", job.Query),
-				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			)
-			events, err := m.schema.BuildDDLEvents(ctx, job)
-			if err != nil {
-				return nil, nil, err
-			}
-
-=======
 		if job.BinlogInfo == nil {
 			continue
 		}
@@ -253,7 +237,6 @@ func (m *ddlManager) tick(
 
 		// Send DDL events to redo log.
 		if m.redoDDLManager.Enabled() {
->>>>>>> d0329d7f1c (ddl_puller (ticdc): handle dorp pk/uk ddl correctly (#10965))
 			for _, event := range events {
 				// TODO: find a better place to do this check
 				// check if the ddl event is belong to an ineligible table.

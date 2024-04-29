@@ -121,12 +121,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	if job != nil {
 		skip, err := p.handleJob(job)
 		if err != nil {
-<<<<<<< HEAD
-			return cerror.WrapError(cerror.ErrHandleDDLFailed,
-				err, job.String(), job.Query, job.StartTS, job.StartTS)
-=======
 			return err
->>>>>>> d0329d7f1c (ddl_puller (ticdc): handle dorp pk/uk ddl correctly (#10965))
 		}
 		log.Info("handle ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -258,148 +253,8 @@ func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-<<<<<<< HEAD
 	}
 	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
-=======
-	}()
-
-	snap := p.schemaStorage.GetLastSnapshot()
-	if err = snap.FillSchemaName(job); err != nil {
-		log.Info("failed to fill schema name for ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.Error(err))
-		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
-			return true, nil
-		}
-		return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
-			errors.Trace(err), job.Query, job.StartTS, job.StartTS)
-	}
-
-	switch job.Type {
-	case timodel.ActionRenameTables:
-		skip, err = p.handleRenameTables(job)
-		if err != nil {
-			log.Warn("handle rename tables ddl job failed",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.String("schema", job.SchemaName),
-				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
-				zap.Uint64("startTs", job.StartTS),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-				zap.Error(err))
-			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
-				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
-		}
-	case timodel.ActionRenameTable:
-		oldTable, ok := snap.PhysicalTableByID(job.TableID)
-		if !ok {
-			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
-			if !discard {
-				return false, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
-			}
-			log.Warn("skip rename table ddl since cannot found the old table info",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", job.TableID),
-				zap.Int64("newSchemaID", job.SchemaID),
-				zap.String("newSchemaName", job.SchemaName),
-				zap.String("oldTableName", job.BinlogInfo.TableInfo.Name.O),
-				zap.String("newTableName", job.TableName))
-			return true, nil
-		}
-		// since we can find the old table, it must be able to find the old schema.
-		// 2. If we can find the preTableInfo, we filter it by the old table name.
-		skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table)
-		skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
-		if err != nil {
-			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
-				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
-		}
-		// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
-		if skipByOldTableName {
-			if !skipByNewTableName {
-				return false, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
-			}
-			return true, nil
-		}
-		log.Info("ddl puller receive rename table ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
-	default:
-		// nil means it is a schema ddl job, it's no need to fill the table name.
-		if job.BinlogInfo.TableInfo != nil {
-			job.TableName = job.BinlogInfo.TableInfo.Name.O
-		}
-		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
-	}
-
-	if skip {
-		return true, nil
-	}
-
-	err = p.schemaStorage.HandleDDLJob(job)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
-			errors.Trace(err), job.Query, job.StartTS, job.StartTS)
-	}
-	p.setResolvedTs(job.BinlogInfo.FinishedTS)
-	p.schemaVersion = job.BinlogInfo.SchemaVersion
-
-	return p.checkIneligibleTableDDL(snap, job)
-}
-
-// checkIneligibleTableDDL checks if the table is ineligible before and after the DDL.
-//  1. If it is not a table DDL, we shouldn't check it.
-//  2. If the table after the DDL is ineligible:
-//     a. If the table is not exist before the DDL, we should ignore the DDL.
-//     b. If the table is ineligible before the DDL, we should ignore the DDL.
-//     c. If the table is eligible before the DDL, we should return an error.
-func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, job *timodel.Job) (skip bool, err error) {
-	if filter.IsSchemaDDL(job.Type) {
-		return false, nil
-	}
-
-	ineligible := p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(job.TableID)
-	if !ineligible {
-		return false, nil
-	}
-
-	// If the table is not in the snapshot before the DDL,
-	// we should ignore the DDL.
-	_, exist := snapBefore.PhysicalTableByID(job.TableID)
-	if !exist {
-		return true, nil
-	}
-
-	// If the table after the DDL is ineligible, we should check if it is not ineligible before the DDL.
-	// If so, we should return an error to inform the user that it is a
-	// dangerous operation and should be handled manually.
-	isBeforeineligible := snapBefore.IsIneligibleTableID(job.TableID)
-	if isBeforeineligible {
-		log.Warn("ignore the DDL event of ineligible table",
-			zap.String("changefeed", p.changefeedID.ID), zap.Any("ddl", job))
-		return true, nil
-	}
-	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
-		"it is a dangerous operation and may cause data loss. If you want to replicate this ddl safely, "+
-		"pelase pause the changefeed and update the `force-replicate=true` "+
-		"in the changefeed configuration, "+
-		"then resume the changefeed.", job.Query))
->>>>>>> d0329d7f1c (ddl_puller (ticdc): handle dorp pk/uk ddl correctly (#10965))
 }
 
 // handleRenameTables gets all the tables that are renamed
@@ -636,7 +491,46 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
 	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
-	return false, nil
+	return p.checkIneligibleTableDDL(snap, job)
+}
+
+// checkIneligibleTableDDL checks if the table is ineligible before and after the DDL.
+//  1. If it is not a table DDL, we shouldn't check it.
+//  2. If the table after the DDL is ineligible:
+//     a. If the table is not exist before the DDL, we should ignore the DDL.
+//     b. If the table is ineligible before the DDL, we should ignore the DDL.
+//     c. If the table is eligible before the DDL, we should return an error.
+func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, job *timodel.Job) (skip bool, err error) {
+	if filter.IsSchemaDDL(job.Type) {
+		return false, nil
+	}
+
+	ineligible := p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(job.TableID)
+	if !ineligible {
+		return false, nil
+	}
+
+	// If the table is not in the snapshot before the DDL,
+	// we should ignore the DDL.
+	_, exist := snapBefore.PhysicalTableByID(job.TableID)
+	if !exist {
+		return true, nil
+	}
+
+	// If the table after the DDL is ineligible, we should check if it is not ineligible before the DDL.
+	// If so, we should return an error to inform the user that it is a
+	// dangerous operation and should be handled manually.
+	isBeforeineligible := snapBefore.IsIneligibleTableID(job.TableID)
+	if isBeforeineligible {
+		log.Warn("ignore the DDL event of ineligible table",
+			zap.String("changefeed", p.changefeedID.ID), zap.Any("ddl", job))
+		return true, nil
+	}
+	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
+		"it is a dangerous operation and may cause data loss. If you want to replicate this ddl safely, "+
+		"pelase pause the changefeed and update the `force-replicate=true` "+
+		"in the changefeed configuration, "+
+		"then resume the changefeed.", job.Query))
 }
 
 func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
