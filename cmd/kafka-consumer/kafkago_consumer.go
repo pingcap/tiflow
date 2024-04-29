@@ -15,7 +15,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"os"
 	"strings"
 	"time"
 
@@ -25,10 +28,44 @@ import (
 	"go.uber.org/zap"
 )
 
-func kafkaGoGetPartitionNum(address []string, topic string) (int32, error) {
+func newDialer(o *consumerOption) (*kafka.Dialer, error) {
+	caCert, err := os.ReadFile(o.ca)
+	if err != nil {
+		return nil, err
+	}
+
+	clientCert, err := tls.LoadX509KeyPair(o.cert, o.key)
+	if err != nil {
+		return nil, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	dialer := &kafka.Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+		TLS: &tls.Config{
+			RootCAs:            caCertPool,
+			Certificates:       []tls.Certificate{clientCert},
+			MinVersion:         tls.VersionTLS10,
+			InsecureSkipVerify: false,
+		},
+	}
+	return dialer, nil
+
+}
+func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
+	transport := kafka.DefaultTransport
+	if len(o.ca) != 0 {
+		if tlsDialer, err := newDialer(o); err == nil {
+			transport = &kafka.Transport{Dial: tlsDialer.DialFunc}
+		}
+	}
 	client := &kafka.Client{
-		Addr:    kafka.TCP(address...),
-		Timeout: 10 * time.Second,
+		Addr:      kafka.TCP(o.address...),
+		Timeout:   10 * time.Second,
+		Transport: transport,
 	}
 	for i := 0; i <= 30; i++ {
 		resp, err := client.Metadata(context.Background(), &kafka.MetadataRequest{})
@@ -37,19 +74,19 @@ func kafkaGoGetPartitionNum(address []string, topic string) (int32, error) {
 		}
 		topics := resp.Topics
 		for i := 0; i < len(topics); i++ {
-			if topics[i].Name == topic {
+			if topics[i].Name == o.topic {
 				topicDetail := topics[i]
 				numPartitions := int32(len(topicDetail.Partitions))
 				log.Info("get partition number of topic",
-					zap.String("topic", topic),
+					zap.String("topic", o.topic),
 					zap.Int32("partitionNum", numPartitions))
 				return numPartitions, nil
 			}
 		}
-		log.Info("retry get partition number", zap.String("topic", topic))
+		log.Info("retry get partition number", zap.String("topic", o.topic))
 		time.Sleep(1 * time.Second)
 	}
-	return 0, cerror.Errorf("wait the topic(%s) created timeout", topic)
+	return 0, cerror.Errorf("wait the topic(%s) created timeout", o.topic)
 }
 
 type kafkaGoConsumer struct {
@@ -62,7 +99,7 @@ var _ KakfaConsumer = (*kafkaGoConsumer)(nil)
 // NewkafkaGoConsumer will create a consumer client.
 func NewkafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c := new(kafkaGoConsumer)
-	partitionNum, err := kafkaGoGetPartitionNum(o.address, o.topic)
+	partitionNum, err := kafkaGoGetPartitionNum(o)
 	if err != nil {
 		log.Panic("Error get partition number", zap.String("topic", o.topic), zap.Error(err))
 	}
@@ -84,15 +121,23 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 	if len(topics) == 0 {
 		log.Panic("Error no topics provided")
 	}
+	dialer := kafka.DefaultDialer
+	if len(c.option.ca) != 0 {
+		tlsDialer, err := newDialer(c.option)
+		if err != nil {
+			log.Panic("Error create dialer")
+		}
+		dialer = tlsDialer
+	}
 	client, err := kafka.NewConsumerGroup(kafka.ConsumerGroupConfig{
 		ID:      c.option.groupID,
 		Brokers: c.option.address,
 		Topics:  topics,
+		Dialer:  dialer,
 	})
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
-
 	defer func() {
 		if err = client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
