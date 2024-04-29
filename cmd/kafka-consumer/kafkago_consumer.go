@@ -48,7 +48,8 @@ func newDialer(o *consumerOption) (*kafka.Dialer, error) {
 		TLS: &tls.Config{
 			RootCAs:            caCertPool,
 			Certificates:       []tls.Certificate{clientCert},
-			MinVersion:         tls.VersionTLS10,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2", "http/1.1"},
 			InsecureSkipVerify: false,
 		},
 	}
