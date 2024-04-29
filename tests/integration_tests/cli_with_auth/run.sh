@@ -9,8 +9,8 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
-# export TICDC_USER=ticdc
-# export TICDC_PASSWORD=ticdc_secret
+export TICDC_USER=ticdc
+export TICDC_PASSWORD=ticdc_secret
 
 function check_changefeed_count() {
 	pd_addr=$1
