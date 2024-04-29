@@ -39,8 +39,7 @@ func TestDMLEventE2E(t *testing.T) {
 	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 
-	ra
-	nd.New(rand.NewSource(time.Now().Unix())).Shuffle(len(event.Columns), func(i, j int) {
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(event.Columns), func(i, j int) {
 		event.Columns[i], event.Columns[j] = event.Columns[j], event.Columns[i]
 		colInfos[i], colInfos[j] = colInfos[j], colInfos[i]
 	})
