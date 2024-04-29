@@ -47,14 +47,8 @@ function run() {
 }
 
 trap stop_tidb_cluster EXIT
-<<<<<<< HEAD
 # FIXME: re-enable the case later.
 # run $*
 # check_logs $WORK_DIR
 # echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
 echo "case $TEST_NAME is skipped"
-=======
-# run $*
-check_logs $WORK_DIR
-echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
->>>>>>> 36e9e1bf6f (cli(ticdc): allow client authentication to be enabled without tls (#11005))
