@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -114,7 +115,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
-		task.getUpperBound(task.tableSink.getUpperBoundTs()))
+		task.getUpperBound(task.tableSink.getUpperBoundTs()),
+		encoding.TS_WINDOW(),
+	)
 	advancer.lastPos = lowerBound.Prev()
 
 	allEventCount := 0

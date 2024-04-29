@@ -261,8 +261,8 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 			CommitTs: 4,
 		}, lastWritePos)
 		require.Equal(suite.T(), sorter.Position{
-			StartTs:  4,
-			CommitTs: 4,
+			StartTs:  0,
+			CommitTs: 5,
 		}, lastWritePos.Next())
 	}
 	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)

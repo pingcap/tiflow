@@ -359,8 +359,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenR
 			CommitTs: 2,
 		}, lastWritePos)
 		require.Equal(suite.T(), sorter.Position{
-			StartTs:  2,
-			CommitTs: 2,
+			StartTs:  0,
+			CommitTs: 3,
 		}, lastWritePos.Next())
 		cancel()
 	}
@@ -414,8 +414,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 			CommitTs: 2,
 		}, lastWritePos)
 		require.Equal(suite.T(), sorter.Position{
-			StartTs:  2,
-			CommitTs: 2,
+			StartTs:  0,
+			CommitTs: 3,
 		}, lastWritePos.Next())
 		cancel()
 	}
@@ -516,8 +516,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 			CommitTs: 4,
 		}, lastWritePos)
 		require.Equal(suite.T(), sorter.Position{
-			StartTs:  4,
-			CommitTs: 4,
+			StartTs:  0,
+			CommitTs: 5,
 		}, lastWritePos.Next())
 	}
 	taskChan <- &sinkTask{
@@ -569,8 +569,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 			CommitTs: 4,
 		}, lastWritePos)
 		require.Equal(suite.T(), sorter.Position{
-			StartTs:  4,
-			CommitTs: 4,
+			StartTs:  0,
+			CommitTs: 5,
 		}, lastWritePos.Next())
 	}
 	taskChan <- &sinkTask{

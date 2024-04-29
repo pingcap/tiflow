@@ -428,7 +428,7 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail")
 	select {
 	case task := <-manager.sinkTaskChan:
-		require.Equal(t, sorter.Position{StartTs: 2, CommitTs: 2}, task.lowerBound)
+		require.Equal(t, sorter.Position{StartTs: 0, CommitTs: 3}, task.lowerBound)
 		task.callback(sorter.Position{StartTs: 3, CommitTs: 4})
 	case <-time.After(2 * time.Second):
 		panic("should always get a sink task")

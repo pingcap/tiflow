@@ -39,8 +39,8 @@ type TsWindow struct {
 	sizeInSeconds int
 }
 
-// TS_WINDOW returns a TsWindow instance.
-func TS_WINDOW() TsWindow {
+// TsWindow returns a TsWindow instance.
+func TsWindow() TsWindow {
 	return TsWindow{sizeInSeconds: 30}
 }
 
@@ -126,7 +126,7 @@ func encodeTsKey(buf []byte, uniqueID uint32, tableID uint64, CRTs uint64, start
 	offset += uniqueIDLen
 
 	// tsWindow
-	tsWindow := TS_WINDOW().ExtractTsWindow(CRTs)
+	tsWindow := TsWindow().ExtractTsWindow(CRTs)
 	binary.BigEndian.PutUint64(buf[offset:], tsWindow)
 	offset += tsWindowLen
 
@@ -142,8 +142,6 @@ func encodeTsKey(buf []byte, uniqueID uint32, tableID uint64, CRTs uint64, start
 	if len(startTs) > 0 {
 		binary.BigEndian.PutUint64(buf[offset:], startTs[0])
 	}
-
-	return
 }
 
 // getDMLOrder returns the order of the dml types: delete<update<insert

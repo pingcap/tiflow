@@ -80,8 +80,8 @@ type tableSinkWrapper struct {
 	replicateTs    model.Ts
 	genReplicateTs func(ctx context.Context) (model.Ts, error)
 
-	// lastCleanTime indicates the last time the table has been cleaned.
-	lastCleanTime time.Time
+	// lastCleanWindow indicates the last timestamp window the table has been cleaned.
+	lastCleanWindow uint64
 
 	// rangeEventCounts is for clean the table sorter.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be

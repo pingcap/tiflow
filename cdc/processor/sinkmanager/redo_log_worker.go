@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -71,6 +72,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
+		encoding.TS_WINDOW(),
 	)
 	advancer.lastPos = lowerBound.Prev()
 

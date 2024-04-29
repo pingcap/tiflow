@@ -84,7 +84,6 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		channs:       channs,
 		closed:       make(chan struct{}),
 		tables:       spanz.NewHashMap[*tableState](),
-		tsWindow:     encoding.TS_WINDOW(),
 	}
 
 	for i := range eventSorter.dbs {
@@ -518,9 +517,9 @@ func (s *EventSorter) cleanTable(
 
 	if len(upperBound) == 1 {
 		window := s.tsWindow.ExtractTsWindow(upperBound[0].CommitTs) - 5
-		toClean = sorter.GenCommitFence(s.tsWindow.MinTsInWindow(window + 1))
+		toClean = sorter.GenCommitFence(s.tsWindow.MinTsInWindow(window))
 	} else {
-		toClean = sorter.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
+		toClean = sorter.GenCommitFence(math.MaxUint64)
 	}
 
 	state.mu.RLock()
