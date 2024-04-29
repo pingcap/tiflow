@@ -70,7 +70,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -331,7 +337,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -499,7 +511,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",

@@ -205,6 +205,30 @@ var (
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  timodel.ActionCreateTable,
 	}
+	updateEvent = &model.RowChangedEvent{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("aa"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("bb"),
+			},
+		}, tableInfo),
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("aaa"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("bbb"),
+			},
+		}, tableInfo),
+	}
 )
 
 func TestMaxMessageBytes(t *testing.T) {
@@ -378,6 +402,7 @@ func TestEncodeDecodeE2E(t *testing.T) {
 	topic := "test"
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
 	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
 	encoder := builder.Build()
@@ -571,4 +596,35 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, column.Value, decodedColumn.Value)
 	}
+}
+
+func TestOutputOldValueFalse(t *testing.T) {
+	ctx := context.Background()
+	topic := "test"
+
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	err = encoder.AppendRowChangedEvent(ctx, topic, updateEvent, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	decoded, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Nil(t, decoded.PreColumns)
 }
