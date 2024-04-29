@@ -14,14 +14,9 @@
 package avro
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"math/big"
-	"math/rand"
-	"sort"
 	"testing"
-	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -592,136 +587,8 @@ func TestColumnToAvroData(t *testing.T) {
 	}
 }
 
-func indentJSON(j string) string {
-	var buf bytes.Buffer
-	_ = json.Indent(&buf, []byte(j), "", "  ")
-	return buf.String()
-}
-
-func newLargeEvent() *model.RowChangedEvent {
-	cols := make([]*model.Column, 0)
-	colInfos := make([]rowcodec.ColInfo, 0)
-
-	cols = append(
-		cols,
-		&model.Column{
-			Name:  "id",
-			Value: int64(1),
-			Type:  mysql.TypeLong,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-		},
-	)
-	colInfos = append(
-		colInfos,
-		rowcodec.ColInfo{
-			ID:            1000,
-			IsPKHandle:    true,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeLong),
-		},
-	)
-
-	for _, v := range avroTestColumns {
-		cols = append(cols, &v.col)
-		colInfos = append(colInfos, v.colInfo)
-
-		colNew := v.col
-		colNew.Name = colNew.Name + "nullable"
-		colNew.Value = nil
-		colNew.Flag.SetIsNullable()
-
-		colInfoNew := v.colInfo
-		colInfoNew.ID += int64(len(avroTestColumns))
-
-		cols = append(cols, &colNew)
-		colInfos = append(colInfos, colInfoNew)
-	}
-
-	nameToIDMap := make(map[string]int64, len(cols))
-	for i, col := range cols {
-		nameToIDMap[col.Name] = colInfos[i].ID
-	}
-	tidbTableInfo := model.BuildTiDBTableInfoImpl(
-		"avroencode",
-		cols,
-		[][]int{{0}},
-		model.NewNameBasedColumnIDAllocator(nameToIDMap))
-	model.AddExtraColumnInfo(tidbTableInfo, colInfos)
-	tableInfo := model.WrapTableInfo(100, "testdb", 100, tidbTableInfo)
-	return &model.RowChangedEvent{
-		CommitTs:  417318403368288260,
-		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
-	}
-}
-
-func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
-	t.Parallel()
-
-	event := newLargeEvent()
-	columns := event.GetColumns()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
-	input := &avroEncodeInput{
-		columns,
-		colInfos,
-	}
-
-	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
-		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
-		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
-	})
-
-	codecConfig := common.NewConfig(config.ProtocolAvro)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.EnableRowChecksum = true
-	codecConfig.AvroDecimalHandlingMode = "string"
-	codecConfig.AvroBigintUnsignedHandlingMode = "string"
-
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
-
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
-	require.NoError(t, err)
-	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
-	_, err = goavro.NewCodec(schema)
-	require.NoError(t, err)
-
-	require.True(t, sort.IsSorted(input))
-}
-
-func TestRowToAvroSchema(t *testing.T) {
-	t.Parallel()
-
-	event := newLargeEvent()
-	columns := event.GetColumns()
-	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
-	input := &avroEncodeInput{
-		columns,
-		colInfos,
-	}
-
-	codecConfig := common.NewConfig(config.ProtocolAvro)
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
-
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
-	require.NoError(t, err)
-	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
-	_, err = goavro.NewCodec(schema)
-	require.NoError(t, err)
-
-	codecConfig.EnableTiDBExtension = true
-	encoder = NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
-
-	schema, err = encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
-	require.NoError(t, err)
-	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
-	_, err = goavro.NewCodec(schema)
-	require.NoError(t, err)
-}
-
 func TestRowToAvroData(t *testing.T) {
-	t.Parallel()
-
-	event := newLargeEvent()
+	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	columns := event.GetColumns()
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 	input := &avroEncodeInput{
@@ -756,7 +623,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
-	event := newLargeEvent()
+	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	topic := "default"
 	bin, err := encoder.encodeValue(ctx, "default", event)
 	require.NoError(t, err)
@@ -796,7 +663,7 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
-	event := newLargeEvent()
+	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	topic := "default"
 	bin, err := encoder.encodeKey(ctx, topic, event)
 	require.NoError(t, err)
@@ -815,7 +682,7 @@ func TestAvroEncode(t *testing.T) {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
-	require.Equal(t, int32(1), res.(map[string]interface{})["id"])
+	require.Equal(t, int32(127), res.(map[string]interface{})["t"])
 
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)

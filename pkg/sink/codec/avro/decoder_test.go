@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,7 +72,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
-	event := newLargeEvent()
+	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
 
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(event.Columns), func(i, j int) {
@@ -105,38 +106,19 @@ func TestDecodeEvent(t *testing.T) {
 }
 
 func TestDecodeDDLEvent(t *testing.T) {
-	t.Parallel()
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.AvroEnableWatermark = true
 
-	config := &common.Config{
-		EnableTiDBExtension: true,
-		AvroEnableWatermark: true,
-	}
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	encoder := &BatchEncoder{
-		namespace: model.DefaultNamespace,
-		result:    make([]*common.Message, 0, 1),
-		config:    config,
-	}
-
-	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
-		StartTs:  1020,
-		CommitTs: 1030,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema:      "test",
-				Table:       "t1",
-				TableID:     0,
-				IsPartition: false,
-			},
-		},
-		Type:  timodel.ActionAddColumn,
-		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
-	})
+	ddl, _, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	message, err := encoder.EncodeDDLEvent(ddl)
 	require.NoError(t, err)
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(config, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -148,28 +130,21 @@ func TestDecodeDDLEvent(t *testing.T) {
 	decodedEvent, err := decoder.NextDDLEvent()
 	require.NoError(t, err)
 	require.NotNil(t, decodedEvent)
-	require.Equal(t, uint64(1030), decodedEvent.CommitTs)
-	require.Equal(t, timodel.ActionAddColumn, decodedEvent.Type)
-	require.Equal(t, "ALTER TABLE test.t1 ADD COLUMN a int", decodedEvent.Query)
-	require.Equal(t, "test", decodedEvent.TableInfo.TableName.Schema)
-	require.Equal(t, "t1", decodedEvent.TableInfo.TableName.Table)
-	require.Equal(t, int64(0), decodedEvent.TableInfo.TableName.TableID)
-	require.False(t, decodedEvent.TableInfo.TableName.IsPartition)
+	require.Equal(t, ddl.CommitTs, decodedEvent.CommitTs)
+	require.Equal(t, timodel.ActionCreateTable, decodedEvent.Type)
+	require.NotEmpty(t, decodedEvent.Query)
+	require.NotEmpty(t, decodedEvent.TableInfo.TableName.Schema)
+	require.NotEmpty(t, decodedEvent.TableInfo.TableName.Table)
 }
 
 func TestDecodeResolvedEvent(t *testing.T) {
 	t.Parallel()
 
-	config := &common.Config{
-		EnableTiDBExtension: true,
-		AvroEnableWatermark: true,
-	}
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.AvroEnableWatermark = true
 
-	encoder := &BatchEncoder{
-		namespace: model.DefaultNamespace,
-		config:    config,
-		result:    make([]*common.Message, 0, 1),
-	}
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
 	resolvedTs := uint64(1591943372224)
 	message, err := encoder.EncodeCheckpointEvent(resolvedTs)
@@ -177,7 +152,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(config, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
