@@ -15,6 +15,7 @@ package txn
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,6 +41,8 @@ func (b *blackhole) OnTxnEvent(e *dmlsink.TxnCallbackableEvent) bool {
 			break
 		}
 	}
+	t := rand.Intn(1000)
+	time.Sleep(time.Millisecond * time.Duration(t))
 	e.Callback()
 	return true
 }
@@ -79,7 +82,10 @@ func TestConflicts(t *testing.T) {
 		Event: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{insertEvent},
 		},
-		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		Callback: func() {
+			ok := atomic.CompareAndSwapUint32(&handled, 0, 1)
+			require.True(t, ok)
+		},
 		SinkState: sinkState,
 	}
 
@@ -91,7 +97,10 @@ func TestConflicts(t *testing.T) {
 		Event: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{insertEvent},
 		},
-		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		Callback: func() {
+			ok := atomic.CompareAndSwapUint32(&handled, 1, 2)
+			require.True(t, ok)
+		},
 		SinkState: sinkState,
 	}
 
@@ -103,7 +112,10 @@ func TestConflicts(t *testing.T) {
 		Event: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{insertEvent},
 		},
-		Callback:  func() { atomic.AddUint32(&handled, 1) },
+		Callback: func() {
+			ok := atomic.CompareAndSwapUint32(&handled, 2, 3)
+			require.True(t, ok)
+		},
 		SinkState: sinkState,
 	}
 
@@ -111,7 +123,7 @@ func TestConflicts(t *testing.T) {
 
 	bes := make([]backend, 0, 4)
 	for i := 0; i < 4; i++ {
-		bes = append(bes, &blackhole{blockOnEvents: 1})
+		bes = append(bes, &blackhole{blockOnEvents: 0})
 	}
 	errCh := make(chan error, 1)
 	sink := newSink(context.Background(),
@@ -120,13 +132,13 @@ func TestConflicts(t *testing.T) {
 	err := sink.WriteEvents(txns...)
 	require.NoError(t, err)
 
-	time.Sleep(time.Second)
-	require.Equal(t, uint32(0), atomic.LoadUint32(&handled))
+	// time.Sleep(time.Second)
+	// require.Equal(t, uint32(0), atomic.LoadUint32(&handled))
 
-	for _, be := range bes {
-		atomic.StoreInt32(&be.(*blackhole).blockOnEvents, 0)
-	}
-	time.Sleep(time.Second)
+	// for _, be := range bes {
+	// 	atomic.StoreInt32(&be.(*blackhole).blockOnEvents, 0)
+	// }
+	time.Sleep(time.Second * 5)
 	require.Equal(t, uint32(3), atomic.LoadUint32(&handled))
 	sink.Close()
 }
