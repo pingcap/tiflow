@@ -28,6 +28,11 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	retryTime = 30
+	timeout   = time.Second * 10
+)
+
 func newDialer(o *consumerOption) (*kafka.Dialer, error) {
 	caCert, err := os.ReadFile(o.ca)
 	if err != nil {
@@ -65,10 +70,10 @@ func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
 	}
 	client := &kafka.Client{
 		Addr:      kafka.TCP(o.address...),
-		Timeout:   10 * time.Second,
+		Timeout:   timeout,
 		Transport: transport,
 	}
-	for i := 0; i <= 30; i++ {
+	for i := 0; i <= retryTime; i++ {
 		resp, err := client.Metadata(context.Background(), &kafka.MetadataRequest{})
 		if err != nil {
 			return 0, cerror.Trace(err)
@@ -195,6 +200,10 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
 							log.Panic("Error commit offsets", zap.Error(err))
 						}
+						log.Info("commit offset",
+							zap.String("topic", topic),
+							zap.Int("partition", partition),
+							zap.Int64("offset", offset))
 					}
 				})
 			}
