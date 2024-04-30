@@ -27,10 +27,10 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -1302,7 +1302,7 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
-	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor, cp.cfg.ExtStorage)
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.ExtStorage)
 	if err != nil {
 		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {

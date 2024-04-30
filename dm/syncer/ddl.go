@@ -21,18 +21,17 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	tidbddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/types"
-	tablefilter "github.com/pingcap/tidb/util/filter"
-	tidbmock "github.com/pingcap/tidb/util/mock"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/table/tables"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -79,7 +78,7 @@ type DDLWorker struct {
 	collationCompatible        string
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
-	baList                     *tablefilter.Filter
+	baList                     *filter.Filter
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
@@ -1091,7 +1090,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.AlterTable, err
 	}
 	// handle column options
-	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
 		ddl.logger.Warn("process column options failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
@@ -1174,7 +1173,7 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 					}
 				}
 			case ast.AlterTableReorganizePartition:
-				return bf.ReorganizePartion
+				return bf.ReorganizePartition
 			case ast.AlterTableRebuildPartition:
 				return bf.RebuildPartition
 			case ast.AlterTableCoalescePartitions:

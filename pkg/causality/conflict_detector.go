@@ -16,17 +16,21 @@ package causality
 import (
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // ConflictDetector implements a logic that dispatches transaction
-// to different workers in a way that transactions modifying the same
-// keys are never executed concurrently and have their original orders
-// preserved.
-type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
-	workers []Worker
+// to different worker cache channels in a way that transactions
+// modifying the same keys are never executed concurrently and
+// have their original orders preserved. Transactions in different
+// channels can be executed concurrently.
+type ConflictDetector[Txn txnEvent] struct {
+	// resolvedTxnCaches are used to cache resolved transactions.
+	resolvedTxnCaches []txnCache[Txn]
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
@@ -38,28 +42,25 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 
 	// Used to run a background goroutine to GC or notify nodes.
 	notifiedNodes *chann.DrainableChann[func()]
-	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
+	garbageNodes  *chann.DrainableChann[*internal.Node]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
 }
 
-type txnFinishedEvent struct {
-	node         *internal.Node
-	conflictKeys []uint64
-}
-
 // NewConflictDetector creates a new ConflictDetector.
-func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
-	workers []Worker,
-	numSlots uint64,
-) *ConflictDetector[Worker, Txn] {
-	ret := &ConflictDetector[Worker, Txn]{
-		workers:       workers,
-		slots:         internal.NewSlots[*internal.Node](numSlots),
-		numSlots:      numSlots,
-		notifiedNodes: chann.NewAutoDrainChann[func()](),
-		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
-		closeCh:       make(chan struct{}),
+func NewConflictDetector[Txn txnEvent](
+	numSlots uint64, opt TxnCacheOption,
+) *ConflictDetector[Txn] {
+	ret := &ConflictDetector[Txn]{
+		resolvedTxnCaches: make([]txnCache[Txn], opt.Count),
+		slots:             internal.NewSlots[*internal.Node](numSlots),
+		numSlots:          numSlots,
+		notifiedNodes:     chann.NewAutoDrainChann[func()](),
+		garbageNodes:      chann.NewAutoDrainChann[*internal.Node](),
+		closeCh:           make(chan struct{}),
+	}
+	for i := 0; i < opt.Count; i++ {
+		ret.resolvedTxnCaches[i] = newTxnCache[Txn](opt)
 	}
 
 	ret.wg.Add(1)
@@ -73,29 +74,40 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 
 // Add pushes a transaction to the ConflictDetector.
 //
-// NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
-	conflictKeys := txn.ConflictKeys(d.numSlots)
-	node := internal.NewNode()
-	node.OnResolved = func(workerID int64) {
-		unlock := func() {
+// NOTE: if multiple threads access this concurrently,
+// Txn.GenSortedDedupKeysHash must be sorted by the slot index.
+func (d *ConflictDetector[Txn]) Add(txn Txn) {
+	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
+	node := internal.NewNode(sortedKeysHash)
+	txnWithNotifier := TxnWithNotifier[Txn]{
+		TxnEvent: txn,
+		PostTxnExecuted: func() {
+			// After this transaction is executed, we can remove the node from the graph,
+			// and resolve related dependencies for these transacitons which depend on this
+			// executed transaction.
 			node.Remove()
-			d.garbageNodes.In() <- txnFinishedEvent{node, conflictKeys}
-		}
-		d.sendToWorker(txn, unlock, workerID)
+
+			// Send this node to garbageNodes to GC it from the slots if this node is still
+			// occupied related slots.
+			d.garbageNodes.In() <- node
+		},
 	}
-	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
+	node.TrySendToTxnCache = func(cacheID int64) bool {
+		// Try sending this txn to related cache as soon as all dependencies are resolved.
+		return d.sendToCache(txnWithNotifier, cacheID)
+	}
+	node.RandCacheID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.resolvedTxnCaches)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
-	d.slots.Add(node, conflictKeys)
+	d.slots.Add(node)
 }
 
 // Close closes the ConflictDetector.
-func (d *ConflictDetector[Worker, Txn]) Close() {
+func (d *ConflictDetector[Txn]) Close() {
 	close(d.closeCh)
 	d.wg.Wait()
 }
 
-func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.CloseAndDrain()
 		d.garbageNodes.CloseAndDrain()
@@ -108,20 +120,33 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 			if notifyCallback != nil {
 				notifyCallback()
 			}
-		case event := <-d.garbageNodes.Out():
-			if event.node != nil {
-				d.slots.Free(event.node, event.conflictKeys)
+		case node := <-d.garbageNodes.Out():
+			if node != nil {
+				d.slots.Free(node)
 			}
 		}
 	}
 }
 
-// sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, unlock func(), workerID int64) {
-	if workerID < 0 {
-		panic("must assign with a valid workerID")
+// sendToCache should not call txn.Callback if it returns an error.
+func (d *ConflictDetector[Txn]) sendToCache(txn TxnWithNotifier[Txn], id int64) bool {
+	if id < 0 {
+		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
 	}
-	txn.OnConflictResolved()
-	worker := d.workers[workerID]
-	worker.Add(txn, unlock)
+
+	// Note OnConflictResolved must be called before add to cache. Otherwise, there will
+	// be a data race since the txn may be read before the OnConflictResolved is called.
+	txn.TxnEvent.OnConflictResolved()
+	cache := d.resolvedTxnCaches[id]
+	ok := cache.add(txn)
+	return ok
+}
+
+// GetOutChByCacheID returns the output channel by cacheID.
+// Note txns in single cache should be executed sequentially.
+func (d *ConflictDetector[Txn]) GetOutChByCacheID(id int64) <-chan TxnWithNotifier[Txn] {
+	if id < 0 {
+		log.Panic("must assign with a valid cacheID", zap.Int64("cacheID", id))
+	}
+	return d.resolvedTxnCaches[id].out()
 }

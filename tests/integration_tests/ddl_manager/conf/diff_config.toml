@@ -12,7 +12,7 @@ source-instances = ["mysql1"]
 
 target-instance = "tidb0"
 
-target-check-tables = ["ddl_manager.*"]
+target-check-tables = ["ddl_manager.*", "cross_db_1.*", "cross_db_2.*"]
 
 [data-sources]
 [data-sources.mysql1]

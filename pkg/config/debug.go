@@ -26,11 +26,11 @@ type DebugConfig struct {
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
-	// EnableKVConnectBackOff enables the backoff for kv connect.
-	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
-
 	// CDCV2 enables ticdc version 2 implementation with new metastore
 	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
+
+	// Puller is the configuration of the puller.
+	Puller *PullerConfig `toml:"puller" json:"puller"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
@@ -49,4 +49,14 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 
 	return nil
+}
+
+// PullerConfig represents config for puller
+type PullerConfig struct {
+	// EnableResolvedTsStuckDetection is used to enable resolved ts stuck detection.
+	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
+	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
+	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
+	// LogRegionDetails determines whether logs Region details or not in puller and kv-client.
+	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
 }

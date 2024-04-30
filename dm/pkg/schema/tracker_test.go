@@ -22,13 +22,13 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/filter"
-	timock "github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	timock "github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -613,7 +613,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("test", "create table t(a int primary key, b int, c varchar(20000), key(c(20000)))"))
+			AddRow("test", "create table t(a int, b int, c varchar(20000), primary key(a, b), key(c(20000)))/*!90000 SHARD_ROW_ID_BITS=6 */"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
 	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
@@ -804,4 +804,13 @@ func TestNeedRestrictedSQLExecutor(t *testing.T) {
 
 	err = tracker.Exec(ctx, "testdb", parseSQL(t, p, `alter table testdb.t modify column a int not null;`))
 	require.NoError(t, err)
+}
+
+func TestMustNotUseMockStore(t *testing.T) {
+	ctx := context.Background()
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.Nil(t, tracker.se.GetStore(), "see https://github.com/pingcap/tiflow/issues/5334")
 }

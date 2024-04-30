@@ -153,6 +153,36 @@ func NewReplicationSet(
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,
 		},
+		// We need to initialize the stats with the checkpoint ts.
+		// Only when the table into ReplicationSetStateReplicating state, owner will update the table's stats
+		// In advanceCheckpoint, it will first check table.Stats.StageCheckpoints["puller-egress"] whether it is nil,
+		// Only when it's not nil, then consider it join to calculate the slowest puller resolved ts.
+		// If we don't initialize the stats here, when the new table is stuck in incremental scan
+		// the min puller resolved ts calulcated in advanceCheckpoint will increase continuely
+		Stats: tablepb.Stats{
+			StageCheckpoints: map[string]tablepb.Checkpoint{
+				"puller-egress": {
+					CheckpointTs: checkpoint,
+					ResolvedTs:   checkpoint,
+				},
+				"puller-ingress": {
+					CheckpointTs: checkpoint,
+					ResolvedTs:   checkpoint,
+				},
+				"sink": {
+					CheckpointTs: checkpoint,
+					ResolvedTs:   checkpoint,
+				},
+				"sorter-ingress": {
+					CheckpointTs: checkpoint,
+					ResolvedTs:   checkpoint,
+				},
+				"sorter-egress": {
+					CheckpointTs: checkpoint,
+					ResolvedTs:   checkpoint,
+				},
+			},
+		},
 	}
 	// Count of captures that is in Stopping states.
 	stoppingCount := 0
@@ -1020,7 +1050,15 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
 	}
-	r.Stats = stats
+
+	if r.Checkpoint.LastSyncedTs < checkpoint.LastSyncedTs {
+		r.Checkpoint.LastSyncedTs = checkpoint.LastSyncedTs
+	}
+
+	// we only update stats when stats is not empty, because we only collect stats every 10s.
+	if stats.Size() > 0 {
+		r.Stats = stats
+	}
 }
 
 // SetHeap is a max-heap, it implements heap.Interface.

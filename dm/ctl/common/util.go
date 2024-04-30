@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -337,7 +337,7 @@ func GetTaskNameFromArgOrFile(arg string) string {
 		return arg
 	}
 	cfg := config.NewTaskConfig()
-	if err := cfg.Decode(string(content)); err != nil {
+	if err := cfg.FromYaml(string(content)); err != nil {
 		return arg
 	}
 	return cfg.Name

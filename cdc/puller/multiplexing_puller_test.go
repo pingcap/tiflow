@@ -22,12 +22,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
-	client := kv.NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
+	cfg := &config.ServerConfig{Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}}}
+	client := kv.NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span) error {
 		select {
 		case <-ctx.Done():
@@ -37,7 +40,10 @@ func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *Multiplexi
 		}
 	}
 	return NewMultiplexingPuller(
-		model.ChangeFeedID{}, client, consume,
+		model.ChangeFeedID{},
+		client,
+		pdutil.NewClock4Test(),
+		consume,
 		1, func(tablepb.Span, int) int { return 0 }, 1,
 	)
 }
@@ -81,7 +87,8 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 
 	spans := []tablepb.Span{spanz.ToSpan([]byte("t_a"), []byte("t_e"))}
 	spans[0].TableID = 1
-	subID := puller.subscribe(spans, 996, "test")[0]
+	puller.subscribe(spans, 996, "test")
+	subID := puller.subscriptions.n.GetV(spans[0]).subID
 	for _, event := range events {
 		puller.inputChs[0] <- kv.MultiplexingEvent{RegionFeedEvent: event, SubscriptionID: subID}
 	}

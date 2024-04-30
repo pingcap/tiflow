@@ -22,12 +22,14 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	"github.com/google/uuid"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -48,7 +50,7 @@ func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FileP
 	err = cfg.Apply(ctx, sinkURI, replicaConfig)
 	require.NoError(t, err)
 
-	f := NewFilePathGenerator(cfg, storage, ".json", clock.New())
+	f := NewFilePathGenerator(model.ChangeFeedID{}, cfg, storage, ".json", pdutil.NewMonotonicClock(clock.New()))
 	return f
 }
 
@@ -83,7 +85,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	f = testFilePathGenerator(ctx, t, dir)
 	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorYear.String()
-	f.clock = mockClock
+	f.SetClock(pdutil.NewMonotonicClock(mockClock))
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
 	date = f.GenerateDateStr()
 	path, err = f.GenerateDataFilePath(ctx, table, date)
@@ -107,7 +109,8 @@ func TestGenerateDataFilePath(t *testing.T) {
 	f = testFilePathGenerator(ctx, t, dir)
 	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorMonth.String()
-	f.clock = mockClock
+	f.SetClock(pdutil.NewMonotonicClock(mockClock))
+
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
 	date = f.GenerateDateStr()
 	path, err = f.GenerateDataFilePath(ctx, table, date)
@@ -131,7 +134,8 @@ func TestGenerateDataFilePath(t *testing.T) {
 	f = testFilePathGenerator(ctx, t, dir)
 	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorDay.String()
-	f.clock = mockClock
+	f.SetClock(pdutil.NewMonotonicClock(mockClock))
+
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
 	date = f.GenerateDateStr()
 	path, err = f.GenerateDataFilePath(ctx, table, date)
@@ -209,7 +213,8 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	f := testFilePathGenerator(ctx, t, dir)
 	mockClock := clock.NewMock()
 	f.config.DateSeparator = config.DateSeparatorDay.String()
-	f.clock = mockClock
+	f.SetClock(pdutil.NewMonotonicClock(mockClock))
+
 	mockClock.Set(time.Date(2023, 3, 9, 23, 59, 59, 0, time.UTC))
 	table := VersionedTableName{
 		TableNameWithPhysicTableID: model.TableName{
@@ -325,9 +330,25 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	require.Equal(t, tableInfo.Version, f.versionMap[table])
 
 	dir = filepath.Join(dir, "test/table1/meta")
-	cnt, err := os.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(cnt))
+	require.Equal(t, 1, len(files))
+
+	// test schema file is invalid
+	err = os.WriteFile(filepath.Join(dir,
+		fmt.Sprintf("%s.tmp.%s", files[0].Name(), uuid.NewString())),
+		[]byte("invalid"), 0o644)
+	require.NoError(t, err)
+	err = os.Remove(filepath.Join(dir, files[0].Name()))
+	require.NoError(t, err)
+	delete(f.versionMap, table)
+	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, table.TableInfoVersion, f.versionMap[table])
+
+	files, err = os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(files))
 }
 
 func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
@@ -409,7 +430,7 @@ func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	currTime := time.Date(2021, 1, 3, 0, 0, 0, 0, time.UTC)
+	currTime := time.Date(2021, 1, 3, 0, 0, 0, 0, time.Local)
 	checkpointTs := oracle.GoTimeToTS(currTime)
 	cnt, err := RemoveExpiredFiles(ctx, model.ChangeFeedID{}, storage, cfg, checkpointTs)
 	require.NoError(t, err)

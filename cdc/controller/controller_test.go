@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -35,7 +35,7 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-func createController4Test(ctx cdcContext.Context,
+func createController4Test(globalVars *vars.GlobalVars,
 	t *testing.T) (*controllerImpl, *orchestrator.GlobalReactorState,
 	*orchestrator.ReactorStateTester,
 ) {
@@ -55,9 +55,9 @@ func createController4Test(ctx cdcContext.Context,
 	cdcKey := etcd.CDCKey{
 		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
-		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
+		CaptureID: globalVars.CaptureInfo.ID,
 	}
-	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
+	captureBytes, err := globalVars.CaptureInfo.Marshal()
 	require.Nil(t, err)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
 	return o, state, tester
@@ -67,8 +67,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
 	o := NewController(m, &model.CaptureInfo{}, nil).(*controllerImpl)
-	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx, cancel := cdcContext.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -264,8 +263,9 @@ func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
 }
 
 func TestFixChangefeedState(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
-	controller4Test, state, tester := createController4Test(ctx, t)
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
+	controller4Test, state, tester := createController4Test(globalVars, t)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Mismatched state and admin job.
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -297,9 +297,9 @@ func TestFixChangefeedState(t *testing.T) {
 }
 
 func TestCheckClusterVersion(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
-	controller4Test, state, tester := createController4Test(ctx, t)
-	ctx, cancel := cdcContext.WithCancel(ctx)
+	globalVars := vars.NewGlobalVars4Test()
+	controller4Test, state, tester := createController4Test(globalVars, t)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
@@ -331,7 +331,7 @@ func TestCheckClusterVersion(t *testing.T) {
 		etcd.DefaultClusterAndMetaPrefix,
 	),
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+
-			ctx.GlobalVars().CaptureInfo.Version+`"}`))
+			globalVars.CaptureInfo.Version+`"}`))
 
 	// check the tick is not skipped and the changefeed will be handled normally
 	_, err = controller4Test.Tick(ctx, state)
@@ -341,8 +341,9 @@ func TestCheckClusterVersion(t *testing.T) {
 }
 
 func TestFixChangefeedSinkProtocol(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
-	controller4Test, state, tester := createController4Test(ctx, t)
+	globalVars := vars.NewGlobalVars4Test()
+	controller4Test, state, tester := createController4Test(globalVars, t)
+	ctx := context.Background()
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Unknown protocol.
 	changefeedInfo := &model.ChangeFeedInfo{

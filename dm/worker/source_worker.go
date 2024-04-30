@@ -144,7 +144,7 @@ func (w *SourceWorker) Start() {
 	}
 
 	var err error
-	w.sourceDB, err = conn.GetUpstreamDB(&w.cfg.DecryptPassword().From)
+	w.sourceDB, err = conn.GetUpstreamDB(&w.cfg.GetDecryptedClone().From)
 	if err != nil {
 		w.l.Error("can't connected to upstream", zap.Error(err))
 	}
@@ -259,7 +259,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	w.sourceDBMu.Lock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.GetUpstreamDB(&cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.GetUpstreamDB(&cfg.GetDecryptedClone().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -553,7 +553,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 		return nil
 	}
 
-	cfg2, err := cfg.DecryptPassword()
+	cfg2, err := cfg.DecryptedClone()
 	if err != nil {
 		st.fail(errors.Annotate(err, "start sub task"))
 		return nil

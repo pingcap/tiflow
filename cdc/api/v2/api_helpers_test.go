@@ -32,6 +32,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	pdClient := &mockPDClient{}
 	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 	helper.Tk().MustExec("use test;")
 	storage := helper.Storage()
 	ctrl := mock_controller.NewMockController(gomock.NewController(t))
@@ -103,6 +104,12 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.Error(t, cerror.ErrOldValueNotEnabled, err)
+
+	// invalid start-ts, in the future
+	cfg.StartTs = 1000000000000000000
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	require.Error(t, cerror.ErrAPIInvalidParam, err)
 }
 
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {

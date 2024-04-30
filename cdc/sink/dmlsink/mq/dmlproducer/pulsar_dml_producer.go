@@ -168,6 +168,9 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 				log.Error("Pulsar DML producer async send error",
 					zap.String("namespace", p.id.Namespace),
 					zap.String("changefeed", p.id.ID),
+					zap.Int("messageSize", len(m.Payload)),
+					zap.String("topic", topic),
+					zap.String("schema", message.GetSchema()),
 					zap.Error(err))
 				mq.IncPublishedDMLFail(topic, p.id.ID, message.GetSchema())
 				// use this select to avoid send error to a closed channel
@@ -192,8 +195,7 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 	return nil
 }
 
-func (p *pulsarDMLProducer) Close() {
-	// We have to hold the lock to synchronize closing with writing.
+func (p *pulsarDMLProducer) Close() { // We have to hold the lock to synchronize closing with writing.
 	p.closedMu.Lock()
 	defer p.closedMu.Unlock()
 	// If the producer has already been closed, we should skip this close operation.
@@ -207,7 +209,6 @@ func (p *pulsarDMLProducer) Close() {
 	}
 	close(p.failpointCh)
 	p.closed = true
-
 	start := time.Now()
 	keys := p.producers.Keys()
 	for _, topic := range keys {
@@ -218,7 +219,6 @@ func (p *pulsarDMLProducer) Close() {
 			zap.String("namespace", p.id.Namespace),
 			zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
 	}
-
 	p.client.Close()
 }
 
@@ -229,24 +229,26 @@ func newProducer(
 	client pulsar.Client,
 	topicName string,
 ) (pulsar.Producer, error) {
-	po := pulsar.ProducerOptions{
-		Topic: topicName,
+	maxReconnectToBroker := uint(config.DefaultMaxReconnectToPulsarBroker)
+	option := pulsar.ProducerOptions{
+		Topic:                topicName,
+		MaxReconnectToBroker: &maxReconnectToBroker,
 	}
 	if pConfig.BatchingMaxMessages != nil {
-		po.BatchingMaxMessages = *pConfig.BatchingMaxMessages
+		option.BatchingMaxMessages = *pConfig.BatchingMaxMessages
 	}
 	if pConfig.BatchingMaxPublishDelay != nil {
-		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
+		option.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
 	}
 	if pConfig.CompressionType != nil {
-		po.CompressionType = pConfig.CompressionType.Value()
-		po.CompressionLevel = pulsar.Default
+		option.CompressionType = pConfig.CompressionType.Value()
+		option.CompressionLevel = pulsar.Default
 	}
 	if pConfig.SendTimeout != nil {
-		po.SendTimeout = pConfig.SendTimeout.Duration()
+		option.SendTimeout = pConfig.SendTimeout.Duration()
 	}
 
-	producer, err := client.CreateProducer(po)
+	producer, err := client.CreateProducer(option)
 	if err != nil {
 		return nil, err
 	}

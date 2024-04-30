@@ -24,6 +24,7 @@ import (
 )
 
 // NewOperateSchemaCmd creates a OperateSchema command.
+// deprecated, replaced by binlog-schema command.
 func NewOperateSchemaCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "operate-schema <operate-type> <-s source ...> <task-name | task-file> <-d database> <-t table> [schema-file] [--flush] [--sync]",

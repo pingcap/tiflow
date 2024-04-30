@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	tikvmetrics "github.com/tikv/client-go/v2/metrics"
@@ -50,11 +51,12 @@ func init() {
 	etcd.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
-	engine.InitMetrics(registry)
+	sorter.InitMetrics(registry)
 	memorysorter.InitMetrics(registry)
 	redo.InitMetrics(registry)
 	scheduler.InitMetrics(registry)
 	observer.InitMetrics(registry)
+	gc.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.
 	originalRegistry := prometheus.DefaultRegisterer
 	prometheus.DefaultRegisterer = registry

@@ -26,10 +26,10 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -86,7 +86,7 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		columns:  cols,
 		colInfos: colInfos,
 	}
-	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
+	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, &e.TableInfo.TableName, e.TableInfo.Version, keyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -164,14 +164,14 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 	}
 
 	input := &avroEncodeInput{
-		columns:  e.Columns,
-		colInfos: e.ColInfos,
+		columns:  e.GetColumns(),
+		colInfos: e.TableInfo.GetColInfosForRowChangedEvent(),
 	}
 	if len(input.columns) == 0 {
 		return nil, nil
 	}
 
-	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
+	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, &e.TableInfo.TableName, e.TableInfo.Version, input)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -214,13 +214,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
+		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
+		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
@@ -230,8 +230,8 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		value,
 		e.CommitTs,
 		model.MessageTypeRow,
-		&e.Table.Schema,
-		&e.Table.Table,
+		e.TableInfo.GetSchemaNamePtr(),
+		e.TableInfo.GetTableNamePtr(),
 	)
 	message.Callback = callback
 	message.IncRowsCount()
@@ -240,7 +240,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		log.Warn("Single message is too large for avro",
 			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
 			zap.Int("length", message.Length()),
-			zap.Any("table", e.Table))
+			zap.Any("table", e.TableInfo.TableName))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
 	}
 

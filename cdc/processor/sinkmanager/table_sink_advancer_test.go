@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
@@ -280,7 +280,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitF
 
 	// 3. advance with commit fence
 	// Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  1,
 		CommitTs: 2,
 	}
@@ -324,7 +324,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithoutComm
 
 	// 3. advance without commit fence
 	// Last pos is **not** a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  1,
 		CommitTs: 3,
 	}
@@ -364,7 +364,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithSplit
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. meet a txn finished event
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  1,
 		CommitTs: 2,
 	}
@@ -416,7 +416,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSp
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. meet a txn finished event
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  1,
 		CommitTs: 2,
 	}
@@ -472,7 +472,7 @@ func (suite *tableSinkAdvancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsW
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. meet a txn finished event
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  1,
 		CommitTs: 2,
 	}
@@ -537,7 +537,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	advancer.tryMoveToNextTxn(3)
 
 	// 3. Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}
@@ -592,7 +592,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeA
 	advancer.tryMoveToNextTxn(3)
 
 	// 3. Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}
@@ -644,7 +644,7 @@ func (suite *tableSinkAdvancerSuite) TestFinish() {
 	require.Equal(suite.T(), uint64(2), advancer.lastTxnCommitTs)
 	require.Equal(suite.T(), uint64(3), advancer.currTxnCommitTs)
 	// 3. Try finish.
-	finishedPos := engine.Position{
+	finishedPos := sorter.Position{
 		StartTs:  3,
 		CommitTs: 4,
 	}
@@ -695,7 +695,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTx
 	advancer.tryMoveToNextTxn(3)
 
 	// 3. Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}
@@ -745,7 +745,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 	advancer.tryMoveToNextTxn(3)
 
 	// 3. Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}

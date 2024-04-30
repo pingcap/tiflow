@@ -5,7 +5,10 @@ definitions:
         description: encoding method of binary type
         type: string
       delimiter:
-        description: delimiter between fields
+        description: |-
+          delimiter between fields, it can be 1 character or at most 2 characters
+          It can not be CR or LF or contains CR or LF.
+          It should have exclusive characters with quote.
         type: string
       include-commit-ts:
         description: whether to include commit ts
@@ -13,13 +16,25 @@ definitions:
       "null":
         description: representation of null values
         type: string
+      output-handle-key:
+        description: output handle key
+        type: boolean
+      output-old-value:
+        description: output old value
+        type: boolean
       quote:
         description: quoting character
         type: string
     type: object
   config.CloudStorageConfig:
     properties:
+      file-cleanup-cron-spec:
+        type: string
+      file-expiration-days:
+        type: integer
       file-size:
+        type: integer
+      flush-concurrency:
         type: integer
       flush-interval:
         type: string
@@ -38,6 +53,8 @@ definitions:
         type: boolean
       enable-tidb-extension:
         type: boolean
+      encoding-format:
+        type: string
       max-batch-size:
         type: integer
     type: object
@@ -51,6 +68,11 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  config.DebeziumConfig:
+    properties:
+      output-old-value:
+        type: boolean
     type: object
   config.DispatchRule:
     properties:
@@ -232,6 +254,11 @@ definitions:
         description: OAuth2Scope scope
         type: string
     type: object
+  config.OpenProtocolConfig:
+    properties:
+      output-old-value:
+        type: boolean
+    type: object
   config.PulsarConfig:
     properties:
       auth-tls-certificate-path:
@@ -291,9 +318,9 @@ definitions:
           Send and SendAsync returns an error after timeout.
           default: 30s
         type: integer
-      tls-certificate-path:
+      tls-certificate-file:
         type: string
-      tls-private-key-path:
+      tls-key-file-path:
         type: string
       tls-trust-certs-file-path:
         type: string
@@ -313,16 +340,24 @@ definitions:
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
       column-selectors:
-        description: ColumnSelectors is Deprecated.
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
+      content-compatible:
+        description: ContentCompatible is only available when the downstream is MQ.
+        type: boolean
       csv:
         $ref: '#/definitions/config.CSVConfig'
         description: CSVConfig is only available when the downstream is Storage.
       date-separator:
         description: DateSeparator is only available when the downstream is Storage.
         type: string
+      debezium:
+        $ref: '#/definitions/config.DebeziumConfig'
+        description: DebeziumConfig related configurations
+      debezium-disable-schema:
+        description: Debezium only. Whether schema should be excluded in the output.
+        type: boolean
       delete-only-output-handle-key-columns:
         description: DeleteOnlyOutputHandleKeyColumns is only available when the downstream
           is MQ.
@@ -355,6 +390,9 @@ definitions:
         description: OnlyOutputUpdatedColumns is only available when the downstream
           is MQ.
         type: boolean
+      open:
+        $ref: '#/definitions/config.OpenProtocolConfig'
+        description: OpenProtocol related configurations
       protocol:
         description: Protocol is NOT available when the downstream is DB.
         type: string
@@ -367,6 +405,23 @@ definitions:
         description: SchemaRegistry is only available when the downstream is MQ using
           avro protocol.
         type: string
+      send-bootstrap-in-msg-count:
+        description: SendBootstrapInMsgCount means bootstrap messages are being sent
+          every SendBootstrapInMsgCount row change messages.
+        type: integer
+      send-bootstrap-interval-in-sec:
+        description: |-
+          Simple Protocol only config, use to control the behavior of sending bootstrap message.
+          Note: When one of the following conditions is set to negative value,
+          bootstrap sending function will be disabled.
+          SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+        type: integer
+      send-bootstrap-to-all-partition:
+        description: |-
+          SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+          If set to false, bootstrap message will only be sent to the first partition of each topic.
+          Default value is true.
+        type: boolean
       terminator:
         description: Terminator is NOT available when the downstream is DB.
         type: string
@@ -574,6 +629,10 @@ definitions:
         type: boolean
       "null":
         type: string
+      output_handle_key:
+        type: boolean
+      output_old_value:
+        type: boolean
       quote:
         type: string
     type: object
@@ -693,7 +752,13 @@ definitions:
     type: object
   v2.CloudStorageConfig:
     properties:
+      file_cleanup_cron_spec:
+        type: string
+      file_expiration_days:
+        type: integer
       file_size:
+        type: integer
+      flush_concurrency:
         type: integer
       flush_interval:
         type: string
@@ -712,6 +777,8 @@ definitions:
         type: boolean
       enable_tidb_extension:
         type: boolean
+      encoding_format:
+        type: string
       max_batch_size:
         type: integer
     type: object
@@ -728,15 +795,37 @@ definitions:
     type: object
   v2.ConsistentConfig:
     properties:
+      compression:
+        type: string
+      encoding_worker_num:
+        type: integer
+      flush_concurrency:
+        type: integer
       flush_interval:
+        type: integer
+      flush_worker_num:
         type: integer
       level:
         type: string
       max_log_size:
         type: integer
+      memory_usage:
+        $ref: '#/definitions/v2.ConsistentMemoryUsage'
+      meta_flush_interval:
+        type: integer
       storage:
         type: string
       use_file_backend:
+        type: boolean
+    type: object
+  v2.ConsistentMemoryUsage:
+    properties:
+      memory_quota_percentage:
+        type: integer
+    type: object
+  v2.DebeziumConfig:
+    properties:
+      output_old_value:
         type: boolean
     type: object
   v2.DispatchRule:
@@ -785,29 +874,9 @@ definitions:
     type: object
   v2.FilterConfig:
     properties:
-      do_dbs:
-        description: DoDBs is an allowlist of schemas.
-        items:
-          type: string
-        type: array
-      do_tables:
-        description: DoTables is an allowlist of tables.
-        items:
-          $ref: '#/definitions/v2.Table'
-        type: array
       event_filters:
         items:
           $ref: '#/definitions/v2.EventFilterRule'
-        type: array
-      ignore_dbs:
-        description: IgnoreDBs is a blocklist of schemas.
-        items:
-          type: string
-        type: array
-      ignore_tables:
-        description: IgnoreTables is a blocklist of tables.
-        items:
-          $ref: '#/definitions/v2.Table'
         type: array
       ignore_txn_start_ts:
         items:
@@ -841,6 +910,8 @@ definitions:
         type: string
       integrity_check_level:
         type: string
+    type: object
+  v2.JSONDuration:
     type: object
   v2.KafkaConfig:
     properties:
@@ -971,6 +1042,11 @@ definitions:
       write_timeout:
         type: string
     type: object
+  v2.OpenProtocolConfig:
+    properties:
+      output_old_value:
+        type: boolean
+    type: object
   v2.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -1046,11 +1122,15 @@ definitions:
         type: boolean
       case_sensitive:
         type: boolean
+      changefeed_error_stuck_duration:
+        $ref: '#/definitions/v2.JSONDuration'
       check_gc_safe_point:
         type: boolean
       consistent:
         $ref: '#/definitions/v2.ConsistentConfig'
       enable_sync_point:
+        type: boolean
+      enable_table_monitor:
         type: boolean
       filter:
         $ref: '#/definitions/v2.FilterConfig'
@@ -1068,10 +1148,15 @@ definitions:
         $ref: '#/definitions/v2.ChangefeedSchedulerConfig'
       sink:
         $ref: '#/definitions/v2.SinkConfig'
+      sql_mode:
+        description: 'Deprecated: we don''t use this field since v8.0.0.'
+        type: string
       sync_point_interval:
         type: string
       sync_point_retention:
         type: string
+      synced_status:
+        $ref: '#/definitions/v2.SyncedStatusConfig'
     type: object
   v2.ResumeChangefeedConfig:
     properties:
@@ -1130,10 +1215,16 @@ definitions:
         items:
           $ref: '#/definitions/v2.ColumnSelector'
         type: array
+      content_compatible:
+        type: boolean
       csv:
         $ref: '#/definitions/v2.CSVConfig'
       date_separator:
         type: string
+      debezium:
+        $ref: '#/definitions/v2.DebeziumConfig'
+      debezium_disable_schema:
+        type: boolean
       delete_only_output_handle_key_columns:
         type: boolean
       dispatchers:
@@ -1154,6 +1245,8 @@ definitions:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
         type: boolean
+      open:
+        $ref: '#/definitions/v2.OpenProtocolConfig'
       protocol:
         type: string
       pulsar_config:
@@ -1162,19 +1255,43 @@ definitions:
         type: boolean
       schema_registry:
         type: string
+      send_bootstrap_in_msg_count:
+        type: integer
+      send_bootstrap_interval_in_sec:
+        type: integer
+      send_bootstrap_to_all_partition:
+        type: boolean
       terminator:
         type: string
       transaction_atomicity:
         type: string
     type: object
-  v2.Table:
+  v2.SyncedStatus:
     properties:
-      database_name:
-        description: Schema is the name of the schema (database) containing this table.
+      info:
         type: string
-      table_name:
-        description: Name is the unqualified table name.
+      last_synced_ts:
         type: string
+      now_ts:
+        type: string
+      puller_resolved_ts:
+        type: string
+      sink_checkpoint_ts:
+        type: string
+      synced:
+        type: boolean
+    type: object
+  v2.SyncedStatusConfig:
+    properties:
+      checkpoint_interval:
+        description: |-
+          The maximum interval between latest checkpoint ts and now or
+          between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+        type: integer
+      synced_check_interval:
+        description: The minimum interval between the latest synced ts and now required
+          to reach synced state
+        type: integer
     type: object
 info:
   contact: {}
@@ -1891,6 +2008,40 @@ paths:
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/changefeeds/{changefeed_id}/synced:
+    get:
+      consumes:
+      - application/json
+      description: get the synced status of a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SyncedStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get synced status
       tags:
       - changefeed
       - v2

@@ -1,0 +1,65 @@
+version: "2"
+services:
+  zookeeper:
+    restart: always
+    image: quay.io/debezium/zookeeper:2.4
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+  kafka:
+    restart: always
+    image: quay.io/debezium/kafka:2.4
+    ports:
+      - 9092:9092
+      - 9094:9094
+    depends_on:
+      - zookeeper
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=INTERNAL://0.0.0.0:9092,OUTSIDE://0.0.0.0:9094
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9092,OUTSIDE://localhost:9094
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+  mysql:
+    restart: always
+    ports:
+      - 3306:3306
+    image: quay.io/debezium/example-mysql:2.4
+    environment:
+      - MYSQL_ROOT_PASSWORD=
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_USER=mysqluser
+      - MYSQL_PASSWORD=mysqlpw
+  connect:
+    restart: always
+    image: quay.io/debezium/connect:2.4
+    ports:
+      - 8083:8083
+    depends_on:
+      - kafka
+      - mysql
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - STATUS_STORAGE_TOPIC=my_connect_statuses
+  # watcher_dbz: # For Debug Purpose
+  #   restart: always
+  #   image: quay.io/debezium/kafka:2.4
+  #   depends_on:
+  #     - kafka
+  #   command: watch-topic -a -k output_debezium
+  #   environment:
+  #     - ZOOKEEPER_CONNECT=zookeeper:2181
+  #     - KAFKA_BROKER=kafka:9092
+  # watcher_ticdc: # For Debug Purpose
+  #   restart: always
+  #   image: quay.io/debezium/kafka:2.4
+  #   depends_on:
+  #     - kafka
+  #   command: watch-topic -a -k output_ticdc
+  #   environment:
+  #     - ZOOKEEPER_CONNECT=zookeeper:2181
+  #     - KAFKA_BROKER=kafka:9092

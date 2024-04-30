@@ -24,11 +24,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -377,7 +378,14 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+	case mysql.TypeTimestamp:
+		// CAUTION: the timezone location should be the same as the ticdc server.
+		timestamp, err := convertTimezone(value.(string), "Local")
+		if err != nil {
+			return nil, err
+		}
+		buf = appendLengthValue(buf, []byte(timestamp))
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
 		buf = appendLengthValue(buf, []byte(v))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.
@@ -495,4 +503,25 @@ type lookupResponse struct {
 	Name     string `json:"name"`
 	SchemaID int    `json:"id"`
 	Schema   string `json:"schema"`
+}
+
+func convertTimezone(timestamp string, location string) (string, error) {
+	t, err := types.ParseTimestamp(types.StrictContext, timestamp)
+	if err != nil {
+		return "", err
+	}
+
+	loc, err := time.LoadLocation(location)
+	if err != nil {
+		log.Info("cannot load timezone location",
+			zap.String("location", location), zap.Error(err))
+		return "", err
+	}
+
+	err = t.ConvertTimeZone(loc, time.UTC)
+	if err != nil {
+		return "", err
+	}
+
+	return t.String(), nil
 }

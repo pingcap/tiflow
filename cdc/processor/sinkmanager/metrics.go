@@ -18,17 +18,6 @@ import (
 )
 
 var (
-	// MemoryQuota indicates memory usage of a changefeed.
-	MemoryQuota = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkmanager",
-			Name:      "memory_quota",
-			Help:      "memory quota of the changefeed",
-		},
-		// type includes total, used, component includes sink and redo.
-		[]string{"namespace", "changefeed", "type", "component"})
-
 	// RedoEventCache indicates redo event memory usage of a changefeed.
 	RedoEventCache = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{

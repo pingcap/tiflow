@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -27,94 +26,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	rowCases = [][]*model.RowChangedEvent{
-		{{
-			CommitTs: 1,
-			Table:    &model.TableName{Schema: "test", Table: "t"},
-			Columns: []*model.Column{{
-				Name:  "col1",
-				Type:  mysql.TypeVarchar,
-				Value: []byte("aa"),
-			}},
-		}},
-		{
-			{
-				CommitTs: 1,
-				Table:    &model.TableName{Schema: "test", Table: "t"},
-				Columns: []*model.Column{{
-					Name:  "col1",
-					Type:  mysql.TypeVarchar,
-					Value: []byte("aa"),
-				}},
-			},
-			{
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "test", Table: "t"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-			},
-		},
-	}
-
-	ddlCases = [][]*model.DDLEvent{
-		{{
-			CommitTs: 1,
-			TableInfo: &model.TableInfo{
-				TableName: model.TableName{
-					Schema: "a", Table: "b",
-				},
-			},
-			Query: "create table a",
-			Type:  1,
-		}},
-		{
-			{
-				CommitTs: 2,
-				TableInfo: &model.TableInfo{
-					TableName: model.TableName{
-						Schema: "a", Table: "b",
-					},
-				},
-				Query: "create table b",
-				Type:  3,
-			},
-			{
-				CommitTs: 3,
-				TableInfo: &model.TableInfo{
-					TableName: model.TableName{
-						Schema: "a", Table: "b",
-					},
-				},
-				Query: "create table c",
-				Type:  3,
-			},
-		},
-	}
-)
-
 func TestCanalBatchEncoder(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_ = helper.DDL2Event(sql)
 
+	event1 := helper.DML2Event(`insert into test.t values("aa")`, "test", "t")
+	event2 := helper.DML2Event(`insert into test.t values("bb")`, "test", "t")
+
+	rowCases := [][]*model.RowChangedEvent{
+		{event1},
+		{event1, event2},
+	}
+
+	ctx := context.Background()
+	encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 	for _, cs := range rowCases {
-		encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
-		for _, row := range cs {
-			_, _, colInfo := tableInfo.GetRowColInfos()
-			row.TableInfo = tableInfo
-			row.ColInfos = colInfo
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+		for _, event := range cs {
+			err := encoder.AppendRowChangedEvent(ctx, "", event, nil)
 			require.NoError(t, err)
 		}
 		res := encoder.Build()
-
-		if len(cs) == 0 {
-			require.Nil(t, res)
-			continue
-		}
 		require.Len(t, res, 1)
 		require.Nil(t, res[0].Key)
 		require.Equal(t, len(cs), res[0].GetRowsCount())
@@ -129,6 +63,13 @@ func TestCanalBatchEncoder(t *testing.T) {
 		require.Equal(t, len(cs), len(messages.GetMessages()))
 	}
 
+	createTableA := helper.DDL2Event(`create table test.a(a varchar(10) primary key)`)
+	createTableB := helper.DDL2Event(`create table test.b(a varchar(10) primary key)`)
+
+	ddlCases := [][]*model.DDLEvent{
+		{createTableA},
+		{createTableA, createTableB},
+	}
 	for _, cs := range ddlCases {
 		encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 		for _, ddl := range cs {
@@ -155,22 +96,9 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_ = helper.DDL2Event(sql)
 
-	_, _, colInfo := tableInfo.GetRowColInfos()
-	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-		TableInfo: tableInfo,
-		ColInfos:  colInfo,
-	}
-
+	row := helper.DML2Event(`insert into test.t values("aa")`, "test", "t")
 	encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 	require.NotNil(t, encoder)
 

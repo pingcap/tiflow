@@ -34,6 +34,18 @@ type Credential struct {
 	CertPath      string   `toml:"cert-path" json:"cert-path"`
 	KeyPath       string   `toml:"key-path" json:"key-path"`
 	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
+
+	// MTLS indicates whether use mTLS, by default it will affect all connections,
+	// cludings:
+	// 1) connections between TiCDC and TiKV
+	// 2) connections between TiCDC and PD
+	// 3) http server of TiCDC which is used for open API
+	// 4) p2p server of TiCDC which is used sending messages between TiCDC nodes
+	// Todo: just enable mTLS for 3) and 4) by default
+	MTLS bool `toml:"mtls" json:"mtls"`
+
+	ClientUserRequired bool     `toml:"client-user-required" json:"client-user-required"`
+	ClientAllowedUser  []string `toml:"client-allowed-user" json:"client-allowed-user"`
 }
 
 // Value implements the driver.Valuer interface
@@ -81,14 +93,14 @@ func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 
 // ToTLSConfig generates tls's config from *Security
 func (s *Credential) ToTLSConfig() (*tls.Config, error) {
-	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, nil)
+	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, nil, s.MTLS)
 	return cfg, errors.WrapError(errors.ErrToTLSConfigFailed, err)
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
 // the remote common name to be verified.
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
-	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
+	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN, s.MTLS)
 	return cfg, errors.WrapError(errors.ErrToTLSConfigFailed, err)
 }
 
@@ -131,7 +143,7 @@ func (s *Credential) AddSelfCommonName() error {
 //
 // If the CA path is empty, returns nil.
 func ToTLSConfigWithVerify(
-	caPath, certPath, keyPath string, verifyCN []string,
+	caPath, certPath, keyPath string, verifyCN []string, mTLS bool,
 ) (*tls.Config, error) {
 	if len(caPath) == 0 {
 		return nil, nil
@@ -154,6 +166,10 @@ func ToTLSConfigWithVerify(
 		ClientCAs:  certPool,
 		NextProtos: []string{"h2", "http/1.1"}, // specify `h2` to let Go use HTTP/2.
 		MinVersion: tls.VersionTLS12,
+	}
+
+	if mTLS {
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
 	if len(certPath) != 0 && len(keyPath) != 0 {

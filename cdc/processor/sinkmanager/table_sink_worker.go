@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -61,14 +61,10 @@ type sinkWorker struct {
 	changefeedID  model.ChangeFeedID
 	sourceManager *sourcemanager.SourceManager
 	sinkMemQuota  *memquota.MemQuota
-	redoMemQuota  *memquota.MemQuota
-	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 
 	// Metrics.
-	metricRedoEventCacheHit  prometheus.Counter
-	metricRedoEventCacheMiss prometheus.Counter
 	metricOutputEventCountKV prometheus.Counter
 }
 
@@ -77,20 +73,14 @@ func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
 	sinkQuota *memquota.MemQuota,
-	redoQuota *memquota.MemQuota,
-	eventCache *redoEventCache,
 	splitTxn bool,
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:  changefeedID,
 		sourceManager: sourceManager,
 		sinkMemQuota:  sinkQuota,
-		redoMemQuota:  redoQuota,
-		eventCache:    eventCache,
 		splitTxn:      splitTxn,
 
-		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
-		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
 		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
 	}
 }
@@ -127,11 +117,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		task.getUpperBound(task.tableSink.getUpperBoundTs()))
 	advancer.lastPos = lowerBound.Prev()
 
-	allEventSize := uint64(0)
 	allEventCount := 0
 
 	callbackIsPerformed := false
-	performCallback := func(pos engine.Position) {
+	performCallback := func(pos sorter.Position) {
 		if !callbackIsPerformed {
 			task.callback(pos)
 			callbackIsPerformed = true
@@ -139,15 +128,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	defer func() {
-		// Collect metrics.
-		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		w.metricOutputEventCountKV.Add(float64(allEventCount))
+		// Prepare some information for stale table range cleaning.
+		task.tableSink.updateRangeEventCounts(newRangeEventCount(advancer.lastPos, allEventCount))
 
-		// If eventCache is nil, update sorter commit ts and range event count.
-		if w.eventCache == nil {
-			eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
-			task.tableSink.updateRangeEventCounts(eventCount)
-		}
+		// Collect metrics.
+		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
 		log.Debug("Sink task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
@@ -180,29 +165,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 	}()
 
-	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
-		failpoint.Inject("TableSinkWorkerFetchFromCache", func() {
-			err = tablesink.NewSinkInternalError(errors.New("TableSinkWorkerFetchFromCacheInjected"))
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-		// NOTE: lowerBound can be updated by `fetchFromCache`, so `lastPos` should also be updated.
-		advancer.lastPos = lowerBound.Prev()
-		if drained {
-			// If drained is true it means we have drained all events from the cache,
-			// we can return directly instead of get events from the source manager again.
-			performCallback(advancer.lastPos)
-			return nil
-		}
-	}
-
 	// lowerBound and upperBound are both closed intervals.
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		if err := iter.Close(); err != nil {
-			log.Error("Sink worker fails to close iterator",
+			log.Error("sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Stringer("span", &task.span),
@@ -240,7 +207,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
 			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
-			allEventSize += size
 		}
 
 		if err := advancer.tryAdvanceAndAcquireMem(false, pos.Valid()); err != nil {
@@ -249,76 +215,4 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	return advancer.lastTimeAdvance()
-}
-
-func (w *sinkWorker) fetchFromCache(
-	task *sinkTask, // task is read-only here.
-	lowerBound *engine.Position,
-	upperBound *engine.Position,
-) (cacheDrained bool, err error) {
-	newLowerBound := *lowerBound
-	newUpperBound := *upperBound
-
-	cache := w.eventCache.getAppender(task.span)
-	if cache == nil {
-		return
-	}
-	popRes := cache.pop(*lowerBound, *upperBound)
-	if popRes.success {
-		newLowerBound = popRes.upperBoundIfSuccess.Next()
-		if len(popRes.events) > 0 {
-			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
-			w.metricRedoEventCacheHit.Add(float64(popRes.size))
-			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {
-				return
-			}
-		}
-
-		// Get a resolvedTs so that we can record it into sink memory quota.
-		var resolvedTs model.ResolvedTs
-		isCommitFence := popRes.upperBoundIfSuccess.IsCommitFence()
-		if w.splitTxn {
-			resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs)
-			if !isCommitFence {
-				resolvedTs.Mode = model.BatchResolvedMode
-				resolvedTs.BatchID = batchID.Load()
-				batchID.Add(1)
-			}
-		} else {
-			if isCommitFence {
-				resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs)
-			} else {
-				resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs - 1)
-			}
-		}
-		// Transfer the memory usage from redoMemQuota to sinkMemQuota.
-		w.sinkMemQuota.ForceAcquire(popRes.releaseSize)
-		w.sinkMemQuota.Record(task.span, resolvedTs, popRes.releaseSize)
-		w.redoMemQuota.Refund(popRes.releaseSize)
-
-		err = task.tableSink.updateResolvedTs(resolvedTs)
-		log.Debug("Advance table sink",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("span", &task.span),
-			zap.Any("resolvedTs", resolvedTs),
-			zap.Error(err))
-	} else {
-		newUpperBound = popRes.lowerBoundIfFail.Prev()
-	}
-	cacheDrained = newLowerBound.Compare(newUpperBound) > 0
-	log.Debug("fetchFromCache is performed",
-		zap.String("namespace", w.changefeedID.Namespace),
-		zap.String("changefeed", w.changefeedID.ID),
-		zap.Stringer("span", &task.span),
-		zap.Bool("success", popRes.success),
-		zap.Int("eventsLen", len(popRes.events)),
-		zap.Bool("cacheDrained", cacheDrained),
-		zap.Any("lowerBound", lowerBound),
-		zap.Any("upperBound", upperBound),
-		zap.Any("newLowerBound", newLowerBound),
-		zap.Any("newUpperBound", newUpperBound))
-	*lowerBound = newLowerBound
-	*upperBound = newUpperBound
-	return
 }

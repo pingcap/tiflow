@@ -8,8 +8,8 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
 
-# 44 normal help message + 1 "PASS" line
-help_cnt=45
+# 43 normal help message + 1 "PASS" line
+help_cnt=44
 
 function get_uuid() {
 	uuid=$(echo "show variables like '%server_uuid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'FNR == 2 {print $2}')
@@ -76,6 +76,12 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# without set secret-key-path, we cannot use encrypted password
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $cur/conf/source1-encrypted-pass.yaml" \
+		"\"result\": false" 1 \
+		"Access denied for user" 1
 
 	# check wrong backoff-max
 	cp $cur/conf/source1.yaml $WORK_DIR/wrong-source.yaml
@@ -184,7 +190,6 @@ function check_task_lightning() {
 	run_sql_tidb "set @@GLOBAL.max_connections=0;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
-		"\"passed\": true" 1 \
 		"task precheck cannot accurately check the number of connection needed for Lightning" 0
 	run_sql_tidb "set @@GLOBAL.max_connections=5;"
 	# fail but give warning, because it's using Lightining
