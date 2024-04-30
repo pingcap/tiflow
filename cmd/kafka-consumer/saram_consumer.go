@@ -135,9 +135,14 @@ func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 	log.Info("start consume claim",
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
+	// create new decoder
+	decoder, err := NewDecoder(context.Background(), c.option, c.writer.upstreamTiDB)
+	if err != nil {
+		log.Panic("Error create decoder", zap.Error(err))
+	}
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := c.writer.Decode(context.Background(), c.option, partition, message.Key, message.Value, eventGroups); err != nil {
+		if err := c.writer.Decode(decoder, c.option, partition, message.Key, message.Value, eventGroups); err != nil {
 			return err
 		}
 		// sync write to downstream

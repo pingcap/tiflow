@@ -306,7 +306,6 @@ func (w *writer) Write(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			w.popDDL()
-			fmt.Println("popDDL", todoDDL.Query)
 			if todoDDL.CommitTs < minPartitionResolvedTs {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
@@ -338,7 +337,7 @@ func (w *writer) Write(ctx context.Context) error {
 }
 
 // Decode try to decode kafka message to event.
-func (w *writer) Decode(ctx context.Context, option *consumerOption, partition int32,
+func (w *writer) Decode(decoder codec.RowEventDecoder, option *consumerOption, partition int32,
 	key []byte, value []byte, eventGroups map[int64]*eventsGroup,
 ) error {
 	// move to writer
@@ -348,10 +347,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 	if sink == nil {
 		panic("sink should initialized")
 	}
-	decoder, err := NewDecoder(ctx, option, w.upstreamTiDB)
-	if err != nil {
-		log.Panic("Error creating decoder", zap.Error(err))
-	}
+
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
 		return cerror.Trace(err)
