@@ -28,11 +28,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	retryTime = 30
-	timeout   = time.Second * 10
-)
-
 func newDialer(o *consumerOption) (*kafka.Dialer, error) {
 	caCert, err := os.ReadFile(o.ca)
 	if err != nil {
@@ -48,7 +43,7 @@ func newDialer(o *consumerOption) (*kafka.Dialer, error) {
 	caCertPool.AppendCertsFromPEM(caCert)
 
 	dialer := &kafka.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   o.timeout,
 		DualStack: true,
 		TLS: &tls.Config{
 			RootCAs:            caCertPool,
@@ -70,10 +65,10 @@ func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
 	}
 	client := &kafka.Client{
 		Addr:      kafka.TCP(o.address...),
-		Timeout:   timeout,
+		Timeout:   o.timeout,
 		Transport: transport,
 	}
-	for i := 0; i <= retryTime; i++ {
+	for i := 0; i <= o.retryTime; i++ {
 		resp, err := client.Metadata(context.Background(), &kafka.MetadataRequest{})
 		if err != nil {
 			return 0, cerror.Trace(err)
@@ -118,6 +113,8 @@ func NewkafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	}
 	c.writer = w
 	c.option = o
+	// async write to downstream
+	// go c.AsyncWrite(ctx)
 	return c
 }
 

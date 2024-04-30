@@ -56,29 +56,29 @@ func newConfig(o *consumerOption) (*sarama.Config, error) {
 	return config, err
 }
 
-func saramGetPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+func saramGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error) {
 	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(address, cfg)
+	admin, err := sarama.NewClusterAdmin(o.address, cfg)
 	if err != nil {
 		return 0, cerror.Trace(err)
 	}
 	defer admin.Close()
-	for i := 0; i <= 30; i++ {
+	for i := 0; i <= o.retryTime; i++ {
 		topics, err := admin.ListTopics()
 		if err != nil {
 			return 0, cerror.Trace(err)
 		}
-		if topicDetail, ok := topics[topic]; ok {
+		if topicDetail, ok := topics[o.topic]; ok {
 			log.Info("get partition number of topic",
-				zap.String("topic", topic),
+				zap.String("topic", o.topic),
 				zap.Int32("partitionNum", topicDetail.NumPartitions))
 			return topicDetail.NumPartitions, nil
 		}
-		log.Info("retry get partition number", zap.String("topic", topic))
+		log.Info("retry get partition number", zap.String("topic", o.topic))
 		time.Sleep(1 * time.Second)
 	}
 
-	return 0, cerror.Errorf("get partition number(%s) timeout", topic)
+	return 0, cerror.Errorf("get partition number(%s) timeout", o.topic)
 }
 
 type saramConsumer struct {
@@ -97,7 +97,7 @@ func NewSaramConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	if err != nil {
 		log.Panic("Error creating sarama config", zap.Error(err))
 	}
-	partitionNum, err := saramGetPartitionNum(o.address, o.topic, config)
+	partitionNum, err := saramGetPartitionNum(o, config)
 	if err != nil {
 		log.Panic("Error get partition number", zap.String("topic", o.topic), zap.Error(err))
 	}

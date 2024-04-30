@@ -34,6 +34,7 @@ import (
 	"go.uber.org/zap"
 )
 
+
 func main() {
 	debug.SetMemoryLimit(14 * 1024 * 1024 * 1024)
 
@@ -42,12 +43,15 @@ func main() {
 	var (
 		upstreamURIStr string
 		configFile     string
+		consumerClient string
+		consumer       KakfaConsumer
 	)
 
 	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
+	flag.StringVar(&consumerClient, "client", "saram", "Kafka client")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
@@ -91,7 +95,15 @@ func main() {
 		log.Panic("adjust consumer option failed", zap.Error(err))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	consumer := NewkafkaGoConsumer(ctx, consumerOption)
+
+	switch consumerClient {
+	case "kafka-go":
+		consumer = NewkafkaGoConsumer(ctx, consumerOption)
+	case "saram":
+		consumer = NewSaramConsumer(ctx, consumerOption)
+	default:
+		consumer = NewkafkaGoConsumer(ctx, consumerOption)
+	}
 
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {

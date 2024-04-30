@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	cerror "github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -59,15 +60,21 @@ type consumerOption struct {
 	upstreamTiDBDSN string
 
 	enableProfiling bool
+
+	// connect kafka retry times, default 30
+	retryTime int
+	// connect kafka  timeout, default 10s
+	timeout time.Duration
 }
 
 // NewConsumerOption will create a new consumer option
 func NewConsumerOption() *consumerOption {
 	return &consumerOption{
-		version: "2.4.0",
-
+		version:         "2.4.0",
 		maxMessageBytes: math.MaxInt64,
 		maxBatchSize:    math.MaxInt64,
+		retryTime:       30,
+		timeout:         time.Second * 10,
 	}
 }
 
