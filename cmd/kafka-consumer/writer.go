@@ -292,27 +292,30 @@ func (w *writer) Write(ctx context.Context) error {
 	if err != nil {
 		return cerror.Trace(err)
 	}
-	// handle DDL
-	todoDDL := w.getFrontDDL()
-
-	if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
-		// flush DMLs
-		if err := w.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-		}); err != nil {
-			return cerror.Trace(err)
+	for {
+		// handle DDL
+		if todoDDL := w.getFrontDDL(); todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
+			// flush DMLs
+			if err := w.forEachSink(func(sink *partitionSinks) error {
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+			}); err != nil {
+				return cerror.Trace(err)
+			}
+			// DDL can be executed, do it first.
+			if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+				return cerror.Trace(err)
+			}
+			w.popDDL()
+			fmt.Println("popDDL", todoDDL.Query)
+			if todoDDL.CommitTs < minPartitionResolvedTs {
+				log.Info("update minPartitionResolvedTs by DDL",
+					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.String("DDL", todoDDL.Query))
+			}
+			minPartitionResolvedTs = todoDDL.CommitTs
+		} else {
+			break
 		}
-		// DDL can be executed, do it first.
-		if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-			return cerror.Trace(err)
-		}
-		w.popDDL()
-		if todoDDL.CommitTs < minPartitionResolvedTs {
-			log.Info("update minPartitionResolvedTs by DDL",
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-				zap.String("DDL", todoDDL.Query))
-		}
-		minPartitionResolvedTs = todoDDL.CommitTs
 	}
 
 	// update global resolved ts
@@ -411,8 +414,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl)
 			}
-			// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-			// handleCallBack()
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
@@ -464,8 +465,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 			}
 
 			group.Append(row)
-			// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-			// handleCallBack()
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -482,7 +481,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 					zap.Uint64("globalResolvedTs", globalResolvedTs),
 					zap.Int32("partition", partition))
-				// handleCallBack()
 				continue
 			}
 
