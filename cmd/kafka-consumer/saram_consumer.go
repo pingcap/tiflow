@@ -93,10 +93,6 @@ var _ KakfaConsumer = (*saramConsumer)(nil)
 // NewSaramConsumer will create a consumer client.
 func NewSaramConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c := new(saramConsumer)
-	w, err := NewWriter(ctx, o)
-	if err != nil {
-		log.Panic("Error creating writer", zap.Error(err))
-	}
 	config, err := newConfig(o)
 	if err != nil {
 		log.Panic("Error creating sarama config", zap.Error(err))
@@ -108,12 +104,16 @@ func NewSaramConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	if o.partitionNum == 0 {
 		o.partitionNum = partitionNum
 	}
+	w, err := NewWriter(ctx, o)
+	if err != nil {
+		log.Panic("Error creating writer", zap.Error(err))
+	}
 	c.writer = w
 	c.option = o
 	c.ready = make(chan bool)
 	c.config = config
 	// async write to downstream
-	go c.AsyncWrite(ctx)
+	// go c.AsyncWrite(ctx)
 	return c
 }
 
@@ -146,10 +146,10 @@ func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 			return err
 		}
 		// sync write to downstream
-		// if err := c.writer.Write(context.Background()); err != nil {
-		// 	log.Panic("Error write to downstream", zap.Error(err))
-		// }
-		// session.MarkMessage(message, "")
+		if err := c.writer.Write(context.Background()); err != nil {
+			log.Panic("Error write to downstream", zap.Error(err))
+		}
+		session.MarkMessage(message, "")
 	}
 	return nil
 }
