@@ -62,8 +62,9 @@ type RedoApplierConfig struct {
 
 // RedoApplier implements a redo log applier
 type RedoApplier struct {
-	cfg *RedoApplierConfig
-	rd  reader.RedoLogReader
+	cfg            *RedoApplierConfig
+	rd             reader.RedoLogReader
+	updateSplitter *updateEventSplitter
 
 	ddlSink         ddlsink.Sink
 	appliedDDLCount uint64
@@ -180,7 +181,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return row.CommitTs > ddl.CommitTs
 	}
 
-	row, err := ra.rd.ReadNextRow(ctx)
+	row, err := ra.updateSplitter.readNextRow(ctx)
 	if err != nil {
 		return err
 	}
@@ -203,7 +204,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			if err := ra.applyRow(row, checkpointTs); err != nil {
 				return err
 			}
-			if row, err = ra.rd.ReadNextRow(ctx); err != nil {
+			if row, err = ra.updateSplitter.readNextRow(ctx); err != nil {
 				return err
 			}
 		}
@@ -419,6 +420,152 @@ func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.R
 	return reader.NewRedoLogReader(ctx, storageType, readerCfg)
 }
 
+// tempTxnInsertEventStorage is used to store insert events in the same transaction
+type tempTxnInsertEventStorage struct {
+	events []*model.RowChangedEvent
+}
+
+func newTempTxnInsertEventStorage() *tempTxnInsertEventStorage {
+	return &tempTxnInsertEventStorage{
+		events: make([]*model.RowChangedEvent, 0),
+	}
+}
+
+func (t *tempTxnInsertEventStorage) addEvent(event *model.RowChangedEvent) {
+	if !event.IsInsert() {
+		log.Panic("event is not insert event", zap.Any("event", event))
+	}
+	if len(t.events) > 0 && t.events[0].CommitTs != event.CommitTs {
+		log.Panic("commit ts of events in the same transaction should be the same",
+			zap.Uint64("commitTs", event.CommitTs),
+			zap.Any("events", t.events))
+	}
+	t.events = append(t.events, event)
+}
+
+func (t *tempTxnInsertEventStorage) hasEvent() bool {
+	return len(t.events) > 0
+}
+
+func (t *tempTxnInsertEventStorage) readNextEvent() *model.RowChangedEvent {
+	if len(t.events) == 0 {
+		return nil
+	}
+	event := t.events[0]
+	t.events = t.events[1:]
+	return event
+}
+
+// updateEventSplitter splits an update event to a delete event and a deferred insert event
+// deferred insert event means all delete events and update events in the same transaction are emitted before this insert event
+type updateEventSplitter struct {
+	rd              reader.RedoLogReader
+	rdFinished      bool
+	tempStorage     *tempTxnInsertEventStorage
+	prevTxnCommitTs model.Ts
+	// pendingEvent is the event that trigger the process to emit events from tempStorage, it can be
+	// 1) an insert event in the same transaction(because there will be no more update and delete events in the same transaction)
+	// 2) a new event in the next transaction
+	pendingEvent *model.RowChangedEvent
+}
+
+func newUpdateEventSplitter(rd reader.RedoLogReader) *updateEventSplitter {
+	return &updateEventSplitter{
+		rd:              rd,
+		rdFinished:      false,
+		tempStorage:     newTempTxnInsertEventStorage(),
+		prevTxnCommitTs: 0,
+	}
+}
+
+func splitUpdateEvent(event *model.RowChangedEvent) (*model.RowChangedEvent, *model.RowChangedEvent) {
+	deleteEvent := *event
+	deleteEvent.Columns = nil
+
+	insertEvent := *event
+	insertEvent.PreColumns = nil
+
+	return &deleteEvent, &insertEvent
+}
+
+// processEvent return (event to emit, pending event)
+func processEvent(
+	event *model.RowChangedEvent,
+	prevTxnCommitTs model.Ts,
+	tempStorage *tempTxnInsertEventStorage,
+) (*model.RowChangedEvent, *model.RowChangedEvent) {
+	if event == nil {
+		log.Panic("event should not be nil")
+	}
+
+	// meet a new transaction
+	if prevTxnCommitTs != 0 && prevTxnCommitTs != event.CommitTs {
+		if tempStorage.hasEvent() {
+			// emit the insert events in the previous transaction
+			return nil, event
+		}
+	}
+	if event.IsDelete() {
+		return event, nil
+	} else if event.IsInsert() {
+		if tempStorage.hasEvent() {
+			// pend current event and emit the insert events in temp storage first to release memory
+			return nil, event
+		} else {
+			return event, nil
+		}
+	} else {
+		deleteEvent, insertEvent := splitUpdateEvent(event)
+		tempStorage.addEvent(insertEvent)
+		return deleteEvent, nil
+	}
+}
+
+func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChangedEvent, error) {
+	for {
+		// case 1: pendingEvent is not nil, emit all events from tempStorage and then process pendingEvent
+		if u.pendingEvent != nil {
+			if u.tempStorage.hasEvent() {
+				return u.tempStorage.readNextEvent(), nil
+			}
+			var event *model.RowChangedEvent
+			event, u.pendingEvent = processEvent(u.pendingEvent, u.prevTxnCommitTs, u.tempStorage)
+			if event == nil || u.pendingEvent != nil {
+				log.Panic("processEvent return wrong result for pending event",
+					zap.Any("event", event),
+					zap.Any("pendingEvent", u.pendingEvent))
+			}
+			return event, nil
+		}
+		// case 2: no more events from RedoLogReader, emit all events from tempStorage and return nil
+		if u.rdFinished {
+			if u.tempStorage.hasEvent() {
+				return u.tempStorage.readNextEvent(), nil
+			}
+			return nil, nil
+		}
+		// case 3: read and process events from RedoLogReader
+		event, err := u.rd.ReadNextRow(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if event == nil {
+			u.rdFinished = true
+
+		} else {
+			prevTxnCommitTS := u.prevTxnCommitTs
+			u.prevTxnCommitTs = event.CommitTs
+			event, u.pendingEvent = processEvent(event, prevTxnCommitTS, u.tempStorage)
+			if event != nil {
+				return event, nil
+			}
+			if u.pendingEvent == nil {
+				log.Panic("event to emit and pending event cannot all be nil")
+			}
+		}
+	}
+}
+
 // ReadMeta creates a new redo applier and read meta from reader
 func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resolvedTs uint64, err error) {
 	rd, err := createRedoReader(ctx, ra.cfg)
@@ -438,6 +585,7 @@ func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
 	eg.Go(func() error {
 		return ra.rd.Run(egCtx)
 	})
+	ra.updateSplitter = newUpdateEventSplitter(ra.rd)
 
 	ra.memQuota = memquota.NewMemQuota(model.DefaultChangeFeedID(applierChangefeed),
 		config.DefaultChangefeedMemoryQuota, "sink")

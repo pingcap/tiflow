@@ -153,6 +153,48 @@ func TestApply(t *testing.T) {
 			}, tableInfo),
 		},
 		{
+			StartTs:   1150,
+			CommitTs:  1250,
+			TableInfo: tableInfo,
+			Columns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 10,
+				}, {
+					Name:  "b",
+					Value: "20",
+				},
+			}, tableInfo),
+		},
+		{
+			StartTs:   1150,
+			CommitTs:  1250,
+			TableInfo: tableInfo,
+			Columns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 100,
+				}, {
+					Name:  "b",
+					Value: "200",
+				},
+			}, tableInfo),
+		},
+		{
+			StartTs:   1200,
+			CommitTs:  resolvedTs,
+			TableInfo: tableInfo,
+			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 10,
+				}, {
+					Name:  "b",
+					Value: "20",
+				},
+			}, tableInfo),
+		},
+		{
 			StartTs:   1200,
 			CommitTs:  resolvedTs,
 			TableInfo: tableInfo,
@@ -172,6 +214,29 @@ func TestApply(t *testing.T) {
 				}, {
 					Name:  "b",
 					Value: "3",
+				},
+			}, tableInfo),
+		},
+		{
+			StartTs:   1200,
+			CommitTs:  resolvedTs,
+			TableInfo: tableInfo,
+			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 100,
+				}, {
+					Name:  "b",
+					Value: "200",
+				},
+			}, tableInfo),
+			Columns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 200,
+				}, {
+					Name:  "b",
+					Value: "300",
 				},
 			}, tableInfo),
 		},
@@ -267,13 +332,31 @@ func getMockDB(t *testing.T) *sql.DB {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
+	mock.ExpectBegin()
+	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
+		WithArgs(10, "20").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
+		WithArgs(100, "200").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
 	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
+		WithArgs(10).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
 		WithArgs(1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
+		WithArgs(100).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 		WithArgs(2, "3").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
+		WithArgs(200, "300").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
