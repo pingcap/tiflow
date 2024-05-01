@@ -135,8 +135,9 @@ func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 	log.Info("start consume claim",
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
+	ctx := context.Background()
 	// create new decoder
-	decoder, err := NewDecoder(context.Background(), c.option, c.writer.upstreamTiDB)
+	decoder, err := NewDecoder(ctx, c.option, c.writer.upstreamTiDB)
 	if err != nil {
 		log.Panic("Error create decoder", zap.Error(err))
 	}
@@ -146,7 +147,7 @@ func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 			return err
 		}
 		// sync write to downstream
-		if err := c.writer.Write(context.Background()); err != nil {
+		if err := c.writer.Write(ctx); err != nil {
 			log.Panic("Error write to downstream", zap.Error(err))
 		}
 		session.MarkMessage(message, "")
