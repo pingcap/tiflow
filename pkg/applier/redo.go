@@ -443,7 +443,7 @@ type tempTxnInsertEventStorage struct {
 }
 
 const (
-	tempStorageFileName   = "_insert_temp_storage"
+	tempStorageFileName   = "_insert_storage.tmp"
 	defaultFlushThreshold = 50
 )
 
