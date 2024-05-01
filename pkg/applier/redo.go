@@ -437,12 +437,15 @@ type tempTxnInsertEventStorage struct {
 	eventSizes  []int
 	writingFile *os.File
 	readingFile *os.File
-	// reading is used to indicate whether we are reading events from storage, this is to ensure that we read all events before write new events
+	// reading is used to indicate whether we are reading events from storage
+	// this is to ensure that we read all events before write new events
 	reading bool
 }
 
-const tempStorageFileName = "_insert_temp_storage"
-const defaultFlushThreshold = 50
+const (
+	tempStorageFileName   = "_insert_temp_storage"
+	defaultFlushThreshold = 50
+)
 
 func newTempTxnInsertEventStorage(flushThreshold int, dir string) *tempTxnInsertEventStorage {
 	return &tempTxnInsertEventStorage{
