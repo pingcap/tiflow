@@ -58,16 +58,16 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 	return 0, cerror.Errorf("get partition number(%s) timeout", o.topic)
 }
 
-type ConfluentConsumer struct {
+type confluentConsumer struct {
 	option *consumerOption
 	writer *writer
 }
 
-var _ KakfaConsumer = (*ConfluentConsumer)(nil)
+var _ KakfaConsumer = (*confluentConsumer)(nil)
 
 // NewConfluentConsumer will create a consumer client.
 func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
-	c := new(ConfluentConsumer)
+	c := new(confluentConsumer)
 	partitionNum, err := confluentGetPartitionNum(o)
 	if err != nil {
 		log.Panic("Error get partition number", zap.String("topic", o.topic), zap.Error(err))
@@ -87,7 +87,7 @@ func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer 
 }
 
 // Consume will read message from Kafka.
-func (c *ConfluentConsumer) Consume(ctx context.Context) error {
+func (c *confluentConsumer) Consume(ctx context.Context) error {
 	topics := strings.Split(c.option.topic, ",")
 	if len(topics) == 0 {
 		log.Panic("Error no topics provided")
@@ -102,6 +102,7 @@ func (c *ConfluentConsumer) Consume(ctx context.Context) error {
 		"auto.offset.reset": "earliest",
 		// Whether or not we store offsets automatically.
 		"enable.auto.offset.store": false,
+		"enable.auto.commit":       true,
 	}
 	if len(c.option.ca) != 0 {
 		_ = configMap.SetKey("security.protocol", "SSL")
@@ -151,7 +152,7 @@ func (c *ConfluentConsumer) Consume(ctx context.Context) error {
 }
 
 // AsyncWrite call writer to write to the downsteam asynchronously.
-func (c *ConfluentConsumer) AsyncWrite(ctx context.Context) {
+func (c *confluentConsumer) AsyncWrite(ctx context.Context) {
 	if err := c.writer.AsyncWrite(ctx); err != nil {
 		log.Info("async write break", zap.Error(err))
 	}
