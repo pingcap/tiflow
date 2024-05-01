@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -30,10 +29,10 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 		"bootstrap.servers": strings.Join(o.address, ","),
 	}
 	if len(o.ca) != 0 {
-		configMap.SetKey("security.protocol", "SSL")
-		configMap.SetKey("ssl.ca.location", o.ca)
-		configMap.SetKey("ssl.key.location", o.key)
-		configMap.SetKey("ssl.ca.location", o.cert)
+		_ = configMap.SetKey("security.protocol", "SSL")
+		_ = configMap.SetKey("ssl.ca.location", o.ca)
+		_ = configMap.SetKey("ssl.key.location", o.key)
+		_ = configMap.SetKey("ssl.certificate.location", o.cert)
 	}
 	admin, err := confluent.NewAdminClient(configMap)
 	if err != nil {
@@ -66,6 +65,7 @@ type ConfluentConsumer struct {
 
 var _ KakfaConsumer = (*ConfluentConsumer)(nil)
 
+// NewConfluentConsumer will create a consumer client.
 func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c := new(ConfluentConsumer)
 	partitionNum, err := confluentGetPartitionNum(o)
@@ -86,6 +86,7 @@ func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer 
 	return c
 }
 
+// Consume will read message from Kafka.
 func (c *ConfluentConsumer) Consume(ctx context.Context) error {
 	topics := strings.Split(c.option.topic, ",")
 	if len(topics) == 0 {
@@ -103,10 +104,10 @@ func (c *ConfluentConsumer) Consume(ctx context.Context) error {
 		"enable.auto.offset.store": false,
 	}
 	if len(c.option.ca) != 0 {
-		configMap.SetKey("security.protocol", "SSL")
-		configMap.SetKey("ssl.ca.location", c.option.ca)
-		configMap.SetKey("ssl.key.location", c.option.key)
-		configMap.SetKey("ssl.ca.location", c.option.cert)
+		_ = configMap.SetKey("security.protocol", "SSL")
+		_ = configMap.SetKey("ssl.ca.location", c.option.ca)
+		_ = configMap.SetKey("ssl.key.location", c.option.key)
+		_ = configMap.SetKey("ssl.certificate.location", c.option.cert)
 	}
 	client, err := confluent.NewConsumer(configMap)
 	if err != nil {
@@ -137,18 +138,19 @@ func (c *ConfluentConsumer) Consume(ctx context.Context) error {
 			if err := c.writer.Write(ctx); err != nil {
 				log.Panic("Error write to downstream", zap.Error(err))
 			}
-			client.StoreMessage(msg)
-			fmt.Printf("Message on %s: %s\n", msg.TopicPartition, string(msg.Value))
+			if _, err := client.StoreMessage(msg); err != nil {
+				log.Panic("Error store offsets", zap.Error(err))
+			}
 		} else if !err.(confluent.Error).IsTimeout() {
 			// The client will automatically try to recover from all errors.
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.
-			fmt.Printf("Consumer error: %v (%v)\n", err, msg)
+			log.Panic("Error kafka timeout", zap.Error(err))
 		}
 	}
 }
 
-// async write to downsteam
+// AsyncWrite call writer to write to the downsteam asynchronously.
 func (c *ConfluentConsumer) AsyncWrite(ctx context.Context) {
 	if err := c.writer.AsyncWrite(ctx); err != nil {
 		log.Info("async write break", zap.Error(err))
