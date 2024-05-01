@@ -98,7 +98,7 @@ type kafkaGoConsumer struct {
 var _ KakfaConsumer = (*kafkaGoConsumer)(nil)
 
 // NewkafkaGoConsumer will create a consumer client.
-func NewkafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
+func NewKafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c := new(kafkaGoConsumer)
 	partitionNum, err := kafkaGoGetPartitionNum(o)
 	if err != nil {

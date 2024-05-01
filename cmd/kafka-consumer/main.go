@@ -50,7 +50,7 @@ func main() {
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
-	flag.StringVar(&consumerClient, "client", "saram", "Kafka client")
+	flag.StringVar(&consumerClient, "client", "confluent", "Kafka client")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
@@ -97,11 +97,13 @@ func main() {
 
 	switch consumerClient {
 	case "kafka-go":
-		consumer = NewkafkaGoConsumer(ctx, consumerOption)
+		consumer = NewKafkaGoConsumer(ctx, consumerOption)
 	case "saram":
 		consumer = NewSaramConsumer(ctx, consumerOption)
+	case "confluent":
+		consumer = NewConfluentConsumer(ctx, consumerOption)
 	default:
-		consumer = NewkafkaGoConsumer(ctx, consumerOption)
+		consumer = NewKafkaGoConsumer(ctx, consumerOption)
 	}
 
 	var wg sync.WaitGroup

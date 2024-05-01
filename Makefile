@@ -66,6 +66,7 @@ ifeq ("${ENABLE_FIPS}", "1")
 	CGO = 1
 endif
 GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+CGOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=1 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -165,7 +166,7 @@ cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
+	$(CGOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
 
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
