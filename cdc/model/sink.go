@@ -382,6 +382,29 @@ type RowChangedEventInRedoLog struct {
 	IndexColumns [][]int   `msg:"index-columns"`
 }
 
+func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
+	cols := r.Columns
+	if cols == nil {
+		cols = r.PreColumns
+	}
+	tableInfo := BuildTableInfo(
+		r.Table.Schema,
+		r.Table.Table,
+		cols,
+		r.IndexColumns)
+	tableInfo.TableName.TableID = r.Table.TableID
+	tableInfo.TableName.IsPartition = r.Table.IsPartition
+	row := &RowChangedEvent{
+		StartTs:         r.StartTs,
+		CommitTs:        r.CommitTs,
+		PhysicalTableID: r.Table.TableID,
+		TableInfo:       tableInfo,
+		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
+		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
+	}
+	return row
+}
+
 // txnRows represents a set of events that belong to the same transaction.
 type txnRows []*RowChangedEvent
 
