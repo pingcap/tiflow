@@ -72,7 +72,8 @@ func NewDecoder(ctx context.Context, option *consumerOption, upstreamTiDB *sql.D
 }
 
 type writer struct {
-	mu sync.Mutex
+	mu       sync.Mutex
+	interval time.Duration
 
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
@@ -154,6 +155,7 @@ func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
 		return nil, cerror.Trace(err)
 	}
 	w.ddlSink = ddlSink
+	w.interval = 100 * time.Millisecond
 	return w, nil
 }
 
@@ -227,7 +229,7 @@ func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 
 // AsyncWrite will write data downstream asynchronously.
 func (w *writer) AsyncWrite(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 	for {
 		select {
