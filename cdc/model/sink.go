@@ -382,6 +382,7 @@ type RowChangedEventInRedoLog struct {
 	IndexColumns [][]int   `msg:"index-columns"`
 }
 
+// ToRowChangedEvent converts RowChangedEventInRedoLog to RowChangedEvent
 func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
 	cols := r.Columns
 	if cols == nil {

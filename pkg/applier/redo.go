@@ -489,17 +489,17 @@ func (t *tempTxnInsertEventStorage) addEvent(event *model.RowChangedEvent) error
 
 	if t.useFileStorage {
 		return t.writeEventsToFile(event)
-	} else {
-		t.events = append(t.events, event)
-		if len(t.events) >= t.flushThreshold {
-			err := t.writeEventsToFile(t.events...)
-			if err != nil {
-				return err
-			}
-			t.events = t.events[:0]
-		}
-		return nil
 	}
+
+	t.events = append(t.events, event)
+	if len(t.events) >= t.flushThreshold {
+		err := t.writeEventsToFile(t.events...)
+		if err != nil {
+			return err
+		}
+		t.events = t.events[:0]
+	}
+	return nil
 }
 
 func (t *tempTxnInsertEventStorage) writeEventsToFile(events ...*model.RowChangedEvent) error {
@@ -565,11 +565,11 @@ func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, err
 	t.reading = true
 	if t.useFileStorage {
 		return t.readFromFile()
-	} else {
-		event := t.events[0]
-		t.events = t.events[1:]
-		return event, nil
 	}
+
+	event := t.events[0]
+	t.events = t.events[1:]
+	return event, nil
 }
 
 // updateEventSplitter splits an update event to a delete event and a deferred insert event
@@ -630,9 +630,8 @@ func processEvent(
 		if tempStorage.hasEvent() {
 			// pend current event and emit the insert events in temp storage first to release memory
 			return nil, event, nil
-		} else {
-			return event, nil, nil
 		}
+		return event, nil, nil
 	} else {
 		deleteEvent, insertEvent := splitUpdateEvent(event)
 		err := tempStorage.addEvent(insertEvent)
