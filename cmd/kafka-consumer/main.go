@@ -475,7 +475,9 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.ForceReplicate = true
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, replicaConfig, errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
