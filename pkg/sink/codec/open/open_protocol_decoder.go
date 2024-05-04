@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"math/big"
 	"path/filepath"
 	"strings"
 
@@ -230,6 +231,8 @@ func (b *BatchDecoder) buildColumns(
 		switch mysqlType {
 		case mysql.TypeJSON:
 			value = string(value.([]uint8))
+		case mysql.TypeBit:
+			value = int(big.NewInt(0).SetBytes(value.([]uint8)).Uint64())
 		}
 
 		column := &model.Column{
