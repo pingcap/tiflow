@@ -153,6 +153,30 @@ func TestApply(t *testing.T) {
 				},
 			}, tableInfo),
 		},
+		// update event which doesn't modify handle key
+		{
+			StartTs:   1120,
+			CommitTs:  1220,
+			TableInfo: tableInfo,
+			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 1,
+				}, {
+					Name:  "b",
+					Value: "2",
+				},
+			}, tableInfo),
+			Columns: model.Columns2ColumnDatas([]*model.Column{
+				{
+					Name:  "a",
+					Value: 1,
+				}, {
+					Name:  "b",
+					Value: "3",
+				},
+			}, tableInfo),
+		},
 		{
 			StartTs:   1150,
 			CommitTs:  1250,
@@ -205,7 +229,7 @@ func TestApply(t *testing.T) {
 					Value: 1,
 				}, {
 					Name:  "b",
-					Value: "2",
+					Value: "3",
 				},
 			}, tableInfo),
 			Columns: model.Columns2ColumnDatas([]*model.Column{
@@ -338,7 +362,7 @@ func TestApplyBigTxn(t *testing.T) {
 	}, [][]int{{0}})
 	dmls := make([]*model.RowChangedEvent, 0)
 	// insert some rows
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		dml := &model.RowChangedEvent{
 			StartTs:   1100,
 			CommitTs:  1200,
@@ -356,7 +380,7 @@ func TestApplyBigTxn(t *testing.T) {
 		dmls = append(dmls, dml)
 	}
 	// update
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		dml := &model.RowChangedEvent{
 			StartTs:   1200,
 			CommitTs:  1300,
@@ -383,7 +407,7 @@ func TestApplyBigTxn(t *testing.T) {
 		dmls = append(dmls, dml)
 	}
 	// delete and update
-	for i := 0; i < 50; i++ {
+	for i := 1; i <= 50; i++ {
 		dml := &model.RowChangedEvent{
 			StartTs:   1300,
 			CommitTs:  resolvedTs,
@@ -400,7 +424,7 @@ func TestApplyBigTxn(t *testing.T) {
 		}
 		dmls = append(dmls, dml)
 	}
-	for i := 50; i < 100; i++ {
+	for i := 51; i <= 100; i++ {
 		dml := &model.RowChangedEvent{
 			StartTs:   1300,
 			CommitTs:  resolvedTs,
@@ -521,6 +545,12 @@ func getMockDB(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1").
+		WithArgs(1, "3", 1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	mock.ExpectBegin()
 	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 		WithArgs(10, "20").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -588,7 +618,7 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i, fmt.Sprintf("%d", i+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -596,12 +626,12 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
 			WithArgs(i).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i*10, fmt.Sprintf("%d", i*10+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -610,12 +640,12 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
 			WithArgs(i * 10).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	for i := 50; i < 100; i++ {
+	for i := 51; i <= 100; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i*100, fmt.Sprintf("%d", i*100+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
