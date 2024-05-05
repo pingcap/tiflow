@@ -573,6 +573,7 @@ func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, err
 }
 
 // updateEventSplitter splits an update event to a delete event and a deferred insert event
+// when the update event is an update to the handle key or the non empty unique key.
 // deferred insert event means all delete events and update events in the same transaction are emitted before this insert event
 type updateEventSplitter struct {
 	rd              reader.RedoLogReader
@@ -595,16 +596,6 @@ func newUpdateEventSplitter(rd reader.RedoLogReader, dir string) *updateEventSpl
 		tempStorage:     newTempTxnInsertEventStorage(defaultFlushThreshold, dir),
 		prevTxnCommitTs: 0,
 	}
-}
-
-func splitUpdateEvent(event *model.RowChangedEvent) (*model.RowChangedEvent, *model.RowChangedEvent) {
-	deleteEvent := *event
-	deleteEvent.Columns = nil
-
-	insertEvent := *event
-	insertEvent.PreColumns = nil
-
-	return &deleteEvent, &insertEvent
 }
 
 // processEvent return (event to emit, pending event)
@@ -632,9 +623,14 @@ func processEvent(
 			return nil, event, nil
 		}
 		return event, nil, nil
+	} else if !model.ShouldSplitUpdateEvent(event) {
+		return event, nil, nil
 	} else {
-		deleteEvent, insertEvent := splitUpdateEvent(event)
-		err := tempStorage.addEvent(insertEvent)
+		deleteEvent, insertEvent, err := model.SplitUpdateEvent(event)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = tempStorage.addEvent(insertEvent)
 		if err != nil {
 			return nil, nil, err
 		}
