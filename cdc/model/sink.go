@@ -1189,8 +1189,8 @@ func trySplitAndSortUpdateEvent(
 
 		// This indicates that it is an update event. if the pk or uk is updated,
 		// we need to split it into two events (delete and insert).
-		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(e)
+		if e.IsUpdate() && ShouldSplitUpdateEvent(e) {
+			deleteEvent, insertEvent, err := SplitUpdateEvent(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -1215,10 +1215,10 @@ func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
 	return false
 }
 
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
 // If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
+func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
 		return false
@@ -1240,8 +1240,8 @@ func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	return false
 }
 
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(
+// SplitUpdateEvent splits an update event into a delete and an insert event.
+func SplitUpdateEvent(
 	updateEvent *RowChangedEvent,
 ) (*RowChangedEvent, *RowChangedEvent, error) {
 	if updateEvent == nil {
