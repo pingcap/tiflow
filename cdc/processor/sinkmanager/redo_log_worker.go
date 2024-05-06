@@ -72,7 +72,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
-		encoding.TS_WINDOW(),
+		encoding.DefaultTsWindow(),
 	)
 	advancer.lastPos = lowerBound.Prev()
 

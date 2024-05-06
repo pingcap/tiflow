@@ -28,8 +28,8 @@ const (
 	typeUpdate
 	typeInsert
 
-	uniqueIDLen int = 4
 	tsWindowLen int = 8
+	uniqueIDLen int = 4
 	tableIDLen  int = 8
 	tsLen       int = 8
 )
@@ -40,7 +40,7 @@ type TsWindow struct {
 }
 
 // TsWindow returns a TsWindow instance.
-func TsWindow() TsWindow {
+func DefaultTsWindow() TsWindow {
 	return TsWindow{sizeInSeconds: 30}
 }
 
@@ -56,12 +56,12 @@ func (t TsWindow) MinTsInWindow(tsWindow uint64) uint64 {
 
 // DecodeKey decodes a key to uniqueID, tableID, startTs, CRTs.
 func DecodeKey(key []byte) (uniqueID uint32, tableID uint64, startTs, CRTs uint64) {
-	// uniqueID, TsWindow, tableID, CRTs, startTs, Key, Put/Delete
-	offset := 0
+	// TsWindow, uniqueID, tableID, CRTs, startTs, Key, Put/Delete
+	offset := tsWindowLen
 
 	// uniqueID
 	uniqueID = binary.BigEndian.Uint32(key[offset:])
-	offset += (uniqueIDLen + tsWindowLen)
+	offset += (uniqueIDLen)
 
 	// table ID
 	tableID = binary.BigEndian.Uint64(key[offset:])
@@ -89,11 +89,11 @@ func DecodeCRTs(key []byte) uint64 {
 func EncodeTsKey(uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64) []byte {
 	var buf []byte
 	if len(startTs) == 0 {
-		// uniqueID, tsWindow, tableID, CRTs.
-		buf = make([]byte, uniqueIDLen+tsWindowLen+tableIDLen+tsLen)
+		// tsWindow, uniqueID, tableID, CRTs.
+		buf = make([]byte, tsWindowLen+uniqueIDLen+tableIDLen+tsLen)
 	} else if len(startTs) == 1 {
-		// uniqueID, tsWindowLen, tableID, CRTs and startTs.
-		buf = make([]byte, uniqueIDLen+tsWindowLen+tableIDLen+2*tsLen)
+		// tsWindow, uniqueID, tableID, CRTs and startTs.
+		buf = make([]byte, tsWindowLen+uniqueIDLen+tableIDLen+2*tsLen)
 	} else {
 		log.Panic("EncodeTsKey retrieve one startTs at most")
 	}
@@ -102,13 +102,13 @@ func EncodeTsKey(uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64
 }
 
 // EncodeKey encodes a key according to event.
-// Format: uniqueID, tableID, CRTs, startTs, delete/update/insert, Key.
+// Format: tsWindow, uniqueID, tableID, CRTs, startTs, delete/update/insert, Key.
 func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) []byte {
 	if event.RawKV == nil {
 		log.Panic("rawkv must not be nil", zap.Any("event", event))
 	}
 
-	prefixLen := uniqueIDLen + tsWindowLen + tableIDLen + 2*tsLen
+	prefixLen := tsWindowLen + uniqueIDLen + tableIDLen + 2*tsLen
 	keyLen := prefixLen + 2 + len(event.RawKV.Key)
 	buf := make([]byte, keyLen)
 	encodeTsKey(buf, uniqueID, tableID, event.CRTs, event.StartTs)
@@ -121,14 +121,14 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 func encodeTsKey(buf []byte, uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64) {
 	offset := 0
 
+	// tsWindow
+	tsWindow := DefaultTsWindow().ExtractTsWindow(CRTs)
+	binary.BigEndian.PutUint64(buf[offset:], tsWindow)
+	offset += tsWindowLen
+
 	// uniqueID
 	binary.BigEndian.PutUint32(buf[offset:], uniqueID)
 	offset += uniqueIDLen
-
-	// tsWindow
-	tsWindow := TsWindow().ExtractTsWindow(CRTs)
-	binary.BigEndian.PutUint64(buf[offset:], tsWindow)
-	offset += tsWindowLen
 
 	// tableID
 	binary.BigEndian.PutUint64(buf[offset:], tableID)

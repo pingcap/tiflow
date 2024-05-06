@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"sync"
 	"time"
 
@@ -421,10 +420,10 @@ func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) 
 
 // backgroundGC is used to clean up the old data in the sorter.
 func (m *SinkManager) backgroundGC(errors chan<- error) {
-	ticker := time.NewTicker(10*time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	m.wg.Add(1)
-    var window encoding.TsWindow = encoding.TsWindow()
-    var lastCleanedWindow uint64 = 0
+	var window encoding.TsWindow = encoding.DefaultTsWindow()
+	var lastCleanedWindow uint64 = 0
 	go func() {
 		defer m.wg.Done()
 		defer ticker.Stop()
@@ -436,68 +435,31 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					zap.String("changefeed", m.changefeedID.ID))
 				return
 			case <-ticker.C:
-                var minCkpt uint64 = math.MaxUint64
+				var minCkpt uint64 = math.MaxUint64
 				m.tableSinks.Range(func(key tablepb.Span, value any) bool {
-                    ckpt := value.(*tableSinkWrapper).getCheckpointTs().ResolvedMark()
-                    if minCkpt > ckpt {
-                        minCkpt = ckpt
-                    }
+					ckpt := value.(*tableSinkWrapper).getCheckpointTs().ResolvedMark()
+					if minCkpt > ckpt {
+						minCkpt = ckpt
+					}
 					return true
 				})
 
-                inCleaningWindow := window.ExtractTsWindow(ckpt) - 1
-                if inCleaningWindow > lastCleanedWindow {
-                    lastCleanedWindow = inCleaningWindow
+				inCleaningWindow := window.ExtractTsWindow(minCkpt) - 1
+				if inCleaningWindow > lastCleanedWindow {
+					lastCleanedWindow = inCleaningWindow
 					cleanPos := sorter.GenCommitFence(window.MinTsInWindow(inCleaningWindow+1) - 1)
-                    if err := m.sourceManager.CleanAllTables(cleanPos); err != nil {
+					if err := m.sourceManager.CleanAllTables(cleanPos); err != nil {
 						log.Error("Failed to clean all tables in sort engine",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
-                            zap.Any("position", cleanPos),
+							zap.Any("position", cleanPos),
 							zap.Error(err))
 						select {
 						case errors <- err:
 						case <-m.managerCtx.Done():
 						}
-                    }
-                }
-
-				tableSinks.Range(func(span tablepb.Span, sink *tableSinkWrapper) bool {
-					checkpointTs := sink.getCheckpointTs()
-					resolvedMark := checkpointTs.ResolvedMark()
-					if resolvedMark == 0 {
-						return true
 					}
-
-					currWindow := window.ExtractTsWindow(resolvedMark) - 1
-					if currWindow-sink.lastCleanWindow < 5 {
-						return true
-					}
-
-					cleanPos := sorter.GenCommitFence(window.MinTsInWindow(currWindow+1) - 1)
-					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
-						return true
-					}
-					if err := m.sourceManager.CleanByTable(span, cleanPos); err != nil {
-						log.Error("Failed to clean table in sort engine",
-							zap.String("namespace", m.changefeedID.Namespace),
-							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &span),
-							zap.Error(err))
-						select {
-						case errors <- err:
-						case <-m.managerCtx.Done():
-						}
-					} else {
-						log.Debug("table stale data has been cleaned",
-							zap.String("namespace", m.changefeedID.Namespace),
-							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &span),
-							zap.Any("upperBound", cleanPos))
-					}
-					sink.lastCleanWindow = currWindow
-					return true
-				})
+				}
 			}
 		}
 	}()

@@ -116,7 +116,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getUpperBoundTs()),
-		encoding.TS_WINDOW(),
+		encoding.DefaultTsWindow(),
 	)
 	advancer.lastPos = lowerBound.Prev()
 

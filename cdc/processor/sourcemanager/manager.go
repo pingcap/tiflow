@@ -178,6 +178,10 @@ func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound sorter.Positi
 	return m.engine.CleanByTable(span, upperBound)
 }
 
+func (m *SourceManager) CleanAllTables(upperBound sorter.Position) error {
+	return m.engine.CleanAllTables(upperBound)
+}
+
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 	return m.puller.Stats(span)
