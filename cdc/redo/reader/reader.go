@@ -259,8 +259,16 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
+<<<<<<< HEAD
 	case row := <-l.rowCh:
 		return row, nil
+=======
+	case rowInRedoLog := <-l.rowCh:
+		if rowInRedoLog != nil {
+			return rowInRedoLog.ToRowChangedEvent(), nil
+		}
+		return nil, nil
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	}
 }
 

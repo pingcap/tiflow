@@ -1871,7 +1871,11 @@ func TestGroupRowsByType(t *testing.T) {
 			}
 			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
+<<<<<<< HEAD
 			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
+=======
+			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 			for _, rows := range inserts {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}

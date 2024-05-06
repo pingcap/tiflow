@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -28,10 +29,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/spanz"
+=======
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -71,6 +79,7 @@ type SourceManager struct {
 	engine engine.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
+	startTs model.Ts
 
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
@@ -86,9 +95,16 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
+<<<<<<< HEAD
 ) *SourceManager {
 	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
 	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
+=======
+	enableTableMonitor bool,
+	safeModeAtStart bool,
+) *SourceManager {
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 }
 
 // NewForTest creates a new source manager for testing.
@@ -102,14 +118,36 @@ func NewForTest(
 	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
 }
 
+func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
+}
+
+func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
+	if raw == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+	deleteKVEntry := *raw
+	deleteKVEntry.Value = nil
+
+	insertKVEntry := *raw
+	insertKVEntry.OldValue = nil
+
+	return &deleteKVEntry, &insertKVEntry, nil
+}
+
 func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
+<<<<<<< HEAD
 	multiplexing bool,
 	pullerWrapperCreator pullerWrapperCreator,
+=======
+	enableTableMonitor bool,
+	safeModeAtStart bool,
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 ) *SourceManager {
 	mgr := &SourceManager{
 		ready:        make(chan struct{}),
@@ -120,9 +158,44 @@ func newSourceManager(
 		bdrMode:      bdrMode,
 		multiplexing: multiplexing,
 	}
+<<<<<<< HEAD
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
 		mgr.tablePullers.pullerWrapperCreator = pullerWrapperCreator
+=======
+
+	serverConfig := config.GetGlobalServerConfig()
+	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	client := kv.NewSharedClient(
+		mgr.changefeedID, serverConfig, mgr.bdrMode,
+		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
+		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
+	)
+
+	// consume add raw kv entry to the engine.
+	// It will be called by the puller when new raw kv entry is received.
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+		if len(spans) > 1 {
+			log.Panic("DML puller subscribes multiple spans",
+				zap.String("namespace", mgr.changefeedID.Namespace),
+				zap.String("changefeed", mgr.changefeedID.ID))
+		}
+		if raw != nil {
+			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
+				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				mgr.engine.Add(spans[0], pEvent)
+			}
+		}
+		return nil
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	}
 	return mgr
 }
@@ -223,6 +296,15 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	case <-m.tablePullers.ctx.Done():
 		return m.tablePullers.ctx.Err()
 	}
+<<<<<<< HEAD
+=======
+	startTs, err := getCurrentTs(ctx, m.up.PDClient)
+	if err != nil {
+		return err
+	}
+	m.startTs = startTs
+	return m.puller.Run(ctx)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 }
 
 // WaitForReady implements util.Runnable.
@@ -265,4 +347,24 @@ func (m *SourceManager) Close() {
 // Add adds events to the engine. It is used for testing.
 func (m *SourceManager) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	m.engine.Add(span, events...)
+}
+
+func getCurrentTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
+	backoffBaseDelayInMs := int64(100)
+	totalRetryDuration := 10 * time.Second
+	var replicateTs model.Ts
+	err := retry.Do(ctx, func() error {
+		phy, logic, err := pdClient.GetTS(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		replicateTs = oracle.ComposeTS(phy, logic)
+		return nil
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithTotalRetryDuratoin(totalRetryDuration),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	if err != nil {
+		return model.Ts(0), errors.Trace(err)
+	}
+	return replicateTs, nil
 }

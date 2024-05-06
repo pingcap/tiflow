@@ -10,8 +10,13 @@ group=$2
 # Other tests that only support mysql: batch_update_to_no_batch ddl_reentrant
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
+<<<<<<< HEAD
 mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_suicide server_config_compatibility"
 mysql_only_http="http_api http_api_tls api_v2"
+=======
+mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_suicide server_config_compatibility changefeed_dup_error_restart"
+mysql_only_http="http_api http_api_tls api_v2 http_api_tls_with_user_auth cli_tls_with_auth"
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback mq_sink_dispatcher kafka_column_selector kafka_column_selector_avro"
