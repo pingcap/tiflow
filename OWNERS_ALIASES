@@ -1,0 +1,6 @@
+# Sort the member alphabetically.
+aliases:
+  sig-approvers-cdc-api:
+    - hongyunyan
+    - sdojjy
+  # other approvers SIGs.

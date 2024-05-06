@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
@@ -105,7 +106,10 @@ func createTableSinkWrapper(
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
 		changefeedID, span, model.Ts(0),
-		sink, &dmlsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		span,
@@ -270,7 +274,9 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
 		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
 		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}),
 	)
 	version := new(uint64)
 
@@ -316,7 +322,9 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
 		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
 		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		pdutil.NewClock4Test(),
 		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}),
 	)
 	version := new(uint64)
 

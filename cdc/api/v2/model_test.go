@@ -63,6 +63,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
 		DebeziumDisableSchema:            util.AddressOf(false),
+		OpenProtocolConfig:               &OpenProtocolConfig{OutputOldValue: true},
+		DebeziumConfig:                   &DebeziumConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
@@ -91,7 +93,6 @@ var defaultAPIConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: &JSONDuration{*config.
 		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
-	SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
 	SyncedStatus: (*SyncedStatusConfig)(config.GetDefaultReplicaConfig().SyncedStatus),
 }
 

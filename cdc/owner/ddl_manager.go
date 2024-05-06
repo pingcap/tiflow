@@ -223,24 +223,7 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
-			// TODO: find a better place to do this check
-			// check if the ddl event is belong to an ineligible table.
-			// If so, we should ignore it.
-			if !filter.IsSchemaDDL(event.Type) {
-				ignore, err := m.schema.
-					IsIneligibleTable(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
-				if err != nil {
-					return nil, nil, errors.Trace(err)
-				}
-				if ignore {
-					log.Warn("ignore the DDL event of ineligible table",
-						zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
-					continue
-				}
-			}
-
 			tableName := event.TableInfo.TableName
-			// Add all valid DDL events to the pendingDDLs.
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}
 
@@ -456,7 +439,20 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
 			for _, id := range ids {
-				tableBarrierMap[id] = ddl.CommitTs
+				// The same physical table may have multiple related ddl events when calculating barrier.
+				// Example cases:
+				// 1. The logical id of the same partition table may change after change partition.
+				//	So the related ddls may be considered for different tables.
+				//  And they may be returned by `getAllTableNextDDL` at the same time.
+				// 2. The result of `getAllTableNextDDL` may influence the same physical tables as `ddlManager.justSentDDL`.
+				// So we always choose the min commitTs of all ddls related to the same physical table as the barrierTs.
+				if ts, ok := tableBarrierMap[id]; ok {
+					if ddl.CommitTs < ts {
+						tableBarrierMap[id] = ddl.CommitTs
+					}
+				} else {
+					tableBarrierMap[id] = ddl.CommitTs
+				}
 			}
 		}
 	}

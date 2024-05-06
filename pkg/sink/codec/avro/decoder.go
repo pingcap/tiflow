@@ -20,11 +20,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -36,7 +34,6 @@ import (
 type decoder struct {
 	config *common.Config
 	topic  string
-	sc     *stmtctx.StatementContext
 
 	schemaM SchemaManager
 
@@ -49,13 +46,11 @@ func NewDecoder(
 	config *common.Config,
 	schemaM SchemaManager,
 	topic string,
-	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -135,23 +130,23 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
-	columns := event.GetColumns()
 	if isCorrupted(valueMap) {
 		log.Warn("row data is corrupted",
 			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
-		for _, col := range columns {
+		for _, col := range event.Columns {
+			colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 			log.Info("data corrupted, print each column for debugging",
-				zap.String("name", col.Name),
-				zap.Any("type", col.Type),
-				zap.Any("charset", col.Charset),
-				zap.Any("flag", col.Flag),
+				zap.String("name", colInfo.Name.O),
+				zap.Any("type", colInfo.GetType()),
+				zap.Any("charset", colInfo.GetCharset()),
+				zap.Any("flag", colInfo.GetFlag()),
 				zap.Any("value", col.Value),
-				zap.Any("default", col.Default))
+				zap.Any("default", colInfo.GetDefaultValue()))
 		}
 	}
 
 	if found {
-		if err := common.VerifyChecksum(columns, uint32(expectedChecksum)); err != nil {
+		if err := common.VerifyChecksum(event.Columns, event.TableInfo.Columns, uint32(expectedChecksum)); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
@@ -163,7 +158,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // keyMap hold primary key or unique key columns
 // valueMap hold all columns information
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
-func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete bool) (*model.RowChangedEvent, error) {
+func assembleEvent(
+	keyMap, valueMap, schema map[string]interface{}, isDelete bool,
+) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
@@ -290,7 +287,9 @@ func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, err
 
 // value is an interface, need to convert it to the real value with the help of type info.
 // holder has the value's column info.
-func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType byte) (interface{}, error) {
+func getColumnValue(
+	value interface{}, holder map[string]interface{}, mysqlType byte,
+) (interface{}, error) {
 	switch t := value.(type) {
 	// for nullable columns, the value is encoded as a map with one pair.
 	// key is the encoded type, value is the encoded value, only care about the value here.
@@ -299,36 +298,29 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 			value = v
 		}
 	}
+	if value == nil {
+		return nil, nil
+	}
 
 	switch mysqlType {
 	case mysql.TypeEnum:
 		// enum type is encoded as string,
 		// we need to convert it to int by the order of the enum values definition.
 		allowed := strings.Split(holder["allowed"].(string), ",")
-		switch t := value.(type) {
-		case string:
-			enum, err := types.ParseEnum(allowed, t, "")
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			value = enum.Value
-		case nil:
-			value = nil
+		enum, err := types.ParseEnum(allowed, value.(string), "")
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		value = enum.Value
 	case mysql.TypeSet:
 		// set type is encoded as string,
 		// we need to convert it to int by the order of the set values definition.
 		elems := strings.Split(holder["allowed"].(string), ",")
-		switch t := value.(type) {
-		case string:
-			s, err := types.ParseSet(elems, t, "")
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			value = s.Value
-		case nil:
-			value = nil
+		s, err := types.ParseSet(elems, value.(string), "")
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		value = s.Value
 	}
 	return value, nil
 }

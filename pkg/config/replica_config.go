@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -39,12 +38,8 @@ const (
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
 	minSyncPointRetention           = time.Hour * 1
 	minChangeFeedErrorStuckDuration = time.Minute * 30
-	// The default SQL Mode of TiDB: "ONLY_FULL_GROUP_BY,
-	// STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,
-	// NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
-	// Note: The SQL Mode of TiDB is not the same as ORACLE.
-	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
-	defaultSQLMode = mysql.DefaultSQLMode
+	// DefaultTiDBSourceID is the default source ID of TiDB cluster.
+	DefaultTiDBSourceID = 1
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -77,12 +72,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
-		TiDBSourceID:                     1,
+		TiDBSourceID:                     DefaultTiDBSourceID,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
 		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
 		DebeziumDisableSchema:            util.AddressOf(false),
+		OpenProtocol:                     &OpenProtocolConfig{OutputOldValue: true},
+		Debezium:                         &DebeziumConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
@@ -108,7 +105,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
-	SQLMode:                      defaultSQLMode,
 	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
@@ -162,8 +158,10 @@ type replicaConfig struct {
 	// Integrity is only available when the downstream is MQ.
 	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
-	SQLMode                      string              `toml:"sql-mode" json:"sql-mode"`
 	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
+
+	// Deprecated: we don't use this field since v8.0.0.
+	SQLMode string `toml:"sql-mode" json:"sql-mode"`
 }
 
 // Value implements the driver.Valuer interface
@@ -214,7 +212,7 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Clone clones a replication
+// Clone clones a replica config
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	str, err := c.Marshal()
 	if err != nil {

@@ -14,6 +14,7 @@
 package utils
 
 import (
+	"database/sql/driver"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -54,10 +55,10 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 		biu4 bigint unsigned default 24,
 		floatT float default 3.14,
 		doubleT double default 2.7182818284,
-	 	decimalT decimal default 179394.2333,
+	 	decimalT decimal(12, 6) default 179394.2333,
 	 	floatTu float unsigned default 3.14,
 		doubleTu double unsigned default 2.7182818284,
-	 	decimalTu decimal unsigned default 179394.2333,
+	 	decimalTu decimal(12, 6) unsigned default 179394.2333,
 	 	decimalTu2 decimal(5, 4) unsigned default 3.1415,
 	 	varcharT varchar(255) default '测试Varchar default',
 	 	charT char(255) default '测试Char default',
@@ -74,6 +75,7 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 	 	dateT date default '2023-12-27',
 	 	datetimeT datetime default '2023-12-27 12:27:23',
 	 	timestampT timestamp default now(),
+	 	timestampT2 timestamp(6) default '2024-03-11 08:51:01.461270',
 	 	timeT time default '12:27:23',
 	 	yearT year default 2023,
 	 	enumT enum('a', 'b', 'c') default 'b',
@@ -130,6 +132,7 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 		'2020-02-20',
 		'2020-02-20 02:20:20',
 		'2020-02-20 10:20:20',
+	    '2024-03-11 08:51:01.461270',
 		'02:20:20',
 		2020,
 		'a',
@@ -146,4 +149,73 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 	deleteE.Columns = nil
 
 	return ddlEvent, insert, &update, &deleteE
+}
+
+// LargeColumnKeyValues returns the key values of large columns
+func LargeColumnKeyValues() ([]string, []driver.Value) {
+	names := make([]string, 0, len(LargeTableColumns))
+	values := make([]driver.Value, 0, len(LargeTableColumns))
+	for key, value := range LargeTableColumns {
+		names = append(names, key)
+		values = append(values, driver.Value(value))
+	}
+	return names, values
+}
+
+// LargeTableColumns is the columns of large table
+var LargeTableColumns = map[string]interface{}{
+	"t":           []uint8("127"),
+	"tu1":         []uint8("127"),
+	"tu2":         []uint8("128"),
+	"tu3":         []uint8("0"),
+	"tu4":         nil,
+	"s":           []uint8("32767"),
+	"su1":         []uint8("32767"),
+	"su2":         []uint8("32768"),
+	"su3":         []uint8("0"),
+	"su4":         nil,
+	"m":           []uint8("8388607"),
+	"mu1":         []uint8("8388607"),
+	"mu2":         []uint8("8388608"),
+	"mu3":         []uint8("0"),
+	"mu4":         nil,
+	"i":           []uint8("2147483647"),
+	"iu1":         []uint8("2147483647"),
+	"iu2":         []uint8("2147483648"),
+	"iu3":         []uint8("0"),
+	"iu4":         nil,
+	"bi":          []uint8("9223372036854775807"),
+	"biu1":        []uint8("9223372036854775807"),
+	"biu2":        []uint8("9223372036854775808"),
+	"biu3":        []uint8("0"),
+	"biu4":        nil,
+	"floatT":      []uint8("3.14"),
+	"doubleT":     []uint8("2.71"),
+	"decimalT":    []uint8("2333.654321"),
+	"floatTu":     []uint8("3.14"),
+	"doubleTu":    []uint8("2.71"),
+	"decimalTu":   []uint8("2333.123456"),
+	"decimalTu2":  []uint8("1.7371"),
+	"varcharT":    []uint8("测试Varchar"),
+	"charT":       []uint8("测试String"),
+	"binaryT":     []uint8("测试Binary"),
+	"varbinaryT":  []uint8("测试varbinary"),
+	"tinytextT":   []uint8("测试Tinytext"),
+	"textT":       []uint8("测试text"),
+	"mediumtextT": []uint8("测试mediumtext"),
+	"longtextT":   []uint8("测试longtext"),
+	"tinyblobT":   []uint8("测试tinyblob"),
+	"blobT":       []uint8("测试blob"),
+	"mediumblobT": []uint8("测试mediumblob"),
+	"longblobT":   []uint8("测试longblob"),
+	"dateT":       []uint8("2020-02-20"),
+	"datetimeT":   []uint8("2020-02-20 02:20:20"),
+	"timestampT":  []uint8("2020-02-20 10:20:20"),
+	"timestampT2": []uint8("2024-03-11 08:51:01.461270"),
+	"timeT":       []uint8("02:20:20"),
+	"yearT":       []uint8("2020"),
+	"enumT":       []uint8("a"),
+	"setT":        []uint8("b"),
+	"bitT":        []uint8{65},
+	"jsonT":       []uint8("{\"key1\": \"value1\"}"),
 }

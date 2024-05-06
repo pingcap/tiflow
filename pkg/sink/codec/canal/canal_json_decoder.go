@@ -180,10 +180,7 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 			}
 			value = string(rawValue)
 		} else if strings.Contains(mysqlType, "bit") || strings.Contains(mysqlType, "set") {
-			bitValue, err := common.BinaryLiteralToInt(rawValue)
-			if err != nil {
-				return nil, nil, errors.Trace(err)
-			}
+			bitValue := common.MustBinaryLiteralToInt(rawValue)
 			value = strconv.FormatUint(bitValue, 10)
 		} else {
 			value = string(rawValue)
@@ -223,13 +220,9 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			CommitTs: commitTs,
 		},
 	}
-
 	switch eventType {
 	case "INSERT":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
@@ -237,10 +230,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 	case "UPDATE":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
@@ -248,20 +238,14 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
-		if err != nil {
-			return nil, err
-		}
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
 		old, _, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
 		result.Old = []map[string]interface{}{old}
 	case "DELETE":
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err

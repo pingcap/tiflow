@@ -448,7 +448,7 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Type:      colInfo.GetType(),
 		Charset:   colInfo.GetCharset(),
 		Collation: colInfo.GetCollate(),
-		Flag:      tableInfo.ColumnsFlag[colID],
+		Flag:      *tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
 		Default:   GetColumnDefaultValue(colInfo),
 	}
@@ -1006,7 +1006,8 @@ type DDLEvent struct {
 	IsBootstrap  bool             `msg:"-"`
 	// BDRRole is the role of the TiDB cluster, it is used to determine whether
 	// the DDL is executed by the primary cluster.
-	BDRRole string `msg:"-"`
+	BDRRole string        `msg:"-"`
+	SQLMode mysql.SQLMode `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -1028,6 +1029,7 @@ func (d *DDLEvent) FromJobWithArgs(
 	d.Charset = job.Charset
 	d.Collate = job.Collate
 	d.BDRRole = job.BDRRole
+	d.SQLMode = job.SQLMode
 	switch d.Type {
 	// The query for "DROP TABLE" and "DROP VIEW" statements need
 	// to be rebuilt. The reason is elaborated as follows:
@@ -1059,6 +1061,10 @@ func (d *DDLEvent) FromJobWithArgs(
 		d.Query = fmt.Sprintf("ALTER TABLE `%s`.`%s` EXCHANGE PARTITION `%s` WITH TABLE `%s`.`%s`",
 			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
 			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
+
+		if strings.HasSuffix(upperQuery, "WITHOUT VALIDATION") {
+			d.Query += " WITHOUT VALIDATION"
+		}
 	default:
 		d.Query = job.Query
 	}

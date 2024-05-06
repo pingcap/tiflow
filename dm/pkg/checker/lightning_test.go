@@ -17,7 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
