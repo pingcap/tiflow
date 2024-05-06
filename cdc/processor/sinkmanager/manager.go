@@ -290,6 +290,11 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Duration("cost", time.Since(start)))
+
+			// For duplicate entry error, we fast fail to restart changefeed.
+			if cerror.IsDupEntryError(err) {
+				return errors.Trace(err)
+			}
 		}
 
 		// If the error is retryable, we should retry to re-establish the internal resources.
