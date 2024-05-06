@@ -74,7 +74,7 @@ func TestValidateAndAdjustBound(t *testing.T) {
 func TestValidateAndAdjustBoundWithTsWindow(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	window := encoding.TS_WINDOW()
+	window := encoding.DefaultTsWindow()
 	lowerPhs := sorter.Position{CommitTs: window.MinTsInWindow(100)}
 	upperPhs := sorter.Position{CommitTs: window.MinTsInWindow(102)}
 	newLowerPhs, newUpperPhs := validateAndAdjustBound(changefeedID, &span, lowerPhs, upperPhs, window)

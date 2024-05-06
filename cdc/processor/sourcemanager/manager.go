@@ -178,6 +178,7 @@ func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound sorter.Positi
 	return m.engine.CleanByTable(span, upperBound)
 }
 
+// CleanAllTables just wrap the engine's CleanAllTables method.
 func (m *SourceManager) CleanAllTables(upperBound sorter.Position) error {
 	return m.engine.CleanAllTables(upperBound)
 }

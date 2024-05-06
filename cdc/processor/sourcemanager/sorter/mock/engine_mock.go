@@ -122,11 +122,12 @@ func (mr *MockSortEngineMockRecorder) FetchAllTables(lowerBound interface{}) *go
 }
 
 // FetchByTable mocks base method.
-func (m *MockSortEngine) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+func (m *MockSortEngine) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) (sorter.EventIterator, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchByTable", span, lowerBound, upperBound)
 	ret0, _ := ret[0].(sorter.EventIterator)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // FetchByTable indicates an expected call of FetchByTable.
@@ -253,4 +254,55 @@ func (m *MockEventIterator) Next() (*model.PolymorphicEvent, sorter.Position, er
 func (mr *MockEventIteratorMockRecorder) Next() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventIterator)(nil).Next))
+}
+
+// MockTsWindow is a mock of TsWindow interface.
+type MockTsWindow struct {
+	ctrl     *gomock.Controller
+	recorder *MockTsWindowMockRecorder
+}
+
+// MockTsWindowMockRecorder is the mock recorder for MockTsWindow.
+type MockTsWindowMockRecorder struct {
+	mock *MockTsWindow
+}
+
+// NewMockTsWindow creates a new mock instance.
+func NewMockTsWindow(ctrl *gomock.Controller) *MockTsWindow {
+	mock := &MockTsWindow{ctrl: ctrl}
+	mock.recorder = &MockTsWindowMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTsWindow) EXPECT() *MockTsWindowMockRecorder {
+	return m.recorder
+}
+
+// ExtractTsWindow mocks base method.
+func (m *MockTsWindow) ExtractTsWindow(ts uint64) uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExtractTsWindow", ts)
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// ExtractTsWindow indicates an expected call of ExtractTsWindow.
+func (mr *MockTsWindowMockRecorder) ExtractTsWindow(ts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractTsWindow", reflect.TypeOf((*MockTsWindow)(nil).ExtractTsWindow), ts)
+}
+
+// MinTsInWindow mocks base method.
+func (m *MockTsWindow) MinTsInWindow(tsWindow uint64) uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MinTsInWindow", tsWindow)
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// MinTsInWindow indicates an expected call of MinTsInWindow.
+func (mr *MockTsWindowMockRecorder) MinTsInWindow(tsWindow interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinTsInWindow", reflect.TypeOf((*MockTsWindow)(nil).MinTsInWindow), tsWindow)
 }

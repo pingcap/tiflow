@@ -39,7 +39,7 @@ type TsWindow struct {
 	sizeInSeconds int
 }
 
-// TsWindow returns a TsWindow instance.
+// DefaultTsWindow returns a TsWindow instance.
 func DefaultTsWindow() TsWindow {
 	return TsWindow{sizeInSeconds: 30}
 }
