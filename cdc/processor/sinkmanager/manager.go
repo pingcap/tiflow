@@ -51,8 +51,6 @@ const (
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 	// sorter.CleanByTable can be expensive. So it's necessary to reduce useless calls.
-	cleanTableInterval  = 5 * time.Second
-	cleanTableMinEvents = 128
 )
 
 // TableStats of a table sink.

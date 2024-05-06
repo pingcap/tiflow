@@ -131,9 +131,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	defer func() {
-		// Prepare some information for stale table range cleaning.
-		task.tableSink.updateRangeEventCounts(newRangeEventCount(advancer.lastPos, allEventCount))
-
 		// Collect metrics.
 		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
