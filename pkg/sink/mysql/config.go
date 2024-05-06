@@ -208,7 +208,7 @@ func (c *Config) Apply(
 	// in BDR Mode cluster.
 	if replicaConfig.Sink.TiDBSourceID == 0 {
 		log.Error("The TiDB source ID should never be set to 0. Please report it as a bug. The default value will be used: 1.",
-			zap.Uint64("default", replicaConfig.Sink.TiDBSourceID))
+			zap.Uint64("tidbSourceID", replicaConfig.Sink.TiDBSourceID))
 		c.SourceID = config.DefaultTiDBSourceID
 	} else {
 		c.SourceID = replicaConfig.Sink.TiDBSourceID
