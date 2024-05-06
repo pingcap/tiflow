@@ -505,7 +505,132 @@ func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
 func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	// Update handle key.
+=======
+	// Update primary key.
+	tableInfoWithPrimaryKey := BuildTableInfo("test", "t", []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: HandleKeyFlag | PrimaryKeyFlag,
+		},
+	}, [][]int{{1}})
+	events := []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithPrimaryKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Flag:  BinaryFlag,
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Flag:  HandleKeyFlag | PrimaryKeyFlag,
+					Value: "col2-value-updated",
+				},
+			}, tableInfoWithPrimaryKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+		},
+	}
+	result, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update unique key.
+	tableInfoWithUniqueKey := BuildTableInfo("test", "t", []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: UniqueKeyFlag | NullableFlag,
+		},
+	}, [][]int{{1}})
+	events = []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithUniqueKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value-updated",
+				},
+			}, tableInfoWithUniqueKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithUniqueKey),
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update non-handle key.
+	events = []*RowChangedEvent{
+		{
+			CommitTs:  1,
+			TableInfo: tableInfoWithPrimaryKey,
+			Columns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+			PreColumns: Columns2ColumnDatas([]*Column{
+				{
+					Name:  "col1",
+					Value: "col1-value",
+				},
+				{
+					Name:  "col2",
+					Value: "col2-value",
+				},
+			}, tableInfoWithPrimaryKey),
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(result))
+}
+
+func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	columns := []*Column{
 		{
 			Name:  "col1",
@@ -531,7 +656,31 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 		},
 	}
 
+<<<<<<< HEAD
 	events := []*RowChangedEvent{
+=======
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 2)
+
+	txn = &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+
+	txn2 := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
+}
+
+func TestToRedoLog(t *testing.T) {
+	cols := []*Column{
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 		{
 			CommitTs:   1,
 			Columns:    columns,

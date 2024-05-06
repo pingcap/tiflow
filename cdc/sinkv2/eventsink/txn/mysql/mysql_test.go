@@ -1837,7 +1837,11 @@ func TestGroupRowsByType(t *testing.T) {
 			}
 			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql_test.go
 			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
+=======
+			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/txn/mysql/mysql_test.go
 			for _, rows := range inserts {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}

@@ -297,9 +297,14 @@ func convertBinaryToString(cols []*model.Column) {
 }
 
 func (s *mysqlBackend) groupRowsByType(
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 	event *eventsink.TxnCallbackableEvent,
 	tableInfo *timodel.TableInfo,
 	spiltUpdate bool,
+=======
+	event *dmlsink.TxnCallbackableEvent,
+	tableInfo *model.TableInfo,
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/txn/mysql/mysql.go
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
 	preAllocateSize := len(event.Event.Rows)
 	if preAllocateSize > s.cfg.MaxTxnRow {
@@ -335,29 +340,12 @@ func (s *mysqlBackend) groupRowsByType(
 		}
 
 		if row.IsUpdate() {
-			if spiltUpdate {
-				deleteRow = append(
-					deleteRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
-				if len(deleteRow) >= s.cfg.MaxTxnRow {
-					deleteRows = append(deleteRows, deleteRow)
-					deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
-				insertRow = append(
-					insertRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
-				if len(insertRow) >= s.cfg.MaxTxnRow {
-					insertRows = append(insertRows, insertRow)
-					insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
-			} else {
-				updateRow = append(
-					updateRow,
-					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.cfg.MaxMultiUpdateRowCount {
-					updateRows = append(updateRows, updateRow)
-					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
-				}
+			updateRow = append(
+				updateRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+			if len(updateRow) >= s.cfg.MaxMultiUpdateRowCount {
+				updateRows = append(updateRows, updateRow)
+				updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 			}
 		}
 	}
@@ -380,7 +368,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	tableInfo *timodel.TableInfo,
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
-	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
+	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo)
 
 	// handle delete
 	if len(deleteRows) > 0 {
@@ -543,11 +531,21 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				flushCacheDMLs()
 				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.cfg.ForceReplicate)
+=======
+			// Update Event
+			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+				query, args = prepareUpdate(
+					quoteTable,
+					row.GetPreColumns(),
+					row.GetColumns(),
+					s.cfg.ForceReplicate)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/txn/mysql/mysql.go
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -556,12 +554,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				continue
 			}
 
-			// Case for update event or delete event.
-			// For update event:
-			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-			// So we will prepare a DELETE SQL here.
-			// For delete event:
-			// It will be translated directly into a DELETE SQL.
+			// Delete Event
 			if len(row.PreColumns) != 0 {
 				flushCacheDMLs()
 				query, args = prepareDelete(quoteTable, row.PreColumns, s.cfg.ForceReplicate)
@@ -571,14 +564,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				}
 			}
 
-			// Case for update event or insert event.
-			// For update event:
-			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-			// So we will prepare a REPLACE SQL here.
-			// For insert event:
+			// Insert Event
 			// It will be translated directly into a
-			// INSERT(old value is enabled and not in safe mode)
-			// or REPLACE(old value is disabled or in safe mode) SQL.
+			// INSERT(not in safe mode)
+			// or REPLACE(in safe mode) SQL.
 			if len(row.Columns) != 0 {
 				if s.cfg.BatchReplaceEnabled {
 					query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
@@ -634,7 +623,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
-			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			wrapMysqlTxnError(execError),
 			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
 		if rbErr := tx.Rollback(); rbErr != nil {
 			if errors.Cause(rbErr) != context.Canceled {
@@ -659,7 +648,7 @@ func (s *mysqlBackend) sequenceExecute(
 		_, execError := tx.ExecContext(ctx, query, args...)
 		if execError != nil {
 			err := logDMLTxnErr(
-				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				wrapMysqlTxnError(execError),
 				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 			if rbErr := tx.Rollback(); rbErr != nil {
 				if errors.Cause(rbErr) != context.Canceled {
@@ -689,17 +678,25 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		writeTimeout += networkDriftDuration
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			fmt.Printf("start to random error")
+			log.Warn("inject MySQLSinkTxnRandomError")
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
+		failpoint.Inject("MySQLDuplicateEntryError", func() {
+			log.Warn("inject MySQLDuplicateEntryError")
+			err := logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLDuplicateEntry, &dmysql.MySQLError{
+				Number:  uint16(mysql.ErrDupEntry),
+				Message: "Duplicate entry",
+			}), start, s.changefeed, "failpoint", 0, nil)
+			failpoint.Return(err)
+		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
@@ -723,7 +720,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			// so we can use it to trace the data source
 			if err = s.setWriteSource(pctx, tx); err != nil {
 				err := logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed,
 					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
 						s.cfg.SourceID),
@@ -738,7 +735,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 			if err = tx.Commit(); err != nil {
 				return 0, 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					wrapMysqlTxnError(err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
 			return dmls.rowCount, dmls.approximateSize, nil
@@ -755,6 +752,18 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(s.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
+}
+
+func wrapMysqlTxnError(err error) error {
+	errCode, ok := getSQLErrCode(err)
+	if !ok {
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	switch errCode {
+	case mysql.ErrDupEntry:
+		return cerror.WrapError(cerror.ErrMySQLDuplicateEntry, err)
+	}
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
 func logDMLTxnErr(
@@ -790,7 +799,8 @@ func isRetryableDMLError(err error) bool {
 	}
 
 	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
+	// when meet dup entry error, we don't retry and report the error directly to owner to restart the changefeed.
+	case mysql.ErrNoSuchTable, mysql.ErrBadDB, mysql.ErrDupEntry:
 		return false
 	}
 	return true

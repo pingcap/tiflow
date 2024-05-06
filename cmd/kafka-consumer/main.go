@@ -450,9 +450,15 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
+<<<<<<< HEAD
 	sink, err := sink.New(ctx,
 		model.DefaultChangeFeedID("kafka-consumer"),
 		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
+=======
+
+	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -466,7 +472,17 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 		cancel()
 	}()
+<<<<<<< HEAD
 	c.ddlSink = sink
+=======
+
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
+	if err != nil {
+		cancel()
+		return nil, cerror.Trace(err)
+	}
+	c.ddlSink = ddlSink
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	c.ready = make(chan bool)
 	return c, nil
 }

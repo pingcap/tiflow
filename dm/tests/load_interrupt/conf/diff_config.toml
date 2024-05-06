@@ -7,7 +7,11 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
+<<<<<<< HEAD:dm/tests/load_interrupt/conf/diff_config.toml
     output-dir = "/tmp/ticdc_dm_test/output"
+=======
+output-dir = "/tmp/tidb_cdc_test/kafka_simple_handle_key_only_avro/output"
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):tests/integration_tests/kafka_simple_handle_key_only_avro/conf/diff_config.toml
 
     source-instances = ["mysql1"]
 

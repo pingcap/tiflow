@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -46,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -568,6 +570,18 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
+// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
+// pullerSafeMode means to split all update kv entries whose commitTS
+// is older then the start time of this changefeed.
+func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
@@ -895,7 +909,33 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
+<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
+=======
+	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.sourceManager.r = sourcemanager.New(
+		p.changefeedID, p.upstream, p.mg.r,
+		sortEngine, util.GetOrZero(cfConfig.BDRMode),
+		util.GetOrZero(cfConfig.EnableTableMonitor),
+		pullerSafeModeAtStart)
+	p.sourceManager.name = "SourceManager"
+	p.sourceManager.changefeedID = p.changefeedID
+	p.sourceManager.spawn(prcCtx)
+
+	p.sinkManager.r = sinkmanager.New(
+		p.changefeedID, p.latestInfo, p.upstream,
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+	p.sinkManager.name = "SinkManager"
+	p.sinkManager.changefeedID = p.changefeedID
+	p.sinkManager.spawn(prcCtx)
+
+	// Bind them so that sourceManager can notify sinkManager.r.
+	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	if err != nil {
 		return err
 	}
