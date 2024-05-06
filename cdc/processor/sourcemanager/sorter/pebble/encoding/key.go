@@ -41,7 +41,7 @@ type TsWindow struct {
 
 // DefaultTsWindow returns a TsWindow instance.
 func DefaultTsWindow() TsWindow {
-	return TsWindow{sizeInSeconds: 30}
+	return TsWindow{sizeInSeconds: 20}
 }
 
 // ExtractTsWindow implements cdc/processor/sourcemanager/sorter.TsWindow.

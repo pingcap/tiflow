@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
@@ -420,8 +419,6 @@ func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) 
 func (m *SinkManager) backgroundGC(errors chan<- error) {
 	ticker := time.NewTicker(10 * time.Second)
 	m.wg.Add(1)
-	var window encoding.TsWindow = encoding.DefaultTsWindow()
-	var lastCleanedWindow uint64 = 0
 	go func() {
 		defer m.wg.Done()
 		defer ticker.Stop()
@@ -442,20 +439,16 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					return true
 				})
 
-				inCleaningWindow := window.ExtractTsWindow(minCkpt) - 1
-				if inCleaningWindow > lastCleanedWindow {
-					lastCleanedWindow = inCleaningWindow
-					cleanPos := sorter.GenCommitFence(window.MinTsInWindow(inCleaningWindow+1) - 1)
-					if err := m.sourceManager.CleanAllTables(cleanPos); err != nil {
-						log.Error("Failed to clean all tables in sort engine",
-							zap.String("namespace", m.changefeedID.Namespace),
-							zap.String("changefeed", m.changefeedID.ID),
-							zap.Any("position", cleanPos),
-							zap.Error(err))
-						select {
-						case errors <- err:
-						case <-m.managerCtx.Done():
-						}
+				cleanPos := sorter.GenCommitFence(minCkpt)
+				if err := m.sourceManager.CleanAllTables(cleanPos); err != nil {
+					log.Error("Failed to clean all tables in sort engine",
+						zap.String("namespace", m.changefeedID.Namespace),
+						zap.String("changefeed", m.changefeedID.ID),
+						zap.Any("position", cleanPos),
+						zap.Error(err))
+					select {
+					case errors <- err:
+					case <-m.managerCtx.Done():
 					}
 				}
 			}

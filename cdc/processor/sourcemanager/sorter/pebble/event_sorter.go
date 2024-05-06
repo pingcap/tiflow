@@ -14,7 +14,6 @@
 package pebble
 
 import (
-	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -59,6 +58,7 @@ type EventSorter struct {
 	tables     *spanz.HashMap[*tableState]
 
 	tsWindow encoding.TsWindow
+	cleaned  sorter.Position
 }
 
 // EventIter implements sorter.EventIterator.
@@ -84,6 +84,7 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		channs:       channs,
 		closed:       make(chan struct{}),
 		tables:       spanz.NewHashMap[*tableState](),
+		tsWindow:     encoding.DefaultTsWindow(),
 	}
 
 	for i := range eventSorter.dbs {
@@ -231,22 +232,43 @@ func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIte
 
 // CleanByTable implements sorter.SortEngine.
 func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound sorter.Position) error {
-	s.mu.RLock()
-	state, exists := s.tables.Get(span)
-	s.mu.RUnlock()
-
-	if !exists {
-		return nil
-	}
-
-	return s.cleanTable(state, span, upperBound)
+	log.Panic("CleanByTable should never be called",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Stringer("span", &span))
+	return nil
 }
 
 // CleanAllTables implements sorter.EventSortEngine.
 func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
-	log.Panic("CleanAllTables should never be called",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cleaned.Compare(upperBound) >= 0 {
+		return nil
+	}
+
+	boundTsWindow := s.tsWindow.ExtractTsWindow(upperBound.CommitTs)
+	if boundTsWindow == 0 {
+		return nil
+	}
+
+	inCleaningWindow := boundTsWindow - 1
+	if s.cleaned.Valid() {
+		lastCleanedWindow := s.tsWindow.ExtractTsWindow(s.cleaned.CommitTs) - 1
+		if inCleaningWindow == lastCleanedWindow {
+			s.cleaned = upperBound
+			return nil
+		}
+	}
+
+	key := encoding.EncodeTsKey(0, 0, s.tsWindow.MinTsInWindow(inCleaningWindow+1))
+	for _, db := range s.dbs {
+		if err := db.DeleteRange(nil, key, &pebbleWriteOptions); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -294,20 +316,7 @@ func (s *EventSorter) Close() error {
 		ch.CloseAndDrain()
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var err error
-	s.tables.Range(func(span tablepb.Span, state *tableState) bool {
-		// TODO: maybe we can use a unified prefix for a changefeed,
-		//       so that we can speed up it when closing a changefeed.
-		if err1 := s.cleanTable(state, span); err1 != nil {
-			err = err1
-			return false
-		}
-		return true
-	})
-	return err
+	return nil
 }
 
 // SlotsAndHasher implements sorter.SortEngine.
@@ -374,10 +383,6 @@ type tableState struct {
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
-
-	// Following fields are protected by mu.
-	mu      sync.RWMutex
-	cleaned sorter.Position
 }
 
 // DBBatchEvent is used to contains a batch of events and the corresponding resolvedTs info.
@@ -506,47 +511,6 @@ func (s *EventSorter) handleEvents(
 		}
 		batchCh <- batchEvent
 	}
-}
-
-// cleanTable uses DeleteRange to clean data of the given table.
-func (s *EventSorter) cleanTable(
-	state *tableState, span tablepb.Span, upperBound ...sorter.Position,
-) error {
-	var toClean sorter.Position
-	var start, end []byte
-
-	if len(upperBound) == 1 {
-		window := s.tsWindow.ExtractTsWindow(upperBound[0].CommitTs) - 5
-		toClean = sorter.GenCommitFence(s.tsWindow.MinTsInWindow(window))
-	} else {
-		toClean = sorter.GenCommitFence(math.MaxUint64)
-	}
-
-	state.mu.RLock()
-	defer state.mu.RUnlock()
-
-	if state.cleaned.Compare(toClean) >= 0 {
-		return nil
-	}
-
-	start = encoding.EncodeTsKey(state.uniqueID, uint64(span.TableID), 0)
-	toCleanNext := toClean.Next()
-	end = encoding.EncodeTsKey(state.uniqueID, uint64(span.TableID), toCleanNext.CommitTs, toCleanNext.StartTs)
-
-	db := s.dbs[getDB(span, len(s.dbs))]
-	err := db.DeleteRange(start, end, &pebbleWriteOptions)
-	if err != nil {
-		log.Info("clean stale table range fails",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Error(err))
-		return err
-	}
-
-	sorter.RangeCleanCount().Inc()
-	state.cleaned = toClean
-	return nil
 }
 
 // ----- Some internal variable and functions -----

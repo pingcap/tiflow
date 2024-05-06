@@ -179,8 +179,6 @@ func TestCleanData(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span, 0)
-	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), sorter.Position{}))
-	require.Nil(t, s.CleanByTable(span, sorter.Position{}))
+	require.NoError(t, s.CleanAllTables(sorter.Position{}))
+	require.NoError(t, s.CleanAllTables(sorter.Position{StartTs: 3, CommitTs: 4}))
 }
