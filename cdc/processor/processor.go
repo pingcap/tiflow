@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -445,6 +447,18 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
+// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
+// pullerSafeMode means to split all update kv entries whose commitTS
+// is older then the start time of this changefeed.
+func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
@@ -684,9 +698,19 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
+<<<<<<< HEAD
 		sortEngine, p.changefeed.Info.Config.BDRMode)
+=======
+		sortEngine, util.GetOrZero(cfConfig.BDRMode),
+		util.GetOrZero(cfConfig.EnableTableMonitor),
+		pullerSafeModeAtStart)
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 

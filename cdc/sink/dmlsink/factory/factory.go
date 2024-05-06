@@ -62,7 +62,7 @@ type SinkFactory struct {
 	category Category
 }
 
-// New creates a new SinkFactory by schema.
+// New creates a new SinkFactory by scheme.
 func New(
 	ctx context.Context,
 	sinkURIStr string,
@@ -76,8 +76,13 @@ func New(
 	}
 
 	s := &SinkFactory{}
+<<<<<<< HEAD
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
+=======
+	scheme := sink.GetScheme(sinkURI)
+	switch scheme {
+>>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {
@@ -110,7 +115,7 @@ func New(
 		s.category = CategoryBlackhole
 	default:
 		return nil,
-			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
 	}
 
 	return s, nil
