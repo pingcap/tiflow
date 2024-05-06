@@ -81,6 +81,14 @@ const (
 
 	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
 	DefaultEncoderGroupConcurrency = 32
+
+	// DefaultSendBootstrapIntervalInSec is the default interval to send bootstrap message.
+	DefaultSendBootstrapIntervalInSec = int64(120)
+	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
+	DefaultSendBootstrapInMsgCount = int32(10000)
+	// DefaultSendBootstrapToAllPartition is the default value of
+	// whether to send bootstrap message to all partitions.
+	DefaultSendBootstrapToAllPartition = true
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -163,6 +171,18 @@ type SinkConfig struct {
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 
+	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
+	// Note: When one of the following conditions is set to negative value,
+	// bootstrap sending function will be disabled.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
+
 	// OpenProtocol related configurations
 	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
 }
@@ -178,6 +198,20 @@ func (s *SinkConfig) MaskSensitiveData() {
 	if s.PulsarConfig != nil {
 		s.PulsarConfig.MaskSensitiveData()
 	}
+}
+
+// ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
+// Only enable bootstrap sending function for simple protocol
+// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
+func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
+	if s == nil {
+		return false
+	}
+	protocol := util.GetOrZero(s.Protocol)
+
+	return protocol == ProtocolSimple.String() &&
+		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
+		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -334,6 +368,7 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
 	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+	EncodingFormat                 *string `toml:"encoding-format" json:"encoding-format,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration

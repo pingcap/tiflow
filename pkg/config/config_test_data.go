@@ -65,6 +65,9 @@ const (
       "claim-check-storage-uri": ""
     },
     "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "open": {
       "output-old-value": true
     }
@@ -309,6 +312,9 @@ const (
       "output-column-id":false
     },
     "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "open": {
       "output-old-value": true
     }
@@ -472,6 +478,9 @@ const (
       "output-column-id":false
     },
     "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "open": {
       "output-old-value": true
     }

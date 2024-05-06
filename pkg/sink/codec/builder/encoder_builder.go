@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/csv"
 	"github.com/pingcap/tiflow/pkg/sink/codec/maxwell"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 )
 
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
@@ -45,7 +46,8 @@ func NewRowEventEncoderBuilder(
 		return canal.NewJSONRowEventEncoderBuilder(ctx, cfg)
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(cfg), nil
-
+	case config.ProtocolSimple:
+		return simple.NewBuilder(ctx, cfg)
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(cfg.Protocol)
 	}

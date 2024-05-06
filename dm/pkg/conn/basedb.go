@@ -15,6 +15,7 @@ package conn
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"net"
@@ -27,7 +28,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -104,6 +105,7 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 			util.WithCAContent(config.Security.SSLCABytes),
 			util.WithCertAndKeyContent(config.Security.SSLCertBytes, config.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(config.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)

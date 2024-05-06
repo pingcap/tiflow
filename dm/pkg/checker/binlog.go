@@ -24,8 +24,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -307,6 +307,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 			util.WithCAContent(c.sourceCfg.Security.SSLCABytes),
 			util.WithCertAndKeyContent(c.sourceCfg.Security.SSLCertBytes, c.sourceCfg.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(c.sourceCfg.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			markCheckError(result, err)

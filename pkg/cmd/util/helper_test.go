@@ -214,6 +214,9 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		Protocol:                         util.AddressOf("open-protocol"),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
@@ -248,6 +251,9 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }

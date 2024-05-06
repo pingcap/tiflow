@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -89,7 +89,7 @@ type changefeed struct {
 	redoDDLMgr  redo.DDLManager
 	redoMetaMgr redo.MetaManager
 
-	schema    *schemaWrap4Owner
+	schema    entry.SchemaStorage
 	ddlSink   DDLSink
 	ddlPuller puller.DDLPuller
 	// The changefeed will start a backend goroutine in the function `initialize`
@@ -569,11 +569,12 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema, err = newSchemaWrap4Owner(
+	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage,
 		ddlStartTs,
-		c.state.Info.Config,
+		c.state.Info.Config.ForceReplicate,
 		c.id,
+		util.RoleOwner,
 		filter)
 	if err != nil {
 		return errors.Trace(err)

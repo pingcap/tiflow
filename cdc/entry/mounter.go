@@ -26,14 +26,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
@@ -86,11 +85,6 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
-
-	// encoder is used to calculate the checksum.
-	encoder *rowcodec.Encoder
-	// sctx hold some information can be used by the encoder to calculate the checksum.
-	sctx *stmtctx.StatementContext
 }
 
 // NewMounter creates a mounter
@@ -110,11 +104,6 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz:        tz,
 		integrity: integrity,
-
-		encoder: &rowcodec.Encoder{},
-		sctx: &stmtctx.StatementContext{
-			TimeZone: tz,
-		},
 	}
 }
 
@@ -404,14 +393,40 @@ func datum2Column(
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
 
-// return error if cannot get the expected checksum from the decoder
+func (m *mounter) calculateChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+) (uint32, error) {
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		column := rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      &rawColumns[idx],
+		}
+		columns = append(columns, column)
+	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
+
+	calculator := rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}
+
+	checksum, err := calculator.Checksum(m.tz)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checksum, nil
+}
+
+// return error when calculate the checksum.
 // return false if the checksum is not matched
-// return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
-) (uint32, int, bool, error) {
+) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
-		return 0, 0, true, nil
+		return 0, true, nil
 	}
 
 	var decoder *rowcodec.DatumMapDecoder
@@ -421,53 +436,35 @@ func (m *mounter) verifyChecksum(
 		decoder = m.decoder
 	}
 	if decoder == nil {
-		return 0, 0, false, errors.New("cannot found the decoder to get the checksum")
+		return 0, false, errors.New("cannot found the decoder to get the checksum")
 	}
 
-	version := decoder.ChecksumVersion()
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return 0, version, true, nil
+		return 0, true, nil
 	}
 
-	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
-		columns = append(columns, rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
-		})
-	}
-	sort.Slice(columns, func(i, j int) bool {
-		return columns[i].ID < columns[j].ID
-	})
-	calculator := rowcodec.RowData{
-		Cols: columns,
-		Data: make([]byte, 0),
-	}
-
-	checksum, err := calculator.Checksum()
+	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Error(err))
-		return 0, version, false, errors.Trace(err)
+		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
+		return 0, false, errors.Trace(err)
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
 		log.Debug("checksum matched",
 			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
-		return checksum, version, true, nil
+		return checksum, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
 	if !ok {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
 			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
-		return checksum, version,
-			false, errors.New("cannot found the extra checksum from the event")
+			zap.Uint32("first", first))
+		return checksum, false, nil
 	}
 
 	if checksum == extra {
@@ -475,14 +472,14 @@ func (m *mounter) verifyChecksum(
 			"execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("extra", extra))
-		return checksum, version, true, nil
+		return checksum, true, nil
 	}
 
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
 		zap.Uint32("extra", extra))
-	return checksum, version, false, nil
+	return checksum, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
@@ -499,6 +496,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		corrupted       bool
 	)
 
+	if m.decoder != nil {
+		checksumVersion = m.decoder.ChecksumVersion()
+	} else if m.preDecoder != nil {
+		checksumVersion = m.preDecoder.ChecksumVersion()
+	}
+
 	// Decode previous columns.
 	var (
 		preCols     []*model.Column
@@ -513,7 +516,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -542,7 +545,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		current, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -660,7 +663,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(types.DefaultStmtNoWarningContext)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
@@ -719,11 +722,18 @@ func getDefaultOrZeroValue(
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		datum := types.NewDatum(col.GetOriginDefaultValue())
-		sctx := new(stmtctx.StatementContext)
-		sctx.TimeZone = tz
-		d, err = datum.ConvertTo(sctx, &col.FieldType)
+		d, err = datum.ConvertTo(types.DefaultStmtNoWarningContext, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+		}
+		switch col.GetType() {
+		case mysql.TypeTimestamp:
+			t := d.GetMysqlTime()
+			err = t.ConvertTimeZone(time.UTC, tz)
+			if err != nil {
+				return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
+			}
+			d.SetMysqlTime(t)
 		}
 	} else if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
