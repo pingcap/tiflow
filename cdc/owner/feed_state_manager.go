@@ -146,9 +146,9 @@ func (m *feedStateManager) Tick(
 		adminJobPending = true
 		changefeedErrorStuckDuration := *m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration
 		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
-			log.Info("changefeed-error-stuck-duration update",
-				zap.Duration("old-changefeed-error-stuck-duration", m.changefeedErrorStuckDuration),
-				zap.Duration("new-changefeed-error-stuck-duration", changefeedErrorStuckDuration),
+			log.Info("changefeedErrorStuckDuration update",
+				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),
+				zap.Duration("newChangefeedErrorStuckDuration", changefeedErrorStuckDuration),
 			)
 		}
 		m.errBackoff.MaxElapsedTime = changefeedErrorStuckDuration
