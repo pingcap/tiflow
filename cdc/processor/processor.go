@@ -627,7 +627,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	p.sourceManager.spawn(prcCtx)
 
 	p.sinkManager.r = sinkmanager.New(
-		p.changefeedID, p.latestInfo, p.upstream,
+		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID

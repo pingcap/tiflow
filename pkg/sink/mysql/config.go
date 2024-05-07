@@ -198,7 +198,24 @@ func (c *Config) Apply(
 	getMultiStmtEnable(urlParameter, &c.MultiStmtEnable)
 	getCachePrepStmts(urlParameter, &c.CachePrepStmts)
 	c.ForceReplicate = replicaConfig.ForceReplicate
+<<<<<<< HEAD
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
+=======
+
+	// Note(dongmen): The TiDBSourceID should never be 0 here, but we have found that
+	// in some problematic cases, the TiDBSourceID is 0 since something went wrong in the
+	// configuration process. So we need to check it here again.
+	// We do this is because it can cause the data to be inconsistent if the TiDBSourceID is 0
+	// in BDR Mode cluster.
+	if replicaConfig.Sink.TiDBSourceID == 0 {
+		log.Error("The TiDB source ID should never be set to 0. Please report it as a bug. The default value will be used: 1.",
+			zap.Uint64("tidbSourceID", replicaConfig.Sink.TiDBSourceID))
+		c.SourceID = config.DefaultTiDBSourceID
+	} else {
+		c.SourceID = replicaConfig.Sink.TiDBSourceID
+		log.Info("TiDB source ID is set", zap.Uint64("sourceID", c.SourceID))
+	}
+>>>>>>> ec1db0c646 (sink (ticdc): fix sourceID error (#11021))
 
 	return nil
 }
