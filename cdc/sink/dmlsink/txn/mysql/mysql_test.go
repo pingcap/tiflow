@@ -1705,7 +1705,7 @@ func TestGroupRowsByType(t *testing.T) {
 				},
 			}
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
-			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo, false)
+			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo)
 			for _, rows := range inserts {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}

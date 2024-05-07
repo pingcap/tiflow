@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -126,8 +126,11 @@ type ownerImpl struct {
 		feedStateManager FeedStateManager,
 		up *upstream.Upstream,
 		cfg *config.SchedulerConfig,
+		globalVars *vars.GlobalVars,
 	) *changefeed
 	cfg *config.SchedulerConfig
+
+	globalVars *vars.GlobalVars
 }
 
 var (
@@ -139,7 +142,7 @@ var (
 func NewOwner(
 	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
-	etcdClient etcd.CDCEtcdClient,
+	globalVars *vars.GlobalVars,
 ) Owner {
 	return &ownerImpl{
 		upstreamManager: upstreamManager,
@@ -148,7 +151,8 @@ func NewOwner(
 		newChangefeed:   NewChangefeed,
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		cfg:             cfg,
-		etcdClient:      etcdClient,
+		etcdClient:      globalVars.EtcdClient,
+		globalVars:      globalVars,
 	}
 }
 
@@ -170,7 +174,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	o.handleJobs(stdCtx)
 
 	// Tick all changefeeds.
-	ctx := stdCtx.(cdcContext.Context)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		// check if we are the changefeed owner to handle this changefeed
 		if !o.shouldHandleChangefeed(changefeedState) {
@@ -192,18 +195,15 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			}
 			cfReactor = o.newChangefeed(changefeedID, changefeedState.Info, changefeedState.Status,
 				NewFeedStateManager(up, changefeedState),
-				up, o.cfg)
+				up, o.cfg, o.globalVars)
 			o.changefeeds[changefeedID] = cfReactor
 		}
-		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID: changefeedID,
-		})
-		changefeedState.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+		changefeedState.CheckCaptureAlive(o.globalVars.CaptureInfo.ID)
 		captures := o.getChangefeedCaptures(changefeedState, state)
 		if !preflightCheck(changefeedState, captures) {
 			continue
 		}
-		checkpointTs, minTableBarrierTs := cfReactor.Tick(ctx, changefeedState.Info, changefeedState.Status, captures)
+		checkpointTs, minTableBarrierTs := cfReactor.Tick(stdCtx, changefeedState.Info, changefeedState.Status, captures)
 		updateStatus(changefeedState, checkpointTs, minTableBarrierTs)
 	}
 	o.changefeedTicked = true
@@ -214,7 +214,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			reactor.Close(ctx)
+			reactor.Close(stdCtx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
@@ -222,7 +222,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, reactor := range o.changefeeds {
-			reactor.Close(ctx)
+			reactor.Close(stdCtx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}

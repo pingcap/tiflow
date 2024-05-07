@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package entry
 
 import (
@@ -873,8 +870,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		},
 	}
 
+	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	require.NoError(t, err)
 	for _, tc := range testCases {
-		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo, tz)
 		require.Equal(t, tc.Res, val, tc.Name)
 	}
 
@@ -882,9 +881,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "-3.14", // no float
 		FieldType:          *ftTypeNewDecimalNotNull,
 	}
-	_, val, _, _, _ := getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ := getDefaultOrZeroValue(&colInfo, tz)
 	decimal := new(types.MyDecimal)
-	err := decimal.FromString([]byte("-3.14"))
+	err = decimal.FromString([]byte("-3.14"))
 	require.NoError(t, err)
 	require.Equal(t, decimal.String(), val, "mysql.TypeNewDecimal + notnull + default")
 
@@ -892,10 +891,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "2020-11-19 12:12:12",
 		FieldType:          *ftTypeTimestampNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err := types.ParseTimeFromFloatString(
 		types.DefaultStmtNoWarningContext,
-		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + notnull + default")
 
@@ -903,10 +902,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "2020-11-19 12:12:12",
 		FieldType:          *ftTypeTimestampNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expected, err = types.ParseTimeFromFloatString(
 		types.DefaultStmtNoWarningContext,
-		"2020-11-19 12:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
+		"2020-11-19 20:12:12", colInfo.FieldType.GetType(), colInfo.FieldType.GetDecimal())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), val, "mysql.TypeTimestamp + null + default")
 
@@ -914,7 +913,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "e1",
 		FieldType:          *ftTypeEnumNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expectedEnum, err := types.ParseEnumName(colInfo.FieldType.GetElems(), "e1", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
 	require.Equal(t, expectedEnum.Value, val, "mysql.TypeEnum + notnull + default")
@@ -923,7 +922,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		OriginDefaultValue: "1,e",
 		FieldType:          *ftTypeSetNotNull,
 	}
-	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo)
+	_, val, _, _, _ = getDefaultOrZeroValue(&colInfo, tz)
 	expectedSet, err := types.ParseSetName(colInfo.FieldType.GetElems(), "1,e", colInfo.FieldType.GetCollate())
 	require.NoError(t, err)
 	require.Equal(t, expectedSet.Value, val, "mysql.TypeSet + notnull + default")
@@ -1100,6 +1099,37 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	row, err = decoder.NextRowChangedEvent()
 	// no error, checksum verification passed.
 	require.NoError(t, err)
+}
+
+func TestTimezoneDefaultValue(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event(`create table test.t(a int primary key)`)
+	insertEvent := helper.DML2Event(`insert into test.t values (1)`, "test", "t")
+	require.NotNil(t, insertEvent)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+
+	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+
+	_ = helper.DDL2Event(`alter table test.t add column b timestamp default '2023-02-09 13:00:00'`)
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+
+	event := polymorphicEvent.Row
+	require.NotNil(t, event)
+	require.Equal(t, "2023-02-09 13:00:00", event.PreColumns[1].Value.(string))
 }
 
 func TestVerifyChecksumTime(t *testing.T) {
@@ -1565,6 +1595,8 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 	}
+	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	require.NoError(t, err)
 	p := parser.New()
 	for i, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
@@ -1572,7 +1604,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
 		require.NoError(t, err)
 		e := model.RowChangedEvent{
 			TableInfo: cdcTableInfo,

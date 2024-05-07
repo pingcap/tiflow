@@ -3,24 +3,24 @@ groups:
   rules:
   # server related alter rules
   - alert: cdc_multiple_owners
-    expr: sum(rate(ticdc_owner_ownership_counter[30s])) >= 2
+    expr: sum(rate(ticdc_owner_ownership_counter[240s])) >= 0.125
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: warning
-      expr: sum(rate(ticdc_owner_ownership_counter[30s])) >= 2
+      expr: sum(rate(ticdc_owner_ownership_counter[240s])) >= 0.125
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: cdc cluster has multiple owners
 
   - alert: cdc_no_owner
-    expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
+    expr: sum(rate(ticdc_owner_ownership_counter[240s])) < 0.0625
     for: 10m
     labels:
       env: ENV_LABELS_ENV
       level: warning
-      expr: sum(rate(ticdc_owner_ownership_counter[30s])) < 0.5
+      expr: sum(rate(ticdc_owner_ownership_counter[240s])) < 0.0625
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'

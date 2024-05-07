@@ -45,7 +45,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "int(11)", mysqlType)
 
-	flag := tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
+	flag := *tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
 	javaType, err := getJavaSQLType(int64(2147483647), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
@@ -57,7 +57,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "tinyint(4)", mysqlType)
 
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	javaType, err = getJavaSQLType(int64(127), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeTINYINT, javaType)
@@ -69,14 +69,14 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	mysqlType = utils.GetMySQLType(columnInfo, true)
 	require.Equal(t, "smallint(6)", mysqlType)
 
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	javaType, err = getJavaSQLType(int64(32767), columnInfo.FieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeSMALLINT, javaType)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -87,7 +87,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -107,7 +107,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[0].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[0].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "int unsigned", mysqlType)
 	// mysql type with the default type length
@@ -129,7 +129,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -150,7 +150,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "smallint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -170,7 +170,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -190,7 +190,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bigint unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -357,7 +357,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "bit", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -389,7 +389,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	columnID := tableInfo.Columns[1].ID
 	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -401,7 +401,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -454,7 +454,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	columnID = tableInfo.Columns[1].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "float unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -466,7 +466,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "double unsigned", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -528,7 +528,7 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	columnID := tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -551,7 +551,7 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "decimal unsigned zerofill", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -579,7 +579,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	columnID := tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "time", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -602,7 +602,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "datetime", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -625,7 +625,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "timestamp", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -641,7 +641,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	columnID = tableInfo.Columns[1].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "date", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -664,7 +664,7 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "year", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -692,7 +692,7 @@ func TestGetMySQLType4Char(t *testing.T) {
 	columnID := tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "char", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -708,7 +708,7 @@ func TestGetMySQLType4Char(t *testing.T) {
 	columnID = tableInfo.Columns[1].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "varchar", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -729,7 +729,7 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	columnID := tableInfo.Columns[1].ID
 	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "text", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -741,7 +741,7 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinytext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -753,7 +753,7 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	columnID = tableInfo.Columns[3].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumtext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -765,7 +765,7 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 	columnID = tableInfo.Columns[4].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "longtext", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -785,7 +785,7 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
+	flag := *tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "binary", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -807,7 +807,7 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "varbinary", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -827,7 +827,7 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 
 	columnInfo, ok := tableInfo.GetColumnInfo(tableInfo.Columns[1].ID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
+	flag := *tableInfo.ColumnsFlag[tableInfo.Columns[1].ID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "blob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -838,7 +838,7 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[2].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[2].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "tinyblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -849,7 +849,7 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[3].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[3].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "mediumblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -860,7 +860,7 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 
 	columnInfo, ok = tableInfo.GetColumnInfo(tableInfo.Columns[4].ID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
+	flag = *tableInfo.ColumnsFlag[tableInfo.Columns[4].ID]
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "longblob", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)
@@ -881,7 +881,7 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 	columnID := tableInfo.Columns[1].ID
 	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "enum", mysqlType)
@@ -895,7 +895,7 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 	columnID = tableInfo.Columns[2].ID
 	columnInfo, ok = tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag = tableInfo.ColumnsFlag[columnID]
+	flag = *tableInfo.ColumnsFlag[columnID]
 
 	mysqlType = utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "set", mysqlType)
@@ -918,7 +918,7 @@ func TestGetMySQLType4JSON(t *testing.T) {
 	columnID := tableInfo.Columns[1].ID
 	columnInfo, ok := tableInfo.GetColumnInfo(columnID)
 	require.True(t, ok)
-	flag := tableInfo.ColumnsFlag[columnID]
+	flag := *tableInfo.ColumnsFlag[columnID]
 	mysqlType := utils.GetMySQLType(columnInfo, false)
 	require.Equal(t, "json", mysqlType)
 	mysqlType = utils.GetMySQLType(columnInfo, true)

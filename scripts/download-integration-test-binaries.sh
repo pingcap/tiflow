@@ -15,10 +15,6 @@
 # download-integration-test-binaries.sh will
 # * download all the binaries you need for integration testing
 
-# Notice:
-# Please don't try the script locally,
-# it downloads files for linux platform. We only use it in docker-compose.
-
 set -o errexit
 set -o pipefail
 
@@ -31,7 +27,7 @@ branch=${1:-master}
 # binaries.
 community=${2:-false}
 # Specify which version of the community binaries that will be utilized.
-ver=${3:-v6.5.2}
+ver=${3:-v8.1.0}
 # Specify which os that will be used to pack the binaries.
 os=${4:-linux}
 # Specify which architecture that will be used to pack the binaries.
@@ -101,11 +97,12 @@ function download_community_binaries() {
 	tar -xz -C third_bin -f tmp/$ycsb_tar_name
 
 	# minio
-	local minio_url="https://dl.min.io/server/minio/release/linux-amd64/minio"
+	local minio_url="https://dl.min.io/server/minio/release/${os}-${arch}/minio"
 	download "$minio_url" "minio" "third_bin/minio"
 
 	# jq
-	local jq_url="https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
+	local os_name=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
+	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_name}-${arch}"
 	wget -O third_bin/jq "$jq_url"
 
 	chmod a+x third_bin/*
@@ -130,7 +127,7 @@ function download_binaries() {
 	minio_download_url="${file_server_url}/download/minio.tar.gz"
 	go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 	etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-d671b084_linux-amd64.tar.gz"
+	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-79f1fd1e_linux-amd64.tar.gz"
 	jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 	schema_registry_url="${file_server_url}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 

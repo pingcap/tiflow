@@ -211,7 +211,7 @@ func main() {
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID, "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
-	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&consumerOption.logLevel, "log-level", "debug", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
 	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
@@ -475,7 +475,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
@@ -492,7 +492,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig())
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
