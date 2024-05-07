@@ -197,6 +197,9 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 	)
 
 	switch v := stmt.(type) {
+	case *ast.CreateSequenceStmt:
+	case *ast.AlterSequenceStmt:
+	case *ast.DropSequenceStmt:
 	case *ast.AlterDatabaseStmt:
 	case *ast.CreateDatabaseStmt:
 		v.IfNotExists = true
