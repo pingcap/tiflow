@@ -54,4 +54,6 @@ type PullerConfig struct {
 	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
 	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
 	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
+	// EnableResolveLock is used to enable resolve lock feature in kvClient and puller.
+	EnableResolveLock bool `toml:"enable-resolve-lock" json:"enable-resolve-lock"`
 }

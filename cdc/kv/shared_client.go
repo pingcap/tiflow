@@ -163,6 +163,9 @@ func NewSharedClient(
 	}
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
 	s.initMetrics()
+	if !s.config.Debug.Puller.EnableResolveLock {
+		log.Warn("fuzz:resolve lock function is disabled, changefeed my be blocked by locks!")
+	}
 	return s
 }
 
@@ -689,8 +692,10 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 		case <-gcTicker.C:
 			gcResolveLastRun()
 		case task = <-s.resolveLockCh.Out():
-			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
-			doResolve(task.regionID, task.state, task.maxVersion)
+			if s.config.Debug.Puller.EnableResolveLock {
+				s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
+				doResolve(task.regionID, task.state, task.maxVersion)
+			}
 		}
 	}
 }
@@ -766,6 +771,7 @@ func (s *SharedClient) newRequestedTable(
 	}
 
 	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
+
 		maxVersion := rt.staleLocksVersion.Load()
 		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
