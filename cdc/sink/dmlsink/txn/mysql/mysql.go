@@ -357,12 +357,7 @@ func convertBinaryToString(cols []*model.Column) {
 
 func (s *mysqlBackend) groupRowsByType(
 	event *dmlsink.TxnCallbackableEvent,
-<<<<<<< HEAD
 	tableInfo *timodel.TableInfo,
-	spiltUpdate bool,
-=======
-	tableInfo *model.TableInfo,
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
 	preAllocateSize := len(event.Event.Rows)
 	if preAllocateSize > s.cfg.MaxTxnRow {
@@ -578,20 +573,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
-<<<<<<< HEAD
-			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
-			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
-			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
-				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.cfg.ForceReplicate)
-=======
 			// Update Event
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(
 					quoteTable,
-					row.GetPreColumns(),
-					row.GetColumns(),
+					row.PreColumns,
+					row.Columns,
 					s.cfg.ForceReplicate)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -758,27 +746,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-<<<<<<< HEAD
-=======
-			// Set session variables first and then execute the transaction.
-			// we try to set write source for each txn,
-			// so we can use it to trace the data source
-			if err = pmysql.SetWriteSource(pctx, s.cfg, tx); err != nil {
-				err := logDMLTxnErr(
-					wrapMysqlTxnError(err),
-					start, s.changefeed,
-					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
-						s.cfg.SourceID),
-					dmls.rowCount, dmls.startTs)
-				if rbErr := tx.Rollback(); rbErr != nil {
-					if errors.Cause(rbErr) != context.Canceled {
-						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
-					}
-				}
-				return 0, 0, err
-			}
-
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
 			// fall back to the sequantial way.
 			// error can be ErrPrepareMulti, ErrBadConn etc.

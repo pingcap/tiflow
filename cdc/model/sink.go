@@ -347,30 +347,6 @@ type RowChangedEvent struct {
 	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
-// ToRowChangedEvent converts RowChangedEventInRedoLog to RowChangedEvent
-func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
-	cols := r.Columns
-	if cols == nil {
-		cols = r.PreColumns
-	}
-	tableInfo := BuildTableInfo(
-		r.Table.Schema,
-		r.Table.Table,
-		cols,
-		r.IndexColumns)
-	tableInfo.TableName.TableID = r.Table.TableID
-	tableInfo.TableName.IsPartition = r.Table.IsPartition
-	row := &RowChangedEvent{
-		StartTs:         r.StartTs,
-		CommitTs:        r.CommitTs,
-		PhysicalTableID: r.Table.TableID,
-		TableInfo:       tableInfo,
-		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
-		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
-	}
-	return row
-}
-
 // txnRows represents a set of events that belong to the same transaction.
 type txnRows []*RowChangedEvent
 
@@ -878,19 +854,7 @@ func trySplitAndSortUpdateEvent(
 	return rowChangedEvents, nil
 }
 
-<<<<<<< HEAD
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
-=======
-func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
-	if col != nil {
-		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-		return colFlag.IsUniqueKey() || colFlag.IsHandleKey()
-	}
-	return false
-}
-
 // ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 // whether the handle key column or unique key has been modified.
 // If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
 func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {

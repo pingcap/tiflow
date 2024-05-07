@@ -260,6 +260,7 @@ func (ra *RedoApplier) resetQuota(rowSize uint64) error {
 	} else if ra.pendingQuota < 64*1024 {
 		ra.pendingQuota = 64 * 1024
 	}
+	log.Info("reset quota", zap.Uint64("rowSize", rowSize), zap.Uint64("newQuota", ra.pendingQuota))
 	return ra.memQuota.BlockAcquire(ra.pendingQuota - oldQuota)
 }
 
@@ -555,7 +556,7 @@ func (t *tempTxnInsertEventStorage) readFromFile() (*model.RowChangedEvent, erro
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrUnmarshalFailed, err)
 	}
-	return redoLog.RedoRow.Row.ToRowChangedEvent(), nil
+	return redoLog.RedoRow.Row, nil
 }
 
 func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, error) {

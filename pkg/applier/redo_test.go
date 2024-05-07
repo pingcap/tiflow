@@ -145,17 +145,10 @@ func TestApply(t *testing.T) {
 		},
 		// update event which doesn't modify handle key
 		{
-<<<<<<< HEAD
-			StartTs:  1200,
-			CommitTs: resolvedTs,
+			StartTs:  1120,
+			CommitTs: 1220,
 			Table:    &model.TableName{Schema: "test", Table: "t1"},
 			PreColumns: []*model.Column{
-=======
-			StartTs:   1120,
-			CommitTs:  1220,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 				{
 					Name:  "a",
 					Value: 1,
@@ -170,68 +163,78 @@ func TestApply(t *testing.T) {
 				{
 					Name:  "a",
 					Value: 1,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "3",
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		},
 		{
-			StartTs:   1150,
-			CommitTs:  1250,
-			TableInfo: tableInfo,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1150,
+			CommitTs: 1250,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 10,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "20",
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		},
 		{
-			StartTs:   1150,
-			CommitTs:  1250,
-			TableInfo: tableInfo,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1150,
+			CommitTs: 1250,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 100,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "200",
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		},
 		{
-			StartTs:   1200,
-			CommitTs:  resolvedTs,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1200,
+			CommitTs: resolvedTs,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 10,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "20",
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		},
 		{
-			StartTs:   1200,
-			CommitTs:  resolvedTs,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1200,
+			CommitTs: resolvedTs,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 1,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "3",
+					Flag:  0,
 				},
-			}, tableInfo),
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 2,
@@ -244,27 +247,31 @@ func TestApply(t *testing.T) {
 			},
 		},
 		{
-			StartTs:   1200,
-			CommitTs:  resolvedTs,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1200,
+			CommitTs: resolvedTs,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 100,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "200",
+					Flag:  0,
 				},
-			}, tableInfo),
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: 200,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "300",
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		},
 	}
 	for _, dml := range dmls {
@@ -288,7 +295,7 @@ func TestApply(t *testing.T) {
 					Schema: "test", Table: "resolved",
 				},
 			},
-			Query: "create table resolved(id int)",
+			Query: "create table resolved(id int not null unique key)",
 			Type:  timodel.ActionCreateTable,
 		},
 	}
@@ -331,7 +338,7 @@ func TestApplyBigTxn(t *testing.T) {
 			dbIndex++
 		}()
 		if dbIndex%2 == 0 {
-			testDB, err := pmysql.MockTestDB()
+			testDB, err := pmysql.MockTestDB(true)
 			require.Nil(t, err)
 			return testDB, nil
 		}
@@ -350,104 +357,105 @@ func TestApplyBigTxn(t *testing.T) {
 		mysqlDDL.GetDBConnImpl = getDDLDBConnBak
 	}()
 
-	tableInfo := model.BuildTableInfo("test", "t1", []*model.Column{
-		{
-			Name: "a",
-			Type: mysqlParser.TypeLong,
-			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-		}, {
-			Name: "b",
-			Type: mysqlParser.TypeString,
-			Flag: 0,
-		},
-	}, [][]int{{0}})
 	dmls := make([]*model.RowChangedEvent, 0)
 	// insert some rows
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 60; i++ {
 		dml := &model.RowChangedEvent{
-			StartTs:   1100,
-			CommitTs:  1200,
-			TableInfo: tableInfo,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1100,
+			CommitTs: 1200,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i+1),
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		}
 		dmls = append(dmls, dml)
 	}
 	// update
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 60; i++ {
 		dml := &model.RowChangedEvent{
-			StartTs:   1200,
-			CommitTs:  1300,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1200,
+			CommitTs: 1300,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i+1),
+					Flag:  0,
 				},
-			}, tableInfo),
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i * 10,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i*10+1),
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		}
 		dmls = append(dmls, dml)
 	}
 	// delete and update
-	for i := 1; i <= 50; i++ {
+	for i := 1; i <= 30; i++ {
 		dml := &model.RowChangedEvent{
-			StartTs:   1300,
-			CommitTs:  resolvedTs,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1300,
+			CommitTs: resolvedTs,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i * 10,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i*10+1),
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		}
 		dmls = append(dmls, dml)
 	}
-	for i := 51; i <= 100; i++ {
+	for i := 31; i <= 60; i++ {
 		dml := &model.RowChangedEvent{
-			StartTs:   1300,
-			CommitTs:  resolvedTs,
-			TableInfo: tableInfo,
-			PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			StartTs:  1300,
+			CommitTs: resolvedTs,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i * 10,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i*10+1),
+					Flag:  0,
 				},
-			}, tableInfo),
-			Columns: model.Columns2ColumnDatas([]*model.Column{
+			},
+			Columns: []*model.Column{
 				{
 					Name:  "a",
 					Value: i * 100,
+					Flag:  model.HandleKeyFlag,
 				}, {
 					Name:  "b",
 					Value: fmt.Sprintf("%d", i*100+1),
+					Flag:  0,
 				},
-			}, tableInfo),
+			},
 		}
 		dmls = append(dmls, dml)
 	}
@@ -542,8 +550,8 @@ func getMockDB(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1").
-		WithArgs(1, "3", 1).
+	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1").
+		WithArgs(1, "3", 1, "2").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -558,19 +566,14 @@ func getMockDB(t *testing.T) *sql.DB {
 
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
-<<<<<<< HEAD
 	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
-		WithArgs(1, "2").
-=======
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
-		WithArgs(10).
+		WithArgs(10, "20").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
-		WithArgs(1).
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+		WithArgs(1, "3").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
-		WithArgs(100).
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+		WithArgs(100, "200").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 		WithArgs(2, "3").
@@ -609,10 +612,6 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
 	})
-	mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
-		Number:  1305,
-		Message: "FUNCTION test.tidb_version does not exist",
-	})
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -620,7 +619,7 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 60; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i, fmt.Sprintf("%d", i+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -628,12 +627,12 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	for i := 1; i <= 100; i++ {
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
-			WithArgs(i).
+	for i := 1; i <= 60; i++ {
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+			WithArgs(i, fmt.Sprintf("%d", i+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 60; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i*10, fmt.Sprintf("%d", i*10+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -642,12 +641,12 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
-	for i := 1; i <= 100; i++ {
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ?)").
-			WithArgs(i * 10).
+	for i := 1; i <= 60; i++ {
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+			WithArgs(i*10, fmt.Sprintf("%d", i*10+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	for i := 51; i <= 100; i++ {
+	for i := 31; i <= 60; i++ {
 		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(i*100, fmt.Sprintf("%d", i*100+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -657,7 +656,7 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	// Then, apply ddl which commitTs equal to resolvedTs
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("create table resolved(id int)").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("create table resolved(id int not null unique key)").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	mock.ExpectClose()
