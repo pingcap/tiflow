@@ -98,8 +98,8 @@ func main() {
 	switch consumerClient {
 	case "kafka-go":
 		consumer = NewKafkaGoConsumer(ctx, consumerOption)
-	case "saram":
-		consumer = NewSaramConsumer(ctx, consumerOption)
+	case "sarama":
+		consumer = NewSaramaConsumer(ctx, consumerOption)
 	case "confluent":
 		consumer = NewConfluentConsumer(ctx, consumerOption)
 	default:

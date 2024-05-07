@@ -56,7 +56,7 @@ func newConfig(o *consumerOption) (*sarama.Config, error) {
 	return config, err
 }
 
-func saramGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error) {
+func saramaGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error) {
 	// get partition number or create topic automatically
 	admin, err := sarama.NewClusterAdmin(o.address, cfg)
 	if err != nil {
@@ -81,23 +81,23 @@ func saramGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error) 
 	return 0, cerror.Errorf("get partition number(%s) timeout", o.topic)
 }
 
-type saramConsumer struct {
+type saramaConsumer struct {
 	ready  chan bool
 	option *consumerOption
 	config *sarama.Config
 	writer *writer
 }
 
-var _ KakfaConsumer = (*saramConsumer)(nil)
+var _ KakfaConsumer = (*saramaConsumer)(nil)
 
-// NewSaramConsumer will create a consumer client.
-func NewSaramConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
-	c := new(saramConsumer)
+// NewSaramaConsumer will create a consumer client.
+func NewSaramaConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
+	c := new(saramaConsumer)
 	config, err := newConfig(o)
 	if err != nil {
 		log.Panic("Error creating sarama config", zap.Error(err))
 	}
-	partitionNum, err := saramGetPartitionNum(o, config)
+	partitionNum, err := saramaGetPartitionNum(o, config)
 	if err != nil {
 		log.Panic("Error get partition number", zap.String("topic", o.topic), zap.Error(err))
 	}
@@ -118,19 +118,19 @@ func NewSaramConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
-func (c *saramConsumer) Setup(sarama.ConsumerGroupSession) error {
+func (c *saramaConsumer) Setup(sarama.ConsumerGroupSession) error {
 	// Mark the c as ready
 	close(c.ready)
 	return nil
 }
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
-func (c *saramConsumer) Cleanup(sarama.ConsumerGroupSession) error {
+func (c *saramaConsumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
 // ConsumeClaim will async read message from Kafka
-func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	partition := claim.Partition()
 	log.Info("start consume claim",
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
@@ -156,7 +156,7 @@ func (c *saramConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 }
 
 // Consume will read message from Kafka.
-func (c *saramConsumer) Consume(ctx context.Context) error {
+func (c *saramaConsumer) Consume(ctx context.Context) error {
 	client, err := sarama.NewConsumerGroup(c.option.address, c.option.groupID, c.config)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
@@ -184,7 +184,7 @@ func (c *saramConsumer) Consume(ctx context.Context) error {
 }
 
 // AsyncWrite call writer to write to the downsteam asynchronously.
-func (c *saramConsumer) AsyncWrite(ctx context.Context) {
+func (c *saramaConsumer) AsyncWrite(ctx context.Context) {
 	if err := c.writer.AsyncWrite(ctx); err != nil {
 		log.Info("async write break", zap.Error(err))
 	}
