@@ -132,7 +132,7 @@ func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, getDefaultReplicaConfig(), errChan, nil)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
@@ -149,7 +149,7 @@ func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, getDefaultReplicaConfig())
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
 	if err != nil {
 		cancel()
 		return nil, cerror.Trace(err)
@@ -572,12 +572,6 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 			return nil
 		}
 	}
-}
-
-func getDefaultReplicaConfig() *config.ReplicaConfig {
-	defaultReplicaConfig := config.GetDefaultReplicaConfig()
-	defaultReplicaConfig.Sink.TiDBSourceID = config.DefaultTiDBSourceID
-	return defaultReplicaConfig
 }
 
 func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
