@@ -382,6 +382,30 @@ type RowChangedEventInRedoLog struct {
 	IndexColumns [][]int   `msg:"index-columns"`
 }
 
+// ToRowChangedEvent converts RowChangedEventInRedoLog to RowChangedEvent
+func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
+	cols := r.Columns
+	if cols == nil {
+		cols = r.PreColumns
+	}
+	tableInfo := BuildTableInfo(
+		r.Table.Schema,
+		r.Table.Table,
+		cols,
+		r.IndexColumns)
+	tableInfo.TableName.TableID = r.Table.TableID
+	tableInfo.TableName.IsPartition = r.Table.IsPartition
+	row := &RowChangedEvent{
+		StartTs:         r.StartTs,
+		CommitTs:        r.CommitTs,
+		PhysicalTableID: r.Table.TableID,
+		TableInfo:       tableInfo,
+		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
+		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
+	}
+	return row
+}
+
 // txnRows represents a set of events that belong to the same transaction.
 type txnRows []*RowChangedEvent
 
@@ -1125,18 +1149,17 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string) error {
 
 // Whether split a single update event into delete and insert events？
 //
-// For the MySQL Sink, there is no need to split a single unique key changed update event, this
-// is also to keep the backward compatibility, the same behavior as before.
+// For the MySQL Sink, we don't split any update event.
+// This may cause error like "duplicate entry" when sink to the downstream.
+// This kind of error will cause the changefeed to restart,
+// and then the related update rows will be splitted to insert and delete at puller side.
 //
 // For the Kafka and Storage sink, always split a single unique key changed update event, since:
 // 1. Avro and CSV does not output the previous column values for the update event, so it would
 // cause consumer missing data if the unique key changed event is not split.
 // 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
 func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
-	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
-		return false
-	}
-	return true
+	return !sink.IsMySQLCompatibleScheme(sinkScheme)
 }
 
 // trySplitAndSortUpdateEvent try to split update events if unique key is updated
@@ -1166,8 +1189,8 @@ func trySplitAndSortUpdateEvent(
 
 		// This indicates that it is an update event. if the pk or uk is updated,
 		// we need to split it into two events (delete and insert).
-		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(e)
+		if e.IsUpdate() && ShouldSplitUpdateEvent(e) {
+			deleteEvent, insertEvent, err := SplitUpdateEvent(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -1192,10 +1215,10 @@ func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
 	return false
 }
 
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
 // If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
+func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
 		return false
@@ -1217,8 +1240,8 @@ func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	return false
 }
 
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(
+// SplitUpdateEvent splits an update event into a delete and an insert event.
+func SplitUpdateEvent(
 	updateEvent *RowChangedEvent,
 ) (*RowChangedEvent, *RowChangedEvent, error) {
 	if updateEvent == nil {
