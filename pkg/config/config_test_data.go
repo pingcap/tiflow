@@ -64,7 +64,10 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true
   },
   "consistent": {
     "level": "none",
@@ -305,7 +308,10 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true
   },
   "consistent": {
     "level": "none",
@@ -465,7 +471,10 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true
   },
   "consistent": {
     "level": "none",

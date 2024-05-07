@@ -24,18 +24,18 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/domain"
-	tidbkv "github.com/pingcap/tidb/kv"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
-	"github.com/pingcap/tidb/types"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/domain"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timeta "github.com/pingcap/tidb/pkg/meta"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/store/mockstore"
+	"github.com/pingcap/tidb/pkg/testkit"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -581,7 +581,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	err = storage.HandleDDLJob(job)
 	require.Nil(t, err)
 
-	require.Equal(t, storage.(*schemaStorageImpl).resolvedTs, uint64(140))
+	require.Equal(t, storage.(*schemaStorage).resolvedTs, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist := snap.SchemaByID(11)
@@ -691,7 +691,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	meta := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
@@ -729,13 +729,13 @@ func TestExplicitTables(t *testing.T) {
 	tk.MustExec("create table test2.simple_test5 (a varchar(20))")
 	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
+	meta1 := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
-	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
+	meta2 := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
 	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */, f)
 	require.Nil(t, err)
@@ -892,7 +892,7 @@ func TestSchemaStorage(t *testing.T) {
 
 		for _, job := range jobs {
 			ts := job.BinlogInfo.FinishedTS
-			meta, err := kv.GetSnapshotMeta(store, ts)
+			meta := kv.GetSnapshotMeta(store, ts)
 			require.Nil(t, err)
 			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false, f)
 			require.Nil(t, err)
@@ -973,7 +973,7 @@ func TestHandleKey(t *testing.T) {
 	tk.MustExec("create table test.simple_test3 (id bigint, age int)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	meta := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)

@@ -18,8 +18,8 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"

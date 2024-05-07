@@ -23,9 +23,9 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
@@ -209,10 +209,7 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	snap, err := kv.GetSnapshotMeta(p.kvStorage, version.Ver)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	snap := kv.GetSnapshotMeta(p.kvStorage, version.Ver)
 
 	dbInfos, err := snap.ListDatabases()
 	if err != nil {

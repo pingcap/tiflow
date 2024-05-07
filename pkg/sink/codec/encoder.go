@@ -83,3 +83,45 @@ func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
 	// the value type should be the same
 	return preValue == updatedValue
 }
+
+// MockRowEventEncoderBuilder is a mock implementation of RowEventEncoderBuilder
+type MockRowEventEncoderBuilder struct{}
+
+// Build implement the RowEventEncoderBuilder interface
+func (m *MockRowEventEncoderBuilder) Build() RowEventEncoder {
+	return &MockRowEventEncoder{}
+}
+
+// CleanMetrics implement the RowEventEncoderBuilder interface
+func (m *MockRowEventEncoderBuilder) CleanMetrics() {
+	// Clean up metrics if needed
+}
+
+// MockRowEventEncoder is a mock implementation of RowEventEncoder
+type MockRowEventEncoder struct{}
+
+// EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
+func (m *MockRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+	// Implement the encoding logic for checkpoint event
+	return nil, nil
+}
+
+// EncodeDDLEvent implement the DDLEventBatchEncoder interface
+func (m *MockRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+	// Implement the encoding logic for DDL event
+	return nil, nil
+}
+
+// AppendRowChangedEvent implement the RowEventEncoder interface
+func (m *MockRowEventEncoder) AppendRowChangedEvent(
+	ctx context.Context, tableID string, event *model.RowChangedEvent, callback func(),
+) error {
+	// Implement the logic for appending row changed event
+	return nil
+}
+
+// Build implement the RowEventEncoder interface
+func (m *MockRowEventEncoder) Build() []*common.Message {
+	// Implement the logic for building the batch and returning the bytes of key and value
+	return nil
+}
