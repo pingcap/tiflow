@@ -202,7 +202,7 @@ func getKafkaVersion(config *sarama.Config, o *Options) (sarama.KafkaVersion, er
 		})
 	}
 	for i := range addrs {
-		version, err := getKafkaVersionFromBroker(config, addrs[i])
+		version, err := getKafkaVersionFromBroker(config, o.RequestVersion, addrs[i])
 		if err == nil {
 			return version, err
 		}
@@ -210,7 +210,7 @@ func getKafkaVersion(config *sarama.Config, o *Options) (sarama.KafkaVersion, er
 	return version, err
 }
 
-func getKafkaVersionFromBroker(config *sarama.Config, addr string) (sarama.KafkaVersion, error) {
+func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr string) (sarama.KafkaVersion, error) {
 	KafkaVersion := defaultKafkaVersion
 	broker := sarama.NewBroker(addr)
 	err := broker.Open(config)
@@ -218,38 +218,37 @@ func getKafkaVersionFromBroker(config *sarama.Config, addr string) (sarama.Kafka
 		broker.Close()
 	}()
 	if err != nil {
-		log.Warn("Kafka fail to open broker", zap.String("addr", addr))
+		log.Warn("Kafka fail to open broker", zap.String("addr", addr), zap.Error(err))
 		return KafkaVersion, err
 	}
-	apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{Version: 3})
+	apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{Version: requestVersion})
 	if err != nil {
-		log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addr))
+		log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addr), zap.Error(err))
 		return KafkaVersion, err
 	}
 	// ApiKey method
 	// 0      Produce
 	// 3      Metadata (default)
 	version := apiResponse.ApiKeys[3].MaxVersion
-	switch version {
-	case 10:
+	if version >= 10 {
 		KafkaVersion = sarama.V2_8_0_0
-	case 9:
+	} else if version >= 9 {
 		KafkaVersion = sarama.V2_4_0_0
-	case 8:
+	} else if version >= 8 {
 		KafkaVersion = sarama.V2_3_0_0
-	case 7:
+	} else if version >= 7 {
 		KafkaVersion = sarama.V2_1_0_0
-	case 6:
+	} else if version >= 6 {
 		KafkaVersion = sarama.V2_0_0_0
-	case 5:
+	} else if version >= 5 {
 		KafkaVersion = sarama.V1_0_0_0
-	case 3, 4:
+	} else if version >= 3 {
 		KafkaVersion = sarama.V0_11_0_0
-	case 2:
+	} else if version >= 2 {
 		KafkaVersion = sarama.V0_10_1_0
-	case 1:
+	} else if version >= 1 {
 		KafkaVersion = sarama.V0_10_0_0
-	case 0:
+	} else if version >= 0 {
 		KafkaVersion = sarama.V0_8_2_0
 	}
 	return KafkaVersion, nil
