@@ -168,6 +168,15 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts,
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
 		adminJobPending = true
+		changefeedErrorStuckDuration := *m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration
+		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
+			log.Info("changefeed-error-stuck-duration update",
+				zap.Duration("old-changefeed-error-stuck-duration", m.changefeedErrorStuckDuration),
+				zap.Duration("new-changefeed-error-stuck-duration", changefeedErrorStuckDuration),
+			)
+		}
+		m.errBackoff.MaxElapsedTime = changefeedErrorStuckDuration
+		m.changefeedErrorStuckDuration = changefeedErrorStuckDuration
 		return
 	}
 
