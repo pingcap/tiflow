@@ -30,6 +30,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	defaultVersion   = "2.4.0"
+	defaultRetryTime = 30
+	defaultTimeout   = time.Second * 10
+)
+
 type consumerOption struct {
 	address      []string
 	version      string
@@ -70,11 +76,11 @@ type consumerOption struct {
 // NewConsumerOption will create a new consumer option
 func NewConsumerOption() *consumerOption {
 	return &consumerOption{
-		version:         "2.4.0",
+		version:         defaultVersion,
 		maxMessageBytes: math.MaxInt64,
 		maxBatchSize:    math.MaxInt64,
-		retryTime:       30,
-		timeout:         time.Second * 10,
+		retryTime:       defaultRetryTime,
+		timeout:         defaultTimeout,
 	}
 }
 

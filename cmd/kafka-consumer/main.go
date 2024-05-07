@@ -103,7 +103,7 @@ func main() {
 	case "confluent":
 		consumer = NewConfluentConsumer(ctx, consumerOption)
 	default:
-		consumer = NewKafkaGoConsumer(ctx, consumerOption)
+		log.Panic("unsupport consumer client", zap.String("client", consumerClient))
 	}
 
 	var wg sync.WaitGroup
