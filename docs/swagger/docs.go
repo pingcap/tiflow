@@ -1743,6 +1743,14 @@ var doc = `{
                 }
             }
         },
+        "config.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output-old-value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "config.PulsarConfig": {
             "type": "object",
             "properties": {
@@ -1877,6 +1885,10 @@ var doc = `{
                 "only-output-updated-columns": {
                     "description": "OnlyOutputUpdatedColumns is only available when the downstream is MQ.",
                     "type": "boolean"
+                },
+                "open": {
+                    "description": "OpenProtocol related configurations",
+                    "$ref": "#/definitions/config.OpenProtocolConfig"
                 },
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
@@ -2833,6 +2845,14 @@ var doc = `{
                 }
             }
         },
+        "v2.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output_old_value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "v2.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
@@ -3119,6 +3139,9 @@ var doc = `{
                 },
                 "only_output_updated_columns": {
                     "type": "boolean"
+                },
+                "open": {
+                    "$ref": "#/definitions/v2.OpenProtocolConfig"
                 },
                 "protocol": {
                     "type": "string"
