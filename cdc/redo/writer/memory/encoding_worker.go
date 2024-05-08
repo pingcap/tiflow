@@ -127,7 +127,7 @@ func newEncodingWorkerGroup(cfg *writer.LogWriterConfig) *encodingWorkerGroup {
 
 func (e *encodingWorkerGroup) Run(ctx context.Context) (err error) {
 	defer func() {
-		log.Warn("redo fileWorkerGroup closed",
+		log.Warn("redo encoding workers closed",
 			zap.String("namespace", e.changefeed.Namespace),
 			zap.String("changefeed", e.changefeed.ID),
 			zap.Error(err))
