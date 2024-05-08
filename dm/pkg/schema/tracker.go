@@ -208,14 +208,8 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 	case *ast.TruncateTableStmt:
 		ident := ast.Ident{Schema: v.Table.Schema, Name: v.Table.Name}
 		return tr.upstreamTracker.TruncateTable(tr.se, ident)
-	case *ast.SetStmt:
-		tr.logger.Info("Ignoring SET statement",
-			zap.String("set_stmt", v.Text()),
-		)
 	default:
-		tr.logger.DPanic("unexpected statement type",
-			zap.String("type", fmt.Sprintf("%T", v)),
-		)
+		tr.logger.DPanic("unexpected statement type", zap.String("type", fmt.Sprintf("%T", v)))
 	}
 	return nil
 }
