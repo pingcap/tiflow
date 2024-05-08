@@ -3087,7 +3087,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			switch v := stmtNode.(type) {
 			case *ast.CreateTableStmt:
 				s.saveTablePoint(
-					&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
+					&filter.Table{Schema: db, Name: v.Table.Name.O},
 					s.getFlushedGlobalPoint(),
 				)
 			default:
