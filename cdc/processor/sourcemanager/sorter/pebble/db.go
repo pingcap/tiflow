@@ -69,9 +69,9 @@ func iterTable(
 	lowerBound, upperBound sorter.Position,
 ) *pebble.Iterator {
 	// Pebble's iterator range is left-included but right-excluded.
-	upperBoundNext := upperBound.Next()
 	start := encoding.EncodeTsKey(uniqueID, uint64(tableID), lowerBound.CommitTs, lowerBound.StartTs)
-	end := encoding.EncodeTsKey(uniqueID, uint64(tableID), upperBoundNext.CommitTs, upperBoundNext.StartTs)
+	end := encoding.EncodeTsKey(uniqueID, uint64(tableID), upperBound.CommitTs, upperBound.StartTs)
+	end = append(end, 0)
 
 	iter, err := db.NewIter(&pebble.IterOptions{
 		LowerBound: start,

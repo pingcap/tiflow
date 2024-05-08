@@ -123,7 +123,7 @@ func (p Position) Valid() bool {
 // Next can only be called on a valid Position.
 func (p Position) Next() Position {
 	next := Position{StartTs: p.StartTs + 1, CommitTs: p.CommitTs}
-	if next.StartTs == next.CommitTs {
+	if next.StartTs >= next.CommitTs {
 		next.StartTs = 0
 		next.CommitTs += 1
 	}
