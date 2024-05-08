@@ -139,6 +139,7 @@ var defaultServerConfig = &ServerConfig{
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
 			LogRegionDetails:               false,
+			EnableResolveLock:              true,
 		},
 	},
 	ClusterID:              "default",

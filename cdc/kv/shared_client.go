@@ -266,7 +266,9 @@ func NewSharedClient(
 	} else {
 		s.logRegionDetails = log.Debug
 	}
-
+	if !s.config.Debug.Puller.EnableResolveLock {
+		log.Warn("fuzz:resolve lock function is disabled, changefeed my be blocked by locks!")
+	}
 	s.initMetrics()
 	return s
 }
@@ -796,8 +798,10 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		case <-gcTicker.C:
 			gcResolveLastRun()
 		case task = <-s.resolveLockCh.Out():
-			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
-			doResolve(task.regionID, task.state, task.maxVersion)
+			if s.config.Debug.Puller.EnableResolveLock {
+				s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
+				doResolve(task.regionID, task.state, task.maxVersion)
+			}
 		}
 	}
 }
