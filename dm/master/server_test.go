@@ -34,13 +34,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	tiddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
-	toolutils "github.com/pingcap/tidb/util"
-	tidbmock "github.com/pingcap/tidb/util/mock"
+	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	toolutils "github.com/pingcap/tidb/pkg/util"
+	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/checker"
 	common2 "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
@@ -947,7 +947,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 	var wg sync.WaitGroup
 	// taskName is relative to taskConfig
 	cfg := config.NewTaskConfig()
-	err := cfg.Decode(taskConfig)
+	err := cfg.FromYaml(taskConfig)
 	require.NoError(t.T(), err)
 	taskName := cfg.Name
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1769,7 +1769,7 @@ func (t *testMasterSuite) TestOperateSource() {
 	s1.leader.Store(oneselfLeader)
 	require.NoError(t.T(), s1.Start(ctx))
 	defer s1.Close()
-	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	mysqlCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
 	task, err := mysqlCfg.Yaml()

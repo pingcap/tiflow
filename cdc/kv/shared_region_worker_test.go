@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
@@ -29,7 +30,18 @@ import (
 
 func newSharedClientForTestSharedRegionWorker() *SharedClient {
 	// sharedRegionWorker only requires `SharedClient.onRegionFail`.
-	return NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
+	cfg := &config.ServerConfig{
+		KVClient: &config.KVClientConfig{
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 2,
+			AdvanceIntervalInMs:  10,
+		},
+		Debug: &config.DebugConfig{
+			Puller: &config.PullerConfig{LogRegionDetails: false},
+		},
+	}
+	return NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 }
 
 // For UPDATE SQL, its prewrite event has both value and old value.
@@ -59,10 +71,14 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	eventCh := make(chan MultiplexingEvent, 2)
 
 	span := spanz.ToSpan([]byte{}, spanz.UpperBoundKey)
-	sri := newSingleRegionInfo(tikv.RegionVerID{}, span, &tikv.RPCContext{})
-	sri.requestedTable = &requestedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh}
-	sri.lockedRange = &regionlock.LockedRange{}
-	state := newRegionFeedState(sri, 1)
+	region := newRegionInfo(
+		tikv.RegionVerID{},
+		span,
+		&tikv.RPCContext{},
+		&subscribedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh},
+	)
+	region.lockedRangeState = &regionlock.LockedRangeState{}
+	state := newRegionFeedState(region, 1)
 	state.start()
 
 	// Receive prewrite2 with empty value.
@@ -160,35 +176,25 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	worker := newSharedRegionWorker(client)
 	eventCh := make(chan MultiplexingEvent, 2)
 
-	s1 := newRegionFeedState(singleRegionInfo{verID: tikv.NewRegionVerID(1, 1, 1)}, 1)
-	s1.sri.requestedTable = client.newRequestedTable(1, tablepb.Span{}, 0, eventCh)
-	s1.sri.lockedRange = &regionlock.LockedRange{}
+	s1 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(1, 1, 1)}, 1)
+	s1.region.subscribedTable = client.newSubscribedTable(1, tablepb.Span{}, 0, eventCh)
+	s1.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s1.setInitialized()
 	s1.updateResolvedTs(9)
 
-	s2 := newRegionFeedState(singleRegionInfo{verID: tikv.NewRegionVerID(2, 2, 2)}, 2)
-	s2.sri.requestedTable = client.newRequestedTable(2, tablepb.Span{}, 0, eventCh)
-	s2.sri.lockedRange = &regionlock.LockedRange{}
+	s2 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(2, 2, 2)}, 2)
+	s2.region.subscribedTable = client.newSubscribedTable(2, tablepb.Span{}, 0, eventCh)
+	s2.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s2.setInitialized()
 	s2.updateResolvedTs(11)
 
-	s3 := newRegionFeedState(singleRegionInfo{verID: tikv.NewRegionVerID(3, 3, 3)}, 3)
-	s3.sri.requestedTable = client.newRequestedTable(3, tablepb.Span{}, 0, eventCh)
-	s3.sri.lockedRange = &regionlock.LockedRange{}
+	s3 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(3, 3, 3)}, 3)
+	s3.region.subscribedTable = client.newSubscribedTable(3, tablepb.Span{}, 0, eventCh)
+	s3.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s3.updateResolvedTs(8)
 
 	worker.handleResolvedTs(ctx, resolvedTsBatch{ts: 10, regions: []*regionFeedState{s1, s2, s3}})
 	require.Equal(t, uint64(10), s1.getLastResolvedTs())
 	require.Equal(t, uint64(11), s2.getLastResolvedTs())
 	require.Equal(t, uint64(8), s3.getLastResolvedTs())
-
-	select {
-	case event := <-eventCh:
-		require.Equal(t, uint64(0), event.RegionID)
-		require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
-		require.Equal(t, 1, len(event.Resolved.Spans))
-		require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
-	case <-time.NewTimer(100 * time.Millisecond).C:
-		require.True(t, false, "must get an event")
-	}
 }

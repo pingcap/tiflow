@@ -45,7 +45,6 @@ func ParseMetaData(
 	ctx context.Context,
 	dir string,
 	filename string,
-	flavor string,
 	extStorage brstorage.ExternalStorage,
 ) (*binlog.Location, *binlog.Location, error) {
 	fd, err := storage.OpenFile(ctx, dir, filename, extStorage)
@@ -54,11 +53,11 @@ func ParseMetaData(
 	}
 	defer fd.Close()
 
-	return parseMetaDataByReader(filename, flavor, fd)
+	return parseMetaDataByReader(filename, fd)
 }
 
 // ParseMetaData parses mydumper's output meta file by created reader and returns binlog location.
-func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
+func parseMetaDataByReader(filename string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
 	invalidErr := fmt.Errorf("file %s invalid format", filename)
 
 	var (
@@ -101,7 +100,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 				pos.Pos = uint32(pos64)
 			case "GTID":
 				// multiple GTID sets may cross multiple lines, continue to read them.
-				following, err3 := readFollowingGTIDs(br, flavor)
+				following, err3 := readFollowingGTIDs(br)
 				if err3 != nil {
 					return err3
 				}
@@ -154,7 +153,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 		return nil, nil, terror.ErrMetadataNoBinlogLoc.Generate(filename)
 	}
 
-	gset, err := gtid.ParserGTID(flavor, gtidStr)
+	gset, err := gtid.ParserGTID("", gtidStr)
 	if err != nil {
 		return nil, nil, invalidErr
 	}
@@ -165,7 +164,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 		if len(pos2.Name) == 0 || pos2.Pos == uint32(0) {
 			return nil, nil, invalidErr
 		}
-		gset2, err := gtid.ParserGTID(flavor, gtidStr2)
+		gset2, err := gtid.ParserGTID("", gtidStr2)
 		if err != nil {
 			return nil, nil, invalidErr
 		}
@@ -176,7 +175,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 	return locPtr, locPtr2, nil
 }
 
-func readFollowingGTIDs(br *bufio.Reader, flavor string) (string, error) {
+func readFollowingGTIDs(br *bufio.Reader) (string, error) {
 	var following strings.Builder
 	for {
 		line, err := br.ReadString('\n')
@@ -197,7 +196,7 @@ func readFollowingGTIDs(br *bufio.Reader, flavor string) (string, error) {
 		}
 
 		// try parse to verify it
-		_, err = gtid.ParserGTID(flavor, line[:end])
+		_, err = gtid.ParserGTID("", line[:end])
 		if err != nil {
 			// nolint:nilerr
 			return following.String(), nil // return the previous, not including this non-GTID line.

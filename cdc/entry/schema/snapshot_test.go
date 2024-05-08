@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -219,19 +219,19 @@ func TestUpdatePartition(t *testing.T) {
 	oldTb = newTbInfo(1, "DB_1", 11)
 	oldTb.Partition = nil
 	require.Nil(t, snap.inner.createTable(oldTb, 110))
-	require.Error(t, snap.inner.updatePartition(newTbInfo(1, "DB_1", 11), 120))
+	require.Error(t, snap.inner.updatePartition(newTbInfo(1, "DB_1", 11), false, 120))
 
 	// updatePartition fails if the new table is not partitioned.
 	require.Nil(t, snap.inner.dropTable(11, 130))
 	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 140))
 	newTb = newTbInfo(1, "DB_1", 11)
 	newTb.Partition = nil
-	require.Error(t, snap.inner.updatePartition(newTb, 150))
+	require.Error(t, snap.inner.updatePartition(newTb, false, 150))
 	snap1 = snap.Copy()
 
 	newTb = newTbInfo(1, "DB_1", 11)
 	newTb.Partition.Definitions[0] = timodel.PartitionDefinition{ID: 11 + 65536*2}
-	require.Nil(t, snap.inner.updatePartition(newTb, 160))
+	require.Nil(t, snap.inner.updatePartition(newTb, false, 160))
 	snap2 = snap.Copy()
 
 	info, _ = snap1.PhysicalTableByID(11)
@@ -251,6 +251,31 @@ func TestUpdatePartition(t *testing.T) {
 	_, ok = snap2.PhysicalTableByID(11 + 65536*2)
 	require.True(t, ok)
 	require.True(t, snap2.IsIneligibleTableID(11+65536*2))
+}
+
+func TestTruncateTablePartition(t *testing.T) {
+	var oldTb, newTb *model.TableInfo
+
+	snap := NewEmptySnapshot(false)
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 100))
+
+	// updatePartition fails if the old table is not partitioned.
+	oldTb = newTbInfo(1, "DB_1", 11)
+	oldTb.Partition = nil
+	require.Nil(t, snap.inner.createTable(oldTb, 110))
+	require.Error(t, snap.inner.updatePartition(newTbInfo(1, "DB_1", 11), false, 120))
+
+	// updatePartition fails if the new table is not partitioned.
+	require.Nil(t, snap.inner.dropTable(11, 130))
+	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 140))
+	newTb = newTbInfo(1, "DB_1", 11)
+	newTb.Partition = nil
+	require.Error(t, snap.inner.updatePartition(newTb, false, 150))
+
+	newTb = newTbInfo(1, "DB_1", 11)
+	newTb.Partition.Definitions[0] = timodel.PartitionDefinition{ID: 11 + 65536*2}
+	require.Nil(t, snap.inner.updatePartition(newTb, true, 160))
+	require.True(t, snap.IsTruncateTableID(11+65536))
 }
 
 func TestExchangePartition(t *testing.T) {

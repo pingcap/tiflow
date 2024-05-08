@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,6 +73,32 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name: "job123",
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+				Dir:              "/tmp",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverFile, conf.Checkpoint.Driver)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name: "job123",
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+				Dir:              "gcs://bucket/path",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 }
 
 func TestMetricProxies(t *testing.T) {

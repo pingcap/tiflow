@@ -58,9 +58,6 @@ func mockGetDBConn(t *testing.T, table string) (*sql.DB, sqlmock.Sqlmock) {
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
 			AddRow("5.7.35-log"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
-		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` longblob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
@@ -243,8 +240,8 @@ func TestGet(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-					WithArgs(fakeJob, []byte("key0")).
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+					WithArgs(fakeJob, []byte("key0%")).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}).
 						AddRow("key0", "value0"))
 			},
@@ -322,8 +319,8 @@ func TestDelete(t *testing.T) {
 				Header: &metaModel.ResponseHeader{},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-					WithArgs(fakeJob, []byte("key0")).
+				mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+					WithArgs(fakeJob, []byte("key0%")).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -359,8 +356,8 @@ func TestTxn(t *testing.T) {
 		"`meta_key`=VALUES(`meta_key`),`meta_value`=VALUES(`meta_value`),`job_id`=VALUES(`job_id`)")).
 		WithArgs(anyT, anyT, []byte("key1"), []byte("value1"), fakeJob, anyT).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?%")).
-		WithArgs(fakeJob, []byte("key2")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `fakeTable` WHERE job_id = ? AND meta_key like ?")).
+		WithArgs(fakeJob, []byte("key2%")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -410,6 +407,7 @@ func testInner(t *testing.T, m sqlmock.Sqlmock, cli *sqlKVClientImpl, c tCase) {
 			require.Equal(t, c.output, result[0].Interface())
 		}
 	}
+	require.NoError(t, m.ExpectationsWereMet())
 }
 
 func TestSQLImplWithoutNamespace(t *testing.T) {
@@ -451,8 +449,8 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 		"`meta_key`=VALUES(`meta_key`),`meta_value`=VALUES(`meta_value`),`job_id`=VALUES(`job_id`)")).
 		WithArgs(anyT, anyT, []byte("key1"), []byte("value1"), "", anyT).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `meta_kvs` WHERE job_id = ? AND meta_key like ?%")).
-		WithArgs("", []byte("key2")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `meta_kvs` WHERE job_id = ? AND meta_key like ?")).
+		WithArgs("", []byte("key2%")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	txn := cli.Txn(context.Background())
@@ -460,6 +458,7 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	txn.Do(metaModel.OpPut("key1", "value1"))
 	txn.Do(metaModel.OpDelete("key2", metaModel.WithPrefix()))
 	txn.Commit()
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestInitializeError(t *testing.T) {
@@ -503,4 +502,5 @@ func TestInitializeError(t *testing.T) {
 		WillReturnError(errors.New("other error"))
 	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other error", err.Error())
+	require.NoError(t, mock.ExpectationsWereMet())
 }

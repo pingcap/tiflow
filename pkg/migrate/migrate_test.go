@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -112,21 +111,7 @@ func TestMigration(t *testing.T) {
 		Storage:           "s3",
 	}
 	cfg.Filter = &config.FilterConfig{
-		Rules: []string{"a", "b", "c"},
-		MySQLReplicationRules: &filter.MySQLReplicationRules{
-			DoTables: []*filter.Table{{
-				Schema: "testdo",
-				Name:   "testgotable",
-			}},
-			DoDBs: []string{"ad", "bdo"},
-			IgnoreTables: []*filter.Table{
-				{
-					Schema: "testignore",
-					Name:   "testaaaingore",
-				},
-			},
-			IgnoreDBs: []string{"aa", "b2"},
-		},
+		Rules:            []string{"a", "b", "c"},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
 	}
 	info3 := model.ChangeFeedInfo{
@@ -472,7 +457,7 @@ type mockPDClient struct {
 	check func(serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
 
-func (m *mockPDClient) GetLeaderAddr() string {
+func (m *mockPDClient) GetLeaderURL() string {
 	return m.url
 }
 

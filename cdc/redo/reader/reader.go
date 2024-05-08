@@ -37,7 +37,7 @@ import (
 const (
 	emitBatch             = mysql.DefaultMaxTxnRow
 	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
-	maxTotalMemoryUsage   = 90.0
+	maxTotalMemoryUsage   = 80.0
 	maxWaitDuration       = time.Minute * 2
 )
 
@@ -87,7 +87,7 @@ type LogReaderConfig struct {
 type LogReader struct {
 	cfg   *LogReaderConfig
 	meta  *common.LogMeta
-	rowCh chan *model.RowChangedEvent
+	rowCh chan *model.RowChangedEventInRedoLog
 	ddlCh chan *model.DDLEvent
 }
 
@@ -106,7 +106,7 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 
 	logReader := &LogReader{
 		cfg:   cfg,
-		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		rowCh: make(chan *model.RowChangedEventInRedoLog, defaultReaderChanSize),
 		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
 	}
 	// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
@@ -205,11 +205,6 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 				case l.rowCh <- row:
 				}
 			}
-			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
@@ -243,8 +238,11 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
-	case row := <-l.rowCh:
-		return row, nil
+	case rowInRedoLog := <-l.rowCh:
+		if rowInRedoLog != nil {
+			return rowInRedoLog.ToRowChangedEvent(), nil
+		}
+		return nil, nil
 	}
 }
 

@@ -25,8 +25,9 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/charset"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -67,12 +68,9 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 	}
 	defer testDB.Close()
 
-	// Adjust sql_mode for compatibility.
-	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
-	if err != nil {
-		return
-	}
-	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(dsn.Params["sql_mode"])
+	// we use default sql mode for downstream because all dmls generated and ddls in ticdc
+	// are based on default sql mode.
+	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(mysql.DefaultSQLMode)
 	if err != nil {
 		return
 	}
@@ -175,19 +173,6 @@ func generateDSNByConfig(
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
-}
-
-func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
-	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	var sqlMode sql.NullString
-	err := row.Scan(&sqlMode)
-	if err != nil {
-		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
-	}
-	if !sqlMode.Valid {
-		sqlMode.String = ""
-	}
-	return sqlMode.String, err
 }
 
 // check whether the target charset is supported
@@ -347,4 +332,25 @@ func QueryMaxAllowedPacket(ctx context.Context, db *sql.DB) (int64, error) {
 		return 0, cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 	return maxAllowedPacket.Int64, nil
+}
+
+// SetWriteSource sets write source for the transaction.
+func SetWriteSource(ctx context.Context, cfg *Config, txn *sql.Tx) error {
+	// we only set write source when donwstream is TiDB and write source is existed.
+	if !cfg.IsWriteSourceExisted {
+		return nil
+	}
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", cfg.SourceID)
+	_, err := txn.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

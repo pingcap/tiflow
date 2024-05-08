@@ -16,9 +16,9 @@ package codec
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	codecv1 "github.com/pingcap/tiflow/cdc/model/codec/v1"
 	"github.com/stretchr/testify/require"
@@ -68,7 +68,7 @@ func TestV1toV2(t *testing.T) {
 
 	rv2 = &model.RedoLog{
 		RedoRow: model.RedoRowChangedEvent{
-			Row: &model.RowChangedEvent{
+			Row: &model.RowChangedEventInRedoLog{
 				StartTs:  1,
 				CommitTs: 2,
 				Table: &model.TableName{
@@ -77,7 +77,6 @@ func TestV1toV2(t *testing.T) {
 					TableID:     1,
 					IsPartition: false,
 				},
-				TableInfo: nil,
 				Columns: []*model.Column{
 					{
 						Name: "column",
@@ -136,7 +135,7 @@ func TestV1toV2(t *testing.T) {
 func TestRowRedoConvert(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
+	row := &model.RowChangedEventInRedoLog{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
@@ -196,7 +195,7 @@ func TestRowRedoConvert(t *testing.T) {
 func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
+	row := &model.RowChangedEventInRedoLog{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},

@@ -197,7 +197,11 @@ function run() {
 		"unknown command \"any\" for \"dmctl\"" 1 \
 		"Run 'dmctl --help' for usage\." 1
 
+	mkdir -p $WORK_DIR/master
+	cp $cur/conf/key.txt $WORK_DIR/master/
+	export DM_MASTER_EXTRA_ARG="--secret-key-path $WORK_DIR/master/key.txt"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $dm_master_conf
+	export DM_MASTER_EXTRA_ARG=""
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# only one master, check it should be leader and etcd metrics works
 	check_metric $MASTER_PORT 'etcd_server_has_leader' 3 0 2
@@ -480,6 +484,26 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"detect inconsistent DDL sequence" 2
+
+	run_dm_ctl_plain $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"encrypt abc"
+	val=$(cat $WORK_DIR/dmctl-plain.log | head -n 1)
+	echo "encrypt value: $val"
+	ciphertext_len=$(echo $val | awk '{print length($0)}')
+	if [ $ciphertext_len -ne 28 ]; then
+		echo "ciphertext length is not right"
+		exit 1
+	fi
+
+	# start a master without secret-key, encrypt should fail
+	cleanup_process
+	# previous logic will override $dm_master_conf, so we need to copy it again
+	cp $cur/conf/dm-master.toml $dm_master_conf
+	run_dm_master $WORK_DIR/master $MASTER_PORT $dm_master_conf
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"encrypt a" \
+		"secret key is not initialized" 1
 }
 
 cleanup_data dmctl

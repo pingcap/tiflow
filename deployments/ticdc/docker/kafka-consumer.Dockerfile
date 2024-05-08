@@ -7,6 +7,9 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 RUN --mount=type=cache,target=/root/.cache/go-build make kafka_consumer
 
 FROM alpine:3.15
+
+RUN apk update && apk add tzdata
+
 COPY --from=builder  /go/src/github.com/pingcap/tiflow/bin/cdc_kafka_consumer /cdc_kafka_consumer
 
 ENTRYPOINT ["tail", "-f", "/dev/null"]

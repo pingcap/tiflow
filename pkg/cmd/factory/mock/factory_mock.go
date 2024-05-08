@@ -6,6 +6,7 @@ package mock_factory
 
 import (
 	tls "crypto/tls"
+	url "net/url"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -67,6 +68,20 @@ func (m *MockFactory) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 func (mr *MockFactoryMockRecorder) EtcdClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EtcdClient", reflect.TypeOf((*MockFactory)(nil).EtcdClient))
+}
+
+// GetAuthParameters mocks base method.
+func (m *MockFactory) GetAuthParameters() url.Values {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAuthParameters")
+	ret0, _ := ret[0].(url.Values)
+	return ret0
+}
+
+// GetAuthParameters indicates an expected call of GetAuthParameters.
+func (mr *MockFactoryMockRecorder) GetAuthParameters() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthParameters", reflect.TypeOf((*MockFactory)(nil).GetAuthParameters))
 }
 
 // GetCredential mocks base method.
@@ -191,6 +206,20 @@ func NewMockClientGetter(ctrl *gomock.Controller) *MockClientGetter {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClientGetter) EXPECT() *MockClientGetterMockRecorder {
 	return m.recorder
+}
+
+// GetAuthParameters mocks base method.
+func (m *MockClientGetter) GetAuthParameters() url.Values {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAuthParameters")
+	ret0, _ := ret[0].(url.Values)
+	return ret0
+}
+
+// GetAuthParameters indicates an expected call of GetAuthParameters.
+func (mr *MockClientGetterMockRecorder) GetAuthParameters() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthParameters", reflect.TypeOf((*MockClientGetter)(nil).GetAuthParameters))
 }
 
 // GetCredential mocks base method.

@@ -34,19 +34,25 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Use a smaller worker number for test to speed up the test.
+var workerNumberForTest = 2
+
 func checkResolvedTs(t *testing.T, mgr *logManager, expectedRts uint64) {
-	time.Sleep(time.Duration(redo.MinFlushIntervalInMs+200) * time.Millisecond)
-	resolvedTs := uint64(math.MaxUint64)
-	mgr.rtsMap.Range(func(span tablepb.Span, value any) bool {
-		v, ok := value.(*statefulRts)
-		require.True(t, ok)
-		ts := v.getFlushed()
-		if ts < resolvedTs {
-			resolvedTs = ts
-		}
-		return true
-	})
-	require.Equal(t, expectedRts, resolvedTs)
+	require.Eventually(t, func() bool {
+		resolvedTs := uint64(math.MaxUint64)
+		mgr.rtsMap.Range(func(span tablepb.Span, value any) bool {
+			v, ok := value.(*statefulRts)
+			require.True(t, ok)
+			ts := v.getFlushed()
+			if ts < resolvedTs {
+				resolvedTs = ts
+			}
+			return true
+		})
+		return resolvedTs == expectedRts
+		// This retry 80 times, with redo.MinFlushIntervalInMs(50ms) interval,
+		// it will take 4s at most.
+	}, time.Second*4, time.Millisecond*redo.MinFlushIntervalInMs)
 }
 
 func TestConsistentConfig(t *testing.T) {
@@ -119,8 +125,8 @@ func TestLogManagerInProcessor(t *testing.T) {
 			Storage:               storage,
 			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 			MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
-			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
-			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+			EncodingWorkerNum:     workerNumberForTest,
+			FlushWorkerNum:        workerNumberForTest,
 			UseFileBackend:        useFileBackend,
 		}
 		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
@@ -140,6 +146,9 @@ func TestLogManagerInProcessor(t *testing.T) {
 		for _, span := range spans {
 			dmlMgr.AddTable(span, startTs)
 		}
+		tableInfo := &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "t"},
+		}
 		testCases := []struct {
 			span tablepb.Span
 			rows []*model.RowChangedEvent
@@ -147,30 +156,30 @@ func TestLogManagerInProcessor(t *testing.T) {
 			{
 				span: spanz.TableIDToComparableSpan(53),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 120, Table: &model.TableName{TableID: 53}},
-					{CommitTs: 125, Table: &model.TableName{TableID: 53}},
-					{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+					{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
+					{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
+					{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(55),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, Table: &model.TableName{TableID: 55}},
-					{CommitTs: 135, Table: &model.TableName{TableID: 55}},
+					{CommitTs: 130, PhysicalTableID: 55, TableInfo: tableInfo},
+					{CommitTs: 135, PhysicalTableID: 55, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(57),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, Table: &model.TableName{TableID: 57}},
+					{CommitTs: 130, PhysicalTableID: 57, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(59),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 128, Table: &model.TableName{TableID: 59}},
-					{CommitTs: 130, Table: &model.TableName{TableID: 59}},
-					{CommitTs: 133, Table: &model.TableName{TableID: 59}},
+					{CommitTs: 128, PhysicalTableID: 59, TableInfo: tableInfo},
+					{CommitTs: 130, PhysicalTableID: 59, TableInfo: tableInfo},
+					{CommitTs: 133, PhysicalTableID: 59, TableInfo: tableInfo},
 				},
 			},
 		}
@@ -228,9 +237,9 @@ func TestLogManagerInOwner(t *testing.T) {
 			MaxLogSize:            redo.DefaultMaxLogSize,
 			Storage:               storage,
 			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
-			MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
-			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
-			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+			MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+			EncodingWorkerNum:     workerNumberForTest,
+			FlushWorkerNum:        workerNumberForTest,
 			UseFileBackend:        useFileBackend,
 		}
 		startTs := model.Ts(10)
@@ -277,8 +286,8 @@ func TestLogManagerError(t *testing.T) {
 		Storage:               "blackhole-invalid://",
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
-		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
-		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		EncodingWorkerNum:     workerNumberForTest,
+		FlushWorkerNum:        workerNumberForTest,
 	}
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
@@ -286,6 +295,9 @@ func TestLogManagerError(t *testing.T) {
 		return logMgr.Run(ctx)
 	})
 
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{Schema: "test", Table: "t"},
+	}
 	testCases := []struct {
 		span tablepb.Span
 		rows []writer.RedoEvent
@@ -293,9 +305,9 @@ func TestLogManagerError(t *testing.T) {
 		{
 			span: spanz.TableIDToComparableSpan(53),
 			rows: []writer.RedoEvent{
-				&model.RowChangedEvent{CommitTs: 120, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 125, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+				&model.RowChangedEvent{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
+				&model.RowChangedEvent{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
+				&model.RowChangedEvent{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
 			},
 		},
 	}
@@ -361,6 +373,9 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 	b.ResetTimer()
 	for _, tableID := range tables {
 		wg.Add(1)
+		tableInfo := &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: fmt.Sprintf("t_%d", tableID)},
+		}
 		go func(span tablepb.Span) {
 			defer wg.Done()
 			maxCommitTs := maxTsMap.GetV(span)
@@ -371,9 +386,9 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10
 					rows = []*model.RowChangedEvent{
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
 					}
 
 					b.StartTimer()

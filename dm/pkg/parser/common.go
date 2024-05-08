@@ -16,12 +16,12 @@ package parser
 import (
 	"bytes"
 
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
-	"github.com/pingcap/tidb/parser/model"
-	_ "github.com/pingcap/tidb/types/parser_driver" // for import parser driver
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/format"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // for import parser driver
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -197,6 +197,9 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 	)
 
 	switch v := stmt.(type) {
+	case *ast.CreateSequenceStmt:
+	case *ast.AlterSequenceStmt:
+	case *ast.DropSequenceStmt:
 	case *ast.AlterDatabaseStmt:
 	case *ast.CreateDatabaseStmt:
 		v.IfNotExists = true

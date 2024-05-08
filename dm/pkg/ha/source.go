@@ -113,7 +113,7 @@ func sourceCfgFromResp(source string, resp *clientv3.GetResponse) (map[string]*c
 
 	for _, kv := range resp.Kvs {
 		var cfg config.SourceConfig
-		err := cfg.Parse(string(kv.Value))
+		err := cfg.FromToml(string(kv.Value))
 		if err != nil {
 			return scm, terror.ErrConfigEtcdParse.Delegate(err, kv.Key)
 		}

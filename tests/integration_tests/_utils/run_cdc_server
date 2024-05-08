@@ -156,9 +156,9 @@ etcd_info_msg="etcd info"
 # If tls is set, then we need to pass the certificate and use https.
 # Note that the certificate name may be specified.
 if [ -z "$tls_dir" ]; then
-	curl_status_cmd="curl -vsL --max-time 20 http://$addr_url/debug/info"
+	curl_status_cmd="curl -vsL --max-time 20 http://$addr_url/debug/info --user ticdc:ticdc_secret -vsL"
 else
-	curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -vsL --max-time 20 https://$addr_url/debug/info"
+	curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem --user ticdc:ticdc_secret -vsL --max-time 20 https://$addr_url/debug/info"
 fi
 
 # If the command is supposed to fail (in check usage tips test), just exit without retry

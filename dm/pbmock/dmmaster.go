@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/dm/pb"
 	grpc "google.golang.org/grpc"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // MockMasterClient is a mock of MasterClient interface.
@@ -54,6 +55,26 @@ func (mr *MockMasterClientMockRecorder) CheckTask(arg0, arg1 interface{}, arg2 .
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTask", reflect.TypeOf((*MockMasterClient)(nil).CheckTask), varargs...)
+}
+
+// Encrypt mocks base method.
+func (m *MockMasterClient) Encrypt(arg0 context.Context, arg1 *pb.EncryptRequest, arg2 ...grpc.CallOption) (*pb.EncryptResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Encrypt", varargs...)
+	ret0, _ := ret[0].(*pb.EncryptResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Encrypt indicates an expected call of Encrypt.
+func (mr *MockMasterClientMockRecorder) Encrypt(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encrypt", reflect.TypeOf((*MockMasterClient)(nil).Encrypt), varargs...)
 }
 
 // GetCfg mocks base method.
@@ -194,6 +215,46 @@ func (mr *MockMasterClientMockRecorder) ListMember(arg0, arg1 interface{}, arg2 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMember", reflect.TypeOf((*MockMasterClient)(nil).ListMember), varargs...)
+}
+
+// ListSourceConfigs mocks base method.
+func (m *MockMasterClient) ListSourceConfigs(arg0 context.Context, arg1 *emptypb.Empty, arg2 ...grpc.CallOption) (*pb.ListSourceConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListSourceConfigs", varargs...)
+	ret0, _ := ret[0].(*pb.ListSourceConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSourceConfigs indicates an expected call of ListSourceConfigs.
+func (mr *MockMasterClientMockRecorder) ListSourceConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSourceConfigs", reflect.TypeOf((*MockMasterClient)(nil).ListSourceConfigs), varargs...)
+}
+
+// ListTaskConfigs mocks base method.
+func (m *MockMasterClient) ListTaskConfigs(arg0 context.Context, arg1 *emptypb.Empty, arg2 ...grpc.CallOption) (*pb.ListTaskConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListTaskConfigs", varargs...)
+	ret0, _ := ret[0].(*pb.ListTaskConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTaskConfigs indicates an expected call of ListTaskConfigs.
+func (mr *MockMasterClientMockRecorder) ListTaskConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskConfigs", reflect.TypeOf((*MockMasterClient)(nil).ListTaskConfigs), varargs...)
 }
 
 // OfflineMember mocks base method.
@@ -614,6 +675,21 @@ func (mr *MockMasterServerMockRecorder) CheckTask(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTask", reflect.TypeOf((*MockMasterServer)(nil).CheckTask), arg0, arg1)
 }
 
+// Encrypt mocks base method.
+func (m *MockMasterServer) Encrypt(arg0 context.Context, arg1 *pb.EncryptRequest) (*pb.EncryptResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Encrypt", arg0, arg1)
+	ret0, _ := ret[0].(*pb.EncryptResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Encrypt indicates an expected call of Encrypt.
+func (mr *MockMasterServerMockRecorder) Encrypt(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encrypt", reflect.TypeOf((*MockMasterServer)(nil).Encrypt), arg0, arg1)
+}
+
 // GetCfg mocks base method.
 func (m *MockMasterServer) GetCfg(arg0 context.Context, arg1 *pb.GetCfgRequest) (*pb.GetCfgResponse, error) {
 	m.ctrl.T.Helper()
@@ -717,6 +793,36 @@ func (m *MockMasterServer) ListMember(arg0 context.Context, arg1 *pb.ListMemberR
 func (mr *MockMasterServerMockRecorder) ListMember(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMember", reflect.TypeOf((*MockMasterServer)(nil).ListMember), arg0, arg1)
+}
+
+// ListSourceConfigs mocks base method.
+func (m *MockMasterServer) ListSourceConfigs(arg0 context.Context, arg1 *emptypb.Empty) (*pb.ListSourceConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListSourceConfigs", arg0, arg1)
+	ret0, _ := ret[0].(*pb.ListSourceConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSourceConfigs indicates an expected call of ListSourceConfigs.
+func (mr *MockMasterServerMockRecorder) ListSourceConfigs(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSourceConfigs", reflect.TypeOf((*MockMasterServer)(nil).ListSourceConfigs), arg0, arg1)
+}
+
+// ListTaskConfigs mocks base method.
+func (m *MockMasterServer) ListTaskConfigs(arg0 context.Context, arg1 *emptypb.Empty) (*pb.ListTaskConfigsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTaskConfigs", arg0, arg1)
+	ret0, _ := ret[0].(*pb.ListTaskConfigsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTaskConfigs indicates an expected call of ListTaskConfigs.
+func (mr *MockMasterServerMockRecorder) ListTaskConfigs(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskConfigs", reflect.TypeOf((*MockMasterServer)(nil).ListTaskConfigs), arg0, arg1)
 }
 
 // OfflineMember mocks base method.

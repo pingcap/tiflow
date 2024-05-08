@@ -19,13 +19,36 @@ import (
 	"sort"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
+
+type columnsArray []*model.Column
+
+func (a columnsArray) Len() int {
+	return len(a)
+}
+
+func (a columnsArray) Less(i, j int) bool {
+	return a[i].Name < a[j].Name
+}
+
+func (a columnsArray) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+// sortColumnArrays sort column arrays by name
+func sortColumnArrays(arrays ...[]*model.Column) {
+	for _, array := range arrays {
+		if array != nil {
+			sort.Sort(columnsArray(array))
+		}
+	}
+}
 
 type messageRow struct {
 	Update     map[string]internal.Column `json:"u,omitempty"`
@@ -101,13 +124,13 @@ func rowChangeToMsg(
 	config *common.Config,
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
-	if e.Table.IsPartition {
-		partition = &e.Table.TableID
+	if e.TableInfo.IsPartitionTable() {
+		partition = &e.PhysicalTableID
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,
-		Schema:        e.Table.Schema,
-		Table:         e.Table.Table,
+		Schema:        e.TableInfo.GetSchemaName(),
+		Table:         e.TableInfo.GetTableName(),
 		RowID:         e.RowID,
 		Partition:     partition,
 		Type:          model.MessageTypeRow,
@@ -116,21 +139,24 @@ func rowChangeToMsg(
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.GetPreColumns(), onlyHandleKeyColumns)
 		if onlyHandleKeyColumns && len(value.Delete) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
 		}
 	} else if e.IsUpdate() {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
-		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
+		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
+		if config.OpenOutputOldValue {
+			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
+		}
+		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
+			(len(value.PreColumns) == 0 && !config.OpenOutputOldValue)) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
 		if config.OnlyOutputUpdatedColumns {
 			value.dropNotUpdatedColumns()
 		}
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the insert event")
 		}
@@ -144,22 +170,30 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.Table = &model.TableName{
-		Schema: key.Schema,
-		Table:  key.Table,
-	}
-	// TODO: we lost the tableID from kafka message
-	if key.Partition != nil {
-		e.Table.TableID = *key.Partition
-		e.Table.IsPartition = true
-	}
 
 	if len(value.Delete) != 0 {
-		e.PreColumns = codecColumns2RowChangeColumns(value.Delete)
+		preCols := codecColumns2RowChangeColumns(value.Delete)
+		sortColumnArrays(preCols)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
+		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, preCols, indexColumns)
+		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
 	} else {
-		e.Columns = codecColumns2RowChangeColumns(value.Update)
-		e.PreColumns = codecColumns2RowChangeColumns(value.PreColumns)
+		cols := codecColumns2RowChangeColumns(value.Update)
+		preCols := codecColumns2RowChangeColumns(value.PreColumns)
+		sortColumnArrays(cols)
+		sortColumnArrays(preCols)
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
+		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, cols, indexColumns)
+		e.Columns = model.Columns2ColumnDatas(cols, e.TableInfo)
+		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
 	}
+
+	// TODO: we lost the tableID from kafka message
+	if key.Partition != nil {
+		e.PhysicalTableID = *key.Partition
+		e.TableInfo.TableName.IsPartition = true
+	}
+
 	return e
 }
 

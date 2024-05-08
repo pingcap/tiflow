@@ -15,10 +15,14 @@ package frontier
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
@@ -197,6 +201,39 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
+}
+
+func TestSpanString(t *testing.T) {
+	t.Parallel()
+
+	spAB := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	spBC := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	spCD := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	spDE := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
+	spEF := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	spFG := tablepb.Span{StartKey: []byte("f"), EndKey: []byte("g")}
+	spGH := tablepb.Span{StartKey: []byte("g"), EndKey: []byte("h")}
+
+	spAH := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("h")}
+	f := NewFrontier(1, spAH).(*spanFrontier)
+	require.Equal(t, `[0:61 @ 1] [0:68 @ Max] `, f.SpanString(spAH))
+
+	f.Forward(1, spAB, 2)
+	f.Forward(2, spBC, 5)
+	f.Forward(3, spCD, 10)
+	f.Forward(4, spDE, 20)
+	f.Forward(5, spEF, 30)
+	f.Forward(6, spFG, 25)
+	f.Forward(7, spGH, 35)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:61 @ 2] [2:62 @ 5] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [6:66 @ 25] [7:67 @ 35] [0:68 @ Max] `, f.stringWtihRegionID())
+	// Print 5 span: start, before, target span, next, end
+	require.Equal(t, `[1:61 @ 2] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [0:68 @ Max] `, f.SpanString(spDE))
+
+	spBH := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("h")}
+	f.Forward(8, spBH, 18)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:61 @ 2] [8:62 @ 18] [0:68 @ Max] `, f.stringWtihRegionID())
 }
 
 func TestMinMax(t *testing.T) {
@@ -390,4 +427,195 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	require.Equal(t, uint64(4), f.Frontier())
 	f.Forward(8, tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}, 5)
 	require.Equal(t, uint64(5), f.Frontier())
+}
+
+func TestFrontierEntries(t *testing.T) {
+	t.Parallel()
+
+	ab := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	bc := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	cd := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	de := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
+	ef := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	af := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("f")}
+	f := NewFrontier(0, af)
+
+	var slowestTs uint64 = math.MaxUint64
+	var slowestRange tablepb.Span
+	getSlowestRange := func() {
+		slowestTs = math.MaxUint64
+		slowestRange = tablepb.Span{}
+		f.Entries(func(key []byte, ts uint64) {
+			if ts < slowestTs {
+				slowestTs = ts
+				slowestRange.StartKey = key
+				slowestRange.EndKey = nil
+			} else if slowestTs != math.MaxUint64 && len(slowestRange.EndKey) == 0 {
+				slowestRange.EndKey = key
+			}
+		})
+	}
+
+	getSlowestRange()
+	require.Equal(t, uint64(0), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("f"), []byte(slowestRange.EndKey))
+
+	f.Forward(1, ab, 100)
+	f.Forward(2, bc, 200)
+	f.Forward(3, cd, 300)
+	f.Forward(4, de, 400)
+	f.Forward(5, ef, 500)
+	getSlowestRange()
+	require.Equal(t, uint64(100), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
+}
+
+func TestMergeSpitWithDifferentRegionID(t *testing.T) {
+	frontier := NewFrontier(100, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")})
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1222)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 102)
+	frontier.Forward(4, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 103)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")}, 104)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1223)
+	frontier.Forward(3, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 105)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 107)
+	frontier.(*spanFrontier).spanList.Entries(func(node *skipListNode) bool {
+		fmt.Printf("%d:[%s: %s) %d\n", node.regionID,
+			string(node.Key()),
+			string(node.End()), node.value.key)
+		return true
+	})
+	require.Equal(t, uint64(107), frontier.Frontier())
+}
+
+func TestRandomMergeAndSplit(t *testing.T) {
+	t.Parallel()
+
+	start, end := spanz.GetTableRange(8616)
+	rangelock := regionlock.NewRangeLock(1, start, end, 100, "")
+	frontier := NewFrontier(100, tablepb.Span{StartKey: start, EndKey: end})
+	ctx := context.Background()
+
+	var nextRegionID uint64 = 1
+	var nextVersion uint64 = 1
+	var nextTs uint64 = 100
+	rangelock.LockRange(ctx, start, end, nextRegionID, nextVersion)
+
+	nextTs += 1
+	frontier.Forward(1, tablepb.Span{StartKey: start, EndKey: end}, nextTs)
+	require.Equal(t, nextTs, frontier.Frontier())
+
+	for i := 0; i < 5000; i++ {
+		totalLockedRanges := rangelock.Len()
+		unchangedRegions := make([]lockedRegion, 0, totalLockedRanges)
+
+		mergeOrSplit := "split"
+		if totalLockedRanges > 1 && rand.Intn(2) > 0 {
+			mergeOrSplit = "merge"
+		}
+
+		nextTs += 1
+		if mergeOrSplit == "split" {
+			var r1, r2 lockedRegion
+			selected := rand.Intn(totalLockedRanges)
+			count := 0
+			rangelock.IterForTest(func(regionID, version uint64, state *regionlock.LockedRangeState, span tablepb.Span) {
+				ts := state.ResolvedTs.Load()
+				startKey := span.StartKey
+				endKey := span.EndKey
+				if count == selected {
+					r1 = lockedRegion{regionID, version, startKey, endKey, ts}
+				} else {
+					r := lockedRegion{regionID, version, startKey, endKey, ts}
+					unchangedRegions = append(unchangedRegions, r)
+				}
+				count += 1
+			})
+
+			rangelock.UnlockRange(r1.startKey, r1.endKey, r1.regionID, r1.version)
+
+			r2 = r1.split(&nextRegionID, &nextVersion)
+			rangelock.LockRange(ctx, r1.startKey, r1.endKey, r1.regionID, nextVersion)
+			rangelock.LockRange(ctx, r2.startKey, r2.endKey, r2.regionID, nextVersion)
+
+			frontier.Forward(r1.regionID, tablepb.Span{StartKey: r1.startKey, EndKey: r1.endKey}, nextTs)
+			frontier.Forward(r2.regionID, tablepb.Span{StartKey: r2.startKey, EndKey: r2.endKey}, nextTs)
+		} else {
+			var r1, r2 lockedRegion
+			selected := rand.Intn(totalLockedRanges - 1)
+			count := 0
+			rangelock.IterForTest(func(regionID, version uint64, state *regionlock.LockedRangeState, span tablepb.Span) {
+				ts := state.ResolvedTs.Load()
+				startKey := span.StartKey
+				endKey := span.EndKey
+				if count == selected {
+					r1 = lockedRegion{regionID, version, startKey, endKey, ts}
+				} else if count == selected+1 {
+					r2 = lockedRegion{regionID, version, startKey, endKey, ts}
+				} else {
+					r := lockedRegion{regionID, version, startKey, endKey, ts}
+					unchangedRegions = append(unchangedRegions, r)
+				}
+				count += 1
+			})
+
+			rangelock.UnlockRange(r1.startKey, r1.endKey, r1.regionID, r1.version)
+			rangelock.UnlockRange(r2.startKey, r2.endKey, r2.regionID, r2.version)
+
+			r2.merge(r1, &nextVersion)
+			rangelock.LockRange(ctx, r2.startKey, r2.endKey, r2.regionID, nextVersion)
+
+			frontier.Forward(r2.regionID, tablepb.Span{StartKey: r2.startKey, EndKey: r2.endKey}, nextTs)
+		}
+		for _, r := range unchangedRegions {
+			frontier.Forward(r.regionID, tablepb.Span{StartKey: r.startKey, EndKey: r.endKey}, nextTs)
+		}
+		require.Equal(t, nextTs, frontier.Frontier())
+	}
+}
+
+type lockedRegion struct {
+	regionID uint64
+	version  uint64
+	startKey []byte
+	endKey   []byte
+	ts       uint64
+}
+
+func (r *lockedRegion) split(regionIDGen *uint64, versionGen *uint64) (s lockedRegion) {
+	*regionIDGen += 1
+	*versionGen += 1
+
+	s.regionID = *regionIDGen
+	s.version = *versionGen
+	s.ts = r.ts
+	s.startKey = r.startKey
+
+	s.endKey = make([]byte, len(r.startKey)+1)
+	copy(s.endKey, r.startKey)
+	for {
+		s.endKey[len(s.endKey)-1] = '1'
+		if bytes.Compare(s.endKey, r.endKey) < 0 {
+			break
+		}
+		s.endKey[len(s.endKey)-1] = '0'
+		s.endKey = append(s.endKey, '0')
+	}
+
+	r.version = *versionGen
+	r.startKey = make([]byte, len(s.endKey))
+	copy(r.startKey, s.endKey)
+	return
+}
+
+func (r *lockedRegion) merge(s lockedRegion, versionGen *uint64) {
+	if !bytes.Equal(r.startKey, s.endKey) {
+		panic("bad merge")
+	}
+
+	*versionGen += 1
+	r.startKey = s.startKey
+	r.version = *versionGen
 }

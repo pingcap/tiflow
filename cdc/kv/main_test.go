@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("github.com/pingcap/tiflow/pkg/workerpool.(*worker).run"),
 		goleak.IgnoreTopFunction("sync.runtime_Semacquire"),
+		goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).mpoolDrain"),
 	}
 
 	leakutil.SetUpLeakTest(m, opts...)

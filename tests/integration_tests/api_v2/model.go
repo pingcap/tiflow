@@ -185,7 +185,6 @@ type ReplicaConfig struct {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
@@ -209,19 +208,6 @@ type EventFilterRule struct {
 	IgnoreDeleteValueExpr    string `json:"ignore_delete_value_expr"`
 }
 
-// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
-type MySQLReplicationRules struct {
-	// DoTables is an allowlist of tables.
-	DoTables []*Table `json:"do_tables,omitempty"`
-	// DoDBs is an allowlist of schemas.
-	DoDBs []string `json:"do_dbs,omitempty"`
-
-	// IgnoreTables is a blocklist of tables.
-	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
-	// IgnoreDBs is a blocklist of schemas.
-	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
-}
-
 // Table represents a qualified table name.
 type Table struct {
 	// Schema is the name of the schema (database) containing this table.
@@ -233,17 +219,23 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol,omitempty"`
-	SchemaRegistry           string            `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig        `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors,omitempty"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       *int              `json:"encoder_concurrency,omitempty"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
-	ContentCompatible        *bool             `json:"content_compatible"`
+	Protocol                    string              `json:"protocol,omitempty"`
+	SchemaRegistry              string              `json:"schema_registry,omitempty"`
+	CSVConfig                   *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules               []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors             []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity                string              `json:"transaction_atomicity"`
+	EncoderConcurrency          *int                `json:"encoder_concurrency,omitempty"`
+	Terminator                  string              `json:"terminator"`
+	DateSeparator               string              `json:"date_separator,omitempty"`
+	EnablePartitionSeparator    *bool               `json:"enable_partition_separator,omitempty"`
+	ContentCompatible           *bool               `json:"content_compatible"`
+	SendBootstrapIntervalInSec  *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount     *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
+	SendBootstrapToAllPartition *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+	DebeziumDisableSchema       *bool               `json:"debezium_disable_schema,omitempty"`
+	DebeziumConfig              *DebeziumConfig     `json:"debezium,omitempty"`
+	OpenProtocolConfig          *OpenProtocolConfig `json:"open,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -379,4 +371,14 @@ type Capture struct {
 	IsOwner       bool   `json:"is_owner"`
 	AdvertiseAddr string `json:"address"`
 	ClusterID     string `json:"cluster_id"`
+}
+
+// OpenProtocolConfig represents the configurations for open protocol encoding
+type OpenProtocolConfig struct {
+	OutputOldValue bool `json:"output_old_value"`
+}
+
+// DebeziumConfig represents the configurations for debezium protocol encoding
+type DebeziumConfig struct {
+	OutputOldValue bool `json:"output_old_value"`
 }

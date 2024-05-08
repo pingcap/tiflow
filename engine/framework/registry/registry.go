@@ -22,6 +22,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.uber.org/zap"
 )
 
@@ -94,6 +95,12 @@ func (r *registryImpl) CreateWorker(
 
 	config, err := factory.DeserializeConfig(configBytes)
 	if err != nil {
+		// dm will connect upstream to adjust some config, so we need check whether
+		// the error is retryable too.
+		err2 := errorutil.ConvertErr(tp, err)
+		if factory.IsRetryableError(err2) {
+			return nil, errors.ErrCreateWorkerNonTerminate.Wrap(err).GenWithStackByArgs()
+		}
 		return nil, errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
 	}
 

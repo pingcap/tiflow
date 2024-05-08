@@ -27,8 +27,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -1145,6 +1145,7 @@ func (r *Relay) setSyncConfig() error {
 			util.WithCAContent(r.cfg.From.Security.SSLCABytes),
 			util.WithCertAndKeyContent(r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(r.cfg.From.Security.CertAllowedCN),
+			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)

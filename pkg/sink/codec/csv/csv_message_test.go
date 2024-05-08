@@ -18,11 +18,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -742,7 +741,9 @@ func TestCSVMessageEncode(t *testing.T) {
 		tableName  string
 		schemaName string
 		commitTs   uint64
+		preColumns []any
 		columns    []any
+		HandleKey  kv.Handle
 	}
 	testCases := []struct {
 		name   string
@@ -784,6 +785,48 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    []any{"a!b!c", "def"},
 			},
 			want: []byte(`U!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+					OutputHandleKey: true,
+				},
+				opType:     operationUpdate,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				preColumns: []any{"a!b!c", "abc"},
+				columns:    []any{"a!b!c", "def"},
+				HandleKey:  kv.IntHandle(1),
+			},
+			want: []byte(`D!table2!test!435661838416609281!true!1!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!true!1!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+				},
+				opType:     operationInsert,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				columns:    []any{"a!b!c", "def"},
+			},
+			want: []byte(`I!table2!test!435661838416609281!false!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, with quote mark",
@@ -903,7 +946,9 @@ func TestCSVMessageEncode(t *testing.T) {
 				schemaName: tc.fields.schemaName,
 				commitTs:   tc.fields.commitTs,
 				columns:    tc.fields.columns,
+				preColumns: tc.fields.preColumns,
 				newRecord:  true,
+				HandleKey:  tc.fields.HandleKey,
 			}
 
 			require.Equal(t, tc.want, c.encode())
@@ -931,19 +976,17 @@ func TestRowChangeEventConversion(t *testing.T) {
 			cols = append(cols, &c.col)
 			colInfos = append(colInfos, c.colInfo)
 		}
-		row.ColInfos = colInfos
-		row.Table = &model.TableName{
-			Table:  fmt.Sprintf("table%d", idx),
-			Schema: "test",
-		}
+		tidbTableInfo := model.BuildTiDBTableInfo(fmt.Sprintf("table%d", idx), cols, nil)
+		model.AddExtraColumnInfo(tidbTableInfo, colInfos)
+		row.TableInfo = model.WrapTableInfo(100, "test", 100, tidbTableInfo)
 
 		if idx%3 == 0 { // delete operation
-			row.PreColumns = cols
+			row.PreColumns = model.Columns2ColumnDatas(cols, row.TableInfo)
 		} else if idx%3 == 1 { // insert operation
-			row.Columns = cols
+			row.Columns = model.Columns2ColumnDatas(cols, row.TableInfo)
 		} else { // update operation
-			row.PreColumns = cols
-			row.Columns = cols
+			row.PreColumns = model.Columns2ColumnDatas(cols, row.TableInfo)
+			row.Columns = model.Columns2ColumnDatas(cols, row.TableInfo)
 		}
 		csvMsg, err := rowChangedEvent2CSVMsg(&common.Config{
 			Delimiter:            "\t",
@@ -956,23 +999,9 @@ func TestRowChangeEventConversion(t *testing.T) {
 		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
 
-		ticols := make([]*timodel.ColumnInfo, 0)
-		for _, col := range cols {
-			ticol := &timodel.ColumnInfo{
-				Name:      timodel.NewCIStr(col.Name),
-				FieldType: *types.NewFieldType(col.Type),
-			}
-			if col.Flag.IsBinary() {
-				ticol.SetCharset(charset.CharsetBin)
-			} else {
-				ticol.SetCharset(mysql.DefaultCharset)
-			}
-			ticols = append(ticols, ticol)
-		}
-
 		row2, err := csvMsg2RowChangedEvent(&common.Config{
 			BinaryEncodingMethod: group[0].BinaryEncodingMethod,
-		}, csvMsg, ticols)
+		}, csvMsg, row.TableInfo)
 		require.Nil(t, err)
 		require.NotNil(t, row2)
 	}

@@ -69,7 +69,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		log.Warn("Single message is too large for open-protocol, only encode handle key columns",
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", e.Table),
+			zap.Any("table", e.TableInfo.TableName),
 			zap.Any("key", key))
 		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
@@ -112,7 +112,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			log.Warn("Single message is too large for open-protocol",
 				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 				zap.Int("length", length),
-				zap.Any("table", e.Table),
+				zap.Any("table", e.TableInfo.TableName),
 				zap.Any("key", key))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
@@ -168,8 +168,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	message.Value = append(message.Value, valueLenByte[:]...)
 	message.Value = append(message.Value, value...)
 	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
+	message.Schema = e.TableInfo.GetSchemaNamePtr()
+	message.Table = e.TableInfo.GetTableNamePtr()
 	message.IncRowsCount()
 
 	if callback != nil {

@@ -32,7 +32,6 @@ type redoWorker struct {
 	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memquota.MemQuota
 	redoDMLManager redo.DMLManager
-	eventCache     *redoEventCache
 }
 
 func newRedoWorker(
@@ -40,14 +39,12 @@ func newRedoWorker(
 	sourceManager *sourcemanager.SourceManager,
 	quota *memquota.MemQuota,
 	redoDMLMgr redo.DMLManager,
-	eventCache *redoEventCache,
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
 		sourceManager:  sourceManager,
 		memQuota:       quota,
 		redoDMLManager: redoDMLMgr,
-		eventCache:     eventCache,
 	}
 }
 
@@ -77,19 +74,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	)
 	advancer.lastPos = lowerBound.Prev()
 
-	var cache *eventAppender
-	if w.eventCache != nil {
-		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
-	}
+	allEventCount := 0
 
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
-	allEventCount := 0
-	cachedSize := uint64(0)
-
 	defer func() {
-		eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
-		task.tableSink.updateRangeEventCounts(eventCount)
-
 		if err := iter.Close(); err != nil {
 			log.Error("redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -97,6 +85,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				zap.Stringer("span", &task.span),
 				zap.Error(err))
 		}
+	}()
+
+	defer func() {
 		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
@@ -120,12 +111,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			if cache != nil {
-				// Still need to update cache upper boundary even if no events.
-				cache.pushBatch(nil, 0, upperBound)
-			}
-
-			return advancer.finish(ctx, cachedSize, upperBound)
+			return advancer.finish(ctx, upperBound)
 		}
 
 		allEventCount += 1
@@ -146,30 +132,17 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			advancer.appendEvents(x, size)
 		}
 
-		if cache != nil {
-			cached, brokenSize := cache.pushBatch(x, size, pos)
-			if cached {
-				cachedSize += size
-			} else {
-				cachedSize -= brokenSize
-			}
-		}
-
-		advanced, err := advancer.tryAdvanceAndAcquireMem(
+		err = advancer.tryAdvanceAndAcquireMem(
 			ctx,
-			cachedSize,
 			false,
 			pos.Valid(),
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if advanced {
-			cachedSize = 0
-		}
 	}
 
 	// Even if task is canceled we still call this again, to avoid something
 	// are left and leak forever.
-	return advancer.advance(ctx, cachedSize)
+	return advancer.advance(ctx)
 }

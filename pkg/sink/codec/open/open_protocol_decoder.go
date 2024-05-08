@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -207,11 +207,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	event := b.nextEvent
 	if b.nextKey.OnlyHandleKey {
-		var err error
-		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		event = b.assembleHandleKeyOnlyEvent(ctx, event)
 	}
 
 	b.nextKey = nil
@@ -234,6 +230,8 @@ func (b *BatchDecoder) buildColumns(
 		switch mysqlType {
 		case mysql.TypeJSON:
 			value = string(value.([]uint8))
+		case mysql.TypeBit:
+			value = common.MustBinaryLiteralToInt(value.([]uint8))
 		}
 
 		column := &model.Column{
@@ -252,60 +250,59 @@ func (b *BatchDecoder) buildColumns(
 
 func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
-) (*model.RowChangedEvent, error) {
+) *model.RowChangedEvent {
 	var (
-		schema   = handleKeyOnlyEvent.Table.Schema
-		table    = handleKeyOnlyEvent.Table.Table
+		schema   = handleKeyOnlyEvent.TableInfo.GetSchemaName()
+		table    = handleKeyOnlyEvent.TableInfo.GetTableName()
 		commitTs = handleKeyOnlyEvent.CommitTs
 	)
 
+	tableInfo := handleKeyOnlyEvent.TableInfo
 	if handleKeyOnlyEvent.IsInsert() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
-			conditions[col.Name] = col.Value
+			colName := tableInfo.ForceGetColumnName(col.ColumnID)
+			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		columns := b.buildColumns(holder, conditions)
-		handleKeyOnlyEvent.Columns = columns
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
+		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsDelete() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
-			conditions[col.Name] = col.Value
+			colName := tableInfo.ForceGetColumnName(col.ColumnID)
+			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		preColumns := b.buildColumns(holder, conditions)
-		handleKeyOnlyEvent.PreColumns = preColumns
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preColumns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, preColumns, indexColumns)
+		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsUpdate() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
-			conditions[col.Name] = col.Value
+			colName := tableInfo.ForceGetColumnName(col.ColumnID)
+			conditions[colName] = col.Value
 		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		columns := b.buildColumns(holder, conditions)
-		handleKeyOnlyEvent.Columns = columns
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(columns)
+		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
+		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 
 		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
-			conditions[col.Name] = col.Value
+			colName := tableInfo.ForceGetColumnName(col.ColumnID)
+			conditions[colName] = col.Value
 		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		preColumns := b.buildColumns(holder, conditions)
-		handleKeyOnlyEvent.PreColumns = preColumns
+		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
 	}
 
-	return handleKeyOnlyEvent, nil
+	return handleKeyOnlyEvent
 }
 
 func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {

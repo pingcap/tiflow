@@ -28,24 +28,25 @@ func NewCmdCli() *cobra.Command {
 	cmds := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Here we will initialize the logging configuration and set the current default context.
-			cancel := util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
-			util.LogHTTPProxies()
-			// A notify that complete immediately, it skips the second signal essentially.
-			doneNotify := func() <-chan struct{} {
-				done := make(chan struct{})
-				close(done)
-				return done
-			}
-			util.InitSignalHandling(doneNotify, cancel)
-			return nil
-		},
-		Args: cobra.NoArgs,
+		Args:  cobra.NoArgs,
 	}
 
 	// Binding the `cli` command flags.
 	cf.AddFlags(cmds)
+	cmds.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		// Here we will initialize the logging configuration and set the current default context.
+		cancel := util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
+		util.LogHTTPProxies()
+		// A notify that complete immediately, it skips the second signal essentially.
+		doneNotify := func() <-chan struct{} {
+			done := make(chan struct{})
+			close(done)
+			return done
+		}
+		util.InitSignalHandling(doneNotify, cancel)
+
+		util.CheckErr(cf.CompleteClientAuthParameters(cmd))
+	}
 
 	// Construct the client construction factory.
 	f := factory.NewFactory(cf)
@@ -56,6 +57,7 @@ func NewCmdCli() *cobra.Command {
 	cmds.AddCommand(newCmdProcessor(f))
 	cmds.AddCommand(newCmdTso(f))
 	cmds.AddCommand(newCmdUnsafe(f))
+	cmds.AddCommand(newConfigureCredentials())
 
 	return cmds
 }

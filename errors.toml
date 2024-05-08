@@ -203,12 +203,17 @@ failed to convert ddl '%s' to filter event type
 
 ["CDC:ErrCorruptedDataMutation"]
 error = '''
-Changefeed %s.%s stopped due to corrupted data mutation received. Corrupted mutation detail information %+v
+Changefeed %s.%s stopped due to corrupted data mutation received
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
+'''
+
+["CDC:ErrCredentialNotFound"]
+error = '''
+credential not found: %s
 '''
 
 ["CDC:ErrDDLSchemaNotFound"]
@@ -219,6 +224,11 @@ cannot find mysql.tidb_ddl_job schema
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
+'''
+
+["CDC:ErrDebeziumEncodeFailed"]
+error = '''
+debezium encode failed
 '''
 
 ["CDC:ErrDecodeFailed"]
@@ -243,7 +253,7 @@ dispatcher failed
 
 ["CDC:ErrEncodeFailed"]
 error = '''
-encode failed: %s
+encode failed
 '''
 
 ["CDC:ErrEtcdIgnore"]
@@ -343,7 +353,7 @@ get tikv grpc context failed
 
 ["CDC:ErrHandleDDLFailed"]
 error = '''
-handle ddl failed, job: %s, query: %s, startTs: %d. If you want to skip this DDL and continue with replication, you can manually execute this DDL downstream. Afterwards, add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.
+handle ddl failed, query: %s, startTs: %d. If you want to skip this DDL and continue with replication, you can manually execute this DDL downstream. Afterwards, add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.
 '''
 
 ["CDC:ErrIllegalSorterParameter"]
@@ -354,6 +364,11 @@ illegal parameter for sorter: %s
 ["CDC:ErrIncompatibleSinkConfig"]
 error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
+["CDC:ErrInternalCheckFailed"]
+error = '''
+internal check failed, %s
 '''
 
 ["CDC:ErrInternalServerError"]
@@ -539,6 +554,11 @@ multiple TiCDC clusters exist while using --pd
 ["CDC:ErrMySQLConnectionError"]
 error = '''
 MySQL connection error
+'''
+
+["CDC:ErrMySQLDuplicateEntry"]
+error = '''
+MySQL duplicate entry error
 '''
 
 ["CDC:ErrMySQLInvalidConfig"]
@@ -748,7 +768,7 @@ invalid pulsar client ID '%s'
 
 ["CDC:ErrPulsarInvalidConfig"]
 error = '''
-pulsar config invalid
+pulsar config invalid %s
 '''
 
 ["CDC:ErrPulsarInvalidPartitionNum"]
@@ -994,6 +1014,16 @@ generate tls config failed
 ["CDC:ErrURLFormatInvalid"]
 error = '''
 url format is invalid
+'''
+
+["CDC:ErrUnauthorized"]
+error = '''
+user %s unauthorized, error: %s
+'''
+
+["CDC:ErrUnexpected"]
+error = '''
+cdc met unexpected error: %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]
@@ -1343,7 +1373,7 @@ meta operation fail
 
 ["DFLOW:ErrMetaOpFailed"]
 error = '''
-meta operation %s is failed
+unexpected meta operation failure: %s
 '''
 
 ["DFLOW:ErrMetaOptionConflict"]

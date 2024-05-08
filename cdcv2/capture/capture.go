@@ -27,13 +27,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	ownerv2 "github.com/pingcap/tiflow/cdcv2/owner"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -159,21 +158,12 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
-
-	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
+	g.Go(func() error {
+		return c.MessageServer.Run(stdCtx, c.MessageRouter.GetLocalChannel())
 	})
 
 	g.Go(func() error {
-		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
-	})
-
-	g.Go(func() error {
-		return c.captureObservation.Run(ctx,
+		return c.captureObservation.Run(stdCtx,
 			func(ctx context.Context,
 				controllerObserver metadata.ControllerObservation,
 			) error {
@@ -186,7 +176,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 			})
 	})
 	g.Go(func() error {
-		return c.owner.Run(ctx)
+		return c.owner.Run(stdCtx)
 	})
 	return errors.Trace(g.Wait())
 }
@@ -204,8 +194,12 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if c.upstreamManager != nil {
 		c.upstreamManager.Close()
 	}
-	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	_, err := c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient)
+	c.upstreamManager = upstream.NewManager(ctx, upstream.CaptureTopologyCfg{
+		CaptureInfo: c.info,
+		GCServiceID: c.EtcdClient.GetGCServiceID(),
+		SessionTTL:  int64(c.config.CaptureSessionTTL),
+	})
+	_, err := c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient, c.EtcdClient.GetEtcdClient())
 	if err != nil {
 		return errors.Trace(err)
 	}

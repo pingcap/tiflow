@@ -65,25 +65,35 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 	ev := &model.RowChangedEvent{}
+	var cols, preCols []*model.Column
 	if oldValue != nil {
-		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
+		if preCols, err = oldValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	if newValue != nil {
-		if ev.Columns, err = newValue.ToModel(); err != nil {
+		if cols, err = newValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	ev.CommitTs = b.headers.GetTs(b.index)
-	ev.Table = &model.TableName{
-		Schema: b.headers.GetSchema(b.index),
-		Table:  b.headers.GetTable(b.index),
+	if len(preCols) > 0 {
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
+		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), preCols, indexColumns)
+	} else {
+		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
+		ev.TableInfo = model.BuildTableInfo(b.headers.GetSchema(b.index), b.headers.GetTable(b.index), cols, indexColumns)
+	}
+	if len(preCols) > 0 {
+		ev.PreColumns = model.Columns2ColumnDatas(preCols, ev.TableInfo)
+	}
+	if len(cols) > 0 {
+		ev.Columns = model.Columns2ColumnDatas(cols, ev.TableInfo)
 	}
 	partition := b.headers.GetPartition(b.index)
 	if partition >= 0 {
-		ev.Table.TableID = partition
-		ev.Table.IsPartition = true
+		ev.PhysicalTableID = partition
+		ev.TableInfo.TableName.IsPartition = true
 	}
 	b.index++
 	return ev, nil
@@ -117,9 +127,9 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return event, nil
 }
 
-func newBatchDecoder(bits []byte) (codec.RowEventDecoder, error) {
+func newBatchDecoder(_, value []byte) (codec.RowEventDecoder, error) {
 	decoder := NewBatchDecoderWithAllocator(NewSliceAllocator(64))
-	err := decoder.AddKeyValue(nil, bits)
+	err := decoder.AddKeyValue(nil, value)
 	return decoder, err
 }
 
