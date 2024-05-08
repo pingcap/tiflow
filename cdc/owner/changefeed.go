@@ -479,7 +479,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 func (c *changefeed) initialize(ctx cdcContext.Context,
 	info *model.ChangeFeedInfo,
-	status *model.ChangeFeedStatus) (err error) {
+	status *model.ChangeFeedStatus,
+) (err error) {
 	if c.initialized.Load() || status == nil {
 		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or

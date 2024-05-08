@@ -15,7 +15,6 @@ package context
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/workerpool"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )

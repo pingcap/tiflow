@@ -15,10 +15,10 @@ package async
 
 import (
 	"context"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"sync"
 
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
