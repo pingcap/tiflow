@@ -109,7 +109,7 @@ func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
 	return func(ctx *gin.Context) {
 		changefeedID := changefeedIDFunc(ctx)
 		// check if this capture is the changefeed owner
-		if handleRequestIfIsChnagefeedOwner(ctx, p, changefeedID) {
+		if handleRequestIfIsChangefeedOwner(ctx, p, changefeedID) {
 			return
 		}
 
@@ -159,7 +159,7 @@ func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
 	}
 }
 
-func handleRequestIfIsChnagefeedOwner(ctx *gin.Context, p capture.Capture, changefeedID model.ChangeFeedID) bool {
+func handleRequestIfIsChangefeedOwner(ctx *gin.Context, p capture.Capture, changefeedID model.ChangeFeedID) bool {
 	// currently not only controller capture has the owner, remove this check in the future
 	if p.StatusProvider() != nil {
 		ok, err := p.StatusProvider().IsChangefeedOwner(ctx, changefeedID)

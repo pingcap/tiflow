@@ -126,7 +126,7 @@ func createOwner4Test(globalVars *vars.GlobalVars, t *testing.T) (*ownerImpl, *o
 		},
 		// new downstream observer
 		func(
-			ctx context.Context, chnagefeedID model.ChangeFeedID,
+			ctx context.Context, ChangefeedID model.ChangeFeedID,
 			sinkURIStr string, replCfg *config.ReplicaConfig,
 			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
