@@ -569,7 +569,7 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	require.Equal(t, 1, len(result))
 }
 
-func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
+func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 	columns := []*Column{
 		{
 			Name:  "col1",
@@ -614,6 +614,13 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
+
+	txn2 := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
 }
 
 func TestToRedoLog(t *testing.T) {

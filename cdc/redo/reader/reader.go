@@ -240,26 +240,7 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 		return nil, errors.Trace(ctx.Err())
 	case rowInRedoLog := <-l.rowCh:
 		if rowInRedoLog != nil {
-			cols := rowInRedoLog.Columns
-			if cols == nil {
-				cols = rowInRedoLog.PreColumns
-			}
-			tableInfo := model.BuildTableInfo(
-				rowInRedoLog.Table.Schema,
-				rowInRedoLog.Table.Table,
-				cols,
-				rowInRedoLog.IndexColumns)
-			tableInfo.TableName.TableID = rowInRedoLog.Table.TableID
-			tableInfo.TableName.IsPartition = rowInRedoLog.Table.IsPartition
-			row := &model.RowChangedEvent{
-				StartTs:         rowInRedoLog.StartTs,
-				CommitTs:        rowInRedoLog.CommitTs,
-				PhysicalTableID: rowInRedoLog.Table.TableID,
-				TableInfo:       tableInfo,
-				Columns:         model.Columns2ColumnDatas(rowInRedoLog.Columns, tableInfo),
-				PreColumns:      model.Columns2ColumnDatas(rowInRedoLog.PreColumns, tableInfo),
-			}
-			return row, nil
+			return rowInRedoLog.ToRowChangedEvent(), nil
 		}
 		return nil, nil
 	}
