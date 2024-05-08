@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -98,6 +99,20 @@ func EncodeTsKey(uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64
 		log.Panic("EncodeTsKey retrieve one startTs at most")
 	}
 	encodeTsKey(buf, uniqueID, tableID, CRTs, startTs...)
+	return buf
+}
+
+// EncodeTsKeyUpperBoundExcluded is like EncodeTsKey, but only used for generating a excluded upper bound.
+func EncodeTsKeyUpperBoundExcluded(uniqueID uint32, tableID uint64, CRTs uint64, startTs uint64) []byte {
+	originWindow := DefaultTsWindow().ExtractTsWindow(CRTs)
+	pos := sorter.Position{StartTs: startTs, CommitTs: CRTs}
+	pos = pos.Next()
+	changedWindow := DefaultTsWindow().ExtractTsWindow(pos.CommitTs)
+
+	buf := EncodeTsKey(uniqueID, tableID, pos.CommitTs, pos.StartTs)
+	if changedWindow != originWindow {
+		binary.BigEndian.PutUint64(buf[0:tsWindowLen], originWindow)
+	}
 	return buf
 }
 
