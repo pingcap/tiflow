@@ -3091,7 +3091,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					s.getFlushedGlobalPoint(),
 				)
 			default:
-				logger.Warn("ignoring statement", zap.String("type", fmt.Sprintf("%T", v)))
+				logger.Warn("ignoring statement",
+					zap.String("type", fmt.Sprintf("%T", v)),
+					zap.ByteString("statement", stmt))
 			}
 		}
 	}
