@@ -17,9 +17,9 @@ import (
 	"context"
 	"testing"
 
-	ddl2 "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/util/filter"
+	ddl2 "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"

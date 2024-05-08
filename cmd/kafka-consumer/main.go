@@ -16,12 +16,16 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +36,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
-	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -51,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -59,7 +64,6 @@ import (
 
 func newConsumerOption() *consumerOption {
 	return &consumerOption{
-		groupID: fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		version: "2.4.0",
 
 		maxMessageBytes: math.MaxInt64,
@@ -77,9 +81,8 @@ type consumerOption struct {
 	maxMessageBytes int
 	maxBatchSize    int
 
-	protocol            config.Protocol
-	enableTiDBExtension bool
-	enableRowChecksum   bool
+	protocol    config.Protocol
+	codecConfig *common.Config
 
 	// the replicaConfig of the changefeed which produce data to the kafka topic
 	replicaConfig *config.ReplicaConfig
@@ -96,6 +99,8 @@ type consumerOption struct {
 
 	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
 	upstreamTiDBDSN string
+
+	enableProfiling bool
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
@@ -104,22 +109,14 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	if s != "" {
 		o.version = s
 	}
-
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		o.groupID = s
-	}
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-
 	o.address = strings.Split(upstreamURI.Host, ",")
 
-	saramaConfig := sarama.NewConfig()
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(o.address, o.topic, saramaConfig)
+		partition, err := getPartitionNum(o.address, o.topic)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", o.topic), zap.Error(err))
 		}
@@ -151,53 +148,34 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	}
 
 	s = upstreamURI.Query().Get("protocol")
-	if s != "" {
-		protocol, err := config.ParseSinkProtocolFromString(s)
-		if err != nil {
-			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
-		}
-		o.protocol = protocol
+	if s == "" {
+		log.Panic("cannot found the protocol from the sink url")
 	}
-
-	s = upstreamURI.Query().Get("enable-tidb-extension")
-	if s != "" {
-		enableTiDBExtension, err := strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-tidb-extension of upstream-uri")
-		}
-		if enableTiDBExtension {
-			if o.protocol != config.ProtocolCanalJSON && o.protocol != config.ProtocolAvro {
-				log.Panic("enable-tidb-extension only work with canal-json / avro")
-			}
-		}
-		o.enableTiDBExtension = enableTiDBExtension
+	protocol, err := config.ParseSinkProtocolFromString(s)
+	if err != nil {
+		log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 	}
+	o.protocol = protocol
 
-	s = upstreamURI.Query().Get("enable-row-checksum")
-	if s != "" {
-		enableRowChecksum, err := strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-row-checksum of upstream-uri")
-		}
-		if enableRowChecksum {
-			if o.protocol != config.ProtocolAvro {
-				log.Panic("enable-row-checksum only work with avro")
-			}
-		}
-		o.enableRowChecksum = enableRowChecksum
-	}
-
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 	if configFile != "" {
-		replicaConfig := config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
+		err = cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
-		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
-			return errors.Trace(err)
+		if _, err = filter.VerifyTableRules(replicaConfig.Filter); err != nil {
+			return cerror.Trace(err)
 		}
-		o.replicaConfig = replicaConfig
+	}
+	o.replicaConfig = replicaConfig
+
+	o.codecConfig = common.NewConfig(protocol)
+	if err = o.codecConfig.Apply(upstreamURI, o.replicaConfig); err != nil {
+		return cerror.Trace(err)
+	}
+	if protocol == config.ProtocolAvro {
+		o.codecConfig.AvroEnableWatermark = true
 	}
 
 	log.Info("consumer option adjusted",
@@ -209,14 +187,13 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		zap.String("groupID", o.groupID),
 		zap.Int("maxMessageBytes", o.maxMessageBytes),
 		zap.Int("maxBatchSize", o.maxBatchSize),
-		zap.Any("protocol", o.protocol),
-		zap.Bool("enableTiDBExtension", o.enableTiDBExtension),
-		zap.Bool("enableRowChecksum", o.enableRowChecksum))
-
+		zap.String("upstreamURI", upstreamURI.String()))
 	return nil
 }
 
 func main() {
+	debug.SetMemoryLimit(14 * 1024 * 1024 * 1024)
+
 	consumerOption := newConsumerOption()
 
 	var (
@@ -224,19 +201,22 @@ func main() {
 		configFile     string
 	)
 
+	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
+
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-
+	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID, "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
 	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.key, "key", "", "Private key path for Kafka SSL connection")
+	flag.BoolVar(&consumerOption.enableProfiling, "enable-profiling", false, "enable pprof profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -292,12 +272,22 @@ func main() {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
 
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
+	if consumerOption.enableProfiling {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := http.ListenAndServe(":6060", nil); err != nil {
+				log.Panic("Error starting pprof", zap.Error(err))
+			}
+		}()
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for {
-			// `Consume` should be called inside an infinite loop, when a
+			// `consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
 			if err := client.Consume(ctx, strings.Split(consumerOption.topic, ","), consumer); err != nil {
@@ -337,23 +327,24 @@ func main() {
 	}
 }
 
-func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+func getPartitionNum(address []string, topic string) (int32, error) {
+	saramaConfig := sarama.NewConfig()
 	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(address, cfg)
+	admin, err := sarama.NewClusterAdmin(address, saramaConfig)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	err = admin.Close()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	topicDetail, exist := topics[topic]
 	if !exist {
-		return 0, errors.Errorf("can not find topic %s", topic)
+		return 0, cerror.Errorf("can not find topic %s", topic)
 	}
 	log.Info("get partition number of topic",
 		zap.String("topic", topic),
@@ -364,13 +355,13 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error {
 	admin, err := sarama.NewClusterAdmin(address, cfg)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.Trace(err)
 	}
 	defer admin.Close()
 	for i := 0; i <= 30; i++ {
 		topics, err := admin.ListTopics()
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 		if _, ok := topics[topic]; ok {
 			return nil
@@ -378,7 +369,7 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 		log.Info("wait the topic created", zap.String("topic", topic))
 		time.Sleep(1 * time.Second)
 	}
-	return errors.Errorf("wait the topic(%s) created timeout", topic)
+	return cerror.Errorf("wait the topic(%s) created timeout", topic)
 }
 
 func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
@@ -386,7 +377,7 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 
 	version, err := sarama.ParseKafkaVersion(o.version)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 
 	config.ClientID = "ticdc_kafka_sarama_consumer"
@@ -405,7 +396,7 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 			KeyPath:  o.key,
 		}).ToTLSConfig()
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.Trace(err)
 		}
 	}
 
@@ -440,10 +431,6 @@ type Consumer struct {
 
 	eventRouter *dispatcher.EventRouter
 
-	tz *time.Location
-
-	codecConfig *common.Config
-
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
@@ -456,45 +443,33 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 
 	tz, err := util.GetTimezone(o.timezone)
 	if err != nil {
-		return nil, errors.Annotate(err, "can not load timezone")
+		return nil, cerror.Annotate(err, "can not load timezone")
 	}
 	config.GetGlobalServerConfig().TZ = o.timezone
-	c.tz = tz
+	o.codecConfig.TimeZone = tz
 
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
 
-	c.codecConfig = common.NewConfig(o.protocol)
-	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
-	}
-
-	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
-		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
-	}
-
-	if c.codecConfig.LargeMessageHandle.HandleKeyOnly() {
-		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
+	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+		db, err := openDB(ctx, o.upstreamTiDBDSN)
 		if err != nil {
 			return nil, err
 		}
 		c.upstreamTiDB = db
 	}
 
-	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		c.eventRouter = eventRouter
+	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
+	if err != nil {
+		return nil, cerror.Trace(err)
 	}
+	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
+
 	for i := 0; i < int(o.partitionNum); i++ {
 		c.sinks[i] = &partitionSinks{}
 	}
@@ -503,13 +478,13 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
 	if err != nil {
 		cancel()
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 	c.sinkFactory = f
 
 	go func() {
 		err := <-errChan
-		if errors.Cause(err) != context.Canceled {
+		if !errors.Is(cerror.Cause(err), context.Canceled) {
 			log.Error("error on running consumer", zap.Error(err))
 		} else {
 			log.Info("consumer exited")
@@ -520,7 +495,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig())
 	if err != nil {
 		cancel()
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 	c.ddlSink = ddlSink
 	c.ready = make(chan bool)
@@ -583,25 +558,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		err     error
 	)
 
-	switch c.codecConfig.Protocol {
+	switch c.option.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		decoder, err = open.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		decoder, err = canal.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 		if err != nil {
 			return err
 		}
 	case config.ProtocolAvro:
 		schemaM, err := avro.NewConfluentSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
+		decoder = avro.NewDecoder(c.option.codecConfig, schemaM, c.option.topic)
+	case config.ProtocolSimple:
+		decoder, err = simple.NewDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
 	default:
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.option.protocol))
 	}
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.Trace(err)
 	}
 
 	log.Info("start consume claim",
@@ -610,9 +587,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+		if err = decoder.AddKeyValue(message.Key, message.Value); err != nil {
 			log.Error("add key value to the decoder failed", zap.Error(err))
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 
 		counter := 0
@@ -647,7 +624,29 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				if partition == 0 {
+
+				if simple, ok := decoder.(*simple.Decoder); ok {
+					cachedEvents := simple.GetCachedEvents()
+					for _, row := range cachedEvents {
+						var partitionID int64
+						if row.Table.IsPartition {
+							partitionID = row.Table.TableID
+						}
+						tableID := c.fakeTableIDGenerator.
+							generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+						row.Table.TableID = tableID
+
+						group, ok := eventGroups[tableID]
+						if !ok {
+							group = newEventsGroup()
+							eventGroups[tableID] = group
+						}
+						group.Append(row)
+					}
+				}
+
+				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
+				if partition == 0 && ddl.Query != "" {
 					c.appendDDL(ddl)
 				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
@@ -659,20 +658,22 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-
-				if c.eventRouter != nil {
-					target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
-					if err != nil {
-						return errors.Trace(err)
-					}
-					if partition != target {
-						log.Panic("RowChangedEvent dispatched to wrong partition",
-							zap.Int32("obtained", partition),
-							zap.Int32("expected", target),
-							zap.Int32("partitionNum", c.option.partitionNum),
-							zap.Any("row", row),
-						)
-					}
+				// when using simple protocol, the row may be nil, since it's table info not received yet,
+				// it's cached in the decoder, so just continue here.
+				if row == nil {
+					continue
+				}
+				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
+				if err != nil {
+					return cerror.Trace(err)
+				}
+				if partition != target {
+					log.Panic("RowChangedEvent dispatched to wrong partition",
+						zap.Int32("obtained", partition),
+						zap.Int32("expected", target),
+						zap.Int32("partitionNum", c.option.partitionNum),
+						zap.Any("row", row),
+					)
 				}
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
@@ -745,8 +746,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
@@ -774,7 +773,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Warn("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.String("DDL", ddl.Query))
 		return
 	}
 
@@ -783,12 +782,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.ddlWithMaxCommitTs {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	c.ddlWithMaxCommitTs = ddl
 }
 
@@ -817,7 +816,7 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	defer c.sinksMu.Unlock()
 	for _, sink := range c.sinks {
 		if err := fn(sink); err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 	}
 	return nil
@@ -848,7 +847,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 
 		// handle DDL
@@ -858,19 +857,19 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
-				return errors.Trace(err)
+				return cerror.Trace(err)
 			}
 
 			// DDL can be executed, do it first.
 			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return errors.Trace(err)
+				return cerror.Trace(err)
 			}
 			c.popDDL()
 
 			if todoDDL.CommitTs < minPartitionResolvedTs {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
+					zap.String("DDL", todoDDL.Query))
 			}
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
@@ -889,7 +888,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if err := c.forEachSink(func(sink *partitionSinks) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 	}
 }
@@ -913,7 +912,8 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 				log.Error("Failed to update resolved ts", zap.Error(err))
 				return false
 			}
-			if !tableSink.(tablesink.TableSink).GetCheckpointTs().EqualOrGreater(resolvedTs) {
+			checkpoint := tableSink.(tablesink.TableSink).GetCheckpointTs()
+			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
 			return true
@@ -949,7 +949,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Error("open db failed", zap.Error(err))
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 
 	db.SetMaxOpenConns(10)
@@ -959,8 +959,8 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.Error(err))
-		return nil, errors.Trace(err)
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, cerror.Trace(err)
 	}
 	log.Info("open db success", zap.String("dsn", dsn))
 	return db, nil

@@ -166,7 +166,10 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}()
 
-	cc, err := c.grpcPool.Connect(ctx, rs.storeAddr)
+	// grpc stream can be canceled by this context when any goroutine meet error,
+	// the underline established grpc connections is unaffected.
+	g, gctx := errgroup.WithContext(ctx)
+	cc, err := c.grpcPool.Connect(gctx, rs.storeAddr)
 	if err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -178,7 +181,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		return isCanceled()
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
 	if cc.Multiplexing() {
 		s.multiplexing = cc
 		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })

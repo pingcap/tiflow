@@ -19,10 +19,9 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,9 +63,7 @@ func TestDecodeEvent(t *testing.T) {
 	schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
-	tz, err := util.GetLocalTimezone()
-	require.NoError(t, err)
-	decoder := NewDecoder(config, schemaM, topic, tz)
+	decoder := NewDecoder(config, schemaM, topic)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -112,9 +109,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	tz, err := util.GetLocalTimezone()
-	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -155,9 +150,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	tz, err := util.GetLocalTimezone()
-	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 

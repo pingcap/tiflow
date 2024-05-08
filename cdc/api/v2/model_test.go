@@ -20,7 +20,7 @@ import (
 	"time"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -58,6 +58,10 @@ var defaultAPIConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
+		OpenProtocolConfig:               &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

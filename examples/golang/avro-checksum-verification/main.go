@@ -24,11 +24,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -366,7 +367,13 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// encoded as bytes if binary flag set to true, else string
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeVarchar,
+		mysql.TypeVarString,
+		mysql.TypeString,
+		mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob,
+		mysql.TypeLongBlob,
+		mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:
 			buf = appendLengthValue(buf, []byte(a))
@@ -377,7 +384,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+	case mysql.TypeTimestamp:
+		location := "local"
+		timestamp := value.(string)
+		loc, err := time.LoadLocation(location)
+		if err != nil {
+			return nil, err
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		if err != nil {
+			return nil, err
+		}
+		timestamp = t.UTC().Format("2006-01-02 15:04:05")
+		buf = appendLengthValue(buf, []byte(timestamp))
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
 		buf = appendLengthValue(buf, []byte(v))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.

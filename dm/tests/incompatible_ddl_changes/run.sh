@@ -74,23 +74,23 @@ function incompatible_ddl() {
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 change c_mediumint c_mediumint_new mediumint(7);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event rename" 1
+		"event rename column" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 change c_mediumint_new c_mediumint mediumint(7);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event rename" 1
+		"event rename column" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	# drop
+	# drop column
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 drop column c_json;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event drop" 1
+		"event drop column" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
@@ -105,11 +105,11 @@ function incompatible_ddl() {
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	# modify pk
+	# drop pk
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 drop primary key"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event modify pk" 1
+		"event drop primary key" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
@@ -123,27 +123,28 @@ function incompatible_ddl() {
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	# modify constaints
+	# modify constraint
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 add constraint c_int_unique unique(c_int)"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event modify constaint" 1
+		"event modify constraint" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	# modify uk
+	# drop uk
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 change c_int c_int int"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"modify uk" 1
+		"drop unique key" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
+	# drop index
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 drop index c_int_unique"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event drop" 1
+		"event drop index" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
@@ -189,16 +190,16 @@ function incompatible_ddl() {
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 reorganize partition p0 into ( partition n0 values less than (5), partition n1 values less than (100000));"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event reorganize partition" 1
+		"event reorganize table partition" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	# truncate
+	# truncate partition
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 truncate partition n0"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event truncate" 1
+		"event truncate table partition" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
@@ -207,18 +208,18 @@ function incompatible_ddl() {
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 rebuild partition n0,n1;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event rebuild partition" 1
+		"event rebuild table partition" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
 
 	# exchange partition
-	run_sql_source1 "create table incompatible_ddl_changes.tb1(id int) partition by range(id)(partition p0 values less than (100000));"
+	run_sql_source1 "create table incompatible_ddl_changes.tb1(id int) partition by range(id)(partition p0 values less than (100000), partition p1 values less than(1000000));"
 	run_sql_source1 "create table incompatible_ddl_changes.tb2(id int);"
 	run_sql_source1 "alter table incompatible_ddl_changes.tb1 exchange partition p0 with table incompatible_ddl_changes.tb2"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event exchange partition" 1
+		"event exchange table partition" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2
@@ -228,7 +229,68 @@ function incompatible_ddl() {
 	run_sql_source1 "alter table incompatible_ddl_changes.tb3 coalesce partition 2;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"event coalesce partition" 1
+		"event coalesce table partition" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# rename index
+	run_sql_source1 "alter table incompatible_ddl_changes.tb3 add index idx(id);"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event modify constraint" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+	run_sql_source1 "alter table incompatible_ddl_changes.tb3 rename index idx to idx1;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event rename index" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# drop partition
+	run_sql_source1 "alter table incompatible_ddl_changes.tb1 drop partition p0;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event drop table partition" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# rename table
+	run_sql_source1 "rename table incompatible_ddl_changes.tb3 to incompatible_ddl_changes.tb4;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event rename table" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# truncate table
+	run_sql_source1 "truncate table incompatible_ddl_changes.tb4;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event truncate table" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# drop table
+	run_sql_source1 "drop table incompatible_ddl_changes.tb4;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event drop table" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	# drop database
+	run_sql_source1 "drop database incompatible_ddl_changes;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"event drop database" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 2

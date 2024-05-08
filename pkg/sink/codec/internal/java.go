@@ -13,7 +13,7 @@
 
 package internal
 
-import "github.com/pingcap/tidb/parser/mysql"
+import "github.com/pingcap/tidb/pkg/parser/mysql"
 
 // JavaSQLType is the sql type defined in class java.sql.Types in java sdk
 type JavaSQLType int32

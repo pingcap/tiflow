@@ -119,7 +119,7 @@ LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
-LDFLAGS += -X "github.com/pingcap/tidb/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "github.com/pingcap/tidb/pkg/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
 
 include tools/Makefile
 include Makefile.engine
@@ -337,7 +337,7 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
+	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/","^cmd/"
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \

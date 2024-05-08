@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -362,6 +362,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -457,6 +458,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
+		var openProtocolConfig *config.OpenProtocolConfig
+		if c.Sink.OpenProtocolConfig != nil {
+			openProtocolConfig = &config.OpenProtocolConfig{
+				OutputOldValue: c.Sink.OpenProtocolConfig.OutputOldValue,
+			}
+		}
 
 		res.Sink = &config.SinkConfig{
 			DispatchRules:                    dispatchRules,
@@ -477,6 +484,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         c.Sink.SafeMode,
+			OpenProtocol:                     openProtocolConfig,
 		}
 
 		if c.Sink.TxnAtomicity != nil {
@@ -484,6 +492,17 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
+		}
+		if c.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*c.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if c.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*c.Sink.SendBootstrapInMsgCount)
+		}
+
+		if c.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
 		}
 
 	}
@@ -620,6 +639,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -746,7 +766,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
-
+		var openProtocolConfig *OpenProtocolConfig
+		if cloned.Sink.OpenProtocol != nil {
+			openProtocolConfig = &OpenProtocolConfig{
+				OutputOldValue: cloned.Sink.OpenProtocol.OutputOldValue,
+			}
+		}
 		res.Sink = &SinkConfig{
 			Protocol:                         cloned.Sink.Protocol,
 			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
@@ -766,6 +791,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
+			OpenProtocolConfig:               openProtocolConfig,
 		}
 
 		if cloned.Sink.TxnAtomicity != nil {
@@ -773,6 +799,18 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
+		}
+
+		if cloned.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*cloned.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if cloned.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
+		}
+
+		if cloned.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
 		}
 	}
 	if cloned.Consistent != nil {
@@ -947,6 +985,10 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
+	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -1163,6 +1205,7 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+	EncodingFormat                 *string `json:"encoding_format,omitempty"`
 }
 
 // PulsarConfig represents a pulsar sink configuration
@@ -1286,4 +1329,9 @@ type GlueSchemaRegistryConfig struct {
 	// SecretAccessKey of the schema registry
 	SecretAccessKey string `json:"secret_access_key,omitempty"`
 	Token           string `json:"token,omitempty"`
+}
+
+// OpenProtocolConfig represents the configurations for open protocol encoding
+type OpenProtocolConfig struct {
+	OutputOldValue bool `json:"output_old_value"`
 }

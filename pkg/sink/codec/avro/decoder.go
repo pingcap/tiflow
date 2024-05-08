@@ -22,23 +22,21 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 type decoder struct {
 	config *common.Config
 	topic  string
-	sc     *stmtctx.StatementContext
 
 	schemaM SchemaManager
 
@@ -51,13 +49,11 @@ func NewDecoder(
 	config *common.Config,
 	schemaM SchemaManager,
 	topic string,
-	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      &stmtctx.StatementContext{TimeZone: tz},
 	}
 }
 
@@ -562,13 +558,12 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeBit encoded as bytes
 	case mysql.TypeBit:
 		// bit is store as bytes, convert to uint64.
-		v, err := common.BinaryLiteralToInt(value.([]byte))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		v := common.MustBinaryLiteralToInt(value.([]byte))
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// encoded as bytes if binary flag set to true, else string
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeVarchar, mysql.TypeVarString,
+		mysql.TypeString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:
 			buf = appendLengthValue(buf, []byte(a))
@@ -579,7 +574,24 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
+	case mysql.TypeTimestamp:
+		location := "Local"
+		var ts string
+		switch data := value.(type) {
+		case map[string]interface{}:
+			ts = data["value"].(string)
+			location = data["location"].(string)
+		case string:
+			ts = data
+		}
+		ts, err := util.ConvertTimezone(ts, location)
+		if err != nil {
+			log.Panic("convert timestamp to timezone failed",
+				zap.String("timestamp", ts), zap.String("location", location),
+				zap.Error(err))
+		}
+		buf = appendLengthValue(buf, []byte(ts))
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
 		buf = appendLengthValue(buf, []byte(v))
 	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.

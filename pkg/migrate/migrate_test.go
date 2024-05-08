@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -472,7 +472,7 @@ type mockPDClient struct {
 	check func(serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
 
-func (m *mockPDClient) GetLeaderAddr() string {
+func (m *mockPDClient) GetLeaderURL() string {
 	return m.url
 }
 
