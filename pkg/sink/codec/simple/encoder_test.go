@@ -653,6 +653,16 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
+	createTableSQL := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) null, key idx_name_email(name, email))`
+	createTableDDLEvent := helper.DDL2Event(createTableSQL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, "jack", "male", "jack@abc.com")`, "test", "t")
+
+	renameTableDDLEvent := helper.DDL2Event(`rename table test.t to test.abc`)
+
+	insertEvent2 := helper.DML2Event(`insert into test.abc values (2, "anna", "female", "anna@abc.com")`, "test", "abc")
+	helper.Tk().MustExec("drop table test.abc")
+
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.EnableRowChecksum = true
@@ -674,8 +684,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			createTableSQL := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
-			createTableDDLEvent := helper.DDL2Event(createTableSQL)
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
 
@@ -718,7 +726,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 				createTableDDLEvent.TableInfo.TableName.Table, createTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
-			insertEvent := helper.DML2Event(`insert into test.t values (1, "jack", "male", "jack@abc.com")`, "test", "t")
 			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 			require.NoError(t, err)
 
@@ -741,7 +748,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
-			renameTableDDLEvent := helper.DDL2Event(`rename table test.t to test.abc`)
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
 			require.NoError(t, err)
 
@@ -770,7 +776,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 				renameTableDDLEvent.TableInfo.TableName.Table, renameTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
-			insertEvent2 := helper.DML2Event(`insert into test.abc values (2, "anna", "female", "anna@abc.com")`, "test", "abc")
 			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent2, func() {})
 			require.NoError(t, err)
 
@@ -792,8 +797,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, insertEvent2.TableInfo.GetSchemaName(), decodedRow.TableInfo.GetSchemaName())
 			require.Equal(t, insertEvent2.TableInfo.GetTableName(), decodedRow.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
-
-			helper.Tk().MustExec("drop table test.abc")
 		}
 	}
 }

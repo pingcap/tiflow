@@ -180,9 +180,6 @@ func (m *avroMarshaller) Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = newMessageFromAvroNative(native, v.(*message))
-	if err != nil {
-		return errors.Trace(err)
-	}
+	newMessageFromAvroNative(native, v.(*message))
 	return nil
 }
