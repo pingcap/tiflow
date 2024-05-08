@@ -975,12 +975,12 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
-					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
-						"WHERE `a1`=? AND `a3`=? LIMIT 1",
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
+						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
 				values:          [][]interface{}{{3, 3, 2, 2}},
 				rowCount:        1,
-				approximateSize: 83,
+				approximateSize: 92,
 			},
 		}, {
 			name: "update with PK",
@@ -1016,11 +1016,11 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
-				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
-					"WHERE `a1`=? AND `a3`=? LIMIT 1"},
+				sqls: []string{"UPDATE `common_1`.`pk` SET `a1` = ?, `a3` = ? " +
+					"WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
 				values:          [][]interface{}{{3, 3, 2, 2}},
 				rowCount:        1,
-				approximateSize: 72,
+				approximateSize: 81,
 			},
 		}, {
 			name: "batch insert with PK",
