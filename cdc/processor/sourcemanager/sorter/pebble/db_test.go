@@ -80,7 +80,7 @@ func TestIteratorWithTableFilter(t *testing.T) {
 		require.Equal(t, int64(0), stats.Levels[level].NumFiles)
 	}
 
-	for _, x := range []struct {
+	for i, x := range []struct {
 		lowerTs, upperTs uint64
 		expectedCount    int
 	}{
@@ -103,6 +103,6 @@ func TestIteratorWithTableFilter(t *testing.T) {
 			}
 			require.Nil(t, iter.Close())
 		}
-		require.Equal(t, x.expectedCount, count)
+		require.Equal(t, x.expectedCount, count, "case %d fails", i)
 	}
 }
