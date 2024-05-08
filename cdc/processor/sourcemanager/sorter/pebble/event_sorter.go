@@ -264,9 +264,10 @@ func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
 	}
 
 	inCleaningCommitTs := s.tsWindow.MinTsInWindow(inCleaningWindow+1) - 1
-	key := encoding.EncodeTsKeyUpperBoundExcluded(math.MaxUint32, math.MaxUint64, inCleaningCommitTs, 0)
+	end := encoding.EncodeTsKeyUpperBoundExcluded(math.MaxUint32, math.MaxUint64, inCleaningCommitTs, 0)
+	start := encoding.EncodeTsKey(0, 0, 0, 0)
 	for _, db := range s.dbs {
-		if err := db.DeleteRange(nil, key, &pebbleWriteOptions); err != nil {
+		if err := db.DeleteRange(start, end, &pebbleWriteOptions); err != nil {
 			return err
 		}
 	}
