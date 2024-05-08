@@ -194,10 +194,6 @@ func newTiColumnInfo(
 		default:
 		}
 	}
-	err := col.SetDefaultValue(defaultValue)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-	}
 
 	for _, index := range indexes {
 		if index.Primary {
@@ -211,7 +207,8 @@ func newTiColumnInfo(
 		}
 	}
 
-	return col, nil
+	err := col.SetDefaultValue(defaultValue)
+	return col, cerror.WrapError(cerror.ErrDecodeFailed, err)
 }
 
 // IndexSchema is the schema of the index.
@@ -379,9 +376,6 @@ func newDDLEvent(msg *message) (*model.DDLEvent, error) {
 
 	if msg.PreTableSchema != nil {
 		preTableInfo, err = newTableInfo(msg.PreTableSchema)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
@@ -389,7 +383,7 @@ func newDDLEvent(msg *message) (*model.DDLEvent, error) {
 		TableInfo:    tableInfo,
 		PreTableInfo: preTableInfo,
 		Query:        msg.SQL,
-	}, nil
+	}, err
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
@@ -477,17 +471,16 @@ func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
 	if flag.GetType() != mysql.TypeTimestamp {
 		return
 	}
-	if column.Value == nil {
-		return
+	if column.Value != nil {
+		var ts string
+		switch v := column.Value.(type) {
+		case map[string]string:
+			ts = v["value"]
+		case map[string]interface{}:
+			ts = v["value"].(string)
+		}
+		column.Value = ts
 	}
-	var ts string
-	switch v := column.Value.(type) {
-	case map[string]string:
-		ts = v["value"]
-	case map[string]interface{}:
-		ts = v["value"].(string)
-	}
-	column.Value = ts
 }
 
 func decodeColumns(
@@ -626,10 +619,7 @@ func (a *jsonMarshaller) newDMLMessage(
 		m.Type = DMLTypeUpdate
 		m.Data = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m.Old = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-	} else {
-		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
-
 	if a.config.EnableRowChecksum && event.Checksum != nil {
 		m.Checksum = &checksum{
 			Version:   event.Checksum.Version,
@@ -648,15 +638,14 @@ func (a *jsonMarshaller) formatColumns(
 	result := make(map[string]interface{}, len(columns))
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range columns {
-		if col == nil {
-			continue
+		if col != nil {
+			flag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
+			if onlyHandleKey && !flag.IsHandleKey() {
+				continue
+			}
+			value := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
+			result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 		}
-		flag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-		if onlyHandleKey && !flag.IsHandleKey() {
-			continue
-		}
-		value := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
-		result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 	}
 	return result
 }
@@ -701,7 +690,6 @@ func (a *avroMarshaller) encodeValue4Avro(
 	default:
 		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
-
 	return value, ""
 }
 
@@ -712,6 +700,7 @@ func encodeValue(
 		return nil
 	}
 
+	var err error
 	switch ft.GetType() {
 	case mysql.TypeBit:
 		switch v := value.(type) {
@@ -736,25 +725,24 @@ func encodeValue(
 		switch v := value.(type) {
 		case []uint8:
 			data := string(v)
-			enum, err := tiTypes.ParseEnumName(ft.GetElems(), data, ft.GetCollate())
-			if err != nil {
-				log.Panic("parse enum name failed",
-					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
-			}
-			return enum.Value
+			var enum tiTypes.Enum
+			enum, err = tiTypes.ParseEnumName(ft.GetElems(), data, ft.GetCollate())
+			value = enum.Value
 		}
 	case mysql.TypeSet:
 		switch v := value.(type) {
 		case []uint8:
 			data := string(v)
-			set, err := tiTypes.ParseSetName(ft.GetElems(), data, ft.GetCollate())
-			if err != nil {
-				log.Panic("parse set name failed",
-					zap.Any("elems", ft.GetElems()), zap.String("name", data), zap.Error(err))
-			}
-			return set.Value
+			var set tiTypes.Set
+			set, err = tiTypes.ParseSetName(ft.GetElems(), data, ft.GetCollate())
+			value = set.Value
 		}
 	default:
+	}
+
+	if err != nil {
+		log.Panic("parse enum / set name failed",
+			zap.Any("elems", ft.GetElems()), zap.Any("name", value), zap.Error(err))
 	}
 
 	var result string
@@ -812,9 +800,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		// json encoding, set is encoded as `string`, bit encoded as `string`
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
-			if err != nil {
-				return nil
-			}
 		case []uint8:
 			value = common.MustBinaryLiteralToInt(v)
 		case uint64:
@@ -826,9 +811,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseInt(v, 10, 64)
-			if err != nil {
-				return nil
-			}
 		default:
 			value = v
 		}
@@ -838,9 +820,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 			value, err = strconv.ParseInt(v, 10, 64)
 			if err != nil {
 				value, err = strconv.ParseUint(v, 10, 64)
-				if err != nil {
-					return nil
-				}
 			}
 		case map[string]interface{}:
 			value = uint64(v["value"].(int64))
@@ -851,9 +830,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseFloat(v, 32)
-			if err != nil {
-				return nil
-			}
 		default:
 			value = v
 		}
@@ -861,9 +837,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseFloat(v, 64)
-			if err != nil {
-				return nil
-			}
 		default:
 			value = v
 		}
@@ -873,11 +846,12 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
-			if err != nil {
-				return nil
-			}
 		}
 	default:
+	}
+
+	if err != nil {
+		return nil
 	}
 
 	result.Value = value

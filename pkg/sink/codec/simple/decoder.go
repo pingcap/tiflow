@@ -69,10 +69,6 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 	}
 
 	m, err := newMarshaller(config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return &Decoder{
 		config:     config,
 		marshaller: m,
@@ -82,21 +78,17 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 
 		memo:           newMemoryTableInfoProvider(),
 		cachedMessages: list.New(),
-	}, nil
+	}, errors.Trace(err)
 }
 
 // AddKeyValue add the received key and values to the Decoder,
-func (d *Decoder) AddKeyValue(_, value []byte) error {
+func (d *Decoder) AddKeyValue(_, value []byte) (err error) {
 	if d.value != nil {
 		return cerror.ErrDecodeFailed.GenWithStack(
 			"Decoder value already exists, not consumed yet")
 	}
-	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return err
-	}
-	d.value = value
-	return nil
+	d.value, err = common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	return err
 }
 
 // HasNext returns whether there is any event need to be consumed
@@ -165,12 +157,10 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
-	if err != nil {
-		return nil, err
-	}
-	log.Debug("row changed event assembled", zap.Any("event", event))
 	d.msg = nil
-	return event, nil
+
+	log.Debug("row changed event assembled", zap.Any("event", event))
+	return event, err
 }
 
 func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {

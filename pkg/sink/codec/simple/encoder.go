@@ -131,10 +131,7 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 	value, err = common.Compress(e.config.ChangefeedID,
 		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return nil, err
-	}
-	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
+	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), err
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
@@ -182,15 +179,11 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 	}
 
 	m, err := newMarshaller(config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
 		marshaller: m,
-	}, nil
+	}, errors.Trace(err)
 }
 
 // Build implement the RowEventEncoderBuilder interface
