@@ -33,10 +33,16 @@ var (
 	maxKafkaVersion     = sarama.V2_8_0_0
 )
 
+var (
+	defaultKafkaVersion = sarama.V2_0_0_0
+	maxKafkaVersion     = sarama.V2_8_0_0
+)
+
 // NewSaramaConfig return the default config and set the according version and metrics
 func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 	config.ClientID = o.ClientID
+	var err error
 	var err error
 	// Admin client would refresh metadata periodically,
 	// if metadata cannot be refreshed easily, this would indicate the network condition between the
@@ -120,6 +126,27 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	err = completeSaramaSASLConfig(ctx, config, o)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	kafkaVersion, err := getKafkaVersion(config, o)
+	if err != nil {
+		log.Warn("Can't get Kafka version by broker. ticdc will use default version",
+			zap.String("defaultVersion", kafkaVersion.String()))
+	}
+	config.Version = kafkaVersion
+
+	if o.IsAssignedVersion {
+		version, err := sarama.ParseKafkaVersion(o.Version)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
+		}
+		config.Version = version
+		if !version.IsAtLeast(maxKafkaVersion) && version.String() != kafkaVersion.String() {
+			log.Warn("The Kafka version you assigned may not be correct. "+
+				"Please assign a version equal to or less than the specified version",
+				zap.String("assignedVersion", version.String()),
+				zap.String("desiredVersion", kafkaVersion.String()))
+		}
 	}
 
 	kafkaVersion, err := getKafkaVersion(config, o)

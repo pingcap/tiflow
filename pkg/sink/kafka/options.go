@@ -249,6 +249,7 @@ func (o *Options) Apply(changefeedID model.ChangeFeedID,
 	if urlParameter.KafkaVersion != nil {
 		o.Version = *urlParameter.KafkaVersion
 		o.IsAssignedVersion = true
+		o.IsAssignedVersion = true
 	}
 
 	if urlParameter.MaxMessageBytes != nil {
