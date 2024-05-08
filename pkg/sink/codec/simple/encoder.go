@@ -114,11 +114,11 @@ func (e *encoder) AppendRowChangedEvent(
 
 // Build implement the RowEventEncoder interface
 func (e *encoder) Build() []*common.Message {
-	if len(e.messages) == 0 {
-		return nil
+	var result []*common.Message
+	if len(e.messages) != 0 {
+		result = e.messages
+		e.messages = nil
 	}
-	result := e.messages
-	e.messages = nil
 	return result
 }
 
