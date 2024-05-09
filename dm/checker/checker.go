@@ -611,58 +611,8 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	} else if !result.Summary.Passed {
 		errs = append(errs, unit.NewProcessError(errors.New("check was failed, please see detail")))
 	}
-	warnLeft, errLeft := c.warnCnt, c.errCnt
 
-	// remove success result if not pass
-	results := result.Results[:0]
-	for _, r := range result.Results {
-		if r.State == checker.StateSuccess {
-			continue
-		}
-
-		// handle results without r.Errors
-		if len(r.Errors) == 0 {
-			switch r.State {
-			case checker.StateWarning:
-				if warnLeft == 0 {
-					continue
-				}
-				warnLeft--
-				results = append(results, r)
-			case checker.StateFailure:
-				if errLeft == 0 {
-					continue
-				}
-				errLeft--
-				results = append(results, r)
-			}
-			continue
-		}
-
-		subErrors := make([]*checker.Error, 0, len(r.Errors))
-		for _, e := range r.Errors {
-			switch e.Severity {
-			case checker.StateWarning:
-				if warnLeft == 0 {
-					continue
-				}
-				warnLeft--
-				subErrors = append(subErrors, e)
-			case checker.StateFailure:
-				if errLeft == 0 {
-					continue
-				}
-				errLeft--
-				subErrors = append(subErrors, e)
-			}
-		}
-		// skip display an empty Result
-		if len(subErrors) > 0 {
-			r.Errors = subErrors
-			results = append(results, r)
-		}
-	}
-	result.Results = results
+	filterResults(result, c.warnCnt, c.errCnt)
 
 	c.updateInstruction(result)
 
@@ -688,6 +638,59 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		Errors:     errs,
 		Detail:     rawResult,
 	}
+}
+
+func filterResults(result *checker.Results, warnCnt, errCnt int64) {
+	// remove success result if not pass
+	results := result.Results[:0]
+	for _, r := range result.Results {
+		if r.State == checker.StateSuccess {
+			continue
+		}
+
+		// handle results without r.Errors
+		if len(r.Errors) == 0 {
+			switch r.State {
+			case checker.StateWarning:
+				if warnCnt == 0 {
+					continue
+				}
+				warnCnt--
+				results = append(results, r)
+			case checker.StateFailure:
+				if errCnt == 0 {
+					continue
+				}
+				errCnt--
+				results = append(results, r)
+			}
+			continue
+		}
+
+		subErrors := make([]*checker.Error, 0, len(r.Errors))
+		for _, e := range r.Errors {
+			switch e.Severity {
+			case checker.StateWarning:
+				if warnCnt == 0 {
+					continue
+				}
+				warnCnt--
+				subErrors = append(subErrors, e)
+			case checker.StateFailure:
+				if errCnt == 0 {
+					continue
+				}
+				errCnt--
+				subErrors = append(subErrors, e)
+			}
+		}
+		// skip display an empty Result
+		if len(subErrors) > 0 {
+			r.Errors = subErrors
+			results = append(results, r)
+		}
+	}
+	result.Results = results
 }
 
 // updateInstruction updates the check result's Instruction.

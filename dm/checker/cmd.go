@@ -85,6 +85,14 @@ func RunCheckOnConfigs(
 	cfgs []*config.SubTaskConfig,
 	dumpWholeInstance bool,
 ) (*checker.Results, error) {
+	return runCheckOnConfigs(ctx, cfgs, dumpWholeInstance)
+}
+
+func runCheckOnConfigs(
+	ctx context.Context,
+	cfgs []*config.SubTaskConfig,
+	dumpWholeInstance bool,
+) (*checker.Results, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
 	}
@@ -104,4 +112,26 @@ func RunCheckOnConfigs(
 	defer c.Close()
 
 	return checker.Do(ctx, c.checkList)
+}
+
+// RunCheckOnConfigsWithLimit returns the check result for given subtask configs.
+// Caller should be noticed that result may be very large. The result will be
+// truncated to `warnLimit` and `errLimit`, but the total count in summary will
+// be the same as the original result.
+//
+// when `dumpWholeInstance` is true, checker will require SELECT ON *.*
+// privileges for SourceDumpPrivilegeChecker.
+func RunCheckOnConfigsWithLimit(
+	ctx context.Context,
+	cfgs []*config.SubTaskConfig,
+	dumpWholeInstance bool,
+	warnLimit, errLimit int64,
+) (*checker.Results, error) {
+	result, err := runCheckOnConfigs(ctx, cfgs, dumpWholeInstance)
+	if err != nil || result == nil {
+		return result, err
+	}
+
+	filterResults(result, warnLimit, errLimit)
+	return result, nil
 }
