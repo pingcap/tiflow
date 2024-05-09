@@ -244,7 +244,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.Equal(t, DDLTypeQuery, dec.msg.Type)
 
-			event, err := dec.NextDDLEvent()
+			_, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 
 			m, err = enc.EncodeDDLEvent(createDBDDLEvent)
@@ -259,7 +259,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.Equal(t, DDLTypeQuery, dec.msg.Type)
 
-			event, err = dec.NextDDLEvent()
+			_, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 
 			m, err = enc.EncodeDDLEvent(createTableDDLEvent)
@@ -274,7 +274,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.Equal(t, DDLTypeCreate, dec.msg.Type)
 
-			event, err = dec.NextDDLEvent()
+			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
