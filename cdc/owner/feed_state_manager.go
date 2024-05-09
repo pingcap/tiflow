@@ -25,6 +25,7 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -144,7 +145,7 @@ func (m *feedStateManager) Tick(
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
 		adminJobPending = true
-		changefeedErrorStuckDuration := *m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration
+		changefeedErrorStuckDuration := util.GetOrZero(m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration)
 		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
 			log.Info("changefeedErrorStuckDuration update",
 				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),
