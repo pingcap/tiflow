@@ -151,9 +151,9 @@ func (m *feedStateManager) Tick(
 				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),
 				zap.Duration("newChangefeedErrorStuckDuration", changefeedErrorStuckDuration),
 			)
+			m.errBackoff.MaxElapsedTime = changefeedErrorStuckDuration
+			m.changefeedErrorStuckDuration = changefeedErrorStuckDuration
 		}
-		m.errBackoff.MaxElapsedTime = changefeedErrorStuckDuration
-		m.changefeedErrorStuckDuration = changefeedErrorStuckDuration
 		return
 	}
 
