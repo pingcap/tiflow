@@ -26,9 +26,7 @@ import (
 
 func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 	configMap := &confluent.ConfigMap{
-		"bootstrap.servers":  strings.Join(o.address, ","),
-		"session.timeout.ms": 6000,
-		"debug":              "cgrp,broker,security",
+		"bootstrap.servers": strings.Join(o.address, ","),
 	}
 	if len(o.ca) != 0 {
 		_ = configMap.SetKey("security.protocol", "SSL")
@@ -36,7 +34,7 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 		_ = configMap.SetKey("ssl.key.location", o.key)
 		_ = configMap.SetKey("ssl.certificate.location", o.cert)
 	}
-	admin, err := confluent.NewAdminClient(configMap)
+	admin, err := confluent.NewConsumer(configMap)
 	if err != nil {
 		return 0, cerror.Trace(err)
 	}
