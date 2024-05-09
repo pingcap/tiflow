@@ -271,7 +271,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	messageClientConfig.AdvertisedAddr = advertiseAddr
 
 	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
-
+	c.ChangefeedThreadPool = workerpool.NewDefaultAsyncPool(changefeedAsyncInitWorkerCount)
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
@@ -350,11 +350,12 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	stdCtx, cancel := context.WithCancel(stdCtx)
 
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
+		CaptureInfo:          c.info,
+		EtcdClient:           c.EtcdClient,
+		MessageServer:        c.MessageServer,
+		MessageRouter:        c.MessageRouter,
+		SortEngineFactory:    c.sortEngineFactory,
+		ChangefeedThreadPool: c.ChangefeedThreadPool,
 	})
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
