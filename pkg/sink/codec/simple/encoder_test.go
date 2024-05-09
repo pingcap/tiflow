@@ -215,13 +215,13 @@ func TestEncodeDDLSequence(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
-		//common.EncodingFormatJSON,
+		common.EncodingFormatJSON,
 	} {
 		codecConfig.EncodingFormat = format
 		for _, compressionType := range []string{
 			compression.None,
 			compression.Snappy,
-			//compression.LZ4,
+			compression.LZ4,
 		} {
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
