@@ -50,6 +50,7 @@ endif
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
 OS := "$(shell go env GOOS)"
 SED_IN_PLACE ?= $(shell which sed)
+IS_ALPINE := $(shell grep -qi Alpine /etc/os-release && echo 1)
 ifeq (${OS}, "linux")
 	CGO := 0
 	SED_IN_PLACE += -i
@@ -65,8 +66,13 @@ ifeq ("${ENABLE_FIPS}", "1")
 	GOEXPERIMENT = GOEXPERIMENT=boringcrypto
 	CGO = 1
 endif
+
+CONSUMER_BUILD_FLAG=
+ifeq ("${IS_ALPINE}", "1")
+	CONSUMER_BUILD_FLAG = -tags musl
+endif
 GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
-CGOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=1 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+CONSUMER_GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=1 $(GO) build $(CONSUMER_BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -166,7 +172,7 @@ cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
-	$(CGOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
+	$(CONSUMER_GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
 
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
