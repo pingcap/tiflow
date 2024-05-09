@@ -542,8 +542,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			callbacks = append(callbacks, event.Callback)
 		}
 
+		// TODO: find a better threshold
+		enableBatchModeThreshold := 1
 		// Determine whether to use batch dml feature here.
-		if s.cfg.BatchDMLEnable {
+		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > enableBatchModeThreshold {
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
