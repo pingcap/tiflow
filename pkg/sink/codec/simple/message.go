@@ -230,7 +230,7 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 	for _, col := range index.Columns {
 		indexSchema.Columns = append(indexSchema.Columns, col.Name.O)
 		colInfo := columns[col.Offset]
-		// An index is not null when all columns of aer not null
+		// An index is not null when all columns of are not null
 		if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
 			indexSchema.Nullable = true
 		}

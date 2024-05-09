@@ -487,25 +487,20 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 // GetPrimaryKeyColumnNames returns the primary key column names
 func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
-	result := make([]string, 0)
-	for _, index := range ti.Indices {
-		if index.Primary {
-			for _, col := range index.Columns {
-				result = append(result, col.Name.O)
-			}
-			return result
-		}
+	if ti.PKIsHandle {
+		return []string{ti.GetPkColInfo().Name.O}
 	}
 
-	for _, columnsOffsets := range ti.IndexColumnsOffset {
-		for _, offset := range columnsOffsets {
-			columnInfo := ti.Columns[offset]
-			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
-				result = append(result, columnInfo.Name.O)
-			}
+	indexInfo := ti.GetPrimaryKey()
+	if indexInfo != nil {
+		result := make([]string, 0, len(indexInfo.Columns))
+		for _, col := range indexInfo.Columns {
+			result = append(result, col.Name.O)
 		}
+		return result
 	}
-	return result
+
+	return nil
 }
 
 // GetColumnDefaultValue returns the default definition of a column.
