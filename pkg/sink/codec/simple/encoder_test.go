@@ -695,6 +695,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.NotEqual(t, 0, dec.msg.BuildTs)
+			require.True(t, dec.msg.TableSchema.Indexes[0].Nullable)
 
 			columnSchemas := dec.msg.TableSchema.Columns
 			sortedColumns := make([]*timodel.ColumnInfo, len(createTableDDLEvent.TableInfo.Columns))
@@ -1042,10 +1043,11 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(
-    	id int primary key,
+    	id int,
     	name varchar(255) not null,
     	age int,
     	email varchar(255) not null,
+    	primary key(id),
     	key idx_name_email(name, email))`
 	ddlEvent := helper.DDL2Event(sql)
 	ddlEvent.IsBootstrap = true
@@ -1260,18 +1262,30 @@ func TestDMLMessageTooLarge(t *testing.T) {
 	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.MaxMessageBytes = 100
+	codecConfig.MaxMessageBytes = 50
+
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
 	} {
 		codecConfig.EncodingFormat = format
-		b, err := NewBuilder(context.Background(), codecConfig)
-		require.NoError(t, err)
-		enc := b.Build()
 
-		err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
-		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+		for _, handle := range []string{
+			config.LargeMessageHandleOptionNone,
+			config.LargeMessageHandleOptionHandleKeyOnly,
+			config.LargeMessageHandleOptionClaimCheck,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleOption = handle
+			if handle == config.LargeMessageHandleOptionClaimCheck {
+				codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
+			}
+			b, err := NewBuilder(context.Background(), codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
+
+			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
+			require.ErrorIs(t, err, errors.ErrMessageTooLarge, string(format), handle)
+		}
 	}
 }
 
