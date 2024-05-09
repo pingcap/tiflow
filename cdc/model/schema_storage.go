@@ -487,20 +487,19 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 // GetPrimaryKeyColumnNames returns the primary key column names
 func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
+	var result []string
 	if ti.PKIsHandle {
-		return []string{ti.GetPkColInfo().Name.O}
+		result = append(result, ti.GetPkColInfo().Name.O)
+		return result
 	}
 
 	indexInfo := ti.GetPrimaryKey()
 	if indexInfo != nil {
-		result := make([]string, 0, len(indexInfo.Columns))
 		for _, col := range indexInfo.Columns {
 			result = append(result, col.Name.O)
 		}
-		return result
 	}
-
-	return nil
+	return result
 }
 
 // GetColumnDefaultValue returns the default definition of a column.

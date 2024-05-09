@@ -3074,20 +3074,38 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				setFirstErr(err)
 				continue
 			}
-			err = s.schemaTracker.Exec(ctx, db, stmtNode)
-			if err != nil {
-				logger.Warn("fail to create table for dump files",
-					zap.Any("path", s.cfg.LoaderConfig.Dir),
-					zap.Any("file", file),
-					zap.ByteString("statement", stmt),
-					zap.Error(err))
-				setFirstErr(err)
-				continue
+			switch v := stmtNode.(type) {
+			case *ast.SetStmt:
+				logger.Warn("ignoring statement",
+					zap.String("type", fmt.Sprintf("%T", v)),
+					zap.ByteString("statement", stmt))
+			case *ast.CreateTableStmt:
+				err = s.schemaTracker.Exec(ctx, db, stmtNode)
+				if err != nil {
+					logger.Warn("fail to create table for dump files",
+						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
+						zap.Error(err))
+					setFirstErr(err)
+					continue
+				}
+				s.saveTablePoint(
+					&filter.Table{Schema: db, Name: v.Table.Name.O},
+					s.getFlushedGlobalPoint(),
+				)
+			default:
+				err = s.schemaTracker.Exec(ctx, db, stmtNode)
+				if err != nil {
+					logger.Warn("fail to create table for dump files",
+						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
+						zap.Error(err))
+					setFirstErr(err)
+					continue
+				}
 			}
-			s.saveTablePoint(
-				&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
-				s.getFlushedGlobalPoint(),
-			)
 		}
 	}
 	return firstErr
