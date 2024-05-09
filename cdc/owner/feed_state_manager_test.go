@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -999,7 +1000,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	require.True(t, manager.ShouldRunning())
 
 	// 2. test when the changefeed is in warning state, and the resolvedTs and checkpointTs is not progressing,
-	// the changefeed state will remain warning whena new warning is encountered.
+	// the changefeed state will remain warning when a new warning is encountered.
 	time.Sleep(manager.changefeedErrorStuckDuration + 10)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.NotNil(t, status)
@@ -1063,4 +1064,83 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Equal(t, model.StateFailed, state.Info.State)
 	require.False(t, manager.ShouldRunning())
+}
+
+func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID(changefeedInfo.ID))
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.state = state
+	manager.Tick(0, state.Status, state.Info)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	// stop a changefeed
+	manager.PushAdminJob(&model.AdminJob{
+		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
+		Type: model.AdminStop,
+	})
+	manager.Tick(0, state.Status, state.Info)
+	tester.MustApplyPatches()
+	require.False(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateStopped)
+	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+
+	// update ChangefeedErrorStuckDuration
+	stuckDuration := time.Second * 10
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.NotNil(t, info)
+		info.Config.ChangefeedErrorStuckDuration = util.AddressOf(stuckDuration)
+		return info, true, nil
+	})
+	tester.MustApplyPatches()
+
+	// resume the changefeed in stopped state
+	manager.PushAdminJob(&model.AdminJob{
+		CfID:                  model.DefaultChangeFeedID(changefeedInfo.ID),
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: 100,
+	})
+
+	manager.Tick(0, state.Status, state.Info)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, manager.changefeedErrorStuckDuration, stuckDuration)
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
+	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
+
+	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+
+	time.Sleep(stuckDuration - 10)
+	manager.Tick(200, state.Status, state.Info)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	require.Equal(t, state.Info.State, model.StateNormal)
+
+	time.Sleep(stuckDuration)
+	manager.Tick(201, state.Status, state.Info)
+	tester.MustApplyPatches()
+	require.False(t, manager.ShouldRunning())
+	require.Equal(t, state.Info.State, model.StateFailed)
 }
