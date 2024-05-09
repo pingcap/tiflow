@@ -133,7 +133,7 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	o.protocol = protocol
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	//the TiDB source ID should never be set to 0
+	// the TiDB source ID should never be set to 0
 	replicaConfig.Sink.TiDBSourceID = 1
 	replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 	if configFile != "" {
