@@ -488,7 +488,7 @@ func (p *processor) Tick(
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
 	if !p.initialized.Load() {
-		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, p.globalVars.ChangefeedThreadPool)
+		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, ctx.GlobalVars().ChangefeedThreadPool)
 		if err != nil {
 			return errors.Trace(err), nil
 		}
