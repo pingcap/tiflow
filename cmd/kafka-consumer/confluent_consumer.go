@@ -40,10 +40,17 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 	}
 	defer admin.Close()
 
+	timeout := 3000
 	for i := 0; i <= o.retryTime; i++ {
-		resp, err := admin.GetMetadata(&o.topic, false, 500)
+		resp, err := admin.GetMetadata(&o.topic, false, timeout)
 		if err != nil {
-			return 0, cerror.Trace(err)
+			if err.(confluent.Error).Code() == confluent.ErrTransport {
+				log.Info("retry get partition number", zap.Int("retryTime", i), zap.Int("timeout", timeout))
+				timeout += 100
+				continue
+			} else {
+				return 0, cerror.Trace(err)
+			}
 		}
 		if topicDetail, ok := resp.Topics[o.topic]; ok {
 			numPartitions := int32(len(topicDetail.Partitions))
