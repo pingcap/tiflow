@@ -209,6 +209,55 @@ func TestRunCheckOnConfigsLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, result.Summary.Failed)
 	require.Len(t, result.Results, 1)
+
+	// test limit warning of sub-results
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+	errNoSuchTable := &gmysql.MySQLError{Number: 1146, Message: "Table 'xxx' doesn't exist"}
+
+	createTable1 := `CREATE TABLE %s (
+				  id int(11) DEFAULT NULL,
+				  b int(11) DEFAULT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+
+	mock = initMockDB(t)
+	mock.MatchExpectationsInOrder(false)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_1`").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_1`").WillReturnError(errNoSuchTable) // downstream connection mock
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_2`").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_2`").WillReturnError(errNoSuchTable) // downstream connection mock
+
+	result, err = RunCheckOnConfigs(context.Background(), cfgs, false, 100, 100)
+	require.NoError(t, err)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "primary/unique key does not exist")
+	require.Contains(t, result.Results[0].Errors[1].ShortErr, "primary/unique key does not exist")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	mock = initMockDB(t)
+	mock.MatchExpectationsInOrder(false)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_1`").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_1`").WillReturnError(errNoSuchTable) // downstream connection mock
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_2`").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
+	mock.ExpectQuery("SHOW CREATE TABLE `db_1`.`t_2`").WillReturnError(errNoSuchTable) // downstream connection mock
+
+	result, err = RunCheckOnConfigs(context.Background(), cfgs, false, 1, 0)
+	require.NoError(t, err)
+	require.Len(t, result.Results[0].Errors, 1)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "primary/unique key does not exist")
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestTargetDBPrivilegeChecking(t *testing.T) {
