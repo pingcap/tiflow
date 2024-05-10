@@ -793,10 +793,6 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		// json encoding, set is encoded as `string`, bit encoded as `string`
 		case string:
 			value, err = strconv.ParseUint(v, 10, 64)
-		case []uint8:
-			value = common.MustBinaryLiteralToInt(v)
-		case uint64:
-			value = v
 		case int64:
 			value = uint64(v)
 		}
