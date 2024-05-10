@@ -1071,21 +1071,25 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	manager.Tick(0, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
-	// stop a changefeed
-	manager.PushAdminJob(&model.AdminJob{
-		CfID: model.DefaultChangeFeedID(changefeedInfo.ID),
-		Type: model.AdminStop,
-	})
-	manager.Tick(0, state.Status, state.Info)
+
+	stuckDuration := time.Second * 10
+	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	time.Sleep(stuckDuration - 10)
+	manager.Tick(100, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.False(t, manager.ShouldRunning())
-	require.False(t, manager.ShouldRemoved())
-	require.Equal(t, state.Info.State, model.StateStopped)
-	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
-	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+	require.Less(t, manager.changefeedErrorStuckDuration, stuckDuration)
+	require.Equal(t, state.Info.State, model.StateFailed)
 
 	// update ChangefeedErrorStuckDuration
-	stuckDuration := time.Second * 10
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.NotNil(t, info)
 		info.Config.ChangefeedErrorStuckDuration = util.AddressOf(stuckDuration)
@@ -1100,7 +1104,7 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 		OverwriteCheckpointTs: 100,
 	})
 
-	manager.Tick(0, state.Status, state.Info)
+	manager.Tick(101, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
 	require.False(t, manager.ShouldRemoved())
