@@ -1086,7 +1086,7 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
 
-	stuckDuration := time.Second * 10
+	stuckDuration := manager.changefeedErrorStuckDuration + time.Second*3
 	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Warning: &model.RunningError{
