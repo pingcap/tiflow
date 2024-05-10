@@ -48,9 +48,8 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 				log.Info("retry get partition number", zap.Int("retryTime", i), zap.Int("timeout", timeout))
 				timeout += 100
 				continue
-			} else {
-				return 0, cerror.Trace(err)
 			}
+			return 0, cerror.Trace(err)
 		}
 		if topicDetail, ok := resp.Topics[o.topic]; ok {
 			numPartitions := int32(len(topicDetail.Partitions))
