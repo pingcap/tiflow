@@ -1096,7 +1096,7 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 			}}, true, nil
 		})
 	tester.MustApplyPatches()
-	time.Sleep(stuckDuration - 10)
+	time.Sleep(stuckDuration - time.Second)
 	manager.Tick(100, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.False(t, manager.ShouldRunning())
@@ -1109,9 +1109,16 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 		info.Config.ChangefeedErrorStuckDuration = util.AddressOf(stuckDuration)
 		return info, true, nil
 	})
+	// update status
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.NotNil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 100,
+		}, true, nil
+	})
 	tester.MustApplyPatches()
 
-	// resume the changefeed in stopped state
+	// resume the changefeed in failed state
 	manager.PushAdminJob(&model.AdminJob{
 		CfID:                  model.DefaultChangeFeedID(changefeedInfo.ID),
 		Type:                  model.AdminResume,
@@ -1135,14 +1142,25 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 				Message: "fake error for test",
 			}}, true, nil
 		})
+	tester.MustApplyPatches()
 
-	time.Sleep(stuckDuration - 10)
+	time.Sleep(stuckDuration - time.Second)
 	manager.Tick(200, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
-	require.Equal(t, state.Info.State, model.StateNormal)
+	require.Equal(t, state.Info.State, model.StateWarning)
 
-	time.Sleep(stuckDuration)
+	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+
+	time.Sleep(time.Second)
 	manager.Tick(201, state.Status, state.Info)
 	tester.MustApplyPatches()
 	require.False(t, manager.ShouldRunning())
