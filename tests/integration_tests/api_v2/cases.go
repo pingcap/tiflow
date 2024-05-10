@@ -371,7 +371,7 @@ func testResignOwner(ctx context.Context, client *CDCRESTClient) error {
 	assertResponseIsOK(resp)
 	// sleep sometime to wait capture resign owner, then check the capture id again
 	// resign owner mustn't reset the capture
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	newCapture := listCaptures(ctx, client)
 	if len(newCapture.Items) != 1 || len(old.Items) != 1 {
 		log.Panic("capture size is not equals 1", zap.Any("old", old), zap.Any("new", newCapture))
