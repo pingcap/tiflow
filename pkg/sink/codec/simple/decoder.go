@@ -259,10 +259,7 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"no message found when decode DDL event")
 	}
-	ddl, err := newDDLEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+	ddl := newDDLEvent(d.msg)
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
