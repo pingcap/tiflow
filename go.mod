@@ -68,9 +68,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240412033321-fd0796e60f86
 	github.com/pingcap/kvproto v0.0.0-20240227073058-929ab83f9754
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240425142112-54ba0ed68407
-	github.com/pingcap/tidb-tools v0.0.0-20240408054520-d28ee6cd546e
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240425142112-54ba0ed68407
+	github.com/pingcap/tidb v1.1.0-beta.0.20240202150325-40f51ca87c4b
+	github.com/pingcap/tidb-tools v0.0.0-20240202030925-a6014db89eb8
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240202150325-40f51ca87c4b
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -113,7 +113,7 @@ require (
 	golang.org/x/oauth2 v0.18.0
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.19.0
-	golang.org/x/text v0.14.0
+	golang.org/x/text v0.15.0
 	golang.org/x/time v0.5.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240304212257-790db918fca8
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240308144416-29370a3891b7
