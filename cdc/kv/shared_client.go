@@ -361,7 +361,9 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.handleRangeTasks(ctx) })
 	g.Go(func() error { return s.handleRegions(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
-	g.Go(func() error { return s.handleResolveLockTasks(ctx) })
+	for i := 0; i < 4; i++ {
+		g.Go(func() error { return s.handleResolveLockTasks(ctx) })
+	}
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	log.Info("event feed started",
