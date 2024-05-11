@@ -191,12 +191,8 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 							}
 							log.Panic("Error reading message", zap.Error(err))
 						}
-						if err := c.writer.Decode(decoder, c.option, int32(partition), msg.Key, msg.Value, eventGroups); err != nil {
+						if err := c.writer.Decode(ctx, decoder, c.option, int32(partition), msg.Key, msg.Value, eventGroups); err != nil {
 							log.Panic("Error decode message", zap.Error(err))
-						}
-						// sync write to downstream
-						if err := c.writer.Write(ctx); err != nil {
-							log.Panic("Error write to downstream", zap.Error(err))
 						}
 						offset = msg.Offset
 						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {

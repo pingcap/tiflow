@@ -143,12 +143,8 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 	}
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := c.writer.Decode(decoder, c.option, partition, message.Key, message.Value, eventGroups); err != nil {
+		if err := c.writer.Decode(ctx, decoder, c.option, partition, message.Key, message.Value, eventGroups); err != nil {
 			return err
-		}
-		// sync write to downstream
-		if err := c.writer.Write(ctx); err != nil {
-			log.Panic("Error write to downstream", zap.Error(err))
 		}
 		session.MarkMessage(message, "")
 	}

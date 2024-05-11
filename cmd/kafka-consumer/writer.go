@@ -339,7 +339,7 @@ func (w *writer) Write(ctx context.Context) error {
 }
 
 // Decode try to decode kafka message to event.
-func (w *writer) Decode(decoder codec.RowEventDecoder, option *consumerOption, partition int32,
+func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, option *consumerOption, partition int32,
 	key []byte, value []byte, eventGroups map[int64]*eventsGroup,
 ) error {
 	// move to writer
@@ -503,6 +503,10 @@ func (w *writer) Decode(decoder codec.RowEventDecoder, option *consumerOption, p
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
+			// sync write to downstream
+			if err := w.Write(ctx); err != nil {
+				log.Panic("Error write to the downstream", zap.Error(err))
+			}
 		}
 
 	}
