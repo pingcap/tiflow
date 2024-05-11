@@ -31,6 +31,9 @@ type DebugConfig struct {
 
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`
+
+	// EnablePDForwarding is used to enable forwarding request function of PD client.
+	EnablePDForwarding bool `toml:"enable-pd-forwarding" json:"enable-pd-forwarding"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

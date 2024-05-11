@@ -140,6 +140,7 @@ var defaultServerConfig = &ServerConfig{
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
 			LogRegionDetails:               false,
 		},
+		EnablePDForwarding: true,
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -152,7 +153,8 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					},
 					MinConnectTimeout: 3 * time.Second,
 				}),
-			))
+			),
+			pd.WithForwardingOption(config.GetGlobalServerConfig().Debug.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)
