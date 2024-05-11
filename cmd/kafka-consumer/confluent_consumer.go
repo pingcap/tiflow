@@ -141,6 +141,10 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 			if err := c.writer.Decode(ctx, decoder, c.option, partition, msg.Key, msg.Value, eventGroups); err != nil {
 				log.Panic("Error decode message", zap.Error(err))
 			}
+			// sync write to downstream
+			if err := c.writer.Write(ctx); err != nil {
+				log.Panic("Error write to the downstream", zap.Error(err))
+			}
 			if _, err := client.StoreMessage(msg); err != nil {
 				log.Panic("Error store offsets", zap.Error(err))
 			}

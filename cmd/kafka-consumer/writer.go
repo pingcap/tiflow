@@ -342,10 +342,7 @@ func (w *writer) Write(ctx context.Context) error {
 func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, option *consumerOption, partition int32,
 	key []byte, value []byte, eventGroups map[int64]*eventsGroup,
 ) error {
-	// move to writer
-	w.sinksMu.Lock()
 	sink := w.sinks[partition]
-	w.sinksMu.Unlock()
 	if sink == nil {
 		panic("sink should initialized")
 	}
@@ -503,7 +500,7 @@ func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, opti
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
-			// sync write to downstream
+			// write in time
 			if err := w.Write(ctx); err != nil {
 				log.Panic("Error write to the downstream", zap.Error(err))
 			}

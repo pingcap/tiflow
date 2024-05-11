@@ -146,6 +146,10 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		if err := c.writer.Decode(ctx, decoder, c.option, partition, message.Key, message.Value, eventGroups); err != nil {
 			return err
 		}
+		// sync write to downstream
+		if err := c.writer.Write(ctx); err != nil {
+			log.Panic("Error write to the downstream", zap.Error(err))
+		}
 		session.MarkMessage(message, "")
 	}
 	return nil
