@@ -69,10 +69,10 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20240227073058-929ab83f9754
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4
+	github.com/pingcap/tidb v1.1.0-beta.0.20240428083427-66ba419636ce
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240410110152-5fc42c9be2f5
+	github.com/pingcap/tidb-tools v0.0.0-20240508055508-ee5de104059e
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240428083427-66ba419636ce
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -90,7 +90,7 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240409022718-714958ccd4d5
+	github.com/tikv/client-go/v2 v2.0.8-0.20240424052342-0229f4077f0c
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20240322051414-fb9e2d561b6e
 	github.com/tinylib/msgp v1.1.6
@@ -170,7 +170,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
-	github.com/scalalang2/golang-fifo v0.1.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/tidwall/btree v1.7.0 // indirect
@@ -330,7 +329,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
-	github.com/prometheus/common v0.52.2 // indirect
+	github.com/prometheus/common v0.53.0 // indirect
 	github.com/prometheus/procfs v0.13.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/reusee/mmh3 v0.0.0-20140820141314-64b85163255b // indirect
