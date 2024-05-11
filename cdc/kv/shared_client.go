@@ -815,7 +815,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		log.Info("event feed starts to check locked regions",
+		s.logRegionDetails("event feed starts to check locked regions",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID))
 
@@ -892,7 +892,7 @@ func (s *SharedClient) newSubscribedTable(
 func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksTargetTs, targetTs)
 	res := r.rangeLock.IterAll(r.tryResolveLock)
-	log.Warn("event feed finds slow locked ranges",
+	s.logRegionDetails("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
