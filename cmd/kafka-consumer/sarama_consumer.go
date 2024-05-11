@@ -136,19 +136,9 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
 	ctx := context.Background()
-	// create new decoder
-	decoder, err := NewDecoder(ctx, c.option, c.writer.upstreamTiDB)
-	if err != nil {
-		log.Panic("Error create decoder", zap.Error(err))
-	}
-	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := c.writer.Decode(ctx, decoder, c.option, partition, message.Key, message.Value, eventGroups); err != nil {
+		if err := c.writer.Decode(ctx, c.option, partition, message.Key, message.Value); err != nil {
 			return err
-		}
-		// sync write to downstream
-		if err := c.writer.Write(ctx); err != nil {
-			log.Panic("Error write to the downstream", zap.Error(err))
 		}
 		session.MarkMessage(message, "")
 	}
@@ -180,12 +170,5 @@ func (c *saramaConsumer) Consume(ctx context.Context) error {
 			return ctx.Err()
 		}
 		c.ready = make(chan bool)
-	}
-}
-
-// AsyncWrite call writer to write to the downsteam asynchronously.
-func (c *saramaConsumer) AsyncWrite(ctx context.Context) {
-	if err := c.writer.AsyncWrite(ctx); err != nil {
-		log.Info("async write break", zap.Error(err))
 	}
 }

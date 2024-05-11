@@ -19,6 +19,4 @@ import "context"
 type KakfaConsumer interface {
 	// get data from Kafka
 	Consume(ctx context.Context) error
-	// async write data to downstream
-	AsyncWrite(ctx context.Context)
 }

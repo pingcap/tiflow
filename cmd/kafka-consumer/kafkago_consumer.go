@@ -172,12 +172,6 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 						log.Panic("Error set offset", zap.Error(err))
 					}
 
-					// create new decoder
-					decoder, err := NewDecoder(ctx, c.option, c.writer.upstreamTiDB)
-					if err != nil {
-						log.Panic("Error create decoder", zap.Error(err))
-					}
-					eventGroups := make(map[int64]*eventsGroup)
 					for {
 						msg, err := reader.ReadMessage(ctx)
 						if err != nil {
@@ -191,12 +185,8 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 							}
 							log.Panic("Error reading message", zap.Error(err))
 						}
-						if err := c.writer.Decode(ctx, decoder, c.option, int32(partition), msg.Key, msg.Value, eventGroups); err != nil {
+						if err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value); err != nil {
 							log.Panic("Error decode message", zap.Error(err))
-						}
-						// sync write to downstream
-						if err := c.writer.Write(ctx); err != nil {
-							log.Panic("Error write to the downstream", zap.Error(err))
 						}
 						offset = msg.Offset
 						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
@@ -206,12 +196,5 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 				})
 			}
 		}
-	}
-}
-
-// AsyncWrite call writer to write to the downsteam asynchronously.
-func (c *kafkaGoConsumer) AsyncWrite(ctx context.Context) {
-	if err := c.writer.AsyncWrite(ctx); err != nil {
-		log.Info("async write break", zap.Error(err))
 	}
 }

@@ -82,9 +82,10 @@ type writer struct {
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	// sinkFactory is used to create table sink for each table.
-	sinkFactory *eventsinkfactory.SinkFactory
-	sinks       []*partitionSinks
-	sinksMu     sync.Mutex
+	sinkFactory  *eventsinkfactory.SinkFactory
+	sinks        []*partitionSinks
+	eventsGroups []map[int64]*eventsGroup
+	decoders     []codec.RowEventDecoder
 
 	// initialize to 0 by default
 	globalResolvedTs uint64
@@ -124,11 +125,19 @@ func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
 	w.eventRouter = eventRouter
 
 	w.sinks = make([]*partitionSinks, o.partitionNum)
+	w.eventsGroups = make([]map[int64]*eventsGroup, o.partitionNum)
+	w.decoders = make([]codec.RowEventDecoder, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
 
 	for i := 0; i < int(o.partitionNum); i++ {
 		w.sinks[i] = &partitionSinks{}
+		decoder, err := NewDecoder(ctx, o, w.upstreamTiDB)
+		if err != nil {
+			log.Panic("Error create decoder", zap.Error(err))
+		}
+		w.decoders[i] = decoder
+		w.eventsGroups[i] = make(map[int64]*eventsGroup)
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
@@ -205,8 +214,6 @@ func (w *writer) popDDL() {
 }
 
 func (w *writer) forEachSink(fn func(sink *partitionSinks) error) error {
-	w.sinksMu.Lock()
-	defer w.sinksMu.Unlock()
 	for _, sink := range w.sinks {
 		if err := fn(sink); err != nil {
 			return cerror.Trace(err)
@@ -225,65 +232,6 @@ func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 		return nil
 	})
 	return result, err
-}
-
-// AsyncWrite will write data downstream asynchronously.
-func (w *writer) AsyncWrite(ctx context.Context) error {
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-
-		minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
-		if err != nil {
-			return cerror.Trace(err)
-		}
-
-		// handle DDL
-		todoDDL := w.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
-			// flush DMLs
-			if err := w.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			}); err != nil {
-				return cerror.Trace(err)
-			}
-
-			// DDL can be executed, do it first.
-			if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return cerror.Trace(err)
-			}
-			w.popDDL()
-
-			if todoDDL.CommitTs < minPartitionResolvedTs {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.String("DDL", todoDDL.Query))
-			}
-			minPartitionResolvedTs = todoDDL.CommitTs
-		}
-
-		// update global resolved ts
-		if w.globalResolvedTs > minPartitionResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", w.globalResolvedTs),
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
-		}
-
-		if w.globalResolvedTs < minPartitionResolvedTs {
-			w.globalResolvedTs = minPartitionResolvedTs
-		}
-
-		if err := w.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, w.globalResolvedTs)
-		}); err != nil {
-			return cerror.Trace(err)
-		}
-	}
 }
 
 // Write will write data downstream synchronously.
@@ -312,8 +260,8 @@ func (w *writer) Write(ctx context.Context) error {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
 					zap.String("DDL", todoDDL.Query))
+				minPartitionResolvedTs = todoDDL.CommitTs
 			}
-			minPartitionResolvedTs = todoDDL.CommitTs
 		} else {
 			break
 		}
@@ -338,14 +286,11 @@ func (w *writer) Write(ctx context.Context) error {
 	return nil
 }
 
-// Decode try to decode kafka message to event.
-func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, option *consumerOption, partition int32,
-	key []byte, value []byte, eventGroups map[int64]*eventsGroup,
-) error {
+// Decode is to decode kafka message to event.
+func (w *writer) Decode(ctx context.Context, option *consumerOption, partition int32, key []byte, value []byte) error {
 	sink := w.sinks[partition]
-	if sink == nil {
-		panic("sink should initialized")
-	}
+	decoder := w.decoders[partition]
+	eventGroups := w.eventsGroups[partition]
 
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
@@ -468,6 +413,7 @@ func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, opti
 					zap.Error(err))
 			}
 
+			log.Info("recived resolvedTs", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if ts < globalResolvedTs || ts < partitionResolvedTs {
@@ -500,12 +446,10 @@ func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, opti
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
-			// write in time
 			if err := w.Write(ctx); err != nil {
 				log.Panic("Error write to the downstream", zap.Error(err))
 			}
 		}
-
 	}
 
 	if counter > option.maxBatchSize {
@@ -513,6 +457,14 @@ func (w *writer) Decode(ctx context.Context, decoder codec.RowEventDecoder, opti
 			zap.Int("actual-batch-size", counter))
 	}
 	return nil
+}
+
+func (w *writer) Valid(partition int32) {
+	eventGroups := w.eventsGroups[partition]
+	if len(eventGroups) != 0 {
+		log.Panic("some events have not be write to the downstream",
+			zap.Int32("partition", partition), zap.Int("events num", len(eventGroups)))
+	}
 }
 
 type fakeTableIDGenerator struct {

@@ -128,38 +128,19 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 
 	err = client.SubscribeTopics(topics, nil)
 
-	decoder, err := NewDecoder(ctx, c.option, c.writer.upstreamTiDB)
-	if err != nil {
-		log.Panic("Error create decoder", zap.Error(err))
-	}
-	eventGroups := make(map[int64]*eventsGroup)
 	for {
 		msg, err := client.ReadMessage(100 * time.Millisecond)
 		if err == nil {
 			// Process the message received.
 			partition := msg.TopicPartition.Partition
-			if err := c.writer.Decode(ctx, decoder, c.option, partition, msg.Key, msg.Value, eventGroups); err != nil {
+			if err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value); err != nil {
 				log.Panic("Error decode message", zap.Error(err))
 			}
-			// sync write to downstream
-			if err := c.writer.Write(ctx); err != nil {
-				log.Panic("Error write to the downstream", zap.Error(err))
-			}
-			if _, err := client.StoreMessage(msg); err != nil {
-				log.Panic("Error store offsets", zap.Error(err))
-			}
+			client.CommitMessage(msg)
 		} else if !err.(confluent.Error).IsTimeout() {
-			// The client will automatically try to recover from all errors.
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.
 			log.Panic("Error kafka timeout", zap.Error(err))
 		}
-	}
-}
-
-// AsyncWrite call writer to write to the downsteam asynchronously.
-func (c *confluentConsumer) AsyncWrite(ctx context.Context) {
-	if err := c.writer.AsyncWrite(ctx); err != nil {
-		log.Info("async write break", zap.Error(err))
 	}
 }
