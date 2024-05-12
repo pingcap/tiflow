@@ -136,9 +136,6 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 			if err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value); err != nil {
 				log.Panic("Error decode message", zap.Error(err))
 			}
-			if err := c.writer.Write(ctx); err != nil {
-				log.Panic("Error write to the downstream", zap.Error(err))
-			}
 			if _, err := client.CommitMessage(msg); err != nil {
 				log.Panic("Error commit message", zap.Error(err))
 			}

@@ -445,10 +445,10 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
-			// write in time
-			if err := w.Write(ctx); err != nil {
-				log.Panic("Error write to the downstream", zap.Error(err))
-			}
+		}
+		// write in time
+		if err := w.Write(ctx); err != nil {
+			log.Panic("Error write to the downstream", zap.Error(err))
 		}
 	}
 
@@ -456,15 +456,10 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", option.maxBatchSize),
 			zap.Int("actual-batch-size", counter))
 	}
-	return nil
-}
-
-func (w *writer) Valid(partition int32) {
-	eventGroups := w.eventsGroups[partition]
-	if len(eventGroups) != 0 {
-		log.Panic("some events have not be write to the downstream",
-			zap.Int32("partition", partition), zap.Int("events num", len(eventGroups)))
+	if err := w.Write(ctx); err != nil {
+		log.Panic("Error write to the downstream", zap.Error(err))
 	}
+	return nil
 }
 
 type fakeTableIDGenerator struct {
