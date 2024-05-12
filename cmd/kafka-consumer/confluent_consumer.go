@@ -139,7 +139,9 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 			if err := c.writer.Write(ctx); err != nil {
 				log.Panic("Error write to the downstream", zap.Error(err))
 			}
-			client.CommitMessage(msg)
+			if _, err := client.CommitMessage(msg); err != nil {
+				log.Panic("Error commit message", zap.Error(err))
+			}
 		} else if !err.(confluent.Error).IsTimeout() {
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.

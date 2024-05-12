@@ -413,7 +413,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 					zap.Error(err))
 			}
 
-			log.Info("recived resolvedTs", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if ts < globalResolvedTs || ts < partitionResolvedTs {
