@@ -446,6 +446,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
+			// write in time
 			if err := w.Write(ctx); err != nil {
 				log.Panic("Error write to the downstream", zap.Error(err))
 			}

@@ -19,7 +19,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"os"
-	"strings"
 	"time"
 
 	cerror "github.com/pingcap/errors"
@@ -29,44 +28,43 @@ import (
 )
 
 func newDialer(o *consumerOption) (*kafka.Dialer, error) {
-	caCert, err := os.ReadFile(o.ca)
-	if err != nil {
-		return nil, err
-	}
-
-	clientCert, err := tls.LoadX509KeyPair(o.cert, o.key)
-	if err != nil {
-		return nil, err
-	}
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-
 	dialer := &kafka.Dialer{
 		Timeout:   o.timeout,
 		DualStack: true,
-		TLS: &tls.Config{
+	}
+	if len(o.ca) != 0 {
+		caCert, err := os.ReadFile(o.ca)
+		if err != nil {
+			return nil, err
+		}
+
+		clientCert, err := tls.LoadX509KeyPair(o.cert, o.key)
+		if err != nil {
+			return nil, err
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		dialer.TLS = &tls.Config{
 			RootCAs:            caCertPool,
 			Certificates:       []tls.Certificate{clientCert},
 			MinVersion:         tls.VersionTLS12,
 			NextProtos:         []string{"h2", "http/1.1"},
 			InsecureSkipVerify: false,
-		},
+		}
 	}
 	return dialer, nil
 }
 
 func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
-	transport := kafka.DefaultTransport
-	if len(o.ca) != 0 {
-		if tlsDialer, err := newDialer(o); err == nil {
-			transport = &kafka.Transport{Dial: tlsDialer.DialFunc}
-		}
+	dialer, err := newDialer(o)
+	if err != nil {
+		log.Panic("Error create dialer")
 	}
 	client := &kafka.Client{
 		Addr:      kafka.TCP(o.address...),
 		Timeout:   o.timeout,
-		Transport: transport,
+		Transport: &kafka.Transport{Dial: dialer.DialFunc},
 	}
 	for i := 0; i <= o.retryTime; i++ {
 		resp, err := client.Metadata(context.Background(), &kafka.MetadataRequest{})
@@ -92,6 +90,7 @@ func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
 
 type kafkaGoConsumer struct {
 	option *consumerOption
+	config kafka.ConsumerGroupConfig
 	writer *writer
 }
 
@@ -113,31 +112,22 @@ func NewKafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	}
 	c.writer = w
 	c.option = o
-	// async write to downstream
-	// go c.AsyncWrite(ctx)
+	dialer, err := newDialer(c.option)
+	if err != nil {
+		log.Panic("Error create dialer")
+	}
+	c.config = kafka.ConsumerGroupConfig{
+		ID:      o.groupID,
+		Brokers: o.address,
+		Topics:  []string{o.topic},
+		Dialer:  dialer,
+	}
 	return c
 }
 
 // Consume will read message from Kafka.
 func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
-	topics := strings.Split(c.option.topic, ",")
-	if len(topics) == 0 {
-		log.Panic("Error no topics provided")
-	}
-	dialer := kafka.DefaultDialer
-	if len(c.option.ca) != 0 {
-		tlsDialer, err := newDialer(c.option)
-		if err != nil {
-			log.Panic("Error create dialer")
-		}
-		dialer = tlsDialer
-	}
-	client, err := kafka.NewConsumerGroup(kafka.ConsumerGroupConfig{
-		ID:      c.option.groupID,
-		Brokers: c.option.address,
-		Topics:  topics,
-		Dialer:  dialer,
-	})
+	client, err := kafka.NewConsumerGroup(c.config)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
@@ -146,10 +136,13 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 			log.Panic("Error closing client", zap.Error(err))
 		}
 	}()
-
 	for {
-		gen, err := client.Next(context.Background())
+		gen, err := client.Next(ctx)
 		if err != nil {
+			if err.(kafka.Error) == kafka.GroupCoordinatorNotAvailable {
+				log.Warn("wait group coordinator available", zap.Error(err))
+				continue
+			}
 			return err
 		}
 		for topic, assignments := range gen.Assignments {
@@ -158,7 +151,6 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 				log.Info("start consume message",
 					zap.String("topic", topic), zap.Int("partition", partition),
 					zap.Int64("initialOffset", offset))
-				// async read
 				gen.Start(func(ctx context.Context) {
 					reader := kafka.NewReader(kafka.ReaderConfig{
 						Brokers:   c.option.address,
@@ -187,6 +179,9 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 						}
 						if err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value); err != nil {
 							log.Panic("Error decode message", zap.Error(err))
+						}
+						if err := c.writer.Write(ctx); err != nil {
+							log.Panic("Error write to the downstream", zap.Error(err))
 						}
 						offset = msg.Offset
 						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
