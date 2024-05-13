@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
@@ -105,7 +106,12 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 }
 
 func TestSubscribedTable(t *testing.T) {
+<<<<<<< HEAD
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
+=======
+	s := &SharedClient{resolveLockTaskCh: chann.NewAutoDrainChann[resolveLockTask]()}
+	s.logRegionDetails = log.Info
+>>>>>>> d410926387 (kv (ticdc): reduce some verbose log (#11077))
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newSubscribedTable(SubscriptionID(1), span, 100, nil)
 	s.totalSpans.v = make(map[SubscriptionID]*subscribedTable)

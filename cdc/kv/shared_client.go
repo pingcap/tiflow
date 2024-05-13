@@ -881,11 +881,18 @@ func (s *SharedClient) newSubscribedTable(
 	return rt
 }
 
+<<<<<<< HEAD
 func (r *subscribedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
 
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",
+=======
+func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
+	util.MustCompareAndMonotonicIncrease(&r.staleLocksTargetTs, targetTs)
+	res := r.rangeLock.IterAll(r.tryResolveLock)
+	s.logRegionDetails("event feed finds slow locked ranges",
+>>>>>>> d410926387 (kv (ticdc): reduce some verbose log (#11077))
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
