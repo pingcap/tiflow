@@ -289,7 +289,7 @@ func (m *mounter) decodeRow(
 		} else {
 			m.decoder = decoder
 		}
-		datums, err = decodeRowV2(decoder, rawValue)
+		datums, err = decodeRowV2(decoder, rawValue, datums)
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
 	}
@@ -411,7 +411,7 @@ func datum2Column(
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
 	// columnInfos should have the same length and order with cols
-	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
+	columnInfos := make([]*timodel.ColumnInfo, 0, len(tableInfo.Columns))
 
 	for _, colInfo := range tableInfo.Columns {
 		if !model.IsColCDCVisible(colInfo) {
