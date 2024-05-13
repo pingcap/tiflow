@@ -505,8 +505,12 @@ LOOP2:
 	failpoint.Inject("NewChangefeedRetryError", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
+	cInfo, err := c.state.Info.Clone()
+	if err != nil {
+		return errors.Trace(err)
+	}
 
-	if c.state.Info.Config.CheckGCSafePoint {
+	if cInfo.Config.CheckGCSafePoint {
 		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
 		// We update TTL to 10 minutes,
@@ -560,19 +564,19 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
+	if util.GetOrZero(cInfo.Config.EnableSyncPoint) {
 		c.barriers.Update(syncPointBarrier, c.resolvedTs)
 	}
-	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+	c.barriers.Update(finishBarrier, cInfo.GetTargetTs())
 
-	filter, err := pfilter.NewFilter(c.state.Info.Config, "")
+	filter, err := pfilter.NewFilter(cInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage,
 		ddlStartTs,
-		c.state.Info.Config.ForceReplicate,
+		cInfo.Config.ForceReplicate,
 		c.id,
 		util.RoleOwner,
 		filter)
@@ -587,14 +591,14 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.state.Info.Config.Sink.TiDBSourceID = sourceID
+	cInfo.Config.Sink.TiDBSourceID = sourceID
 	log.Info("set source id",
 		zap.Uint64("sourceID", sourceID),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
+	c.ddlSink = c.newSink(c.id, cInfo, ctx.Throw, func(err error) {
 		select {
 		case <-ctx.Done():
 		case c.warningCh <- err:
@@ -603,7 +607,7 @@ LOOP2:
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		c.state.Info.Config,
+		cInfo.Config,
 		c.upstream, ddlStartTs,
 		c.id,
 		c.schema,
@@ -618,13 +622,13 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, cInfo.SinkURI, cInfo.Config)
 	if err != nil {
 		return err
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	c.redoDDLMgr = redo.NewDDLManager(c.id, c.state.Info.Config.Consistent, ddlStartTs)
+	c.redoDDLMgr = redo.NewDDLManager(c.id, cInfo.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -633,7 +637,7 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, checkpointTs)
+	c.redoMetaMgr = redo.NewMetaManager(c.id, cInfo.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -645,7 +649,7 @@ LOOP2:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	downstreamType, err := c.state.Info.DownstreamType()
+	downstreamType, err := cInfo.DownstreamType()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -661,13 +665,13 @@ LOOP2:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		downstreamType,
-		util.GetOrZero(c.state.Info.Config.BDRMode),
+		util.GetOrZero(cInfo.Config.BDRMode),
 	)
 
 	// create scheduler
 	cfg := *c.cfg
-	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
-	epoch := c.state.Info.Epoch
+	cfg.ChangefeedSettings = cInfo.Config.Scheduler
+	epoch := cInfo.Epoch
 	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg, c.redoMetaMgr)
 	if err != nil {
 		return errors.Trace(err)
@@ -676,7 +680,7 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
-	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(cInfo.CreateTime)))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
@@ -684,7 +688,7 @@ LOOP2:
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.resolvedTs),
-		zap.String("info", c.state.Info.String()))
+		zap.String("info", cInfo.String()))
 
 	return nil
 }

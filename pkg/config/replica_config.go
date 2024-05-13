@@ -45,6 +45,8 @@ const (
 	// Note: The SQL Mode of TiDB is not the same as ORACLE.
 	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
 	defaultSQLMode = mysql.DefaultSQLMode
+	// DefaultTiDBSourceID is the default source ID of TiDB cluster.
+	DefaultTiDBSourceID = 1
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
