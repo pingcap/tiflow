@@ -50,6 +50,8 @@ const (
 	DisableMemoryLimit = 0
 
 	// EnablePDForwarding is the value of whether to enable PD client forwarding function.
+	// The PD client will forward the requests throughthe follower
+	// If there is a network partition problem between TiCDC and PD leader.
 	EnablePDForwarding = true
 )
 
