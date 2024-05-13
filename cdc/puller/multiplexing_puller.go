@@ -34,8 +34,8 @@ import (
 )
 
 const (
-	resolveLockFence        time.Duration = 4 * time.Second
-	resolveLockTickInterval time.Duration = 2 * time.Second
+	resolveLockFence        time.Duration = 20 * time.Second
+	resolveLockTickInterval time.Duration = 10 * time.Second
 
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.

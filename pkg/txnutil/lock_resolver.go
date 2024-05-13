@@ -128,8 +128,9 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 			locks[i] = txnkv.NewLock(locksInfo[i])
 		}
 		lockCount += len(locksInfo)
-		log.Info("scan lock finished", zap.Any("locks", locksInfo))
-
+		if lockCount > 0 {
+			log.Info("scan lock finished", zap.Any("locks", locksInfo))
+		}
 		_, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
 		if err1 != nil {
 			return errors.Trace(err1)
