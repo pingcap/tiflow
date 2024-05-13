@@ -1460,6 +1460,12 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, badDec)
 
+	events := []*model.RowChangedEvent{
+		insertEvent,
+		updateEvent,
+		deleteEvent,
+	}
+
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatJSON,
 		common.EncodingFormatAvro,
@@ -1480,27 +1486,9 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, db)
 			require.NoError(t, err)
 
-			m, err := enc.EncodeDDLEvent(ddlEvent)
-			require.NoError(t, err)
-
-			err = dec.AddKeyValue(m.Key, m.Value)
-			require.NoError(t, err)
-
-			messageType, hasNext, err := dec.HasNext()
-			require.NoError(t, err)
-			require.True(t, hasNext)
-			require.Equal(t, model.MessageTypeDDL, messageType)
-
-			_, err = dec.NextDDLEvent()
-			require.NoError(t, err)
-
 			enc.(*encoder).config.MaxMessageBytes = 500
 			dec.config.MaxMessageBytes = 500
-			for _, event := range []*model.RowChangedEvent{
-				insertEvent,
-				updateEvent,
-				deleteEvent,
-			} {
+			for _, event = range events {
 				err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
 				require.NoError(t, err)
 
@@ -1560,13 +1548,32 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 				}
 
+				decodedRow, err := dec.NextRowChangedEvent()
+				require.NoError(t, err)
+				require.Nil(t, decodedRow)
+			}
+
+			enc.(*encoder).config.MaxMessageBytes = config.DefaultMaxMessageBytes
+			dec.config.MaxMessageBytes = config.DefaultMaxMessageBytes
+			m, err := enc.EncodeDDLEvent(ddlEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+
+			for _, event = range events {
 				mock.ExpectQuery("SELECT @@global.time_zone").
 					WillReturnRows(mock.NewRows([]string{""}).AddRow("SYSTEM"))
 
-				query := fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs)
+				query := fmt.Sprintf("set @@tidb_snapshot=%v", insertEvent.CommitTs)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
-				query = fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs-1)
+				query = fmt.Sprintf("set @@tidb_snapshot=%v", insertEvent.CommitTs-1)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
 				names, values := utils.LargeColumnKeyValues()
@@ -1576,8 +1583,14 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				mock.ExpectQuery("select * from test.t where t = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
-				decodedRow, err := dec.NextRowChangedEvent()
-				require.NoError(t, err)
+			}
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			decodedRows := dec.GetCachedEvents()
+			for idx, decodedRow := range decodedRows {
+				event := events[idx]
+
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())

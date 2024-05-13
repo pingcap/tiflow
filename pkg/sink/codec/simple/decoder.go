@@ -84,7 +84,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 // AddKeyValue add the received key and values to the Decoder,
 func (d *Decoder) AddKeyValue(_, value []byte) (err error) {
 	if d.value != nil {
-		return cerror.ErrDecodeFailed.GenWithStack(
+		return cerror.ErrCodecDecode.GenWithStack(
 			"Decoder value already exists, not consumed yet")
 	}
 	d.value, err = common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
@@ -191,9 +191,14 @@ func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
 	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"cannot found the table info, schema: %s, table: %s, version: %d",
-			m.Schema, m.Table, m.SchemaVersion)
+		log.Debug("table info not found for the event, "+
+			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+			zap.String("schema", d.msg.Schema),
+			zap.String("table", d.msg.Table),
+			zap.Uint64("version", d.msg.SchemaVersion))
+		d.cachedMessages.PushBack(d.msg)
+		d.msg = nil
+		return nil, nil
 	}
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
@@ -241,13 +246,7 @@ func (d *Decoder) buildData(
 		col := holder.Types[i]
 		value := holder.Values[i]
 
-		fieldType, ok := fieldTypeMap[col.Name()]
-		if !ok {
-			log.Panic("cannot found the field type",
-				zap.String("schema", d.msg.Schema),
-				zap.String("table", d.msg.Table),
-				zap.String("column", col.Name()))
-		}
+		fieldType := fieldTypeMap[col.Name()]
 		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
 	return result
@@ -270,10 +269,6 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		event, err := d.NextRowChangedEvent()
 		if err != nil {
 			return nil, err
-		}
-		if event == nil {
-			ele = ele.Next()
-			continue
 		}
 		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
 
