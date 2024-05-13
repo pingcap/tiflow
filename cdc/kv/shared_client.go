@@ -815,7 +815,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		s.logRegionDetails("event feed starts to check locked regions",
+		log.Info("event feed starts to check locked regions",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID))
 
