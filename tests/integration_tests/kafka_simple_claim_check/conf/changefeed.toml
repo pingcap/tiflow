@@ -1,3 +1,7 @@
+[integrity]
+integrity-check-level = "correctness"
+corruption-handle-level = "error"
+
 [sink.kafka-config.large-message-handle]
 large-message-handle-compression = "snappy"
 large-message-handle-option = "claim-check"
