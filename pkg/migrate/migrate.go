@@ -148,7 +148,7 @@ func createPDClient(ctx context.Context,
 				MinConnectTimeout: 3 * time.Second,
 			}),
 		),
-		pd.WithForwardingOption(config.GetGlobalServerConfig().Debug.EnablePDForwarding),
+		pd.WithForwardingOption(config.EnablePDForwarding),
 	)
 }
 

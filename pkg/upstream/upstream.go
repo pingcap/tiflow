@@ -154,7 +154,7 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					MinConnectTimeout: 3 * time.Second,
 				}),
 			),
-			pd.WithForwardingOption(config.GetGlobalServerConfig().Debug.EnablePDForwarding))
+			pd.WithForwardingOption(config.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)

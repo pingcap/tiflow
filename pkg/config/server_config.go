@@ -48,6 +48,9 @@ const (
 	// DisableMemoryLimit is the default max memory percentage for TiCDC server.
 	// 0 means no memory limit.
 	DisableMemoryLimit = 0
+
+	// EnablePDForwarding is the value of whether to enable PD client forwarding function.
+	EnablePDForwarding = true
 )
 
 var (
@@ -140,7 +143,6 @@ var defaultServerConfig = &ServerConfig{
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
 			LogRegionDetails:               false,
 		},
-		EnablePDForwarding: true,
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,
