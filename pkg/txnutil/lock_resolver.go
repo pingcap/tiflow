@@ -16,7 +16,6 @@ package txnutil
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -52,24 +51,22 @@ func NewLockerResolver(
 const scanLockLimit = 1024
 
 func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint64) (err error) {
-	var totalLocks []*txnkv.Lock
+	var lockCount int = 0
 
-	start := time.Now()
+	log.Info("resolve lock starts",
+		zap.Uint64("regionID", regionID),
+		zap.Uint64("maxVersion", maxVersion),
+		zap.String("namespace", r.changefeed.Namespace),
+		zap.String("changefeed", r.changefeed.ID))
 
 	defer func() {
-		// Only log when there are locks or error to avoid log flooding.
-		if len(totalLocks) != 0 || err != nil {
-			cost := time.Since(start)
-			log.Info("resolve lock finishes",
-				zap.Uint64("regionID", regionID),
-				zap.Int("lockCount", len(totalLocks)),
-				zap.Any("locks", totalLocks),
-				zap.Uint64("maxVersion", maxVersion),
-				zap.String("namespace", r.changefeed.Namespace),
-				zap.String("changefeed", r.changefeed.ID),
-				zap.Duration("duration", cost),
-				zap.Error(err))
-		}
+		log.Info("resolve lock finishes",
+			zap.Uint64("regionID", regionID),
+			zap.Int("lockCount", lockCount),
+			zap.Uint64("maxVersion", maxVersion),
+			zap.String("namespace", r.changefeed.Namespace),
+			zap.String("changefeed", r.changefeed.ID),
+			zap.Error(err))
 	}()
 
 	// TODO test whether this function will kill active transaction
@@ -130,7 +127,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		for i := range locksInfo {
 			locks[i] = txnkv.NewLock(locksInfo[i])
 		}
-		totalLocks = append(totalLocks, locks...)
+		lockCount += len(locksInfo)
 
 		_, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
 		if err1 != nil {
