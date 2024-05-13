@@ -1352,6 +1352,16 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "unsupported:///"
+	b, err := NewBuilder(ctx, codecConfig)
+	require.Error(t, err)
+	require.Nil(t, b)
+
+	badDec, err := NewDecoder(ctx, codecConfig, nil)
+	require.Error(t, err)
+	require.Nil(t, badDec)
+
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
@@ -1366,7 +1376,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			codecConfig.MaxMessageBytes = config.DefaultMaxMessageBytes
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-			b, err := NewBuilder(ctx, codecConfig)
+			b, err = NewBuilder(ctx, codecConfig)
 			require.NoError(t, err)
 			enc := b.Build()
 
@@ -1620,4 +1630,34 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestDecoder(t *testing.T) {
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	decoder, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+	require.NotNil(t, decoder)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.False(t, hasNext)
+	require.Equal(t, model.MessageTypeUnknown, messageType)
+
+	ddl, err := decoder.NextDDLEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, ddl)
+
+	decoder.msg = new(message)
+	checkpoint, err := decoder.NextResolvedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Equal(t, uint64(0), checkpoint)
+
+	event, err := decoder.NextRowChangedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, event)
+
+	decoder.value = []byte("invalid")
+	err = decoder.AddKeyValue(nil, nil)
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
 }
