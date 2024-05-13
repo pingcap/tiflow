@@ -1570,10 +1570,10 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				mock.ExpectQuery("SELECT @@global.time_zone").
 					WillReturnRows(mock.NewRows([]string{""}).AddRow("SYSTEM"))
 
-				query := fmt.Sprintf("set @@tidb_snapshot=%v", insertEvent.CommitTs)
+				query := fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
-				query = fmt.Sprintf("set @@tidb_snapshot=%v", insertEvent.CommitTs-1)
+				query = fmt.Sprintf("set @@tidb_snapshot=%v", event.CommitTs-1)
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
 				names, values := utils.LargeColumnKeyValues()
