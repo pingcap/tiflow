@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -233,6 +234,23 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	return row, err
 }
 
+var (
+	datumsPool = sync.Pool{
+		New: func() any {
+			return make(map[int64]types.Datum)
+		},
+	}
+)
+
+func requestDatums() map[int64]types.Datum {
+	return datumsPool.Get().(map[int64]types.Datum)
+}
+
+func releaseDatums(datums map[int64]types.Datum) {
+	clear(datums)
+	datumsPool.Put(datums)
+}
+
 func (m *mounter) unmarshalRowKVEntry(
 	tableInfo *model.TableInfo,
 	rawKey []byte,
@@ -246,17 +264,12 @@ func (m *mounter) unmarshalRowKVEntry(
 	}
 	base.RecordID = recordID
 
-	var (
-		row, preRow           map[int64]types.Datum
-		rowExist, preRowExist bool
-	)
-
-	row, rowExist, err = m.decodeRow(rawValue, recordID, tableInfo, false)
+	row, rowExist, err := m.decodeRow(rawValue, recordID, tableInfo, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	preRow, preRowExist, err = m.decodeRow(rawOldValue, recordID, tableInfo, true)
+	preRow, preRowExist, err := m.decodeRow(rawOldValue, recordID, tableInfo, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -289,6 +302,7 @@ func (m *mounter) decodeRow(
 		} else {
 			m.decoder = decoder
 		}
+		datums = requestDatums()
 		datums, err = decodeRowV2(decoder, rawValue, datums)
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
@@ -558,6 +572,11 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	} else if m.preDecoder != nil {
 		checksumVersion = m.preDecoder.ChecksumVersion()
 	}
+
+	defer func() {
+		releaseDatums(row.Row)
+		releaseDatums(row.PreRow)
+	}()
 
 	// Decode previous columns.
 	var (
