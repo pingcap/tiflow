@@ -466,7 +466,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", option.maxBatchSize),
 			zap.Int("actual-batch-size", counter))
 	}
-	// flush when recived DDL event or resolvedTs
+	// flush when received DDL event or resolvedTs
 	if messageType != model.MessageTypeRow {
 		return w.Write(ctx, messageType)
 	}
