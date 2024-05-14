@@ -654,7 +654,7 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (schema string, err error) {
 	switch req.Op {
 	case pb.SchemaOp_ListMigrateTargets:
-		if st.Stage() != pb.Stage_Running || st.Stage() != pb.Stage_Paused {
+		if st.Stage() != pb.Stage_Running && st.Stage() != pb.Stage_Paused {
 			return "", terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
 		}
 	default:
