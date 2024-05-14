@@ -136,11 +136,14 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
 	ctx := context.Background()
-	for message := range claim.Messages() {
-		if err := c.writer.Decode(ctx, c.option, partition, message.Key, message.Value); err != nil {
-			return err
+	for msg := range claim.Messages() {
+		needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
+		if err != nil {
+			log.Panic("Error decode message", zap.Error(err))
 		}
-		session.MarkMessage(message, "")
+		if needCommit {
+			session.MarkMessage(msg, "")
+		}
 	}
 	return nil
 }

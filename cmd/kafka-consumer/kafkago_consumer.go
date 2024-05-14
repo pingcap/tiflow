@@ -177,12 +177,15 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 							}
 							log.Panic("Error reading message", zap.Error(err))
 						}
-						if err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value); err != nil {
+						needCommit, err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value)
+						if err != nil {
 							log.Panic("Error decode message", zap.Error(err))
 						}
 						offset = msg.Offset
-						if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
-							log.Panic("Error commit offsets", zap.Error(err))
+						if needCommit {
+							if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
+								log.Panic("Error commit offsets", zap.Error(err))
+							}
 						}
 					}
 				})

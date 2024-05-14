@@ -133,11 +133,14 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 		if err == nil {
 			// Process the message received.
 			partition := msg.TopicPartition.Partition
-			if err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value); err != nil {
+			needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
+			if err != nil {
 				log.Panic("Error decode message", zap.Error(err))
 			}
-			if _, err := client.CommitMessage(msg); err != nil {
-				log.Panic("Error commit message", zap.Error(err))
+			if needCommit {
+				if _, err := client.CommitMessage(msg); err != nil {
+					log.Panic("Error commit message", zap.Error(err))
+				}
 			}
 		} else if !err.(confluent.Error).IsTimeout() {
 			// Timeout is not considered an error because it is raised by
