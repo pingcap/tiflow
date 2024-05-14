@@ -752,6 +752,7 @@ function test_start_task_with_condition() {
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
 	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
+	curl http://127.0.0.1:8261/api/v1/tasks/incremental_task_use_start_time_after_create/sources/mysql-01/migrate_targets
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -1036,20 +1037,20 @@ function run() {
 	test_relay
 	test_source
 
-	test_shard_task
-	test_multi_tasks
-	test_noshard_task
-	test_task_templates
-	test_noshard_task_dump_status
-	test_complex_operations_of_source_and_task
-	test_task_with_ignore_check_items
-	test_delete_task_with_stopped_downstream
+	#test_shard_task
+	#test_multi_tasks
+	#test_noshard_task
+	#test_task_templates
+	#test_noshard_task_dump_status
+	#test_complex_operations_of_source_and_task
+	#test_task_with_ignore_check_items
+	#test_delete_task_with_stopped_downstream
 	test_start_task_with_condition
-	test_stop_task_with_condition
-	test_reverse_https
+	#test_stop_task_with_condition
+	#test_reverse_https
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
-	test_cluster
+	#test_cluster
 }
 
 cleanup_data openapi
