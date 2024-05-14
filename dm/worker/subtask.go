@@ -664,7 +664,6 @@ func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchem
 	if st.validatorStage() == pb.Stage_Running && req.Op != pb.SchemaOp_ListMigrateTargets {
 		return "", terror.ErrWorkerValidatorNotPaused.Generate(pb.Stage_Running.String())
 	}
-	log.L().Info("operate schema", zap.Stringer("operation", req.Op), zap.String("task", st.cfg.Name), zap.String("source", st.cfg.SourceID), zap.String("stage", st.Stage().String()), zap.String("unit stage", st.validatorStage().String()))
 
 	return syncUnit.OperateSchema(ctx, req)
 }
