@@ -166,7 +166,7 @@ func (c *saramaConsumer) Consume(ctx context.Context) error {
 		// server-side rebalance happens, the consumer session will need to be
 		// recreated to get the new claims
 		if err := client.Consume(ctx, strings.Split(c.option.topic, ","), c); err != nil {
-			log.Panic("Error from consumer", zap.Error(err))
+			log.Error("Error from consumer", zap.Error(err))
 		}
 		// check if context was cancelled, signaling that the consumer should stop
 		if ctx.Err() != nil {

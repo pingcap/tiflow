@@ -145,7 +145,7 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 		} else if !err.(confluent.Error).IsTimeout() {
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.
-			log.Panic("Error kafka timeout", zap.Error(err))
+			log.Error("Error from kafka", zap.Error(err))
 		}
 	}
 }

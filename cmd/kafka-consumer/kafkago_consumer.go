@@ -143,7 +143,7 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 				log.Warn("wait group coordinator available", zap.Error(err))
 				continue
 			}
-			return err
+			log.Error("Error from kafka", zap.Error(err))
 		}
 		for topic, assignments := range gen.Assignments {
 			for _, assignment := range assignments {
