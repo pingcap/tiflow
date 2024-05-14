@@ -145,7 +145,7 @@ func (m *feedStateManager) Tick(
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
 		adminJobPending = true
-		changefeedErrorStuckDuration := util.GetOrZero(m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration)
+		changefeedErrorStuckDuration := util.GetOrZero(m.state.Info.Config.ChangefeedErrorStuckDuration)
 		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
 			log.Info("changefeedErrorStuckDuration update",
 				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),

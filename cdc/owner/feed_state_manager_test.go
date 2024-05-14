@@ -1053,10 +1053,11 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 }
 
 func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
-	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		model.DefaultChangeFeedID(changefeedInfo.ID))
+		ctx.ChangefeedVars().ID)
+
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -1068,22 +1069,22 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	})
 	tester.MustApplyPatches()
 	manager.state = state
-	manager.Tick(0, state.Status, state.Info)
+	manager.Tick(state, 0)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
 
 	stuckDuration := manager.changefeedErrorStuckDuration + time.Second*3
-	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Warning: &model.RunningError{
-				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
 				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
 				Message: "fake error for test",
 			}}, true, nil
 		})
 	tester.MustApplyPatches()
 	time.Sleep(stuckDuration - time.Second)
-	manager.Tick(100, state.Status, state.Info)
+	manager.Tick(state, 100)
 	tester.MustApplyPatches()
 	require.False(t, manager.ShouldRunning())
 	require.Less(t, manager.changefeedErrorStuckDuration, stuckDuration)
@@ -1106,12 +1107,11 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 
 	// resume the changefeed in failed state
 	manager.PushAdminJob(&model.AdminJob{
-		CfID:                  model.DefaultChangeFeedID(changefeedInfo.ID),
+		CfID:                  ctx.ChangefeedVars().ID,
 		Type:                  model.AdminResume,
 		OverwriteCheckpointTs: 100,
 	})
-
-	manager.Tick(101, state.Status, state.Info)
+	manager.Tick(state, 101)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
 	require.False(t, manager.ShouldRemoved())
@@ -1120,10 +1120,10 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
 	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
 
-	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Warning: &model.RunningError{
-				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
 				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
 				Message: "fake error for test",
 			}}, true, nil
@@ -1131,15 +1131,15 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	tester.MustApplyPatches()
 
 	time.Sleep(stuckDuration - time.Second)
-	manager.Tick(200, state.Status, state.Info)
+	manager.Tick(state, 200)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
 	require.Equal(t, state.Info.State, model.StateWarning)
 
-	state.PatchTaskPosition(globalVars.CaptureInfo.ID,
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Warning: &model.RunningError{
-				Addr:    globalVars.CaptureInfo.AdvertiseAddr,
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
 				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
 				Message: "fake error for test",
 			}}, true, nil
@@ -1147,7 +1147,7 @@ func TestUpdateChangefeedWithChangefeedErrorStuckDuration(t *testing.T) {
 	tester.MustApplyPatches()
 
 	time.Sleep(time.Second)
-	manager.Tick(201, state.Status, state.Info)
+	manager.Tick(state, 201)
 	tester.MustApplyPatches()
 	require.False(t, manager.ShouldRunning())
 	require.Equal(t, state.Info.State, model.StateFailed)
