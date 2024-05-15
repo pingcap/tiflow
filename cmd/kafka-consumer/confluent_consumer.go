@@ -139,7 +139,7 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 			}
 			if needCommit {
 				if _, err := client.CommitMessage(msg); err != nil {
-					log.Panic("Error commit message", zap.Error(err))
+					log.Error("Error commit message", zap.Error(err))
 				}
 			}
 		} else if !err.(confluent.Error).IsTimeout() {

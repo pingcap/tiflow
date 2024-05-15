@@ -136,7 +136,7 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 	for msg := range claim.Messages() {
 		needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
 		if err != nil {
-			log.Panic("Error decode message", zap.Error(err))
+			log.Error("Error decode message", zap.Error(err))
 		}
 		if needCommit {
 			session.MarkMessage(msg, "")

@@ -130,7 +130,6 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 		GroupTopics: topics,
 		Dialer:      dialer,
 	})
-	defer client.Close()
 	defer func() {
 		if err = client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
@@ -148,7 +147,7 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 		}
 		if needCommit {
 			if err := client.CommitMessages(ctx, msg); err != nil {
-				log.Panic("Error commit message", zap.Error(err))
+				log.Error("Error commit message", zap.Error(err))
 			}
 		}
 	}
