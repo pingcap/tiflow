@@ -1,0 +1,16 @@
+# Sort the member alphabetically.
+aliases:
+  sig-approvers-cdc-api:
+    - hongyunyan
+    - sdojjy
+  # other approvers SIGs.
+  sig-approvers-dm:
+    - Benjamin2037
+    - D3Hunter
+    - GMHDBJD
+    - lance6716
+  sig-approvers-engine:
+    - Benjamin2037
+    - D3Hunter
+    - GMHDBJD
+    - lance6716
