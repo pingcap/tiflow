@@ -628,14 +628,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if simple, ok := decoder.(*simple.Decoder); ok {
 					cachedEvents := simple.GetCachedEvents()
 					for _, row := range cachedEvents {
-						var partitionID int64
-						if row.TableInfo.IsPartitionTable() {
-							partitionID = row.PhysicalTableID
-						}
-						tableID := c.fakeTableIDGenerator.
-							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-						row.TableInfo.TableName.TableID = tableID
-
+						tableID := row.PhysicalTableID
 						group, ok := eventGroups[tableID]
 						if !ok {
 							group = newEventsGroup()
@@ -689,14 +682,17 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					session.MarkMessage(message, "")
 					continue
 				}
-				var partitionID int64
-				if row.TableInfo.IsPartitionTable() {
-					partitionID = row.PhysicalTableID
-				}
-				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-				row.TableInfo.TableName.TableID = tableID
 
+				tableID := row.PhysicalTableID
+				if c.option.protocol != config.ProtocolSimple {
+					var partitionID int64
+					if row.TableInfo.IsPartitionTable() {
+						partitionID = row.PhysicalTableID
+					}
+					tableID = c.fakeTableIDGenerator.
+						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+					row.TableInfo.TableName.TableID = tableID
+				}
 				group, ok := eventGroups[tableID]
 				if !ok {
 					group = newEventsGroup()
