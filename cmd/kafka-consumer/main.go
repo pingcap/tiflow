@@ -636,7 +636,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ddl.CommitTs <= partitionResolvedTs {
+				if ddl.CommitTs < partitionResolvedTs {
 					log.Panic("DDL event commit-ts less than the resolved ts",
 						zap.Int32("partition", partition),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
@@ -678,7 +678,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= partitionResolvedTs {
+				if row.CommitTs < partitionResolvedTs {
 					log.Panic("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
