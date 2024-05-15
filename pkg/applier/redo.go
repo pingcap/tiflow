@@ -580,13 +580,9 @@ type updateEventSplitter struct {
 	rdFinished      bool
 	tempStorage     *tempTxnInsertEventStorage
 	prevTxnCommitTs model.Ts
-	// pendingEvent is the event that trigger the process to emit events from tempStorage, it can be
-	// 1) an insert event in the same transaction(because there will be no more update and delete events in the same transaction)
-	// 2) a new event in the next transaction
+
+	// pendingEvent is the event that trigger the process to emit events from tempStorage, it always a new event in the next transaction
 	pendingEvent *model.RowChangedEvent
-	// meetInsertInCurTxn is used to indicate whether we meet an insert event in the current transaction
-	// this is to add some check to ensure that insert events are emitted after other kinds of events in the same transaction
-	meetInsertInCurTxn bool
 }
 
 func newUpdateEventSplitter(rd reader.RedoLogReader, dir string) *updateEventSplitter {
@@ -618,11 +614,8 @@ func processEvent(
 	if event.IsDelete() {
 		return event, nil, nil
 	} else if event.IsInsert() {
-		if tempStorage.hasEvent() {
-			// pend current event and emit the insert events in temp storage first to release memory
-			return nil, event, nil
-		}
-		return event, nil, nil
+		err := tempStorage.addEvent(event)
+		return nil, nil, err
 	} else if !model.ShouldSplitUpdateEvent(event) {
 		return event, nil, nil
 	} else {
@@ -638,27 +631,13 @@ func processEvent(
 	}
 }
 
-func (u *updateEventSplitter) checkEventOrder(event *model.RowChangedEvent) {
-	if event == nil {
-		return
-	}
-	if event.CommitTs > u.prevTxnCommitTs {
-		u.meetInsertInCurTxn = false
-		return
-	}
-	if event.IsInsert() {
-		u.meetInsertInCurTxn = true
-	} else {
-		// delete or update events
-		if u.meetInsertInCurTxn {
-			log.Panic("insert events should be emitted after other kinds of events in the same transaction")
-		}
-	}
-}
-
+// For each transaction, we will make insert events in the tempStorage first, and execute them at the final of the transaction.
+// So when we meet a row in a new transaction, we will read from tempStorage and execute them first,
+// then dealing with the new row.
 func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChangedEvent, error) {
 	for {
-		// case 1: pendingEvent is not nil, emit all events from tempStorage and then process pendingEvent
+		// case 1: pendingEvent is not nil, which means we meet the row in a new transaction
+		//         so we need emit all events from tempStorage and then process the pendingEvent
 		if u.pendingEvent != nil {
 			if u.tempStorage.hasEvent() {
 				return u.tempStorage.readNextEvent()
@@ -669,12 +648,9 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 			if err != nil {
 				return nil, err
 			}
-			if event == nil || u.pendingEvent != nil {
-				log.Panic("processEvent return wrong result for pending event",
-					zap.Any("event", event),
-					zap.Any("pendingEvent", u.pendingEvent))
+			if event != nil {
+				return event, nil
 			}
-			return event, nil
 		}
 		// case 2: no more events from RedoLogReader, emit all events from tempStorage and return nil
 		if u.rdFinished {
@@ -691,7 +667,6 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 		if event == nil {
 			u.rdFinished = true
 		} else {
-			u.checkEventOrder(event)
 			prevTxnCommitTS := u.prevTxnCommitTs
 			u.prevTxnCommitTs = event.CommitTs
 			var err error
@@ -701,9 +676,6 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 			}
 			if event != nil {
 				return event, nil
-			}
-			if u.pendingEvent == nil {
-				log.Panic("event to emit and pending event cannot all be nil")
 			}
 		}
 	}
