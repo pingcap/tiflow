@@ -22,12 +22,16 @@ import (
 	"testing"
 
 	"github.com/coreos/go-semver/semver"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
+>>>>>>> c1ee219906 (*: move binlog-filter package to tiflow (#11094))
 	"github.com/stretchr/testify/require"
 )
 

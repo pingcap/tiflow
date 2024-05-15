@@ -17,8 +17,13 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+=======
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+>>>>>>> c1ee219906 (*: move binlog-filter package to tiflow (#11094))
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
