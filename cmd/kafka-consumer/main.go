@@ -635,6 +635,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
+				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
+				if partition != 0 || ddl.Query == "" {
+					continue
+				}
+
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ddl.CommitTs < partitionResolvedTs {
 					log.Panic("DDL event commit-ts less than the resolved ts",
@@ -650,11 +655,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					zap.Int64("offset", message.Offset),
 					zap.Uint64("oldResolvedTs", partitionResolvedTs),
 					zap.Uint64("resolvedTs", ddl.CommitTs))
-
-				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
-				if partition == 0 && ddl.Query != "" {
-					c.appendDDL(ddl)
-				}
+				c.appendDDL(ddl)
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
