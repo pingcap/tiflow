@@ -155,7 +155,7 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160
+      "compaction-l0-trigger": 16
     },
     "messages": {
       "client-max-batch-interval": 10000000,
