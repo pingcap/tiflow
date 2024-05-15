@@ -139,8 +139,12 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 			log.Error("Error decode message", zap.Error(err))
 		}
 		if needCommit {
+			// TODO: retry commit
 			session.MarkMessage(msg, "")
 			session.Commit()
+			if err := session.Context().Err(); err != nil {
+				log.Error("Error commit message", zap.Error(err))
+			}
 		}
 		c.mu.Unlock()
 	}

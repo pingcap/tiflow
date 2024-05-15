@@ -72,11 +72,9 @@ func NewDecoder(ctx context.Context, option *consumerOption, upstreamTiDB *sql.D
 }
 
 type writer struct {
-	mu       sync.Mutex
 	interval time.Duration
 
 	ddlList              []*model.DDLEvent
-	ddlListMu            sync.Mutex
 	ddlWithMaxCommitTs   *model.DDLEvent
 	ddlSink              ddlsink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
@@ -171,8 +169,6 @@ func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
 // append DDL wait to be handled, only consider the constraint among DDLs.
 // for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
 func (w *writer) appendDDL(ddl *model.DDLEvent) {
-	w.ddlListMu.Lock()
-	defer w.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
 	if w.ddlWithMaxCommitTs != nil && ddl.CommitTs < w.ddlWithMaxCommitTs.CommitTs {
 		log.Warn("DDL CommitTs < maxCommitTsDDL.CommitTs",
@@ -197,8 +193,6 @@ func (w *writer) appendDDL(ddl *model.DDLEvent) {
 }
 
 func (w *writer) getFrontDDL() *model.DDLEvent {
-	w.ddlListMu.Lock()
-	defer w.ddlListMu.Unlock()
 	if len(w.ddlList) > 0 {
 		return w.ddlList[0]
 	}
@@ -206,8 +200,6 @@ func (w *writer) getFrontDDL() *model.DDLEvent {
 }
 
 func (w *writer) popDDL() {
-	w.ddlListMu.Lock()
-	defer w.ddlListMu.Unlock()
 	if len(w.ddlList) > 0 {
 		w.ddlList = w.ddlList[1:]
 	}
@@ -236,8 +228,6 @@ func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 
 // Write will write data downstream synchronously.
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
 	if err != nil {
 		return false, cerror.Trace(err)
@@ -472,12 +462,9 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 type fakeTableIDGenerator struct {
 	tableIDs       map[string]int64
 	currentTableID int64
-	mu             sync.Mutex
 }
 
 func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	key := quotes.QuoteSchema(schema, table)
 	if partition != 0 {
 		key = fmt.Sprintf("%s.`%d`", key, partition)

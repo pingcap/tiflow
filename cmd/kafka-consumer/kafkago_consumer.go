@@ -146,6 +146,7 @@ func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
 			log.Panic("Error decode message", zap.Error(err))
 		}
 		if needCommit {
+			// TODO: retry commit
 			if err := client.CommitMessages(ctx, msg); err != nil {
 				log.Error("Error commit message", zap.Error(err))
 			}
