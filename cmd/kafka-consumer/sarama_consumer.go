@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -81,7 +82,7 @@ func saramaGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error)
 }
 
 type saramaConsumer struct {
-	ready  chan bool
+	mu     sync.Mutex
 	option *consumerOption
 	config *sarama.Config
 	writer *writer
@@ -109,15 +110,12 @@ func NewSaramaConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	}
 	c.writer = w
 	c.option = o
-	c.ready = make(chan bool)
 	c.config = config
 	return c
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
 func (c *saramaConsumer) Setup(sarama.ConsumerGroupSession) error {
-	// Mark the c as ready
-	close(c.ready)
 	return nil
 }
 
@@ -134,6 +132,8 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
 	ctx := context.Background()
 	for msg := range claim.Messages() {
+		// sync decode and write
+		c.mu.Lock()
 		needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
 		if err != nil {
 			log.Error("Error decode message", zap.Error(err))
@@ -142,6 +142,7 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 			session.MarkMessage(msg, "")
 			session.Commit()
 		}
+		c.mu.Unlock()
 	}
 	return nil
 }
@@ -173,6 +174,5 @@ func (c *saramaConsumer) Consume(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		c.ready = make(chan bool)
 	}
 }
