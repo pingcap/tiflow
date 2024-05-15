@@ -29,8 +29,6 @@ type (
 const (
 	unassigned    = cacheID(-2)
 	assignedToAny = cacheID(-1)
-
-	invalidNodeID = int64(-1)
 )
 
 var (
@@ -60,8 +58,8 @@ type Node struct {
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependencies    int32
-	resolvedDependencies int32
 	removedDependencies  int32
+	resolvedDependencies int32
 	resolvedList         []int64
 
 	// Following fields are protected by `mu`.
@@ -84,52 +82,14 @@ type Node struct {
 	dependers *btree.BTreeG[*Node]
 }
 
-// NewNode creates a new node.
-func NewNode(sortedDedupKeysHash []uint64) (ret *Node) {
-	defer func() {
-		ret.id = genNextNodeID()
-		ret.sortedDedupKeysHash = sortedDedupKeysHash
-		ret.TrySendToTxnCache = nil
-		ret.RandCacheID = nil
-		ret.totalDependencies = 0
-		ret.resolvedDependencies = 0
-		ret.removedDependencies = 0
-		ret.resolvedList = nil
-		ret.assignedTo = unassigned
-		ret.removed = false
-	}()
-
-	ret = new(Node)
-	return
-}
-
-// NodeID implements interface internal.SlotNode.
-func (n *Node) NodeID() int64 {
+func (n *Node) nodeID() int64 {
 	return n.id
 }
 
-// Hashes implements interface internal.SlotNode.
-func (n *Node) Hashes() []uint64 {
-	return n.sortedDedupKeysHash
-}
-
-// DependOn implements interface internal.SlotNode.
-func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
+func (n *Node) dependOn(dependencyNodes map[int64]*Node) {
 	resolvedDependencies := int32(0)
 
 	depend := func(target *Node) {
-		if target == nil {
-			// For a given Node, every dependency corresponds to a target.
-			// If target is nil it means the dependency doesn't conflict
-			// with any other nodes. However it's still necessary to track
-			// it because Node.tryResolve needs to counting the number of
-			// resolved dependencies.
-			resolvedDependencies = atomic.AddInt32(&n.resolvedDependencies, 1)
-			atomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], assignedToAny)
-			atomic.AddInt32(&n.removedDependencies, 1)
-			return
-		}
-
 		if target.id == n.id {
 			log.Panic("node cannot depend on itself")
 		}
@@ -157,13 +117,8 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 		}
 	}
 
-	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
-	// pending in slots after it's created.
-	// ?: why gen new ID here?
-	n.id = genNextNodeID()
-
 	// `totalDependencies` and `resolvedList` must be initialized before depending on any targets.
-	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
+	n.totalDependencies = int32(len(dependencyNodes))
 	n.resolvedList = make([]int64, 0, n.totalDependencies)
 	for i := 0; i < int(n.totalDependencies); i++ {
 		n.resolvedList = append(n.resolvedList, unassigned)
@@ -172,15 +127,11 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 	for _, node := range dependencyNodes {
 		depend(node)
 	}
-	for i := 0; i < noDependencyKeyCnt; i++ {
-		depend(nil)
-	}
 
 	n.maybeResolve()
 }
 
-// Remove implements interface internal.SlotNode.
-func (n *Node) Remove() {
+func (n *Node) remove() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -195,25 +146,6 @@ func (n *Node) Remove() {
 		n.dependers.Clear(true)
 		n.dependers = nil
 	}
-}
-
-// Free implements interface internal.SlotNode.
-// It must be called if a node is no longer used.
-// We are using sync.Pool to lessen the burden of GC.
-func (n *Node) Free() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.id == invalidNodeID {
-		log.Panic("double free")
-	}
-
-	n.id = invalidNodeID
-	n.TrySendToTxnCache = nil
-
-	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
-	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
-	// again. In the last `assignTo`, it can never know whether the node has been reused
-	// or not.
 }
 
 // tryAssignTo assigns a node to a cache. Returns `true` on success.
@@ -254,7 +186,7 @@ func (n *Node) maybeResolve() {
 			log.Panic("invalid cache ID", zap.Uint64("cacheID", uint64(cacheID)))
 		}
 
-		if cacheID >= 0 {
+		if cacheID != assignedToAny {
 			n.tryAssignTo(cacheID)
 			return
 		}
@@ -289,9 +221,6 @@ func (n *Node) tryResolve() (int64, bool) {
 		hasDiffDep := false
 		for i := 1; i < int(n.totalDependencies); i++ {
 			curr := atomic.LoadInt64(&n.resolvedList[i])
-			// Todo: simplify assign to logic, only resolve dependencies nodes after
-			// corresponding transactions are executed.
-			//
 			// In DependOn, depend(nil) set resolvedList[i] to assignedToAny
 			// for these no dependecy keys.
 			if curr == assignedToAny {

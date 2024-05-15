@@ -34,15 +34,14 @@ type ConflictDetector[Txn txnEvent] struct {
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
-	slots    *internal.Slots[*internal.Node]
+	slots    *internal.Slots
 	numSlots uint64
 
-	// nextWorkerID is used to dispatch transactions round-robin.
-	nextWorkerID atomic.Int64
+	// nextCacheID is used to dispatch transactions round-robin.
+	nextCacheID atomic.Int64
 
 	// Used to run a background goroutine to GC or notify nodes.
 	notifiedNodes *chann.DrainableChann[func()]
-	garbageNodes  *chann.DrainableChann[*internal.Node]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
 }
@@ -53,10 +52,9 @@ func NewConflictDetector[Txn txnEvent](
 ) *ConflictDetector[Txn] {
 	ret := &ConflictDetector[Txn]{
 		resolvedTxnCaches: make([]txnCache[Txn], opt.Count),
-		slots:             internal.NewSlots[*internal.Node](numSlots),
+		slots:             internal.NewSlots(numSlots),
 		numSlots:          numSlots,
 		notifiedNodes:     chann.NewAutoDrainChann[func()](),
-		garbageNodes:      chann.NewAutoDrainChann[*internal.Node](),
 		closeCh:           make(chan struct{}),
 	}
 	for i := 0; i < opt.Count; i++ {
@@ -75,28 +73,24 @@ func NewConflictDetector[Txn txnEvent](
 // Add pushes a transaction to the ConflictDetector.
 //
 // NOTE: if multiple threads access this concurrently,
-// Txn.GenSortedDedupKeysHash must be sorted by the slot index.
+// Txn.ConflictKeys must be sorted by the slot index.
 func (d *ConflictDetector[Txn]) Add(txn Txn) {
-	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
-	node := internal.NewNode(sortedKeysHash)
+	hashes := txn.ConflictKeys()
+	node := d.slots.AllocNode(hashes)
 	txnWithNotifier := TxnWithNotifier[Txn]{
 		TxnEvent: txn,
 		PostTxnExecuted: func() {
 			// After this transaction is executed, we can remove the node from the graph,
 			// and resolve related dependencies for these transacitons which depend on this
 			// executed transaction.
-			node.Remove()
-
-			// Send this node to garbageNodes to GC it from the slots if this node is still
-			// occupied related slots.
-			d.garbageNodes.In() <- node
+			d.slots.Remove(node)
 		},
 	}
 	node.TrySendToTxnCache = func(cacheID int64) bool {
 		// Try sending this txn to related cache as soon as all dependencies are resolved.
 		return d.sendToCache(txnWithNotifier, cacheID)
 	}
-	node.RandCacheID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.resolvedTxnCaches)) }
+	node.RandCacheID = func() int64 { return d.nextCacheID.Add(1) % int64(len(d.resolvedTxnCaches)) }
 	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
 	d.slots.Add(node)
 }
@@ -110,7 +104,6 @@ func (d *ConflictDetector[Txn]) Close() {
 func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.CloseAndDrain()
-		d.garbageNodes.CloseAndDrain()
 	}()
 	for {
 		select {
@@ -119,10 +112,6 @@ func (d *ConflictDetector[Txn]) runBackgroundTasks() {
 		case notifyCallback := <-d.notifiedNodes.Out():
 			if notifyCallback != nil {
 				notifyCallback()
-			}
-		case node := <-d.garbageNodes.Out():
-			if node != nil {
-				d.slots.Free(node)
 			}
 		}
 	}
