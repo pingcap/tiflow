@@ -679,7 +679,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if row.CommitTs < partitionResolvedTs {
-					log.Panic("RowChangedEvent fallback row, ignore it",
+					log.Panic("RowChangedEvent commit-ts less than the resolved ts",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition),
@@ -687,6 +687,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				tableID := row.PhysicalTableID
+				// simple protocol decoder should have set the table id already.
 				if c.option.protocol != config.ProtocolSimple {
 					var partitionID int64
 					if row.TableInfo.IsPartitionTable() {
@@ -713,12 +714,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < partitionResolvedTs {
-					log.Warn("partition resolved ts fallback, skip it",
+					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition))
-					session.MarkMessage(message, "")
-					continue
 				}
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 
