@@ -639,12 +639,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if ddl.CommitTs < partitionResolvedTs {
 					log.Panic("DDL event commit-ts less than the resolved ts",
 						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Uint64("commitTs", ddl.CommitTs),
 						zap.String("DDL", ddl.Query))
 				}
 				atomic.StoreUint64(&sink.resolvedTs, ddl.CommitTs)
 				log.Info("partition resolved ts updated by the DDL event",
+					zap.Int32("partition", partition),
+					zap.Int64("offset", message.Offset),
 					zap.Uint64("oldResolvedTs", partitionResolvedTs),
 					zap.Uint64("resolvedTs", ddl.CommitTs))
 
@@ -670,9 +673,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				if partition != target {
 					log.Panic("RowChangedEvent dispatched to wrong partition",
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
 						zap.Int32("obtained", partition),
 						zap.Int32("expected", target),
-						zap.Int32("partitionNum", c.option.partitionNum),
 						zap.Any("row", row),
 					)
 				}
@@ -680,9 +684,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if row.CommitTs < partitionResolvedTs {
 					log.Panic("RowChangedEvent commit-ts less than the resolved ts",
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Int32("partition", partition),
 						zap.Any("row", row))
 				}
 
@@ -715,9 +720,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < partitionResolvedTs {
 					log.Panic("partition resolved ts fallback",
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
 						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Int32("partition", partition))
+						zap.Uint64("partitionResolvedTs", partitionResolvedTs))
 				}
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 
