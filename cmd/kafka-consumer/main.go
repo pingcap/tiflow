@@ -50,7 +50,7 @@ func main() {
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
-	flag.StringVar(&consumerClient, "client", "confluent", "Kafka client")
+	flag.StringVar(&consumerClient, "client", "kafka-go", "Kafka client")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")

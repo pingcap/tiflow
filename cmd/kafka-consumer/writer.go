@@ -308,8 +308,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 		return false, cerror.Trace(err)
 	}
 	counter := 0
-	DDLEventNum := 0
-	ResolvedTsNum := 0
 	var messageType model.MessageType
 	for {
 		tp, hasNext, err := decoder.HasNext()
@@ -365,7 +363,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl)
-				DDLEventNum++
 			}
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -458,7 +455,6 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
-			ResolvedTsNum++
 		}
 	}
 

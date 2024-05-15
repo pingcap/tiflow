@@ -27,7 +27,6 @@ import (
 
 func newConfig(o *consumerOption) (*sarama.Config, error) {
 	config := sarama.NewConfig()
-
 	version, err := sarama.ParseKafkaVersion(o.version)
 	if err != nil {
 		return nil, cerror.Trace(err)
@@ -40,6 +39,7 @@ func newConfig(o *consumerOption) (*sarama.Config, error) {
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Offsets.AutoCommit.Enable = false
 
 	if len(o.ca) != 0 {
 		config.Net.TLS.Enable = true
@@ -57,7 +57,6 @@ func newConfig(o *consumerOption) (*sarama.Config, error) {
 }
 
 func saramaGetPartitionNum(o *consumerOption, cfg *sarama.Config) (int32, error) {
-	// get partition number or create topic automatically
 	admin, err := sarama.NewClusterAdmin(o.address, cfg)
 	if err != nil {
 		return 0, cerror.Trace(err)
@@ -112,8 +111,6 @@ func NewSaramaConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	c.option = o
 	c.ready = make(chan bool)
 	c.config = config
-	// async write to downstream
-	// go c.AsyncWrite(ctx)
 	return c
 }
 
@@ -143,6 +140,7 @@ func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		}
 		if needCommit {
 			session.MarkMessage(msg, "")
+			session.Commit()
 		}
 	}
 	return nil
@@ -154,7 +152,10 @@ func (c *saramaConsumer) Consume(ctx context.Context) error {
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
-
+	topics := strings.Split(c.option.topic, ",")
+	if len(topics) == 0 {
+		log.Panic("Error no topics provided")
+	}
 	defer func() {
 		if err = client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
@@ -165,7 +166,7 @@ func (c *saramaConsumer) Consume(ctx context.Context) error {
 		// `consume` should be called inside an infinite loop, when a
 		// server-side rebalance happens, the consumer session will need to be
 		// recreated to get the new claims
-		if err := client.Consume(ctx, strings.Split(c.option.topic, ","), c); err != nil {
+		if err := client.Consume(ctx, topics, c); err != nil {
 			log.Error("Error from consumer", zap.Error(err))
 		}
 		// check if context was cancelled, signaling that the consumer should stop

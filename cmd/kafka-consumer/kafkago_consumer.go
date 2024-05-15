@@ -17,8 +17,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"os"
+	"strings"
 	"time"
 
 	cerror "github.com/pingcap/errors"
@@ -90,7 +90,6 @@ func kafkaGoGetPartitionNum(o *consumerOption) (int32, error) {
 
 type kafkaGoConsumer struct {
 	option *consumerOption
-	config kafka.ConsumerGroupConfig
 	writer *writer
 }
 
@@ -112,83 +111,44 @@ func NewKafkaGoConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
 	}
 	c.writer = w
 	c.option = o
-	dialer, err := newDialer(c.option)
-	if err != nil {
-		log.Panic("Error create dialer")
-	}
-	c.config = kafka.ConsumerGroupConfig{
-		ID:      o.groupID,
-		Brokers: o.address,
-		Topics:  []string{o.topic},
-		Dialer:  dialer,
-	}
 	return c
 }
 
 // Consume will read message from Kafka.
 func (c *kafkaGoConsumer) Consume(ctx context.Context) error {
-	client, err := kafka.NewConsumerGroup(c.config)
-	if err != nil {
-		log.Panic("Error creating consumer group client", zap.Error(err))
+	topics := strings.Split(c.option.topic, ",")
+	if len(topics) == 0 {
+		log.Panic("Error no topics provided")
 	}
+	dialer, err := newDialer(c.option)
+	if err != nil {
+		log.Panic("Error create dialer")
+	}
+	client := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     c.option.address,
+		GroupID:     c.option.groupID,
+		GroupTopics: topics,
+		Dialer:      dialer,
+	})
+	defer client.Close()
 	defer func() {
 		if err = client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
 		}
 	}()
+
 	for {
-		gen, err := client.Next(ctx)
+		msg, err := client.FetchMessage(ctx)
 		if err != nil {
-			if err.(kafka.Error) == kafka.GroupCoordinatorNotAvailable {
-				log.Warn("wait group coordinator available", zap.Error(err))
-				continue
-			}
-			log.Error("Error from kafka", zap.Error(err))
+			log.Error("Error fetch message", zap.Error(err))
 		}
-		for topic, assignments := range gen.Assignments {
-			for _, assignment := range assignments {
-				partition, offset := assignment.ID, assignment.Offset
-				log.Info("start consume message",
-					zap.String("topic", topic), zap.Int("partition", partition),
-					zap.Int64("initialOffset", offset))
-				gen.Start(func(ctx context.Context) {
-					reader := kafka.NewReader(kafka.ReaderConfig{
-						Brokers:   c.option.address,
-						Topic:     topic,
-						Partition: partition,
-					})
-					defer reader.Close()
-
-					// seek to the last committed offset for this partition.
-					if err := reader.SetOffset(offset); err != nil {
-						log.Panic("Error set offset", zap.Error(err))
-					}
-
-					for {
-						msg, err := reader.ReadMessage(ctx)
-						if err != nil {
-							if errors.Is(err, kafka.ErrGenerationEnded) {
-								// generation has ended.  commit offsets.
-								// in a real app, offsets would be committed periodically.
-								if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
-									log.Panic("Error commit offsets", zap.Error(err))
-								}
-								return
-							}
-							log.Panic("Error reading message", zap.Error(err))
-						}
-						needCommit, err := c.writer.Decode(ctx, c.option, int32(partition), msg.Key, msg.Value)
-						if err != nil {
-							log.Panic("Error decode message", zap.Error(err))
-						}
-						offset = msg.Offset
-						if needCommit {
-							if err = gen.CommitOffsets(map[string]map[int]int64{topic: {partition: offset + 1}}); err != nil {
-								log.Panic("Error commit offsets", zap.Error(err))
-							}
-						}
-					}
-				})
+		needCommit, err := c.writer.Decode(ctx, c.option, int32(msg.Partition), msg.Key, msg.Value)
+		if err != nil {
+			log.Panic("Error decode message", zap.Error(err))
+		}
+		if needCommit {
+			if err := client.CommitMessages(ctx, msg); err != nil {
+				log.Panic("Error commit message", zap.Error(err))
 			}
 		}
 	}
