@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
