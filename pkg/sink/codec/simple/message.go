@@ -427,8 +427,9 @@ func buildRowChangedEvent(
 			Version:   msg.Checksum.Version,
 		}
 
-		if msg.Checksum.Corrupted || previousCorrupted {
-			log.Warn("consumer detect previous checksum corrupted",
+		corrupted := msg.Checksum.Corrupted || previousCorrupted || currentCorrupted
+		if corrupted {
+			log.Warn("consumer detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
 			for idx, col := range result.PreColumns {
@@ -441,6 +442,7 @@ func buildRowChangedEvent(
 					zap.Any("value", col.Value),
 					zap.Any("default", colInfo.GetDefaultValue()))
 			}
+<<<<<<< HEAD
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 		}
 
@@ -450,6 +452,10 @@ func buildRowChangedEvent(
 				zap.String("table", msg.Table))
 			for idx, col := range result.Columns {
 				colInfo := tableInfo.Columns[idx]
+=======
+			for _, col := range result.Columns {
+				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+>>>>>>> 7531086b08 (codec(ticdc): simple protocol introduce mock marshaller to improve ut coverage (#11098))
 				log.Info("data corrupted, print each column for debugging",
 					zap.String("name", colInfo.Name.O),
 					zap.Any("type", colInfo.GetType()),

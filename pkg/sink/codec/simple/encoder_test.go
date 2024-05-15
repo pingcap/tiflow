@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang/mock/gomock"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	mock_simple "github.com/pingcap/tiflow/pkg/sink/codec/simple/mock"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +86,7 @@ func TestEncodeCheckpoint(t *testing.T) {
 func TestEncodeDMLEnableChecksum(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	createTableDDL, insertEvent, _, _ := utils.NewLargeEvent4Test(t, replicaConfig)
+	createTableDDL, _, updateEvent, _ := utils.NewLargeEvent4Test(t, replicaConfig)
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDL.TableInfo.Columns), func(i, j int) {
 		createTableDDL.TableInfo.Columns[i],
 			createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j],
@@ -127,7 +129,7 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 			_, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 
-			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+			err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
 			require.NoError(t, err)
 
 			messages := enc.Build()
@@ -143,11 +145,53 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 
 			decodedRow, err := dec.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
-			require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
+			require.Equal(t, updateEvent.Checksum.Current, decodedRow.Checksum.Current)
+			require.Equal(t, updateEvent.Checksum.Previous, decodedRow.Checksum.Previous)
 			require.False(t, decodedRow.Checksum.Corrupted)
 		}
 	}
+
+	// tamper the checksum, to test error case
+	updateEvent.Checksum.Current = 1
+	updateEvent.Checksum.Previous = 2
+
+	b, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := b.Build()
+
+	dec, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+	m, err := enc.EncodeDDLEvent(createTableDDL)
+	require.NoError(t, err)
+
+	err = dec.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+
+	_, err = dec.NextDDLEvent()
+	require.NoError(t, err)
+
+	err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
+	require.NoError(t, err)
+
+	messages := enc.Build()
+	require.Len(t, messages, 1)
+
+	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decodedRow, err := dec.NextRowChangedEvent()
+	require.Error(t, err)
+	require.Nil(t, decodedRow)
 }
 
 func TestEncodeDDLSequence(t *testing.T) {
@@ -1525,3 +1569,73 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 		}
 	}
 }
+<<<<<<< HEAD
+=======
+
+func TestDecoder(t *testing.T) {
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	decoder, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+	require.NotNil(t, decoder)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.False(t, hasNext)
+	require.Equal(t, model.MessageTypeUnknown, messageType)
+
+	ddl, err := decoder.NextDDLEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, ddl)
+
+	decoder.msg = new(message)
+	checkpoint, err := decoder.NextResolvedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Equal(t, uint64(0), checkpoint)
+
+	event, err := decoder.NextRowChangedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, event)
+
+	decoder.value = []byte("invalid")
+	err = decoder.AddKeyValue(nil, nil)
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+}
+
+func TestMarshallerError(t *testing.T) {
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+
+	b, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := b.Build()
+
+	mockMarshaller := mock_simple.NewMockmarshaller(gomock.NewController(t))
+	enc.(*encoder).marshaller = mockMarshaller
+
+	mockMarshaller.EXPECT().MarshalCheckpoint(gomock.Any()).Return(nil, errors.ErrEncodeFailed)
+	_, err = enc.EncodeCheckpointEvent(123)
+	require.ErrorIs(t, err, errors.ErrEncodeFailed)
+
+	mockMarshaller.EXPECT().MarshalDDLEvent(gomock.Any()).Return(nil, errors.ErrEncodeFailed)
+	_, err = enc.EncodeDDLEvent(&model.DDLEvent{})
+	require.ErrorIs(t, err, errors.ErrEncodeFailed)
+
+	mockMarshaller.EXPECT().MarshalRowChangedEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.ErrEncodeFailed)
+	err = enc.AppendRowChangedEvent(ctx, "", &model.RowChangedEvent{}, func() {})
+	require.ErrorIs(t, err, errors.ErrEncodeFailed)
+
+	dec, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+	dec.marshaller = mockMarshaller
+
+	mockMarshaller.EXPECT().Unmarshal(gomock.Any(), gomock.Any()).Return(errors.ErrDecodeFailed)
+	err = dec.AddKeyValue([]byte("key"), []byte("value"))
+	require.NoError(t, err)
+
+	messageType, hasNext, err := dec.HasNext()
+	require.ErrorIs(t, err, errors.ErrDecodeFailed)
+	require.False(t, hasNext)
+	require.Equal(t, model.MessageTypeUnknown, messageType)
+}
+>>>>>>> 7531086b08 (codec(ticdc): simple protocol introduce mock marshaller to improve ut coverage (#11098))
