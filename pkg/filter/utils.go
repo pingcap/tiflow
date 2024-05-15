@@ -16,11 +16,7 @@ package filter
 import (
 	"fmt"
 
-<<<<<<< HEAD
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/pkg/parser"
-=======
->>>>>>> c1ee219906 (*: move binlog-filter package to tiflow (#11094))
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"

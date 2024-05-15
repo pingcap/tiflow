@@ -14,12 +14,8 @@
 package config
 
 import (
-<<<<<<< HEAD
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
-=======
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
->>>>>>> c1ee219906 (*: move binlog-filter package to tiflow (#11094))
 )
 
 // FilterConfig represents filter config for a changefeed

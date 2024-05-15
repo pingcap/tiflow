@@ -18,11 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
-=======
->>>>>>> c1ee219906 (*: move binlog-filter package to tiflow (#11094))
 	"github.com/pingcap/tiflow/cdc/model"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
