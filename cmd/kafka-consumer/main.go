@@ -426,9 +426,6 @@ type Consumer struct {
 	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
 
-	// initialize to 0 by default
-	globalResolvedTs uint64
-
 	eventRouter *dispatcher.EventRouter
 
 	option *consumerOption
@@ -638,12 +635,23 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
+				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if ddl.CommitTs <= partitionResolvedTs {
+					log.Panic("DDL event commit-ts less than the resolved ts",
+						zap.Int32("partition", partition),
+						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+						zap.Uint64("commitTs", ddl.CommitTs),
+						zap.String("DDL", ddl.Query))
+				}
+				atomic.StoreUint64(&sink.resolvedTs, ddl.CommitTs)
+				log.Info("partition resolved ts updated by the DDL event",
+					zap.Uint64("oldResolvedTs", partitionResolvedTs),
+					zap.Uint64("resolvedTs", ddl.CommitTs))
+
 				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 				if partition == 0 && ddl.Query != "" {
 					c.appendDDL(ddl)
 				}
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
@@ -653,7 +661,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				// when using simple protocol, the row may be nil, since it's table info not received yet,
 				// it's cached in the decoder, so just continue here.
-				if row == nil {
+				if c.option.protocol == config.ProtocolSimple && row == nil {
 					continue
 				}
 				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
@@ -669,18 +677,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					)
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
-					log.Warn("RowChangedEvent fallback row, ignore it",
+				if row.CommitTs <= partitionResolvedTs {
+					log.Panic("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
-					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-					session.MarkMessage(message, "")
-					continue
 				}
 
 				tableID := row.PhysicalTableID
@@ -700,8 +703,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				group.Append(row)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -710,17 +711,16 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < globalResolvedTs || ts < partitionResolvedTs {
+				if ts < partitionResolvedTs {
 					log.Warn("partition resolved ts fallback, skip it",
 						zap.Uint64("ts", ts),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
 				}
+				atomic.StoreUint64(&sink.resolvedTs, ts)
 
 				for tableID, group := range eventGroups {
 					events := group.Resolve(ts)
@@ -742,12 +742,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				atomic.StoreUint64(&sink.resolvedTs, ts)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
-
 			}
-
+			session.MarkMessage(message, "")
 		}
 
 		if counter > c.option.maxBatchSize {
@@ -834,6 +830,8 @@ func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 func (c *Consumer) Run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
+
+	var globalResolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -850,14 +848,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
-			if err := c.forEachSink(func(sink *partitionSinks) error {
+			if err = c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
 
 			// DDL can be executed, do it first.
-			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+			if err = c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
@@ -870,19 +868,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
 
-		// update global resolved ts
-		if c.globalResolvedTs > minPartitionResolvedTs {
+		if globalResolvedTs > minPartitionResolvedTs {
 			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+				zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
 		}
 
-		if c.globalResolvedTs < minPartitionResolvedTs {
-			c.globalResolvedTs = minPartitionResolvedTs
+		if globalResolvedTs < minPartitionResolvedTs {
+			globalResolvedTs = minPartitionResolvedTs
 		}
 
-		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+		if err = c.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
