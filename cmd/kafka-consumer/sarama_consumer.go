@@ -121,34 +121,50 @@ func (c *saramaConsumer) Setup(sarama.ConsumerGroupSession) error {
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
 func (c *saramaConsumer) Cleanup(sarama.ConsumerGroupSession) error {
+
 	return nil
 }
 
-// ConsumeClaim will async read message from Kafka
+// ConsumeClaim will asynchronously read message from Kafka
 func (c *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	partition := claim.Partition()
 	log.Info("start consume claim",
 		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
 		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
 	ctx := context.Background()
-	for msg := range claim.Messages() {
-		// sync decode and write
-		c.mu.Lock()
-		needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
-		if err != nil {
-			log.Error("Error decode message", zap.Error(err))
-		}
-		if needCommit {
-			// TODO: retry commit
-			session.MarkMessage(msg, "")
-			session.Commit()
-			if err := session.Context().Err(); err != nil {
-				log.Error("Error commit message", zap.Error(err))
+	for {
+		select {
+		case msg, ok := <-claim.Messages():
+			if !ok {
+				log.Error("Error fetch message")
+				return nil
 			}
+			c.consume(ctx, session, partition, msg)
+		// Should return when `session.Context()` is done.
+		// If not, will raise `ErrRebalanceInProgress` or `read tcp <ip>:<port>: i/o timeout` when kafka rebalance. see:
+		// https://github.com/IBM/sarama/issues/1192
+		case <-session.Context().Done():
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		c.mu.Unlock()
 	}
-	return nil
+}
+
+// consume will synchronously decode and write
+func (c *saramaConsumer) consume(ctx context.Context, session sarama.ConsumerGroupSession,
+	partition int32, msg *sarama.ConsumerMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
+	if err != nil {
+		log.Error("Error decode message", zap.Error(err))
+	}
+	if needCommit {
+		// TODO: retry commit
+		session.MarkMessage(msg, "")
+		session.Commit()
+	}
 }
 
 // Consume will read message from Kafka.

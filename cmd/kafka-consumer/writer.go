@@ -226,7 +226,7 @@ func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 	return result, err
 }
 
-// Write will write data downstream synchronously.
+// Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
 	minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
 	if err != nil {
@@ -299,6 +299,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 	}
 	counter := 0
 	var messageType model.MessageType
+	needFlush := false
 	for {
 		tp, hasNext, err := decoder.HasNext()
 		if err != nil {
@@ -353,6 +354,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl)
+				needFlush = true
 			}
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -445,6 +447,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
+			needFlush = true
 		}
 	}
 
@@ -453,7 +456,7 @@ func (w *writer) Decode(ctx context.Context, option *consumerOption, partition i
 			zap.Int("actual-batch-size", counter))
 	}
 	// flush when received DDL event or resolvedTs
-	if messageType != model.MessageTypeRow {
+	if needFlush {
 		return w.Write(ctx, messageType)
 	}
 	return false, nil
