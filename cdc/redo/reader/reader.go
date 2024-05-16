@@ -392,14 +392,9 @@ func (h logHeap) Less(i, j int) bool {
 			if h[i].data.RedoRow.Row.ToRowChangedEvent().IsDelete() {
 				return true
 			} else if h[i].data.RedoRow.Row.ToRowChangedEvent().IsUpdate() {
-				if h[j].data.RedoRow.Row.ToRowChangedEvent().IsDelete() {
-					return false
-				} else {
-					return true
-				}
-			} else {
-				return false
+				return !h[j].data.RedoRow.Row.ToRowChangedEvent().IsDelete()
 			}
+			return false
 		}
 	}
 
