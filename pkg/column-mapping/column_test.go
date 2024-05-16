@@ -17,77 +17,70 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func TestClient(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testColumnMappingSuit{})
-
-type testColumnMappingSuit struct{}
-
-func (t *testColumnMappingSuit) TestRule(c *C) {
+func TestRule(t *testing.T) {
 	// test invalid rules
 	inValidRule := &Rule{"test*", "abc*", "id", "id", "Error", nil, "xxx"}
-	c.Assert(inValidRule.Valid(), NotNil)
+	require.Error(t, inValidRule.Valid())
 
 	inValidRule.TargetColumn = ""
-	c.Assert(inValidRule.Valid(), NotNil)
+	require.Error(t, inValidRule.Valid())
 
 	inValidRule.Expression = AddPrefix
 	inValidRule.TargetColumn = "id"
-	c.Assert(inValidRule.Valid(), NotNil)
+	require.Error(t, inValidRule.Valid())
 
 	inValidRule.Arguments = []string{"1"}
-	c.Assert(inValidRule.Valid(), IsNil)
+	require.NoError(t, inValidRule.Valid())
 
 	inValidRule.Expression = PartitionID
-	c.Assert(inValidRule.Valid(), NotNil)
+	require.Error(t, inValidRule.Valid())
 
 	inValidRule.Arguments = []string{"1", "test_", "t_"}
-	c.Assert(inValidRule.Valid(), IsNil)
+	require.NoError(t, inValidRule.Valid())
 }
 
-func (t *testColumnMappingSuit) TestHandle(c *C) {
+func TestHandle(t *testing.T) {
 	rules := []*Rule{
 		{"Test*", "xxx*", "", "id", AddPrefix, []string{"instance_id:"}, "xx"},
 	}
 
 	// initial column mapping
 	m, err := NewMapping(false, rules)
-	c.Assert(err, IsNil)
-	c.Assert(m.cache.infos, HasLen, 0)
+	require.NoError(t, err)
+	require.Len(t, m.cache.infos, 0)
 
 	// test add prefix, add suffix is similar
 	vals, poss, err := m.HandleRowValue("test", "xxx", []string{"age", "id"}, []interface{}{1, "1"})
-	c.Assert(err, IsNil)
-	c.Assert(vals, DeepEquals, []interface{}{1, "instance_id:1"})
-	c.Assert(poss, DeepEquals, []int{-1, 1})
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{1, "instance_id:1"}, vals)
+	require.Equal(t, []int{-1, 1}, poss)
 
 	// test cache
 	vals, poss, err = m.HandleRowValue("test", "xxx", []string{"name"}, []interface{}{1, "1"})
-	c.Assert(err, IsNil)
-	c.Assert(vals, DeepEquals, []interface{}{1, "instance_id:1"})
-	c.Assert(poss, DeepEquals, []int{-1, 1})
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{1, "instance_id:1"}, vals)
+	require.Equal(t, []int{-1, 1}, poss)
 
 	// test resetCache
 	m.resetCache()
 	_, _, err = m.HandleRowValue("test", "xxx", []string{"name"}, []interface{}{"1"})
-	c.Assert(err, NotNil)
+
+	require.Error(t, err)
 
 	// test DDL
-	_, poss, err = m.HandleDDL("test", "xxx", []string{"id", "age"}, "create table xxx")
-	c.Assert(err, NotNil)
+	_, _, err = m.HandleDDL("test", "xxx", []string{"id", "age"}, "create table xxx")
+	require.Error(t, err)
 
 	statement, poss, err := m.HandleDDL("abc", "xxx", []string{"id", "age"}, "create table xxx")
-	c.Assert(err, IsNil)
-	c.Assert(statement, Equals, "create table xxx")
-	c.Assert(poss, IsNil)
+	require.NoError(t, err)
+	require.Equal(t, "create table xxx", statement)
+	require.Nil(t, poss)
 }
 
-func (t *testColumnMappingSuit) TestQueryColumnInfo(c *C) {
+func TestQueryColumnInfo(t *testing.T) {
 	SetPartitionRule(4, 7, 8)
 	rules := []*Rule{
 		{"test*", "xxx*", "", "id", PartitionID, []string{"8", "test_", "xxx_"}, "xx"},
@@ -95,115 +88,115 @@ func (t *testColumnMappingSuit) TestQueryColumnInfo(c *C) {
 
 	// initial column mapping
 	m, err := NewMapping(false, rules)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// test mismatch
 	info, err := m.queryColumnInfo("test_2", "t_1", []string{"id", "name"})
-	c.Assert(err, IsNil)
-	c.Assert(info.ignore, IsTrue)
+	require.NoError(t, err)
+	require.True(t, info.ignore)
 
 	// test matched
 	info, err = m.queryColumnInfo("test_2", "xxx_1", []string{"id", "name"})
-	c.Assert(err, IsNil)
-	c.Assert(info, DeepEquals, &mappingInfo{
+	require.NoError(t, err)
+	require.Equal(t, &mappingInfo{
 		sourcePosition: -1,
 		targetPosition: 0,
 		rule:           rules[0],
 		instanceID:     int64(8 << 59),
 		schemaID:       int64(2 << 52),
 		tableID:        int64(1 << 44),
-	})
+	}, info)
 
 	m.resetCache()
 	SetPartitionRule(0, 0, 3)
 	info, err = m.queryColumnInfo("test_2", "xxx_1", []string{"id", "name"})
-	c.Assert(info, DeepEquals, &mappingInfo{
+	require.Equal(t, &mappingInfo{
 		sourcePosition: -1,
 		targetPosition: 0,
 		rule:           rules[0],
 		instanceID:     int64(0),
 		schemaID:       int64(0),
 		tableID:        int64(1 << 60),
-	})
+	}, info)
 }
 
-func (t *testColumnMappingSuit) TestSetPartitionRule(c *C) {
+func TestSetPartitionRule(t *testing.T) {
 	SetPartitionRule(4, 7, 8)
-	c.Assert(instanceIDBitSize, Equals, 4)
-	c.Assert(schemaIDBitSize, Equals, 7)
-	c.Assert(tableIDBitSize, Equals, 8)
-	c.Assert(maxOriginID, Equals, int64(1<<44))
+	require.Equal(t, 4, instanceIDBitSize)
+	require.Equal(t, 7, schemaIDBitSize)
+	require.Equal(t, 8, tableIDBitSize)
+	require.Equal(t, int64(1<<44), maxOriginID)
 
 	SetPartitionRule(0, 3, 4)
-	c.Assert(instanceIDBitSize, Equals, 0)
-	c.Assert(schemaIDBitSize, Equals, 3)
-	c.Assert(tableIDBitSize, Equals, 4)
-	c.Assert(maxOriginID, Equals, int64(1<<56))
+	require.Equal(t, 0, instanceIDBitSize)
+	require.Equal(t, 3, schemaIDBitSize)
+	require.Equal(t, 4, tableIDBitSize)
+	require.Equal(t, int64(1<<56), maxOriginID)
 }
 
-func (t *testColumnMappingSuit) TestComputePartitionID(c *C) {
+func TestComputePartitionID(t *testing.T) {
 	SetPartitionRule(4, 7, 8)
 
 	rule := &Rule{
 		Arguments: []string{"test", "t"},
 	}
 	_, _, _, err := computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 	_, _, _, err = computePartitionID("test", "t", rule)
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	rule = &Rule{
 		Arguments: []string{"2", "test", "t", "_"},
 	}
 	instanceID, schemaID, tableID, err := computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(1<<52))
-	c.Assert(tableID, Equals, int64(1<<44))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(1<<52), schemaID)
+	require.Equal(t, int64(1<<44), tableID)
 
 	// test default partition ID to zero
 	instanceID, schemaID, tableID, err = computePartitionID("test", "t_3", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(0))
-	c.Assert(tableID, Equals, int64(3<<44))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(0), schemaID)
+	require.Equal(t, int64(3<<44), tableID)
 
 	instanceID, schemaID, tableID, err = computePartitionID("test_5", "t", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(5<<52))
-	c.Assert(tableID, Equals, int64(0))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(5<<52), schemaID)
+	require.Equal(t, int64(0), tableID)
 
 	_, _, _, err = computePartitionID("unrelated", "t_6", rule)
-	c.Assert(err, ErrorMatches, "test_ is not the prefix of unrelated.*")
+	require.ErrorContains(t, err, "test_ is not the prefix of unrelated")
 
 	_, _, _, err = computePartitionID("test", "x", rule)
-	c.Assert(err, ErrorMatches, "t_ is not the prefix of x.*")
+	require.ErrorContains(t, err, "t_ is not the prefix of x")
 
 	_, _, _, err = computePartitionID("test_0", "t_0xa", rule)
-	c.Assert(err, ErrorMatches, "the suffix of 0xa can't be converted to int64.*")
+	require.ErrorContains(t, err, "the suffix of 0xa can't be converted to int64")
 
 	_, _, _, err = computePartitionID("test_0", "t_", rule)
-	c.Assert(err, ErrorMatches, "t_ is not the prefix of t_.*") // needs a better error message
+	require.ErrorContains(t, err, "t_ is not the prefix of t_") // needs a better error message
 
 	_, _, _, err = computePartitionID("testx", "t_3", rule)
-	c.Assert(err, ErrorMatches, "test_ is not the prefix of testx.*")
+	require.ErrorContains(t, err, "test_ is not the prefix of testx")
 
 	SetPartitionRule(4, 0, 8)
 	rule = &Rule{
 		Arguments: []string{"2", "test_", "t_", ""},
 	}
 	instanceID, schemaID, tableID, err = computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(0))
-	c.Assert(tableID, Equals, int64(1<<51))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(0), schemaID)
+	require.Equal(t, int64(1<<51), tableID)
 
 	instanceID, schemaID, tableID, err = computePartitionID("test_", "t_", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(0))
-	c.Assert(tableID, Equals, int64(0))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(0), schemaID)
+	require.Equal(t, int64(0), tableID)
 
 	// test ignore instance ID
 	SetPartitionRule(4, 7, 8)
@@ -211,33 +204,33 @@ func (t *testColumnMappingSuit) TestComputePartitionID(c *C) {
 		Arguments: []string{"", "test_", "t_", ""},
 	}
 	instanceID, schemaID, tableID, err = computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(0))
-	c.Assert(schemaID, Equals, int64(1<<56))
-	c.Assert(tableID, Equals, int64(1<<48))
+	require.NoError(t, err)
+	require.Equal(t, int64(0), instanceID)
+	require.Equal(t, int64(1<<56), schemaID)
+	require.Equal(t, int64(1<<48), tableID)
 
 	// test ignore schema ID
 	rule = &Rule{
 		Arguments: []string{"2", "", "t_", ""},
 	}
 	instanceID, schemaID, tableID, err = computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(0))
-	c.Assert(tableID, Equals, int64(1<<51))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(0), schemaID)
+	require.Equal(t, int64(1<<51), tableID)
 
 	// test ignore schema ID
 	rule = &Rule{
 		Arguments: []string{"2", "test_", "", ""},
 	}
 	instanceID, schemaID, tableID, err = computePartitionID("test_1", "t_1", rule)
-	c.Assert(err, IsNil)
-	c.Assert(instanceID, Equals, int64(2<<59))
-	c.Assert(schemaID, Equals, int64(1<<52))
-	c.Assert(tableID, Equals, int64(0))
+	require.NoError(t, err)
+	require.Equal(t, int64(2<<59), instanceID)
+	require.Equal(t, int64(1<<52), schemaID)
+	require.Equal(t, int64(0), tableID)
 }
 
-func (t *testColumnMappingSuit) TestPartitionID(c *C) {
+func TestPartitionID(t *testing.T) {
 	SetPartitionRule(4, 7, 8)
 	info := &mappingInfo{
 		instanceID:     int64(2 << 59),
@@ -248,23 +241,23 @@ func (t *testColumnMappingSuit) TestPartitionID(c *C) {
 
 	// test wrong type
 	_, err := partitionID(info, []interface{}{1, "ha"})
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	// test exceed maxOriginID
 	_, err = partitionID(info, []interface{}{"ha", 1 << 44})
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	vals, err := partitionID(info, []interface{}{"ha", 1})
-	c.Assert(err, IsNil)
-	c.Assert(vals, DeepEquals, []interface{}{"ha", int64(2<<59 | 1<<52 | 1<<44 | 1)})
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{"ha", int64(2<<59 | 1<<52 | 1<<44 | 1)}, vals)
 
 	info.instanceID = 0
 	vals, err = partitionID(info, []interface{}{"ha", "123"})
-	c.Assert(err, IsNil)
-	c.Assert(vals, DeepEquals, []interface{}{"ha", fmt.Sprintf("%d", int64(1<<52|1<<44|123))})
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{"ha", fmt.Sprintf("%d", int64(1<<52|1<<44|123))}, vals)
 }
 
-func (t *testColumnMappingSuit) TestCaseSensitive(c *C) {
+func TestCaseSensitive(t *testing.T) {
 	// we test case insensitive in TestHandle
 	rules := []*Rule{
 		{"Test*", "xxx*", "", "id", AddPrefix, []string{"instance_id:"}, "xx"},
@@ -273,12 +266,12 @@ func (t *testColumnMappingSuit) TestCaseSensitive(c *C) {
 	// case sensitive
 	// initial column mapping
 	m, err := NewMapping(true, rules)
-	c.Assert(err, IsNil)
-	c.Assert(m.cache.infos, HasLen, 0)
+	require.NoError(t, err)
+	require.Len(t, m.cache.infos, 0)
 
 	// test add prefix, add suffix is similar
 	vals, poss, err := m.HandleRowValue("test", "xxx", []string{"age", "id"}, []interface{}{1, "1"})
-	c.Assert(err, IsNil)
-	c.Assert(vals, DeepEquals, []interface{}{1, "1"})
-	c.Assert(poss, IsNil)
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{1, "1"}, vals)
+	require.Nil(t, poss)
 }

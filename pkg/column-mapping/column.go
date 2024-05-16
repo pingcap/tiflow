@@ -254,7 +254,7 @@ func (m *Mapping) HandleRowValue(schema, table string, columns []string, vals []
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	if info.ignore == true {
+	if info.ignore {
 		return vals, nil, nil
 	}
 
@@ -287,7 +287,7 @@ func (m *Mapping) HandleDDL(schema, table string, columns []string, statement st
 		return statement, nil, errors.Trace(err)
 	}
 
-	if info.ignore == true {
+	if info.ignore {
 		return statement, nil, nil
 	}
 
@@ -478,7 +478,7 @@ func partitionID(info *mappingInfo, vals []interface{}) ([]interface{}, error) {
 		return nil, errors.NotValidf("id must less than %d, greater than or equal to 0, but got %d, which is", maxOriginID, originID)
 	}
 
-	originID = int64(info.instanceID | info.schemaID | info.tableID | originID)
+	originID = info.instanceID | info.schemaID | info.tableID | originID
 	if isChars {
 		vals[info.targetPosition] = strconv.FormatInt(originID, 10)
 	} else {
