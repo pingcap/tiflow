@@ -271,7 +271,7 @@ func (c *LightningTableEmptyChecker) Name() string {
 func (c *LightningTableEmptyChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether the downstream table not empty which is not compatiable with physical import mode",
+		Desc:  "check whether the downstream table not empty which is not compatible with physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
