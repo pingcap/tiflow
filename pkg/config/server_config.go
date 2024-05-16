@@ -134,7 +134,7 @@ var defaultServerConfig = &ServerConfig{
 			WriterBufferSize:    8388608,
 			Compression:         "snappy",
 			WriteL0PauseTrigger: math.MaxInt32,
-			CompactionL0Trigger: 16,
+			CompactionL0Trigger: 16, // Based on a performance test on 4K tables.
 		},
 		Messages: defaultMessageConfig.Clone(),
 
