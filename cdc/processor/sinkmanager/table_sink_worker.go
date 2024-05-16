@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -114,7 +115,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
-		task.getUpperBound(task.tableSink.getUpperBoundTs()))
+		task.getUpperBound(task.tableSink.getUpperBoundTs()),
+		encoding.DefaultTsWindow(),
+	)
 	advancer.lastPos = lowerBound.Prev()
 
 	allEventCount := 0
@@ -128,9 +131,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	defer func() {
-		// Prepare some information for stale table range cleaning.
-		task.tableSink.updateRangeEventCounts(newRangeEventCount(advancer.lastPos, allEventCount))
-
 		// Collect metrics.
 		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
@@ -166,7 +166,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}()
 
 	// lowerBound and upperBound are both closed intervals.
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+	iter, iterErr := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+	if iterErr != nil {
+		log.Panic("FetchByTable fails",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Stringer("span", &task.span),
+			zap.Error(iterErr))
+	}
 	defer func() {
 		if err := iter.Close(); err != nil {
 			log.Error("sink worker fails to close iterator",

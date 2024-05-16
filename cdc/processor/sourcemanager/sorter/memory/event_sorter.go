@@ -97,13 +97,13 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements sorter.SortEngine.
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) (sorter.EventIterator, error) {
 	value, exists := s.tables.Load(span)
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
 	}
 
-	return value.(*tableSorter).fetch(span, lowerBound, upperBound)
+	return value.(*tableSorter).fetch(span, lowerBound, upperBound), nil
 }
 
 // FetchAllTables implements sorter.SortEngine.

@@ -51,8 +51,6 @@ const (
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 	// sorter.CleanByTable can be expensive. So it's necessary to reduce useless calls.
-	cleanTableInterval  = 5 * time.Second
-	cleanTableMinEvents = 128
 )
 
 // TableStats of a table sink.
@@ -427,7 +425,7 @@ func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) 
 
 // backgroundGC is used to clean up the old data in the sorter.
 func (m *SinkManager) backgroundGC(errors chan<- error) {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
@@ -440,48 +438,27 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					zap.String("changefeed", m.changefeedID.ID))
 				return
 			case <-ticker.C:
-				tableSinks := spanz.NewHashMap[*tableSinkWrapper]()
+				var minCkpt uint64 = math.MaxUint64
 				m.tableSinks.Range(func(key tablepb.Span, value any) bool {
-					wrapper := value.(*tableSinkWrapper)
-					tableSinks.ReplaceOrInsert(key, wrapper)
+					ckpt := value.(*tableSinkWrapper).getCheckpointTs().ResolvedMark()
+					if minCkpt > ckpt {
+						minCkpt = ckpt
+					}
 					return true
 				})
 
-				tableSinks.Range(func(span tablepb.Span, sink *tableSinkWrapper) bool {
-					if time.Since(sink.lastCleanTime) < cleanTableInterval {
-						return true
+				cleanPos := sorter.GenCommitFence(minCkpt)
+				if err := m.sourceManager.CleanAllTables(cleanPos); err != nil {
+					log.Error("Failed to clean all tables in sort engine",
+						zap.String("namespace", m.changefeedID.Namespace),
+						zap.String("changefeed", m.changefeedID.ID),
+						zap.Any("position", cleanPos),
+						zap.Error(err))
+					select {
+					case errors <- err:
+					case <-m.managerCtx.Done():
 					}
-					checkpointTs := sink.getCheckpointTs()
-					resolvedMark := checkpointTs.ResolvedMark()
-					if resolvedMark == 0 {
-						return true
-					}
-
-					cleanPos := sorter.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
-					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
-						return true
-					}
-
-					if err := m.sourceManager.CleanByTable(span, cleanPos); err != nil {
-						log.Error("Failed to clean table in sort engine",
-							zap.String("namespace", m.changefeedID.Namespace),
-							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &span),
-							zap.Error(err))
-						select {
-						case errors <- err:
-						case <-m.managerCtx.Done():
-						}
-					} else {
-						log.Debug("table stale data has been cleaned",
-							zap.String("namespace", m.changefeedID.Namespace),
-							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &span),
-							zap.Any("upperBound", cleanPos))
-					}
-					sink.lastCleanTime = time.Now()
-					return true
-				})
+				}
 			}
 		}
 	}()

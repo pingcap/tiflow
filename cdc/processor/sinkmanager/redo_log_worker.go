@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -71,12 +72,20 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
+		encoding.DefaultTsWindow(),
 	)
 	advancer.lastPos = lowerBound.Prev()
 
 	allEventCount := 0
 
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
+	iter, iterErr := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
+	if iterErr != nil {
+		log.Panic("FetchByTable fails",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Stringer("span", &task.span),
+			zap.Error(iterErr))
+	}
 	defer func() {
 		if err := iter.Close(); err != nil {
 			log.Error("redo worker fails to close iterator",

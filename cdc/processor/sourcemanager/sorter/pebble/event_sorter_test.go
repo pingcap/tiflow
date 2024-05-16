@@ -72,7 +72,8 @@ func TestNoResolvedTs(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
+		iter, err := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
+		require.Nil(t, err)
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -136,7 +137,8 @@ func TestEventFetch(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
+		iter, err := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
+		require.Nil(t, err)
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)
@@ -177,8 +179,6 @@ func TestCleanData(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span, 0)
-	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), sorter.Position{}))
-	require.Nil(t, s.CleanByTable(span, sorter.Position{}))
+	require.NoError(t, s.CleanAllTables(sorter.Position{}))
+	require.NoError(t, s.CleanAllTables(sorter.Position{StartTs: 3, CommitTs: 4}))
 }

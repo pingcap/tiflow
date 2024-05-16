@@ -84,6 +84,7 @@ func (t *TxnEventAppender) Append(
 		if lastCommitTs > row.CommitTs {
 			log.Panic("The commitTs of the emit row is less than the received row",
 				zap.Uint64("lastReceivedCommitTs", lastCommitTs),
+				zap.Int64("tableID", row.TableInfo.ID),
 				zap.Any("row", row))
 		} else if lastCommitTs == row.CommitTs && lastTxn.StartTs > row.StartTs {
 			log.Panic("The startTs of the emit row is less than the received row with same CommitTs",

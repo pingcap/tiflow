@@ -15,7 +15,6 @@ package sinkmanager
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -79,30 +77,6 @@ type tableSinkWrapper struct {
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
 	genReplicateTs func(ctx context.Context) (model.Ts, error)
-
-	// lastCleanTime indicates the last time the table has been cleaned.
-	lastCleanTime time.Time
-
-	// rangeEventCounts is for clean the table sorter.
-	// If rangeEventCounts[i].events is greater than 0, it means there must be
-	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
-	rangeEventCounts   []rangeEventCount
-	rangeEventCountsMu sync.Mutex
-}
-
-type rangeEventCount struct {
-	// firstPos and lastPos are used to merge many rangeEventCount into one.
-	firstPos sorter.Position
-	lastPos  sorter.Position
-	events   int
-}
-
-func newRangeEventCount(pos sorter.Position, events int) rangeEventCount {
-	return rangeEventCount{
-		firstPos: pos,
-		lastPos:  pos,
-		events:   events,
-	}
 }
 
 func newTableSinkWrapper(
@@ -388,58 +362,6 @@ func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
 		zap.Stringer("span", &t.span),
 		zap.Uint64("replicateTs", t.replicateTs))
 	return nil
-}
-
-func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
-	t.rangeEventCountsMu.Lock()
-	defer t.rangeEventCountsMu.Unlock()
-
-	countsLen := len(t.rangeEventCounts)
-	if countsLen == 0 {
-		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
-		return
-	}
-	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
-		// If two rangeEventCounts are close enough, we can merge them into one record
-		// to save memory usage. When merging B into A, A.lastPos will be updated but
-		// A.firstPos will be kept so that we can determine whether to continue to merge
-		// more events or not based on timeDiff(C.lastPos, A.firstPos).
-		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
-		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
-		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
-			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
-		} else {
-			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
-			t.rangeEventCounts[countsLen-1].events += eventCount.events
-		}
-	}
-}
-
-func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound sorter.Position, minEvents int) bool {
-	t.rangeEventCountsMu.Lock()
-	defer t.rangeEventCountsMu.Unlock()
-
-	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
-		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
-	})
-	if len(t.rangeEventCounts) == 0 || idx == 0 {
-		return false
-	}
-
-	count := 0
-	for _, events := range t.rangeEventCounts[0:idx] {
-		count += events.events
-	}
-	shouldClean := count >= minEvents
-
-	if !shouldClean {
-		// To reduce sorter.CleanByTable calls.
-		t.rangeEventCounts[idx-1].events = count
-		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
-	} else {
-		t.rangeEventCounts = t.rangeEventCounts[idx:]
-	}
-	return shouldClean
 }
 
 func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint64) {

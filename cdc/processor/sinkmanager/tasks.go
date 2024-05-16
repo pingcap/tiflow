@@ -78,10 +78,14 @@ type redoTask struct {
 	isCanceled    isCanceled
 }
 
+// The range of a task is limited by:
+// 1. maxTaskTimeRange, to avoid one table holding a worker too long time;
+// 2. TsWindow, to avoid a task covering more than one TsWindow.
 func validateAndAdjustBound(
 	changefeedID model.ChangeFeedID,
 	span *tablepb.Span,
 	lowerBound, upperBound sorter.Position,
+	useTsWindow ...sorter.TsWindow,
 ) (sorter.Position, sorter.Position) {
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
@@ -90,6 +94,16 @@ func validateAndAdjustBound(
 	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
 		newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
 		upperBound = sorter.GenCommitFence(newUpperCommitTs)
+	}
+
+	if len(useTsWindow) > 0 {
+		// NOTE: if ts window is too small and there are too many tables,
+		// the issue may be triggered again: https://github.com/pingcap/tiflow/issues/10169.
+		tsWindow1 := useTsWindow[0].ExtractTsWindow(lowerBound.CommitTs)
+		tsWindow2 := useTsWindow[0].ExtractTsWindow(upperBound.CommitTs)
+		if tsWindow1 != tsWindow2 {
+			upperBound = sorter.GenCommitFence(useTsWindow[0].MinTsInWindow(tsWindow1+1) - 1)
+		}
 	}
 
 	if !upperBound.IsCommitFence() {
