@@ -652,8 +652,15 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 
 // OperateSchema operates schema for an upstream table.
 func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (schema string, err error) {
-	if st.Stage() != pb.Stage_Paused && req.Op != pb.SchemaOp_ListMigrateTargets {
-		return "", terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
+	switch req.Op {
+	case pb.SchemaOp_ListMigrateTargets:
+		if st.Stage() != pb.Stage_Running && st.Stage() != pb.Stage_Paused {
+			return "", terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
+		}
+	default:
+		if st.Stage() != pb.Stage_Paused {
+			return "", terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
+		}
 	}
 
 	syncUnit, ok := st.currUnit.(*syncer.Syncer)
