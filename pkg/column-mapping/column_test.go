@@ -110,6 +110,7 @@ func TestQueryColumnInfo(t *testing.T) {
 	m.resetCache()
 	SetPartitionRule(0, 0, 3)
 	info, err = m.queryColumnInfo("test_2", "xxx_1", []string{"id", "name"})
+	require.NoError(t, err)
 	require.Equal(t, &mappingInfo{
 		sourcePosition: -1,
 		targetPosition: 0,
