@@ -28,8 +28,11 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
+<<<<<<< HEAD
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
+=======
+>>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -38,6 +41,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+<<<<<<< HEAD
+=======
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/pkg/column-mapping"
+>>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )

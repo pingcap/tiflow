@@ -17,8 +17,11 @@ import (
 	"fmt"
 	"strings"
 
+<<<<<<< HEAD
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
+=======
+>>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -27,6 +30,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+<<<<<<< HEAD
+=======
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/pkg/column-mapping"
+>>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"go.uber.org/zap"
 )
 
