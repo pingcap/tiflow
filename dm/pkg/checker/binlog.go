@@ -301,6 +301,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 	if c.sourceCfg.Security != nil {
 		if loadErr := c.sourceCfg.Security.LoadTLSContent(); loadErr != nil {
 			markCheckError(result, loadErr)
+			result.Instruction = "please check upstream tls config"
 			return result
 		}
 		tlsConfig, err = util.NewTLSConfig(
@@ -311,6 +312,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 		)
 		if err != nil {
 			markCheckError(result, err)
+			result.Instruction = "please check upstream tls config"
 			return result
 		}
 	}
@@ -318,6 +320,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 	flavor, err := conn.GetFlavor(ctx, c.db)
 	if err != nil {
 		markCheckError(result, err)
+		result.Instruction = "please check upstream database config"
 		return result
 	}
 
@@ -354,6 +357,12 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 		gtidSet, err2 := gtid.ParserGTID(flavor, c.meta.BinLogGTID)
 		if err2 != nil {
 			markCheckError(result, err2)
+			result.Instruction = "you should check your BinlogGTID's format, "
+			if flavor == mysql.MariaDBFlavor {
+				result.Instruction += "it should consist of three numbers separated with dashes '-', see https://mariadb.com/kb/en/gtid/"
+			} else {
+				result.Instruction += "it should be any combination of single GTIDs and ranges of GTID, see https://dev.mysql.com/doc/refman/8.0/en/replication-gtids-concepts.html"
+			}
 			return result
 		}
 		streamer, err = syncer.StartSyncGTID(gtidSet)
@@ -362,6 +371,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 	}
 	if err != nil {
 		markCheckError(result, err)
+		result.Instruction = "you should make sure your meta's binlog position is valid and not purged, and the user has REPLICATION SLAVE privilege"
 		return result
 	}
 	// if we don't get a new event after 15s, it means there is no new event in the binlog
@@ -370,6 +380,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 	_, err = streamer.GetEvent(ctx2)
 	if err != nil && errors.Cause(err) != context.DeadlineExceeded {
 		markCheckError(result, err)
+		result.Instruction = "you should make sure your meta's binlog position is valid and not purged, and the user has REPLICATION SLAVE privilege"
 		return result
 	}
 

@@ -31,7 +31,7 @@ func TestCheckingItems(t *testing.T) {
 		}
 	}
 	// remember to update the number when add new checking items.
-	require.Equal(t, 5, lightningCheck)
+	require.Equal(t, 6, lightningCheck)
 	require.Equal(t, 16, normalCheck)
 	// all LightningPrechecks can be found by iterating AllCheckingItems
 	require.Len(t, LightningPrechecks, lightningCheck)

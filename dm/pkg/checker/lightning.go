@@ -251,3 +251,35 @@ func (c *LightningCDCPiTRChecker) Check(ctx context.Context) *Result {
 	)
 	return result
 }
+
+// LightningTableEmptyChecker checks whether the cluster's target table is empty.
+type LightningTableEmptyChecker struct {
+	inner precheck.Checker
+}
+
+// NewLightningEmptyTableChecker creates a new LightningEmptyTableChecker.
+func NewLightningEmptyTableChecker(lightningChecker precheck.Checker) RealChecker {
+	return &LightningTableEmptyChecker{inner: lightningChecker}
+}
+
+// Name implements the RealChecker interface.
+func (c *LightningTableEmptyChecker) Name() string {
+	return "lightning_downstream_empty_table"
+}
+
+// Check implements the RealChecker interface.
+func (c *LightningTableEmptyChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether the downstream table not empty which is not compatible with physical import mode",
+		State: StateFailure,
+	}
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateFailure,
+		`you can switch to logical import mode which has no requirements on this`,
+	)
+	return result
+}
