@@ -18,6 +18,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
@@ -146,6 +147,7 @@ func NewSnapshotFromMeta(
 	forceReplicate bool,
 	filter filter.Filter,
 ) (*Snapshot, error) {
+	start := time.Now()
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
@@ -153,8 +155,6 @@ func NewSnapshotFromMeta(
 	}
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
-	// record all tables to be replicated for logging use
-	tables := make([]*model.TableInfo, 0, 1024)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
@@ -207,8 +207,6 @@ func NewSnapshotFromMeta(
 			ineligible := !tableInfo.IsEligible(forceReplicate)
 			if ineligible {
 				snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
-			} else {
-				tables = append(tables, tableInfo)
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
@@ -223,15 +221,10 @@ func NewSnapshotFromMeta(
 		}
 	}
 	snap.inner.currentTs = currentTs
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%d tables to be replicated: ", len(tables)))
-	for _, table := range tables {
-		sb.WriteString(fmt.Sprintf("%s.%s, ", table.TableName.Schema, table.TableName.Table))
-	}
 	log.Info("schema snapshot created",
 		zap.Stringer("changefeed", id),
 		zap.Uint64("currentTs", currentTs),
-		zap.String("tables", sb.String()))
+		zap.Any("duration", time.Since(start).Seconds()))
 	return snap, nil
 }
 
