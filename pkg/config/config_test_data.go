@@ -135,11 +135,15 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
+<<<<<<< HEAD
       "compaction-l0-trigger": 160,
       "compaction-deletion-threshold": 10485760,
       "compaction-period": 1800,
       "iterator-max-alive-duration": 10000,
       "iterator-slow-read-duration": 256
+=======
+      "compaction-l0-trigger": 16
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
     },
     "enable-new-scheduler": true,
     "messages": {
