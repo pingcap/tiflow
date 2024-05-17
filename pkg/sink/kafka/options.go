@@ -151,6 +151,7 @@ type Options struct {
 	ReplicationFactor int16
 	Version           string
 	IsAssignedVersion bool
+	RequestVersion    int16
 	MaxMessageBytes   int
 	Compression       string
 	ClientID          string
