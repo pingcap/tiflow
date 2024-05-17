@@ -54,6 +54,7 @@ func TestSyncProducer(t *testing.T) {
 
 	o := NewOptions()
 	o.Version = "0.9.0.0"
+	o.IsAssignedVersion = true
 	o.BrokerEndpoints = []string{leader.Addr()}
 	o.ClientID = "sarama-test"
 	// specify request version for mock broker
@@ -85,6 +86,7 @@ func TestAsyncProducer(t *testing.T) {
 
 	o := NewOptions()
 	o.Version = "0.9.0.0"
+	o.IsAssignedVersion = true
 	o.BrokerEndpoints = []string{leader.Addr()}
 	o.ClientID = "sarama-test"
 	// specify request version for mock broker
