@@ -14,6 +14,12 @@
 package spanz
 
 import (
+<<<<<<< HEAD
+=======
+	"encoding/binary"
+
+	"blainsmith.com/go/seahash"
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
@@ -74,3 +80,14 @@ func (m *HashMap[T]) Range(iterator ItemIterator[T]) {
 		}
 	}
 }
+<<<<<<< HEAD
+=======
+
+// HashTableSpan hashes the given span to a slot offset.
+func HashTableSpan(span tablepb.Span, slots int) int {
+	b := make([]byte, 8+len(span.StartKey))
+	binary.LittleEndian.PutUint64(b[0:8], uint64(span.TableID))
+	copy(b[8:], span.StartKey)
+	return int(seahash.Sum64(b) % uint64(slots))
+}
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))

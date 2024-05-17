@@ -113,8 +113,14 @@ func buildPebbleOption(cfg *config.DBConfig) (opts *pebble.Options) {
 	opts.ErrorIfExists = true
 	opts.DisableWAL = false // Delete range requires WAL.
 	opts.MaxOpenFiles = cfg.MaxOpenFiles / cfg.Count
+<<<<<<< HEAD:cdc/processor/sourcemanager/engine/pebble/db.go
 	opts.MaxConcurrentCompactions = 6
 	opts.L0CompactionThreshold = cfg.CompactionL0Trigger
+=======
+	opts.MaxConcurrentCompactions = func() int { return 6 }
+	opts.L0CompactionThreshold = 4 // Default for PebbleDB.
+	opts.L0CompactionFileThreshold = cfg.CompactionL0Trigger
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099)):cdc/processor/sourcemanager/sorter/pebble/db.go
 	opts.L0StopWritesThreshold = cfg.WriteL0PauseTrigger
 	opts.LBaseMaxBytes = 64 << 20 // 64 MB
 	opts.MemTableSize = cfg.WriterBufferSize

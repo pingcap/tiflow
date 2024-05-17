@@ -124,6 +124,7 @@ var defaultServerConfig = &ServerConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
+<<<<<<< HEAD
 			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
@@ -135,6 +136,14 @@ var defaultServerConfig = &ServerConfig{
 			CompactionPeriod:            1800,
 			IteratorMaxAliveDuration:    10000,
 			IteratorSlowReadDuration:    256,
+=======
+			MaxOpenFiles:        10000,
+			BlockSize:           65536,
+			WriterBufferSize:    8388608,
+			Compression:         "snappy",
+			WriteL0PauseTrigger: math.MaxInt32,
+			CompactionL0Trigger: 16, // Based on a performance test on 4K tables.
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
 		},
 		Messages: defaultMessageConfig.Clone(),
 
