@@ -150,6 +150,11 @@ type Options struct {
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 	Version           string
+<<<<<<< HEAD
+=======
+	IsAssignedVersion bool
+	RequestVersion    int16
+>>>>>>> ab6a9f91bf (ticdc: fix detecting kafka version  (#11048))
 	MaxMessageBytes   int
 	Compression       string
 	ClientID          string
