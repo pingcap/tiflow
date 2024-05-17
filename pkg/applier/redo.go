@@ -576,10 +576,10 @@ func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, err
 // when the update event is an update to the handle key or the non empty unique key.
 // deferred insert event means all delete events and update events in the same transaction are emitted before this insert event
 type updateEventSplitter struct {
-	rd              reader.RedoLogReader
-	rdFinished      bool
-	tempStorage     *tempTxnInsertEventStorage
-	prevTxnCommitTs model.Ts
+	rd             reader.RedoLogReader
+	rdFinished     bool
+	tempStorage    *tempTxnInsertEventStorage
+	prevTxnStartTs model.Ts
 	// pendingEvent is the event that trigger the process to emit events from tempStorage, it can be
 	// 1) an insert event in the same transaction(because there will be no more update and delete events in the same transaction)
 	// 2) a new event in the next transaction
@@ -591,17 +591,17 @@ type updateEventSplitter struct {
 
 func newUpdateEventSplitter(rd reader.RedoLogReader, dir string) *updateEventSplitter {
 	return &updateEventSplitter{
-		rd:              rd,
-		rdFinished:      false,
-		tempStorage:     newTempTxnInsertEventStorage(defaultFlushThreshold, dir),
-		prevTxnCommitTs: 0,
+		rd:             rd,
+		rdFinished:     false,
+		tempStorage:    newTempTxnInsertEventStorage(defaultFlushThreshold, dir),
+		prevTxnStartTs: 0,
 	}
 }
 
 // processEvent return (event to emit, pending event)
 func processEvent(
 	event *model.RowChangedEvent,
-	prevTxnCommitTs model.Ts,
+	prevTxnStartTs model.Ts,
 	tempStorage *tempTxnInsertEventStorage,
 ) (*model.RowChangedEvent, *model.RowChangedEvent, error) {
 	if event == nil {
@@ -609,7 +609,7 @@ func processEvent(
 	}
 
 	// meet a new transaction
-	if prevTxnCommitTs != 0 && prevTxnCommitTs != event.CommitTs {
+	if prevTxnStartTs != 0 && prevTxnStartTs != event.StartTs {
 		if tempStorage.hasEvent() {
 			// emit the insert events in the previous transaction
 			return nil, event, nil
@@ -642,7 +642,8 @@ func (u *updateEventSplitter) checkEventOrder(event *model.RowChangedEvent) {
 	if event == nil {
 		return
 	}
-	if event.CommitTs > u.prevTxnCommitTs {
+	// meeet a new transaction
+	if event.StartTs != u.prevTxnStartTs {
 		u.meetInsertInCurTxn = false
 		return
 	}
@@ -665,7 +666,7 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 			}
 			var event *model.RowChangedEvent
 			var err error
-			event, u.pendingEvent, err = processEvent(u.pendingEvent, u.prevTxnCommitTs, u.tempStorage)
+			event, u.pendingEvent, err = processEvent(u.pendingEvent, u.prevTxnStartTs, u.tempStorage)
 			if err != nil {
 				return nil, err
 			}
@@ -692,10 +693,10 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 			u.rdFinished = true
 		} else {
 			u.checkEventOrder(event)
-			prevTxnCommitTS := u.prevTxnCommitTs
-			u.prevTxnCommitTs = event.CommitTs
+			prevTxnStartTs := u.prevTxnStartTs
+			u.prevTxnStartTs = event.StartTs
 			var err error
-			event, u.pendingEvent, err = processEvent(event, prevTxnCommitTS, u.tempStorage)
+			event, u.pendingEvent, err = processEvent(event, prevTxnStartTs, u.tempStorage)
 			if err != nil {
 				return nil, err
 			}
