@@ -82,9 +82,10 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
 	})
+	// mock a differnt possible error for the second query
 	mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
-		Number:  1305,
-		Message: "FUNCTION test.tidb_version does not exist",
+		Number:  1044,
+		Message: "Access denied for user 'cdc'@'%' to database 'information_schema'",
 	})
 	require.Nil(t, err)
 	return
