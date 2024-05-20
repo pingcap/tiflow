@@ -100,7 +100,7 @@ func NewSchemaStorage(
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
 		meta := kv.GetSnapshotMeta(storage, startTs)
-		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
+		snap, err = schema.NewSnapshotFromMeta(id, meta, startTs, forceReplicate, filter)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

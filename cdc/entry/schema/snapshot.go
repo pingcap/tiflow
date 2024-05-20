@@ -124,6 +124,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -135,11 +136,12 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
+	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -153,10 +155,6 @@ func NewSnapshotFromMeta(
 	}
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
-<<<<<<< HEAD
-
-=======
->>>>>>> 61efa5f2b3 (snapshot (ticdc): reduce list tables time consumption (#11095))
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
@@ -223,13 +221,11 @@ func NewSnapshotFromMeta(
 		}
 	}
 	snap.inner.currentTs = currentTs
-<<<<<<< HEAD
-=======
+
 	log.Info("schema snapshot created",
 		zap.Stringer("changefeed", id),
 		zap.Uint64("currentTs", currentTs),
 		zap.Any("duration", time.Since(start).Seconds()))
->>>>>>> 61efa5f2b3 (snapshot (ticdc): reduce list tables time consumption (#11095))
 	return snap, nil
 }
 

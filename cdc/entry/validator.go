@@ -37,7 +37,8 @@ func VerifyTables(
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
-	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */, f)
+	snap, err := schema.NewSingleSnapshotFromMeta(model.
+		ChangeFeedID4Test("api", "verify-table"), meta, startTs, false /* explicitTables */, f)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
