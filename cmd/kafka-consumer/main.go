@@ -211,7 +211,7 @@ func main() {
 	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 	flag.StringVar(&consumerOption.groupID, "consumer-group-id", groupID, "consumer group id")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
-	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&consumerOption.logLevel, "log-level", "debug", "log file path")
 	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
 	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
@@ -426,6 +426,9 @@ type Consumer struct {
 	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
 
+	// initialize to 0 by default
+	globalResolvedTs uint64
+
 	eventRouter *dispatcher.EventRouter
 
 	option *consumerOption
@@ -625,7 +628,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if simple, ok := decoder.(*simple.Decoder); ok {
 					cachedEvents := simple.GetCachedEvents()
 					for _, row := range cachedEvents {
-						tableID := row.PhysicalTableID
+						var partitionID int64
+						if row.TableInfo.IsPartitionTable() {
+							partitionID = row.PhysicalTableID
+						}
+						tableID := c.fakeTableIDGenerator.
+							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+						row.TableInfo.TableName.TableID = tableID
+
 						group, ok := eventGroups[tableID]
 						if !ok {
 							group = newEventsGroup()
@@ -636,26 +646,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
-				if partition != 0 || ddl.Query == "" {
-					continue
+				if partition == 0 && ddl.Query != "" {
+					c.appendDDL(ddl)
 				}
-
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ddl.CommitTs < partitionResolvedTs {
-					log.Panic("DDL event commit-ts less than the resolved ts",
-						zap.Int32("partition", partition),
-						zap.Int64("offset", message.Offset),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("commitTs", ddl.CommitTs),
-						zap.String("DDL", ddl.Query))
-				}
-				atomic.StoreUint64(&sink.resolvedTs, ddl.CommitTs)
-				log.Info("partition resolved ts updated by the DDL event",
-					zap.Int32("partition", partition),
-					zap.Int64("offset", message.Offset),
-					zap.Uint64("oldResolvedTs", partitionResolvedTs),
-					zap.Uint64("resolvedTs", ddl.CommitTs))
-				c.appendDDL(ddl)
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
@@ -665,7 +660,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				// when using simple protocol, the row may be nil, since it's table info not received yet,
 				// it's cached in the decoder, so just continue here.
-				if c.option.protocol == config.ProtocolSimple && row == nil {
+				if row == nil {
 					continue
 				}
 				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
@@ -674,35 +669,34 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				if partition != target {
 					log.Panic("RowChangedEvent dispatched to wrong partition",
-						zap.Int32("partition", partition),
-						zap.Int64("offset", message.Offset),
 						zap.Int32("obtained", partition),
 						zap.Int32("expected", target),
+						zap.Int32("partitionNum", c.option.partitionNum),
 						zap.Any("row", row),
 					)
 				}
 
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs < partitionResolvedTs {
-					log.Panic("RowChangedEvent commit-ts less than the resolved ts",
-						zap.Int32("partition", partition),
-						zap.Int64("offset", message.Offset),
+				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
+					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+						zap.Int32("partition", partition),
 						zap.Any("row", row))
+					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+					session.MarkMessage(message, "")
+					continue
 				}
+				var partitionID int64
+				if row.TableInfo.IsPartitionTable() {
+					partitionID = row.PhysicalTableID
+				}
+				tableID := c.fakeTableIDGenerator.
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
+				row.TableInfo.TableName.TableID = tableID
 
-				tableID := row.PhysicalTableID
-				// simple protocol decoder should have set the table id already.
-				if c.option.protocol != config.ProtocolSimple {
-					var partitionID int64
-					if row.TableInfo.IsPartitionTable() {
-						partitionID = row.PhysicalTableID
-					}
-					tableID = c.fakeTableIDGenerator.
-						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-					row.TableInfo.TableName.TableID = tableID
-				}
 				group, ok := eventGroups[tableID]
 				if !ok {
 					group = newEventsGroup()
@@ -710,6 +704,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				group.Append(row)
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -718,15 +714,17 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < partitionResolvedTs {
-					log.Panic("partition resolved ts fallback",
-						zap.Int32("partition", partition),
-						zap.Int64("offset", message.Offset),
+				if ts < globalResolvedTs || ts < partitionResolvedTs {
+					log.Warn("partition resolved ts fallback, skip it",
 						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs))
+						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Int32("partition", partition))
+					session.MarkMessage(message, "")
+					continue
 				}
-				atomic.StoreUint64(&sink.resolvedTs, ts)
 
 				for tableID, group := range eventGroups {
 					events := group.Resolve(ts)
@@ -748,8 +746,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
+				atomic.StoreUint64(&sink.resolvedTs, ts)
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
+
 			}
-			session.MarkMessage(message, "")
+
 		}
 
 		if counter > c.option.maxBatchSize {
@@ -836,8 +838,6 @@ func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 func (c *Consumer) Run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-
-	var globalResolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -854,14 +854,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
-			if err = c.forEachSink(func(sink *partitionSinks) error {
+			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
 
 			// DDL can be executed, do it first.
-			if err = c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
@@ -874,18 +874,19 @@ func (c *Consumer) Run(ctx context.Context) error {
 			minPartitionResolvedTs = todoDDL.CommitTs
 		}
 
-		if globalResolvedTs > minPartitionResolvedTs {
+		// update global resolved ts
+		if c.globalResolvedTs > minPartitionResolvedTs {
 			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", globalResolvedTs),
+				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
 				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
 		}
 
-		if globalResolvedTs < minPartitionResolvedTs {
-			globalResolvedTs = minPartitionResolvedTs
+		if c.globalResolvedTs < minPartitionResolvedTs {
+			c.globalResolvedTs = minPartitionResolvedTs
 		}
 
-		if err = c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
+		if err := c.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
