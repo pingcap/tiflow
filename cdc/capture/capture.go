@@ -53,7 +53,7 @@ import (
 const (
 	cleanMetaDuration = 10 * time.Second
 	// changefeedAsyncInitWorkerCount is the size of the worker pool for changefeed initialization processing.
-	changefeedAsyncInitWorkerCount = 8
+	changefeedAsyncInitWorkerCount = 64
 )
 
 // Capture represents a Capture server, it monitors the changefeed
