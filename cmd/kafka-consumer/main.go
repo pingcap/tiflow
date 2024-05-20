@@ -630,14 +630,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if simple, ok := decoder.(*simple.Decoder); ok {
 					cachedEvents := simple.GetCachedEvents()
 					for _, row := range cachedEvents {
-						var partitionID int64
-						if row.TableInfo.IsPartitionTable() {
-							partitionID = row.PhysicalTableID
-						}
-						tableID := c.fakeTableIDGenerator.
-							generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-						row.TableInfo.TableName.TableID = tableID
-
+						tableID := row.PhysicalTableID
 						group, ok := eventGroups[tableID]
 						if !ok {
 							group = newEventsGroup()
@@ -681,24 +674,21 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
-					log.Warn("RowChangedEvent fallback row, ignore it",
+					log.Panic("RowChangedEvent commit-ts less than the resolved ts",
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Int32("partition", partition),
 						zap.Any("row", row))
-					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-					session.MarkMessage(message, "")
-					continue
 				}
-				var partitionID int64
-				if row.TableInfo.IsPartitionTable() {
-					partitionID = row.PhysicalTableID
-				}
-				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-				row.TableInfo.TableName.TableID = tableID
 
+				tableID := row.PhysicalTableID
+				// simple protocol decoder should have set the table id already.
+				if c.option.protocol != config.ProtocolSimple {
+					tableID = c.fakeTableIDGenerator.
+						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
+				}
 				group, ok := eventGroups[tableID]
 				if !ok {
 					group = newEventsGroup()
@@ -719,13 +709,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts < globalResolvedTs || ts < partitionResolvedTs {
-					log.Warn("partition resolved ts fallback, skip it",
-						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+					log.Panic("partition resolved ts fallback",
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset),
+						zap.Uint64("newResolvedTs", ts),
+						zap.Uint64("oldResolvedTs", partitionResolvedTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
-					session.MarkMessage(message, "")
-					continue
 				}
 
 				for tableID, group := range eventGroups {
@@ -751,7 +741,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				atomic.StoreUint64(&sink.resolvedTs, ts)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
-
 			}
 
 		}

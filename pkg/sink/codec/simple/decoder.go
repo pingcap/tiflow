@@ -215,6 +215,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		Version:       defaultVersion,
 		Schema:        m.Schema,
 		Table:         m.Table,
+		TableID:       m.TableID,
 		Type:          m.Type,
 		CommitTs:      m.CommitTs,
 		SchemaVersion: m.SchemaVersion,
