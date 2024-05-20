@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -109,6 +110,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
 		{newMysqlErr(tmysql.ErrNonuniqTable, "xx"), false},
 		{newMysqlErr(tmysql.ErrBadDB, "xx"), false},
+		{newMysqlErr(errno.ErrTableWithoutPrimaryKey, "Unable to create or change a table without a primary key"), false},
 		{mysql.ErrInvalidConn, true},
 	}
 
