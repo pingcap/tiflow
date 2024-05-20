@@ -214,20 +214,30 @@ func (m *ddlManager) tick(
 			break
 		}
 
-		if job != nil && job.BinlogInfo != nil {
-			log.Info("handle a ddl job",
-				zap.String("namespace", m.changfeedID.Namespace),
-				zap.String("ID", m.changfeedID.ID),
-				zap.Int64("tableID", job.TableID),
-				zap.Int64("jobID", job.ID),
-				zap.String("query", job.Query),
-				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			)
-			events, err := m.schema.BuildDDLEvents(ctx, job)
-			if err != nil {
-				return nil, nil, err
-			}
+		if job.BinlogInfo == nil {
+			continue
+		}
 
+		log.Info("handle a ddl job",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Int64("tableID", job.TableID),
+			zap.Int64("jobID", job.ID),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+		)
+		events, err := m.schema.BuildDDLEvents(ctx, job)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, event := range events {
+			tableName := event.TableInfo.TableName
+			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
+		}
+
+		// Send DDL events to redo log.
+		if m.redoDDLManager.Enabled() {
 			for _, event := range events {
 				// TODO: find a better place to do this check
 				// check if the ddl event is belong to an ineligible table.
