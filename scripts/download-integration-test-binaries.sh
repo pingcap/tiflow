@@ -31,7 +31,7 @@ branch=${1:-master}
 # binaries.
 community=${2:-false}
 # Specify which version of the community binaries that will be utilized.
-ver=${3:-v8.1.0}
+ver=${3:-v7.5.2}
 # Specify which os that will be used to pack the binaries.
 os=${4:-linux}
 # Specify which architecture that will be used to pack the binaries.
