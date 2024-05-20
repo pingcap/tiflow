@@ -158,16 +158,6 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
-<<<<<<< HEAD
-	if err != nil {
-		return nil, err
-	}
-	event.Table = &model.TableName{
-		Schema: tableInfo.TableName.Schema,
-		Table:  tableInfo.TableName.Table,
-	}
-=======
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	d.msg = nil
 
 	log.Debug("row changed event assembled", zap.Any("event", event))

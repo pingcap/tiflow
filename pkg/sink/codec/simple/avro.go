@@ -275,21 +275,11 @@ func (a *avroMarshaller) newDMLMessageMap(
 		m["old"] = old
 		m["type"] = string(DMLTypeDelete)
 	} else if event.IsUpdate() {
-<<<<<<< HEAD
 		data := a.collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		m["data"] = data
 		old := a.collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		m["old"] = old
 		m["type"] = string(DMLTypeUpdate)
-	} else {
-		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
-=======
-		data := a.collectColumns(event.Columns, event.TableInfo, onlyHandleKey)
-		dmlMessagePayload["data"] = data
-		old := a.collectColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
-		dmlMessagePayload["old"] = old
-		dmlMessagePayload["type"] = string(DMLTypeUpdate)
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	}
 
 	m = map[string]interface{}{
@@ -311,19 +301,11 @@ func recycleMap(m map[string]interface{}) {
 	payload := holder["payload"].(map[string]interface{})
 	eventMap := payload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
-<<<<<<< HEAD
-	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
-	if checksumMap != nil {
-		holder := checksumMap.(map[string]interface{})
-		clear(holder)
-		genericMapPool.Put(holder)
-=======
 	checksum := dml["checksum"]
 	if checksum != nil {
 		checksum := checksum.(map[string]interface{})
 		clear(checksum)
 		genericMapPool.Put(checksum)
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	}
 
 	dataMap := eventMap["data"]
@@ -354,20 +336,6 @@ func recycleMap(m map[string]interface{}) {
 func (a *avroMarshaller) collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) map[string]interface{} {
-<<<<<<< HEAD
-	result := make(map[string]interface{}, len(columns))
-	for idx, col := range columns {
-		if col == nil {
-			continue
-		}
-		if onlyHandleKey && !col.Flag.IsHandleKey() {
-			continue
-		}
-		value, avroType := a.encodeValue4Avro(col.Value, columnInfos[idx].Ft)
-		holder := genericMapPool.Get().(map[string]interface{})
-		holder[avroType] = value
-		result[col.Name] = holder
-=======
 	result := rowMapPool.Get().(map[string]interface{})
 	for _, col := range columns {
 		if col != nil {
@@ -381,7 +349,6 @@ func (a *avroMarshaller) collectColumns(
 			holder[avroType] = value
 			result[colInfo.Name.O] = holder
 		}
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	}
 
 	return map[string]interface{}{

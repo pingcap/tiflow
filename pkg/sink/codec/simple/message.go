@@ -608,15 +608,8 @@ func (a *jsonMarshaller) newDMLMessage(
 		m.Old = a.formatColumns(event.PreColumns, event.TableInfo.Columns, onlyHandleKey)
 	} else if event.IsUpdate() {
 		m.Type = DMLTypeUpdate
-<<<<<<< HEAD
-		m.Data = a.formatColumns(event.Columns, event.TableInfo.Columns, onlyHandleKey)
-		m.Old = a.formatColumns(event.PreColumns, event.TableInfo.Columns, onlyHandleKey)
-	} else {
-		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
-=======
 		m.Data = a.formatColumns(event.Columns, event.TableInfo, onlyHandleKey)
 		m.Old = a.formatColumns(event.PreColumns, event.TableInfo, onlyHandleKey)
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	}
 	if a.config.EnableRowChecksum && event.Checksum != nil {
 		m.Checksum = &checksum{
@@ -634,17 +627,6 @@ func (a *jsonMarshaller) formatColumns(
 	columns []*model.Column, colInfos []*timodel.ColumnInfo, onlyHandleKey bool,
 ) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
-<<<<<<< HEAD
-	for idx, col := range columns {
-		if col == nil {
-			continue
-		}
-		if onlyHandleKey && !col.Flag.IsHandleKey() {
-			continue
-		}
-		value := encodeValue(col.Value, &colInfos[idx].FieldType, a.config.TimeZone.String())
-		result[col.Name] = value
-=======
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range columns {
 		if col != nil {
@@ -655,7 +637,6 @@ func (a *jsonMarshaller) formatColumns(
 			value := encodeValue(col.Value, colInfos[i].Ft, a.config.TimeZone.String())
 			result[tableInfo.ForceGetColumnName(col.ColumnID)] = value
 		}
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 	}
 	return result
 }
