@@ -271,11 +271,23 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		if err != nil {
 			return nil, err
 		}
-		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
 
 		next := ele.Next()
-		d.cachedMessages.Remove(ele)
+		if event != nil {
+			d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
+			d.cachedMessages.Remove(ele)
+		}
 		ele = next
+	}
+
+	if ddl.TableInfo.TableName.Table == "finishmark" {
+		unresolved := d.cachedMessages.Len()
+		if unresolved != 0 {
+			log.Error("finishmark received, but not all cached message resolved",
+				zap.Int("unresolved", unresolved))
+		} else {
+			log.Info("finishmark received, and no cached message")
+		}
 	}
 	return ddl, nil
 }
@@ -284,6 +296,10 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
 	result := d.CachedRowChangedEvents
 	d.CachedRowChangedEvents = nil
+
+	if len(result) != 0 {
+		log.Info("cached message resolved", zap.Int("resolved", len(result)))
+	}
 	return result
 }
 
