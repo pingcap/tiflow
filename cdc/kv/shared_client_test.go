@@ -58,6 +58,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 
 func TestRequestedTable(t *testing.T) {
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
+
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newRequestedTable(SubscriptionID(1), span, 100, nil)
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
