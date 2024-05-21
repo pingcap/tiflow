@@ -448,7 +448,8 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		))
+		),
+		pd.WithForwardingOption(config.EnablePDForwarding))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
 	}

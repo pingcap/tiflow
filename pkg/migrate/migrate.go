@@ -147,7 +147,9 @@ func createPDClient(ctx context.Context,
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		))
+		),
+		pd.WithForwardingOption(config.EnablePDForwarding),
+	)
 }
 
 // Note: we do not use etcd transaction to migrate key
