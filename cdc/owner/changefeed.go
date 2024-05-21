@@ -344,11 +344,24 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	if !c.preflightCheck(captures) {
 		return nil
 	}
+	if c.state == nil {
+		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
+		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
+		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
+		// And then it can continue to initialize.
+		return nil
+	}
 
 	if !c.initialized.Load() {
+		info, err := c.state.Info.Clone()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		checkpointTs := c.state.Status.CheckpointTs
+		minTableBarrierTs := c.state.Status.MinTableBarrierTs
 		initialized, err := c.initializer.TryInitialize(ctx,
 			func(ctx cdcContext.Context) error {
-				return c.initialize(ctx, c.state.Info, c.state.Status)
+				return c.initialize(ctx, info, checkpointTs, minTableBarrierTs)
 			},
 			ctx.GlobalVars().ChangefeedThreadPool)
 		if err != nil {
@@ -479,13 +492,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 func (c *changefeed) initialize(ctx cdcContext.Context,
 	info *model.ChangeFeedInfo,
-	status *model.ChangeFeedStatus,
+	checkpointTs uint64,
+	minTableBarrierTs uint64,
 ) (err error) {
-	if c.initialized.Load() || status == nil {
-		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
-		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
-		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
-		// And then it can continue to initialize.
+	if c.initialized.Load() {
 		return nil
 	}
 	c.isReleased = false
@@ -510,12 +520,9 @@ LOOP2:
 		}
 	}
 
-	checkpointTs := status.CheckpointTs
 	if c.resolvedTs == 0 {
 		c.resolvedTs = checkpointTs
 	}
-
-	minTableBarrierTs := status.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -671,7 +678,7 @@ LOOP2:
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
-		status.CheckpointTs,
+		checkpointTs,
 		c.ddlSink,
 		filter,
 		c.ddlPuller,
