@@ -18,6 +18,7 @@ import (
 
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbterror"
@@ -136,7 +137,13 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
+<<<<<<< HEAD
 		mysql.ErrPartitionMgmtOnNonpartitioned:
+=======
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		mysql.ErrNonuniqTable,
+		errno.ErrTableWithoutPrimaryKey:
+>>>>>>> 4d89c24642 (sink(ticdc): quick fail on create table error without primary key when downstream sql_require_primary_key is set (#11144))
 		return false
 	}
 	return true

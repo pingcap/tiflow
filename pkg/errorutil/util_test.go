@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/stretchr/testify/require"
@@ -105,6 +106,12 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
 		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
+<<<<<<< HEAD
+=======
+		{newMysqlErr(tmysql.ErrNonuniqTable, "xx"), false},
+		{newMysqlErr(tmysql.ErrBadDB, "xx"), false},
+		{newMysqlErr(errno.ErrTableWithoutPrimaryKey, "Unable to create or change a table without a primary key"), false},
+>>>>>>> 4d89c24642 (sink(ticdc): quick fail on create table error without primary key when downstream sql_require_primary_key is set (#11144))
 		{mysql.ErrInvalidConn, true},
 	}
 
