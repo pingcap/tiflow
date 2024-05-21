@@ -64,6 +64,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pierrec/lz4/v4 v4.1.18
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
+<<<<<<< HEAD
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240412033321-fd0796e60f86
 	github.com/pingcap/kvproto v0.0.0-20240417154738-4fa2b26b2d80
@@ -71,6 +72,16 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20240425142112-54ba0ed68407
 	github.com/pingcap/tidb-tools v0.0.0-20240408054520-d28ee6cd546e
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240425142112-54ba0ed68407
+=======
+	github.com/pingcap/errors v0.11.5-0.20240311081613-f97970b88865
+	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
+	github.com/pingcap/kvproto v0.0.0-20240227073058-929ab83f9754
+	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
+	github.com/pingcap/tidb v1.1.0-beta.0.20240318100650-eea121309acf
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240318100650-eea121309acf
+>>>>>>> 452dbef875 (*: update tidb version (#10888))
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -87,9 +98,16 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20240424052342-0229f4077f0c
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20240322051414-fb9e2d561b6e
+=======
+	github.com/thanhpk/randstr v1.0.6
+	github.com/tikv/client-go/v2 v2.0.8-0.20240316105842-98a7df8f413d
+	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
+	github.com/tikv/pd/client v0.0.0-20240229065730-92a31c12238e
+>>>>>>> 452dbef875 (*: update tidb version (#10888))
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -195,7 +213,11 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.1 // indirect
+<<<<<<< HEAD
 	github.com/DataDog/zstd v1.5.5 // indirect
+=======
+	github.com/DataDog/zstd v1.5.0 // indirect
+>>>>>>> 452dbef875 (*: update tidb version (#10888))
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
