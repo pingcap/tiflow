@@ -234,13 +234,7 @@ func TestEncodeDDLSequence(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-<<<<<<< HEAD
-			createTableDDLEvent := helper.DDL2Event(
-				"CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
-			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
-=======
 			m, err := enc.EncodeDDLEvent(dropDBEvent)
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 			require.NoError(t, err)
 
 			err = dec.AddKeyValue(m.Key, m.Value)
@@ -589,11 +583,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-<<<<<<< HEAD
-			partitionTableDDLEvent := helper.DDL2Event(
-				"ALTER TABLE TBL2 PARTITION BY RANGE (id2) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
-=======
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 			m, err = enc.EncodeDDLEvent(partitionTableDDLEvent)
 			require.NoError(t, err)
 
@@ -654,11 +643,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-<<<<<<< HEAD
-			reorganizePartitionDDLEvent := helper.DDL2Event(
-				"ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
-=======
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 			m, err = enc.EncodeDDLEvent(reorganizePartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -759,13 +743,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-<<<<<<< HEAD
-			createTableSQL := `create table test.t(id int primary key, 
-				name varchar(255) not null, gender enum('male', 'female'), 
-				email varchar(255) not null, key idx_name_email(name, email))`
-			createTableDDLEvent := helper.DDL2Event(createTableSQL)
-=======
->>>>>>> 687b21d85d (tests(ticdc): simple protocol claim check integration test enable checksum (#11058))
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
 
@@ -1499,7 +1476,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 
 			enc.(*encoder).config.MaxMessageBytes = 500
 			dec.config.MaxMessageBytes = 500
-			for _, event = range events {
+			for _, event := range events {
 				err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
 				require.NoError(t, err)
 
@@ -1573,7 +1550,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
 
-			for _, event = range events {
+			for _, event := range events {
 				mock.ExpectQuery("SELECT @@global.time_zone").
 					WillReturnRows(mock.NewRows([]string{""}).AddRow("SYSTEM"))
 

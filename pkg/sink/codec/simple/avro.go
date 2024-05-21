@@ -212,6 +212,13 @@ var (
 		},
 	}
 
+	// rowMapPool return map for each row
+	rowMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+
 	// dmlPayloadHolderPool return holder for the payload
 	dmlPayloadHolderPool = sync.Pool{
 		New: func() any {
@@ -301,7 +308,7 @@ func recycleMap(m map[string]interface{}) {
 	payload := holder["payload"].(map[string]interface{})
 	eventMap := payload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
-	checksum := dml["checksum"]
+	checksum := eventMap["checksum"]
 	if checksum != nil {
 		checksum := checksum.(map[string]interface{})
 		clear(checksum)
@@ -337,17 +344,15 @@ func (a *avroMarshaller) collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) map[string]interface{} {
 	result := rowMapPool.Get().(map[string]interface{})
-	for _, col := range columns {
+	for idx, col := range columns {
 		if col != nil {
-			colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
-			if onlyHandleKey && !colFlag.IsHandleKey() {
+			if onlyHandleKey && !col.Flag.IsHandleKey() {
 				continue
 			}
-			colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-			value, avroType := a.encodeValue4Avro(col.Value, &colInfo.FieldType)
+			value, avroType := a.encodeValue4Avro(col.Value, columnInfos[idx].Ft)
 			holder := genericMapPool.Get().(map[string]interface{})
 			holder[avroType] = value
-			result[colInfo.Name.O] = holder
+			result[col.Name] = holder
 		}
 	}
 
