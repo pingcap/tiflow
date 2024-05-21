@@ -51,13 +51,8 @@ func newMarshaller(config *common.Config) (marshaller, error) {
 		result = newJSONMarshaller(config)
 	case common.EncodingFormatAvro:
 		result, err = newAvroMarshaller(config, string(avroSchemaBytes))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	default:
-		return nil, errors.New("unknown encoding format")
 	}
-	return result, nil
+	return result, errors.Trace(err)
 }
 
 type jsonMarshaller struct {
@@ -74,10 +69,7 @@ func newJSONMarshaller(config *common.Config) *jsonMarshaller {
 func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	msg := newResolvedMessage(ts)
 	result, err := json.Marshal(msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-	return result, nil
+	return result, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // MarshalDDLEvent implement the marshaller interface
@@ -89,10 +81,7 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 		msg = newDDLMessage(event)
 	}
 	value, err := json.Marshal(msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-	return value, nil
+	return value, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // MarshalRowChangedEvent implement the marshaller interface
@@ -102,10 +91,7 @@ func (m *jsonMarshaller) MarshalRowChangedEvent(
 ) ([]byte, error) {
 	msg := m.newDMLMessage(event, handleKeyOnly, claimCheckFileName)
 	value, err := json.Marshal(msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-	return value, nil
+	return value, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // Unmarshal implement the marshaller interface
@@ -120,28 +106,17 @@ type avroMarshaller struct {
 
 func newAvroMarshaller(config *common.Config, schema string) (*avroMarshaller, error) {
 	codec, err := goavro.NewCodec(schema)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	return &avroMarshaller{
 		codec:  codec,
 		config: config,
-	}, nil
-}
-
-// Marshal implement the marshaller interface
-func (m *avroMarshaller) Marshal(v any) ([]byte, error) {
-	return m.codec.BinaryFromNative(nil, v)
+	}, errors.Trace(err)
 }
 
 // MarshalCheckpoint implement the marshaller interface
 func (m *avroMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	msg := newResolvedMessageMap(ts)
 	result, err := m.codec.BinaryFromNative(nil, msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-	return result, nil
+	return result, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // MarshalDDLEvent implement the marshaller interface
@@ -153,10 +128,7 @@ func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 		msg = newDDLMessageMap(event)
 	}
 	value, err := m.codec.BinaryFromNative(nil, msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-	return value, nil
+	return value, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // MarshalRowChangedEvent implement the marshaller interface
@@ -166,23 +138,13 @@ func (m *avroMarshaller) MarshalRowChangedEvent(
 ) ([]byte, error) {
 	msg := m.newDMLMessageMap(event, handleKeyOnly, claimCheckFileName)
 	value, err := m.codec.BinaryFromNative(nil, msg)
-	if err != nil {
-		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
-	}
-
 	recycleMap(msg)
-	return value, nil
+	return value, errors.WrapError(errors.ErrEncodeFailed, err)
 }
 
 // Unmarshal implement the marshaller interface
 func (m *avroMarshaller) Unmarshal(data []byte, v any) error {
 	native, _, err := m.codec.NativeFromBinary(data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = newMessageFromAvroNative(native, v.(*message))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	newMessageFromAvroNative(native, v.(*message))
+	return errors.Trace(err)
 }
