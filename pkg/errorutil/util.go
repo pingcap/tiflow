@@ -18,10 +18,18 @@ import (
 
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/dbutil"
+=======
+	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+>>>>>>> 4d89c24642 (sink(ticdc): quick fail on create table error without primary key when downstream sql_require_primary_key is set (#11144))
 	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -136,7 +144,13 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
+<<<<<<< HEAD
 		mysql.ErrPartitionMgmtOnNonpartitioned:
+=======
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		mysql.ErrNonuniqTable,
+		errno.ErrTableWithoutPrimaryKey:
+>>>>>>> 4d89c24642 (sink(ticdc): quick fail on create table error without primary key when downstream sql_require_primary_key is set (#11144))
 		return false
 	}
 	return true
