@@ -37,6 +37,8 @@ func NewMultiplexingPullerWrapper(
 	client *kv.SharedClient,
 	eventSortEngine engine.SortEngine,
 	frontiers int,
+	shouldSplitKVEntry ShouldSplitKVEntry,
+	splitUpdateKVEntry SplitUpdateKVEntry,
 ) *MultiplexingWrapper {
 	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
 		if len(spans) > 1 {
@@ -45,8 +47,18 @@ func NewMultiplexingPullerWrapper(
 				zap.String("changefeed", changefeed.ID))
 		}
 		if raw != nil {
-			pEvent := model.NewPolymorphicEvent(raw)
-			eventSortEngine.Add(spans[0], pEvent)
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				eventSortEngine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				eventSortEngine.Add(spans[0], pEvent)
+			}
 		}
 		return nil
 	}

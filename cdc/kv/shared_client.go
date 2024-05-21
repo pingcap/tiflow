@@ -667,7 +667,9 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 			}
 		}
 		start := time.Now()
-		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		defer func() {
+			s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		}()
 
 		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
 			log.Warn("event feed resolve lock fail",
@@ -785,7 +787,6 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
-
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),

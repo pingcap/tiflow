@@ -154,11 +154,67 @@ func TestEncodeDDLSequence(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	dropDBEvent := helper.DDL2Event(`DROP DATABASE IF EXISTS test`)
+	createDBDDLEvent := helper.DDL2Event(`CREATE DATABASE IF NOT EXISTS test`)
 	helper.Tk().MustExec("use test")
+
+	createTableDDLEvent := helper.DDL2Event("CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
+
+	addColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ADD COLUMN `nn` INT")
+
+	dropColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` DROP COLUMN `nn`")
+
+	changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
+
+	modifyColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `value2` VARCHAR(512) FIRST")
+
+	setDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` SET DEFAULT _UTF8MB4'a'")
+
+	dropDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` DROP DEFAULT")
+
+	autoIncrementDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` AUTO_INCREMENT = 5")
+
+	modifyColumnNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NULL")
+
+	modifyColumnNotNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NOT NULL")
+
+	addIndexDDLEvent := helper.DDL2Event("CREATE INDEX `idx_a` ON `TBL1` (`a`)")
+
+	renameIndexDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` RENAME INDEX `idx_a` TO `new_idx_a`")
+
+	indexVisibilityDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ALTER INDEX `new_idx_a` INVISIBLE")
+
+	dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `new_idx_a` ON `TBL1`")
+
+	truncateTableDDLEvent := helper.DDL2Event("TRUNCATE TABLE TBL1")
+
+	multiSchemaChangeDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ADD COLUMN `new_col` INT, ADD INDEX `idx_new_col` (`a`)")
+
+	multiSchemaChangeDropDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 DROP COLUMN `new_col`, DROP INDEX `idx_new_col`")
+
+	renameTableDDLEvent := helper.DDL2Event("RENAME TABLE TBL1 TO TBL2")
+
+	helper.Tk().MustExec("set @@tidb_allow_remove_auto_inc = 1")
+	renameColumnDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHANGE COLUMN `id` `id2` INT")
+
+	partitionTableDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 PARTITION BY RANGE (id2) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
+
+	addPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))")
+
+	dropPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 DROP PARTITION p2")
+
+	truncatePartitionDDLevent := helper.DDL2Event("ALTER TABLE TBL2 TRUNCATE PARTITION p1")
+
+	reorganizePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
+
+	removePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REMOVE PARTITIONING")
+
+	alterCharsetCollateDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin")
+
+	dropTableDDLEvent := helper.DDL2Event("DROP TABLE TBL2")
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
@@ -178,15 +234,43 @@ func TestEncodeDDLSequence(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			createTableDDLEvent := helper.DDL2Event(
-				"CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)")
-			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+			m, err := enc.EncodeDDLEvent(dropDBEvent)
 			require.NoError(t, err)
 
 			err = dec.AddKeyValue(m.Key, m.Value)
 			require.NoError(t, err)
 
 			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.Equal(t, DDLTypeQuery, dec.msg.Type)
+
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			m, err = enc.EncodeDDLEvent(createDBDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.Equal(t, DDLTypeQuery, dec.msg.Type)
+
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			m, err = enc.EncodeDDLEvent(createTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err = dec.HasNext()
 			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
@@ -197,7 +281,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
 
-			addColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ADD COLUMN `nn` INT")
 			m, err = enc.EncodeDDLEvent(addColumnDDLEvent)
 			require.NoError(t, err)
 
@@ -213,7 +296,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 5)
 
-			dropColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` DROP COLUMN `nn`")
 			m, err = enc.EncodeDDLEvent(dropColumnDDLEvent)
 			require.NoError(t, err)
 
@@ -229,7 +311,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
 
-			changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
 			m, err = enc.EncodeDDLEvent(changeColumnDDLEvent)
 			require.NoError(t, err)
 
@@ -245,7 +326,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Len(t, event.TableInfo.Indices, 1)
 			require.Len(t, event.TableInfo.Columns, 4)
 
-			modifyColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `value2` VARCHAR(512) FIRST")
 			m, err = enc.EncodeDDLEvent(modifyColumnDDLEvent)
 			require.NoError(t, err)
 
@@ -258,10 +338,8 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
-			require.Equal(t, 1, len(event.TableInfo.Indices))
+			require.Equal(t, 1, len(event.TableInfo.Indices), string(format), compressionType)
 			require.Equal(t, 4, len(event.TableInfo.Columns))
-
-			setDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` SET DEFAULT _UTF8MB4'a'")
 
 			m, err = enc.EncodeDDLEvent(setDefaultDDLEvent)
 			require.NoError(t, err)
@@ -283,7 +361,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 				}
 			}
 
-			dropDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` DROP DEFAULT")
 			m, err = enc.EncodeDDLEvent(dropDefaultDDLEvent)
 			require.NoError(t, err)
 
@@ -304,7 +381,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 				}
 			}
 
-			autoIncrementDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` AUTO_INCREMENT = 5")
 			m, err = enc.EncodeDDLEvent(autoIncrementDDLEvent)
 			require.NoError(t, err)
 
@@ -320,7 +396,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			modifyColumnNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NULL")
 			m, err = enc.EncodeDDLEvent(modifyColumnNullDDLEvent)
 			require.NoError(t, err)
 
@@ -341,7 +416,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 				}
 			}
 
-			modifyColumnNotNullDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NOT NULL")
 			m, err = enc.EncodeDDLEvent(modifyColumnNotNullDDLEvent)
 			require.NoError(t, err)
 
@@ -362,7 +436,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 				}
 			}
 
-			addIndexDDLEvent := helper.DDL2Event("CREATE INDEX `idx_a` ON `TBL1` (`a`)")
 			m, err = enc.EncodeDDLEvent(addIndexDDLEvent)
 			require.NoError(t, err)
 
@@ -378,7 +451,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 2, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			renameIndexDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` RENAME INDEX `idx_a` TO `new_idx_a`")
 			m, err = enc.EncodeDDLEvent(renameIndexDDLEvent)
 			require.NoError(t, err)
 
@@ -406,7 +478,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.True(t, hasNewIndex)
 			require.True(t, noOldIndex)
 
-			indexVisibilityDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ALTER INDEX `new_idx_a` INVISIBLE")
 			m, err = enc.EncodeDDLEvent(indexVisibilityDDLEvent)
 			require.NoError(t, err)
 
@@ -422,7 +493,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 2, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			dropIndexDDLEvent := helper.DDL2Event("DROP INDEX `new_idx_a` ON `TBL1`")
 			m, err = enc.EncodeDDLEvent(dropIndexDDLEvent)
 			require.NoError(t, err)
 
@@ -438,7 +508,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			truncateTableDDLEvent := helper.DDL2Event("TRUNCATE TABLE TBL1")
 			m, err = enc.EncodeDDLEvent(truncateTableDDLEvent)
 			require.NoError(t, err)
 
@@ -454,7 +523,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			multiSchemaChangeDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 ADD COLUMN `new_col` INT, ADD INDEX `idx_new_col` (`a`)")
 			m, err = enc.EncodeDDLEvent(multiSchemaChangeDDLEvent)
 			require.NoError(t, err)
 
@@ -470,7 +538,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 2, len(event.TableInfo.Indices))
 			require.Equal(t, 5, len(event.TableInfo.Columns))
 
-			multiSchemaChangeDropDDLEvent := helper.DDL2Event("ALTER TABLE TBL1 DROP COLUMN `new_col`, DROP INDEX `idx_new_col`")
 			m, err = enc.EncodeDDLEvent(multiSchemaChangeDropDDLEvent)
 			require.NoError(t, err)
 
@@ -486,7 +553,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			renameTableDDLEvent := helper.DDL2Event("RENAME TABLE TBL1 TO TBL2")
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
 			require.NoError(t, err)
 
@@ -502,8 +568,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			helper.Tk().MustExec("set @@tidb_allow_remove_auto_inc = 1")
-			renameColumnDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHANGE COLUMN `id` `id2` INT")
 			m, err = enc.EncodeDDLEvent(renameColumnDDLEvent)
 			require.NoError(t, err)
 
@@ -519,8 +583,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			partitionTableDDLEvent := helper.DDL2Event(
-				"ALTER TABLE TBL2 PARTITION BY RANGE (id2) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20))")
 			m, err = enc.EncodeDDLEvent(partitionTableDDLEvent)
 			require.NoError(t, err)
 
@@ -536,7 +598,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			addPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 ADD PARTITION (PARTITION p2 VALUES LESS THAN (30))")
 			m, err = enc.EncodeDDLEvent(addPartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -552,7 +613,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			dropPartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 DROP PARTITION p2")
 			m, err = enc.EncodeDDLEvent(dropPartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -568,7 +628,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			truncatePartitionDDLevent := helper.DDL2Event("ALTER TABLE TBL2 TRUNCATE PARTITION p1")
 			m, err = enc.EncodeDDLEvent(truncatePartitionDDLevent)
 			require.NoError(t, err)
 
@@ -584,8 +643,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			reorganizePartitionDDLEvent := helper.DDL2Event(
-				"ALTER TABLE TBL2 REORGANIZE PARTITION p1 INTO (PARTITION p3 VALUES LESS THAN (40))")
 			m, err = enc.EncodeDDLEvent(reorganizePartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -601,7 +658,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			removePartitionDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 REMOVE PARTITIONING")
 			m, err = enc.EncodeDDLEvent(removePartitionDDLEvent)
 			require.NoError(t, err)
 
@@ -617,7 +673,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			alterCharsetCollateDDLEvent := helper.DDL2Event("ALTER TABLE TBL2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin")
 			m, err = enc.EncodeDDLEvent(alterCharsetCollateDDLEvent)
 			require.NoError(t, err)
 
@@ -633,7 +688,6 @@ func TestEncodeDDLSequence(t *testing.T) {
 			require.Equal(t, 1, len(event.TableInfo.Indices))
 			require.Equal(t, 4, len(event.TableInfo.Columns))
 
-			dropTableDDLEvent := helper.DDL2Event("DROP TABLE TBL2")
 			m, err = enc.EncodeDDLEvent(dropTableDDLEvent)
 			require.NoError(t, err)
 
@@ -658,6 +712,16 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
+	createTableSQL := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) null, key idx_name_email(name, email))`
+	createTableDDLEvent := helper.DDL2Event(createTableSQL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, "jack", "male", "jack@abc.com")`, "test", "t")
+
+	renameTableDDLEvent := helper.DDL2Event(`rename table test.t to test.abc`)
+
+	insertEvent2 := helper.DML2Event(`insert into test.abc values (2, "anna", "female", "anna@abc.com")`, "test", "abc")
+	helper.Tk().MustExec("drop table test.abc")
+
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.EnableRowChecksum = true
@@ -679,10 +743,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			createTableSQL := `create table test.t(id int primary key, 
-				name varchar(255) not null, gender enum('male', 'female'), 
-				email varchar(255) not null, key idx_name_email(name, email))`
-			createTableDDLEvent := helper.DDL2Event(createTableSQL)
 			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
 			require.NoError(t, err)
 
@@ -694,6 +754,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.NotEqual(t, 0, dec.msg.BuildTs)
+			require.True(t, dec.msg.TableSchema.Indexes[0].Nullable)
 
 			columnSchemas := dec.msg.TableSchema.Columns
 			sortedColumns := make([]*timodel.ColumnInfo, len(createTableDDLEvent.TableInfo.Columns))
@@ -725,7 +786,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 				createTableDDLEvent.TableInfo.TableName.Table, createTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
-			insertEvent := helper.DML2Event(`insert into test.t values (1, "jack", "male", "jack@abc.com")`, "test", "t")
 			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 			require.NoError(t, err)
 
@@ -748,7 +808,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
-			renameTableDDLEvent := helper.DDL2Event(`rename table test.t to test.abc`)
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
 			require.NoError(t, err)
 
@@ -777,7 +836,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 				renameTableDDLEvent.TableInfo.TableName.Table, renameTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
-			insertEvent2 := helper.DML2Event(`insert into test.abc values (2, "anna", "female", "anna@abc.com")`, "test", "abc")
 			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent2, func() {})
 			require.NoError(t, err)
 
@@ -799,8 +857,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, insertEvent2.TableInfo.GetSchemaName(), decodedRow.TableInfo.GetSchemaName())
 			require.Equal(t, insertEvent2.TableInfo.GetTableName(), decodedRow.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
-
-			helper.Tk().MustExec("drop table test.abc")
 		}
 	}
 }
@@ -1041,10 +1097,11 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	defer helper.Close()
 
 	sql := `create table test.t(
-    	id int primary key,
+    	id int,
     	name varchar(255) not null,
     	age int,
     	email varchar(255) not null,
+    	primary key(id, name),
     	key idx_name_email(name, email))`
 	ddlEvent := helper.DDL2Event(sql)
 	ddlEvent.IsBootstrap = true
@@ -1092,7 +1149,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 			// Bootstrap event doesn't have query
 			require.Equal(t, "", event.Query)
 			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-			require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
+			require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
 
 			item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 				ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -1254,18 +1311,30 @@ func TestDMLMessageTooLarge(t *testing.T) {
 	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.MaxMessageBytes = 100
+	codecConfig.MaxMessageBytes = 50
+
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
 	} {
 		codecConfig.EncodingFormat = format
-		b, err := NewBuilder(context.Background(), codecConfig)
-		require.NoError(t, err)
-		enc := b.Build()
 
-		err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
-		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+		for _, handle := range []string{
+			config.LargeMessageHandleOptionNone,
+			config.LargeMessageHandleOptionHandleKeyOnly,
+			config.LargeMessageHandleOptionClaimCheck,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleOption = handle
+			if handle == config.LargeMessageHandleOptionClaimCheck {
+				codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
+			}
+			b, err := NewBuilder(context.Background(), codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
+
+			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
+			require.ErrorIs(t, err, errors.ErrMessageTooLarge, string(format), handle)
+		}
 	}
 }
 
@@ -1275,6 +1344,16 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "unsupported:///"
+	b, err := NewBuilder(ctx, codecConfig)
+	require.Error(t, err)
+	require.Nil(t, b)
+
+	badDec, err := NewDecoder(ctx, codecConfig, nil)
+	require.Error(t, err)
+	require.Nil(t, badDec)
+
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
@@ -1289,7 +1368,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			codecConfig.MaxMessageBytes = config.DefaultMaxMessageBytes
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-			b, err := NewBuilder(ctx, codecConfig)
+			b, err = NewBuilder(ctx, codecConfig)
 			require.NoError(t, err)
 			enc := b.Build()
 
@@ -1364,6 +1443,17 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+
+	badDec, err := NewDecoder(ctx, codecConfig, nil)
+	require.Error(t, err)
+	require.Nil(t, badDec)
+
+	events := []*model.RowChangedEvent{
+		insertEvent,
+		updateEvent,
+		deleteEvent,
+	}
+
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatJSON,
 		common.EncodingFormatAvro,
@@ -1384,27 +1474,9 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, db)
 			require.NoError(t, err)
 
-			m, err := enc.EncodeDDLEvent(ddlEvent)
-			require.NoError(t, err)
-
-			err = dec.AddKeyValue(m.Key, m.Value)
-			require.NoError(t, err)
-
-			messageType, hasNext, err := dec.HasNext()
-			require.NoError(t, err)
-			require.True(t, hasNext)
-			require.Equal(t, model.MessageTypeDDL, messageType)
-
-			_, err = dec.NextDDLEvent()
-			require.NoError(t, err)
-
 			enc.(*encoder).config.MaxMessageBytes = 500
 			dec.config.MaxMessageBytes = 500
-			for _, event := range []*model.RowChangedEvent{
-				insertEvent,
-				updateEvent,
-				deleteEvent,
-			} {
+			for _, event := range events {
 				err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
 				require.NoError(t, err)
 
@@ -1460,6 +1532,25 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 					}
 				}
 
+				decodedRow, err := dec.NextRowChangedEvent()
+				require.NoError(t, err)
+				require.Nil(t, decodedRow)
+			}
+
+			enc.(*encoder).config.MaxMessageBytes = config.DefaultMaxMessageBytes
+			dec.config.MaxMessageBytes = config.DefaultMaxMessageBytes
+			m, err := enc.EncodeDDLEvent(ddlEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+
+			for _, event := range events {
 				mock.ExpectQuery("SELECT @@global.time_zone").
 					WillReturnRows(mock.NewRows([]string{""}).AddRow("SYSTEM"))
 
@@ -1476,8 +1567,14 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				mock.ExpectQuery("select * from test.t where t = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
-				decodedRow, err := dec.NextRowChangedEvent()
-				require.NoError(t, err)
+			}
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			decodedRows := dec.GetCachedEvents()
+			for idx, decodedRow := range decodedRows {
+				event := events[idx]
+
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
 				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
@@ -1524,4 +1621,34 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestDecoder(t *testing.T) {
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	decoder, err := NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+	require.NotNil(t, decoder)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.False(t, hasNext)
+	require.Equal(t, model.MessageTypeUnknown, messageType)
+
+	ddl, err := decoder.NextDDLEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, ddl)
+
+	decoder.msg = new(message)
+	checkpoint, err := decoder.NextResolvedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Equal(t, uint64(0), checkpoint)
+
+	event, err := decoder.NextRowChangedEvent()
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
+	require.Nil(t, event)
+
+	decoder.value = []byte("invalid")
+	err = decoder.AddKeyValue(nil, nil)
+	require.ErrorIs(t, err, errors.ErrCodecDecode)
 }
