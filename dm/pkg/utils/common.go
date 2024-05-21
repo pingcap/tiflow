@@ -218,10 +218,14 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
+<<<<<<< HEAD
 	sessionCtx.exprctx = &exprCtxImpl{
 		session:             &sessionCtx,
 		ExprCtxExtendedImpl: exprctximpl.NewExprExtendedImpl(&sessionCtx),
 	}
+=======
+	sessionCtx.exprctx = contextsession.NewSessionExprContext(&sessionCtx)
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	return &sessionCtx
 }
 
