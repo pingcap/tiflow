@@ -386,6 +386,7 @@ func buildRowChangedEvent(
 	result := &model.RowChangedEvent{
 		CommitTs:  msg.CommitTs,
 		TableInfo: tableInfo,
+		Table:     &tableInfo.TableName,
 	}
 
 	result.Columns = decodeColumns(msg.Data, tableInfo)
