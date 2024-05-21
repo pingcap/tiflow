@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
 	"github.com/pingcap/tidb/pkg/parser/model"
@@ -39,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -270,7 +270,7 @@ func (c *AgentImpl) FetchTableStmt(ctx context.Context, jobID string, cfg *confi
 }
 
 func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(cfg.MetaSchema))
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", quotes.QuoteName(cfg.MetaSchema))
 	_, err := db.DB.ExecContext(ctx, query)
 	return errors.Trace(err)
 }
@@ -307,19 +307,19 @@ func dropSyncCheckpointTable(ctx context.Context, jobID string, cfg *config.JobC
 }
 
 func loadTableName(jobID string, cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.LightningCheckpoint(jobID))
+	return quotes.QuoteSchema(cfg.MetaSchema, cputil.LightningCheckpoint(jobID))
 }
 
 func syncTableName(jobID string, cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(jobID))
+	return quotes.QuoteSchema(cfg.MetaSchema, cputil.SyncerCheckpoint(jobID))
 }
 
 func shardMetaName(jobID string, cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerShardMeta(jobID))
+	return quotes.QuoteSchema(cfg.MetaSchema, cputil.SyncerShardMeta(jobID))
 }
 
 func onlineDDLName(jobID string, cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerOnlineDDL(jobID))
+	return quotes.QuoteSchema(cfg.MetaSchema, cputil.SyncerOnlineDDL(jobID))
 }
 
 func isLoadFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {

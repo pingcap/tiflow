@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // GetJoinURLs gets the endpoints from the join address.
@@ -38,9 +39,17 @@ func GetJoinURLs(addrs string) []string {
 // JoinMaster let dm-worker join the cluster with the specified master endpoints.
 func (s *Server) JoinMaster(endpoints []string) error {
 	// TODO: grpc proxy
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(s.cfg.SSLCA),
+		util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+		util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+	)
 	if err != nil {
 		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
+	}
+	grpcTLS := grpc.WithInsecure()
+	if tlsConfig != nil {
+		grpcTLS = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
 	// join doesn't support to be canceled now, because it can return at most in (3s+3s) * len(endpoints).
@@ -56,7 +65,13 @@ func (s *Server) JoinMaster(endpoints []string) error {
 	for _, endpoint := range endpoints {
 		ctx1, cancel1 := context.WithTimeout(ctx, 3*time.Second)
 		//nolint:staticcheck
-		conn, err := grpc.DialContext(ctx1, utils.UnwrapScheme(endpoint), grpc.WithBlock(), tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second))
+		conn, err := grpc.DialContext(
+			ctx1,
+			utils.UnwrapScheme(endpoint),
+			grpc.WithBlock(),
+			grpcTLS,
+			grpc.WithBackoffMaxDelay(3*time.Second),
+		)
 		cancel1()
 		if err != nil {
 			if conn != nil {
