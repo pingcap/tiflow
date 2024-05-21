@@ -190,6 +190,7 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		zap.String("groupID", o.groupID),
 		zap.Int("maxMessageBytes", o.maxMessageBytes),
 		zap.Int("maxBatchSize", o.maxBatchSize),
+		zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules),
 		zap.String("upstreamURI", upstreamURI.String()))
 	return nil
 }
@@ -667,6 +668,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Int32("obtained", partition),
 						zap.Int32("expected", target),
 						zap.Int32("partitionNum", c.option.partitionNum),
+						zap.Any("dispatchers", c.option.replicaConfig.Sink.DispatchRules),
 						zap.Any("row", row),
 					)
 				}
