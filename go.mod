@@ -68,16 +68,23 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240412033321-fd0796e60f86
 	github.com/pingcap/kvproto v0.0.0-20240417154738-4fa2b26b2d80
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20240425142112-54ba0ed68407
 	github.com/pingcap/tidb-tools v0.0.0-20240408054520-d28ee6cd546e
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240425142112-54ba0ed68407
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20240520031014-397a460dd067
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb-tools v0.0.0-20240508055508-ee5de104059e
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240520031014-397a460dd067
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
-	github.com/shirou/gopsutil/v3 v3.24.2
+	github.com/shirou/gopsutil/v3 v3.24.4
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.8.0
@@ -87,9 +94,14 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20240424052342-0229f4077f0c
+=======
+	github.com/thanhpk/randstr v1.0.6
+	github.com/tikv/client-go/v2 v2.0.8-0.20240516031922-38e0dca30c8c
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20240322051414-fb9e2d561b6e
+	github.com/tikv/pd/client v0.0.0-20240430080403-1679dbca25b3
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -108,15 +120,25 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
+<<<<<<< HEAD
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	golang.org/x/net v0.24.0
 	golang.org/x/oauth2 v0.18.0
+=======
+	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8
+	golang.org/x/net v0.25.0
+	golang.org/x/oauth2 v0.20.0
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.19.0
-	golang.org/x/text v0.14.0
+	golang.org/x/sys v0.20.0
+	golang.org/x/text v0.15.0
 	golang.org/x/time v0.5.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
+<<<<<<< HEAD
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be
+=======
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240401170217-c3f982113cda
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	google.golang.org/grpc v1.63.2
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -186,8 +208,7 @@ require (
 
 require (
 	cloud.google.com/go v0.112.2 // indirect
-	cloud.google.com/go/compute v1.25.1 // indirect
-	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v1.1.7 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -368,12 +389,16 @@ require (
 	go.opentelemetry.io/otel/sdk v1.22.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
-	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/term v0.19.0 // indirect
 	golang.org/x/tools v0.20.0 // indirect
+=======
+	golang.org/x/term v0.20.0
+	golang.org/x/tools v0.21.0 // indirect
+>>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 	google.golang.org/api v0.170.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
