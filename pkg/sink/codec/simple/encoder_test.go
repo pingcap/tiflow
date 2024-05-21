@@ -1152,13 +1152,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
-					expectedValue := col.Value
-					if colInfo.GetType() == mysql.TypeTimestamp {
-						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
-						require.NoError(t, err)
-					}
-					require.EqualValues(t, expectedValue, decoded.Value)
+					require.EqualValues(t, col.Value, decoded.Value)
 				}
 
 				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
@@ -1170,13 +1164,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedPreviousColumns[colName]
 					require.True(t, ok)
-					colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
-					expectedValue := col.Value
-					if colInfo.GetType() == mysql.TypeTimestamp {
-						expectedValue, err = convertTimezone(expectedValue.(string), "Local")
-						require.NoError(t, err)
-					}
-					require.EqualValues(t, expectedValue, decoded.Value)
+					require.EqualValues(t, col.Value, decoded.Value)
 				}
 			}
 		}
@@ -1294,13 +1282,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
-				expectedValue := col.Value
-				if colInfo.GetType() == mysql.TypeTimestamp {
-					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
-					require.NoError(t, err)
-				}
-				require.EqualValues(t, expectedValue, decoded.Value)
+				require.EqualValues(t, col.Value, decoded.Value)
 			}
 
 			for _, column := range decodedRow.PreColumns {
@@ -1311,13 +1293,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 				colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				colInfo := updateEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
-				expectedValue := col.Value
-				if colInfo.GetType() == mysql.TypeTimestamp {
-					expectedValue, err = convertTimezone(expectedValue.(string), "Local")
-					require.NoError(t, err)
-				}
-				require.EqualValues(t, expectedValue, decoded.Value)
+				require.EqualValues(t, col.Value, decoded.Value)
 			}
 		}
 	}

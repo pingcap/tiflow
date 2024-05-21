@@ -461,10 +461,32 @@ func buildRowChangedEvent(
 			}
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 		}
+	}
 
+	for _, col := range result.Columns {
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
+	}
+	for _, col := range result.PreColumns {
+		adjustTimestampValue(col, tableInfo.ForceGetColumnInfo(col.ColumnID).FieldType)
 	}
 
 	return result, nil
+}
+
+func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
+	if flag.GetType() != mysql.TypeTimestamp {
+		return
+	}
+	if column.Value != nil {
+		var ts string
+		switch v := column.Value.(type) {
+		case map[string]string:
+			ts = v["value"]
+		case map[string]interface{}:
+			ts = v["value"].(string)
+		}
+		column.Value = ts
+	}
 }
 
 func decodeColumns(
@@ -828,39 +850,9 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 				return nil
 			}
 		}
-	case mysql.TypeTimestamp:
-		data := value.(map[string]interface{})
-		ts := data["value"].(string)
-		location := data["location"].(string)
-		ts, err := convertTimezone(ts, location)
-		if err != nil {
-			return nil
-		}
-		value = ts
 	default:
 	}
 
 	result.Value = value
 	return result
-}
-
-func convertTimezone(timestamp string, location string) (string, error) {
-	t, err := tiTypes.ParseTimestamp(tiTypes.StrictContext, timestamp)
-	if err != nil {
-		return "", err
-	}
-
-	loc, err := time.LoadLocation(location)
-	if err != nil {
-		log.Info("cannot load timezone location",
-			zap.String("location", location), zap.Error(err))
-		return "", err
-	}
-
-	err = t.ConvertTimeZone(loc, time.UTC)
-	if err != nil {
-		return "", err
-	}
-
-	return t.String(), nil
 }
