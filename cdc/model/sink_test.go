@@ -445,7 +445,7 @@ func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
 	require.Equal(t, 0, len(result))
 }
 
-func TestTrySplitAndSortUpdateEvent(t *testing.T) {
+func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 	t.Parallel()
 
 	// Update handle key.
@@ -608,4 +608,11 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
+
+	txn2 := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
 }

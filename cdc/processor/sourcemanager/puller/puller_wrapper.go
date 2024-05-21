@@ -40,6 +40,12 @@ type Wrapper interface {
 	Close()
 }
 
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error)
+
 // WrapperImpl is a wrapper of puller used by source manager.
 type WrapperImpl struct {
 	changefeed model.ChangeFeedID
@@ -48,6 +54,9 @@ type WrapperImpl struct {
 	p          puller.Puller
 	startTs    model.Ts
 	bdrMode    bool
+
+	shouldSplitKVEntry ShouldSplitKVEntry
+	splitUpdateKVEntry SplitUpdateKVEntry
 
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
@@ -62,13 +71,17 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
+	shouldSplitKVEntry ShouldSplitKVEntry,
+	splitUpdateKVEntry SplitUpdateKVEntry,
 ) Wrapper {
 	return &WrapperImpl{
-		changefeed: changefeed,
-		span:       span,
-		tableName:  tableName,
-		startTs:    startTs,
-		bdrMode:    bdrMode,
+		changefeed:         changefeed,
+		span:               span,
+		tableName:          tableName,
+		startTs:            startTs,
+		bdrMode:            bdrMode,
+		shouldSplitKVEntry: shouldSplitKVEntry,
+		splitUpdateKVEntry: splitUpdateKVEntry,
 	}
 }
 
@@ -126,8 +139,18 @@ func (n *WrapperImpl) Start(
 				if rawKV == nil {
 					continue
 				}
-				pEvent := model.NewPolymorphicEvent(rawKV)
-				eventSortEngine.Add(n.span, pEvent)
+				if n.shouldSplitKVEntry(rawKV) {
+					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
+					if err != nil {
+						return err
+					}
+					deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+					insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+					eventSortEngine.Add(n.span, deleteEvent, insertEvent)
+				} else {
+					pEvent := model.NewPolymorphicEvent(rawKV)
+					eventSortEngine.Add(n.span, pEvent)
+				}
 			}
 		}
 	})

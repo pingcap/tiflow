@@ -1872,7 +1872,7 @@ func TestGroupRowsByType(t *testing.T) {
 			}
 			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
-			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
+			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo)
 			for _, rows := range inserts {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}
