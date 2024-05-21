@@ -19,12 +19,13 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -114,14 +115,22 @@ func (s *Server) electionNotify(ctx context.Context) {
 func (s *Server) createLeaderClient(leaderAddr string) {
 	s.closeLeaderClient()
 
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(s.cfg.SSLCA),
+		util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+		util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+	)
 	if err != nil {
 		log.L().Error("can't create grpc connection with leader, can't forward request to leader", zap.String("leader", leaderAddr), zap.Error(err))
 		return
 	}
+	grpcTLS := grpc.WithInsecure()
+	if tlsConfig != nil {
+		grpcTLS = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
 
 	//nolint:staticcheck
-	conn, err := grpc.Dial(leaderAddr, tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second))
+	conn, err := grpc.Dial(leaderAddr, grpcTLS, grpc.WithBackoffMaxDelay(3*time.Second))
 	if err != nil {
 		log.L().Error("can't create grpc connection with leader, can't forward request to leader", zap.String("leader", leaderAddr), zap.Error(err))
 		return

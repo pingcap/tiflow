@@ -22,12 +22,12 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -132,7 +132,7 @@ func IsTiDBFromVersion(version string) bool {
 func markCheckError(result *Result, err error) {
 	if err != nil {
 		state := StateFailure
-		if utils.OriginError(err) == context.Canceled {
+		if cerrors.OriginError(err) == context.Canceled {
 			state = StateWarning
 		}
 		// `StateWarning` can't cover `StateFailure`.
