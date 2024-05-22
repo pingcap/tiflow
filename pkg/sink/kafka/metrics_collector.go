@@ -155,7 +155,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
 			OutgoingByteRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 
 		requestRateMetric := m.registry.Get(
@@ -163,7 +163,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
 			RequestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 
 		requestLatencyMetric := m.registry.Get(
@@ -187,7 +187,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
 			responseRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 	}
 }
