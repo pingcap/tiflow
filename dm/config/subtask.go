@@ -28,11 +28,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-<<<<<<< HEAD
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-=======
->>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	extstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -44,11 +39,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-<<<<<<< HEAD
-=======
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
->>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"

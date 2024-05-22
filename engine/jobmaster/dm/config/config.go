@@ -20,22 +20,14 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
-<<<<<<< HEAD
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-=======
->>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/master"
-<<<<<<< HEAD
-=======
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
->>>>>>> 1c7c9aec24 (dep(dm): move column-mapping from tidb-tools to tiflow repo (#11112))
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"gopkg.in/yaml.v2"
