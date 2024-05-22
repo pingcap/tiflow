@@ -32,9 +32,10 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	if pdClient == nil {
 		return config.DefaultTiDBSourceID, nil
 	}
+
 	// The default value of sourceID is 1,
 	// which means the sourceID is not changed by user.
-	sourceID := uint64(1)
+	sourceID := uint64(config.DefaultTiDBSourceID)
 	sourceIDConfig, _, err := pdClient.LoadGlobalConfig(ctx, []string{sourceIDName}, "")
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)

@@ -628,7 +628,7 @@ LOOP2:
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		c.state.Info.Config,
+		info.Config,
 		c.upstream, ddlStartTs,
 		c.id,
 		c.schema,
@@ -643,7 +643,7 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, info.SinkURI, info.Config)
 	if err != nil {
 		return err
 	}
@@ -691,8 +691,8 @@ LOOP2:
 
 	// create scheduler
 	cfg := *c.cfg
-	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
-	epoch := c.state.Info.Epoch
+	cfg.ChangefeedSettings = info.Config.Scheduler
+	epoch := info.Epoch
 	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg, c.redoMetaMgr)
 	if err != nil {
 		return errors.Trace(err)
@@ -701,7 +701,7 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized.Store(true)
-	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.state.Info.CreateTime)))
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(info.CreateTime)))
 	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
