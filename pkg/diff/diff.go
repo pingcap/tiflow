@@ -188,12 +188,14 @@ func (t *TableDiff) CheckTableStruct(ctx context.Context) (bool, error) {
 
 func (t *TableDiff) adjustConfig() {
 	if t.ChunkSize <= 0 {
-		log.Warn("chunk size is less than 0, will use default value 1000", zap.Int("chunk size", t.ChunkSize))
+		log.Warn("chunk size is less than 0, will use default value 1000",
+			zap.Int("chunkSize", t.ChunkSize))
 		t.ChunkSize = 1000
 	}
 
 	if t.ChunkSize < 1000 || t.ChunkSize > 10000 {
-		log.Warn("chunk size is recommend in range [1000, 10000]", zap.Int("chunk size", t.ChunkSize))
+		log.Warn("chunk size is recommend in range [1000, 10000]",
+			zap.Int("chunkSize", t.ChunkSize))
 	}
 
 	if len(t.Range) == 0 {
@@ -463,7 +465,9 @@ func (t *TableDiff) checkChunkDataEqual(ctx context.Context, filterByRand bool, 
 	}
 
 	// if checksum is not equal or don't need compare checksum, compare the data
-	log.Info("select data and then check data", zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)), zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)))
+	log.Info("select data and then check data",
+		zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
+		zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)))
 
 	equal, err = t.compareRows(ctx, chunk)
 	if err != nil {
@@ -542,11 +546,19 @@ func (t *TableDiff) compareChecksum(ctx context.Context, chunk *ChunkRange) (boo
 	}
 
 	if sourceChecksum == targetChecksum {
-		log.Info("checksum is equal", zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)), zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)), zap.Int64("checksum", sourceChecksum), zap.Duration("get source checksum cost", getSourceChecksumDuration), zap.Duration("get target checksum cost", getTargetChecksumDuration))
+		log.Info("checksum is equal",
+			zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
+			zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)),
+			zap.Int64("checksum", sourceChecksum), zap.Duration("getSourceChecksumCost", getSourceChecksumDuration),
+			zap.Duration("getTargetChecksumCost", getTargetChecksumDuration))
 		return true, nil
 	}
 
-	log.Warn("checksum is not equal", zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)), zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)), zap.Int64("source checksum", sourceChecksum), zap.Int64("target checksum", targetChecksum), zap.Duration("get source checksum cost", getSourceChecksumDuration), zap.Duration("get target checksum cost", getTargetChecksumDuration))
+	log.Warn("checksum is not equal",
+		zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
+		zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)),
+		zap.Int64("sourceChecksum", sourceChecksum), zap.Int64("targetChecksum", targetChecksum),
+		zap.Duration("getSourceChecksumCost", getSourceChecksumDuration), zap.Duration("getTargetChecksumCostc", getTargetChecksumDuration))
 
 	return false, nil
 }
@@ -558,14 +570,16 @@ func (t *TableDiff) compareRows(ctx context.Context, chunk *ChunkRange) (bool, e
 	sourceHaveData := make(map[int]bool)
 	args := stringsToInterfaces(chunk.Args)
 
-	targetRows, orderKeyCols, err := getChunkRows(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table, t.TargetTable.info, chunk.Where, args, t.Collation)
+	targetRows, orderKeyCols, err := getChunkRows(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table,
+		t.TargetTable.info, chunk.Where, args, t.Collation)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	defer targetRows.Close()
 
 	for i, sourceTable := range t.SourceTables {
-		rows, _, err := getChunkRows(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table, sourceTable.info, chunk.Where, args, t.Collation)
+		rows, _, err := getChunkRows(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table, sourceTable.info,
+			chunk.Where, args, t.Collation)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -737,9 +751,15 @@ func (t *TableDiff) compareRows(ctx context.Context, chunk *ChunkRange) (bool, e
 	}
 
 	if equal {
-		log.Info("rows is equal", zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)), zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)), zap.Duration("cost", time.Since(beginTime)))
+		log.Info("rows is equal", zap.String("table",
+			dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
+			zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)),
+			zap.Duration("cost", time.Since(beginTime)))
 	} else {
-		log.Warn("rows is not equal", zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)), zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)), zap.Duration("cost", time.Since(beginTime)))
+		log.Warn("rows is not equal",
+			zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
+			zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)),
+			zap.Duration("cost", time.Since(beginTime)))
 	}
 
 	return equal, nil
@@ -794,7 +814,9 @@ func (t *TableDiff) UpdateSummaryInfo(ctx context.Context) chan bool {
 
 			err := updateTableSummary(ctx1, t.CpDB, t.TargetTable.InstanceID, t.TargetTable.Schema, t.TargetTable.Table, t.summaryInfo)
 			if err != nil {
-				log.Warn("save table summary info failed", zap.String("schema", t.TargetTable.Schema), zap.String("table", t.TargetTable.Table), zap.Error(err))
+				log.Warn("save table summary info failed",
+					zap.String("schema", t.TargetTable.Schema),
+					zap.String("table", t.TargetTable.Table), zap.Error(err))
 			}
 		}
 		defer func() {
@@ -845,7 +867,9 @@ func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.Tab
 			}
 		}
 
-		sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES (%s);", dbutil.TableName(schema, table.Name.O), strings.Join(colNames, ","), strings.Join(values, ","))
+		sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES (%s);",
+			dbutil.TableName(schema, table.Name.O),
+			strings.Join(colNames, ","), strings.Join(values, ","))
 	case "delete":
 		kvs := make([]string, 0, len(table.Columns))
 		for _, col := range table.Columns {
@@ -859,9 +883,14 @@ func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.Tab
 			}
 
 			if needQuotes(col.FieldType) {
-				kvs = append(kvs, fmt.Sprintf("%s = '%s'", dbutil.ColumnName(col.Name.O), strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
+				kvs = append(kvs, fmt.Sprintf("%s = '%s'",
+					dbutil.ColumnName(col.Name.O),
+					strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
 			} else {
-				kvs = append(kvs, fmt.Sprintf("%s = %s", dbutil.ColumnName(col.Name.O), string(data[col.Name.O].Data)))
+				kvs = append(kvs,
+					fmt.Sprintf("%s = %s",
+						dbutil.ColumnName(col.Name.O),
+						string(data[col.Name.O].Data)))
 			}
 		}
 		sql = fmt.Sprintf("DELETE FROM %s WHERE %s;", dbutil.TableName(schema, table.Name.O), strings.Join(kvs, " AND "))
@@ -887,7 +916,8 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 		}
 
 		if cmp == 0 {
-			log.Warn("find different row", zap.String("column", key), zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
+			log.Warn("find different row", zap.String("column", key),
+				zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
 		} else if cmp > 0 {
 			log.Warn("target had superfluous data", zap.String("row", rowToString(map2)))
 		} else {
@@ -948,7 +978,8 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
 			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
 			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", string(data1.Data), string(data2.Data), err1, err2)
+				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v",
+					string(data1.Data), string(data2.Data), err1, err2)
 				return
 			}
 
