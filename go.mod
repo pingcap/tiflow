@@ -71,7 +71,6 @@ require (
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
 	github.com/pingcap/tidb v1.1.0-beta.0.20240520031014-397a460dd067
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb-tools v0.0.0-20240508055508-ee5de104059e
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240520031014-397a460dd067
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
