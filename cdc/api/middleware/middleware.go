@@ -46,7 +46,7 @@ func LogMiddleware() gin.HandlerFunc {
 			stdErr = err.Err
 		}
 		version := c.Request.Header.Get(ClientVersionHeader)
-		log.Info(path,
+		log.Info("cdc open api request",
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
