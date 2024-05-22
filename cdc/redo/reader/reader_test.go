@@ -260,7 +260,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -285,7 +285,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -327,7 +327,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -361,7 +361,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -394,7 +394,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -428,7 +428,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -461,7 +461,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -495,7 +495,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -537,7 +537,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -562,7 +562,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -595,7 +595,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -611,7 +611,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 200,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -635,7 +635,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								StartTs:  80,
 								Table: &model.TableName{
@@ -652,7 +652,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								StartTs:  90,
 								Table: &model.TableName{
@@ -677,7 +677,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
@@ -711,7 +711,7 @@ func TestLogHeapLess(t *testing.T) {
 					data: &model.RedoLog{
 						Type: model.RedoLogTypeRow,
 						RedoRow: model.RedoRowChangedEvent{
-							Row: &model.RowChangedEventInRedoLog{
+							Row: &model.RowChangedEvent{
 								CommitTs: 100,
 								Table: &model.TableName{
 									Schema:      "test",
