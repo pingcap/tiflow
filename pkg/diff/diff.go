@@ -36,10 +36,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	// cancel the context for `Equal`, only used in test
-	cancelEqualFunc context.CancelFunc
-)
+// cancel the context for `Equal`, only used in test
+var cancelEqualFunc context.CancelFunc
 
 // TableInstance record a table instance
 type TableInstance struct {
@@ -618,7 +616,6 @@ func (t *TableDiff) compareRows(ctx context.Context, chunk *ChunkRange) (bool, e
 			if !sourceHaveData[i] {
 				if sourceRows[i].Err() != nil {
 					return nil, sourceRows[i].Err()
-
 				}
 				// still don't have data, means the rows is read to the end, so delete the source
 				needDeleteSource = append(needDeleteSource, i)
@@ -972,7 +969,8 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 }
 
 func getChunkRows(ctx context.Context, db *sql.DB, schema, table string, tableInfo *model.TableInfo, where string,
-	args []interface{}, collation string) (*sql.Rows, []*model.ColumnInfo, error) {
+	args []interface{}, collation string,
+) (*sql.Rows, []*model.ColumnInfo, error) {
 	orderKeys, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
 
 	columnNames := make([]string, 0, len(tableInfo.Columns))

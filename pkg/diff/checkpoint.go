@@ -98,7 +98,6 @@ func (s *tableSummaryInfo) get() (totalNum, successNum, failedNum, ignoreNum int
 	s.RLock()
 	defer s.RUnlock()
 	return s.totalNum, s.successNum, s.failedNum, s.ignoreNum
-
 }
 
 // saveChunk saves the chunk's info to `chunk` table
@@ -315,17 +314,16 @@ func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 
 	note: config_hash is the hash value for the config, if config is changed, will clear the history checkpoint.
 	*/
-	createSummaryTableSQL :=
-		"CREATE TABLE IF NOT EXISTS `sync_diff_inspector`.`summary`(" +
-			"`schema` varchar(64), `table` varchar(64)," +
-			"`chunk_num` int not null default 0," +
-			"`check_success_num` int not null default 0," +
-			"`check_failed_num` int not null default 0," +
-			"`check_ignore_num` int not null default 0," +
-			"`state` enum('not_checked', 'checking', 'success', 'failed') DEFAULT 'not_checked'," +
-			"`config_hash` varchar(50)," +
-			"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
-			"PRIMARY KEY(`schema`, `table`));"
+	createSummaryTableSQL := "CREATE TABLE IF NOT EXISTS `sync_diff_inspector`.`summary`(" +
+		"`schema` varchar(64), `table` varchar(64)," +
+		"`chunk_num` int not null default 0," +
+		"`check_success_num` int not null default 0," +
+		"`check_failed_num` int not null default 0," +
+		"`check_ignore_num` int not null default 0," +
+		"`state` enum('not_checked', 'checking', 'success', 'failed') DEFAULT 'not_checked'," +
+		"`config_hash` varchar(50)," +
+		"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
+		"PRIMARY KEY(`schema`, `table`));"
 
 	_, err = db.ExecContext(ctx, createSummaryTableSQL)
 	if err != nil {
@@ -341,18 +339,17 @@ func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 	|        2 | target-1    | diff   | test1 | (`a` >= ? AND `a` < ? AND TRUE) |  91f3020527 |  .....    | success | 2019-03-26 12:41:42 |
 	+----------+-------------+--------+-------+---------------------------------+-------------+-----------+---------+---------------------+
 	*/
-	createChunkTableSQL :=
-		"CREATE TABLE IF NOT EXISTS `sync_diff_inspector`.`chunk`(" +
-			"`chunk_id` int," +
-			"`instance_id` varchar(64)," +
-			"`schema` varchar(64)," +
-			"`table` varchar(64)," +
-			"`range` text," +
-			"`checksum` varchar(20)," +
-			"`chunk_str` text," +
-			"`state` enum('not_checked', 'checking', 'success', 'failed', 'ignore', 'error') DEFAULT 'not_checked'," +
-			"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
-			"PRIMARY KEY(`schema`, `table`, `instance_id`, `chunk_id`));"
+	createChunkTableSQL := "CREATE TABLE IF NOT EXISTS `sync_diff_inspector`.`chunk`(" +
+		"`chunk_id` int," +
+		"`instance_id` varchar(64)," +
+		"`schema` varchar(64)," +
+		"`table` varchar(64)," +
+		"`range` text," +
+		"`checksum` varchar(20)," +
+		"`chunk_str` text," +
+		"`state` enum('not_checked', 'checking', 'success', 'failed', 'ignore', 'error') DEFAULT 'not_checked'," +
+		"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
+		"PRIMARY KEY(`schema`, `table`, `instance_id`, `chunk_id`));"
 	_, err = db.ExecContext(ctx, createChunkTableSQL)
 	if err != nil {
 		log.Error("create chunk table", zap.Error(err))

@@ -400,7 +400,6 @@ func getSplitFields(table *model.TableInfo, splitFields []string) ([]*model.Colu
 		col := dbutil.FindColumnByName(table.Columns, splitField)
 		if col == nil {
 			return nil, errors.NotFoundf("column %s in table %s", splitField, table.Name)
-
 		}
 		splitCols = append(splitCols, col)
 	}
