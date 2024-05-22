@@ -244,8 +244,6 @@ func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValue
 		}
 		mock.ExpectQuery("ORDER BY rand_value").WillReturnRows(randomRows)
 	}
-
-	return
 }
 
 func (s *testSpliterSuite) TestBucketSpliter(c *C) {
@@ -466,6 +464,4 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		bRandomRows.AddRow(bRandomValues[i])
 		mock.ExpectQuery("ORDER BY rand_value").WillReturnRows(bRandomRows)
 	}
-
-	return
 }

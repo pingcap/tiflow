@@ -583,6 +583,9 @@ func (t *TableDiff) compareRows(ctx context.Context, chunk *ChunkRange) (bool, e
 		if err != nil {
 			return false, errors.Trace(err)
 		}
+		if rows.Err() != nil {
+			return false, errors.Trace(rows.Err())
+		}
 		defer rows.Close()
 
 		sourceRows[i] = rows

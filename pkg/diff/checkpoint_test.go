@@ -107,16 +107,19 @@ func (s *testUtilSuite) TestloadFromCheckPoint(c *C) {
 	rows := sqlmock.NewRows([]string{"state", "config_hash"}).AddRow("success", "123")
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 	useCheckpoint, err := loadFromCheckPoint(context.Background(), db, "test", "test", "123")
+	c.Assert(err, IsNil)
 	c.Assert(useCheckpoint, Equals, false)
 
 	rows = sqlmock.NewRows([]string{"state", "config_hash"}).AddRow("success", "123")
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 	useCheckpoint, err = loadFromCheckPoint(context.Background(), db, "test", "test", "456")
+	c.Assert(err, IsNil)
 	c.Assert(useCheckpoint, Equals, false)
 
 	rows = sqlmock.NewRows([]string{"state", "config_hash"}).AddRow("failed", "123")
 	mock.ExpectQuery("SELECT").WillReturnRows(rows)
 	useCheckpoint, err = loadFromCheckPoint(context.Background(), db, "test", "test", "123")
+	c.Assert(err, IsNil)
 	c.Assert(useCheckpoint, Equals, true)
 }
 

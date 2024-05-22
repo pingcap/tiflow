@@ -247,6 +247,7 @@ func (*testChunkSuite) TestRangeLimit(c *C) {
 	for _, chunk := range chunks {
 		rows, _, err := getChunkRows(ctx, conn, "test", "test_range", tableInfo, chunk.Where, stringsToInterfaces(chunk.Args), "")
 		c.Assert(err, IsNil)
+		c.Assert(rows.Err(), IsNil)
 		for rows.Next() {
 			count++
 		}
