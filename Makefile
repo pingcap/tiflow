@@ -121,6 +121,10 @@ LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 LDFLAGS += -X "github.com/pingcap/tidb/pkg/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
 
+# Disable the conflict policy of protoregistry to avoid the conflict error.
+#LDFLAGS += -X "google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn"
+
+
 include tools/Makefile
 include Makefile.engine
 

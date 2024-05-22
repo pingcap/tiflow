@@ -190,9 +190,10 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			// This never be blocked because this is an unbounded channel.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: model.TopicPartitionKey{
-					Topic:        topic,
-					Partition:    index,
-					PartitionKey: key,
+					Topic:          topic,
+					Partition:      index,
+					PartitionKey:   key,
+					TotalPartition: partitionNum,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,

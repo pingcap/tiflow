@@ -575,7 +575,7 @@ func testChangefeedReleaseResource(
 	// initialize
 	cf.Tick(ctx, captures)
 	tester.MustApplyPatches()
-	require.Equal(t, cf.initialized, expectedInitialized)
+	require.Equal(t, cf.initialized.Load(), expectedInitialized)
 
 	// remove changefeed from state manager by admin job
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{

@@ -141,6 +141,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		FileSize:       aws.Int(1024),
 		OutputColumnID: aws.Bool(false),
 	}
+	conf.Sink.OpenProtocol = &OpenProtocolConfig{
+		OutputOldValue: true,
+	}
 
 	b, err := conf.Marshal()
 	require.NoError(t, err)

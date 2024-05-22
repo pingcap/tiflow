@@ -238,6 +238,11 @@ definitions:
         description: OAuth2Scope scope
         type: string
     type: object
+  config.OpenProtocolConfig:
+    properties:
+      output-old-value:
+        type: boolean
+    type: object
   config.PulsarConfig:
     properties:
       auth-tls-certificate-path:
@@ -360,6 +365,9 @@ definitions:
         description: OnlyOutputUpdatedColumns is only available when the downstream
           is MQ.
         type: boolean
+      open:
+        $ref: '#/definitions/config.OpenProtocolConfig'
+        description: OpenProtocol related configurations
       protocol:
         description: Protocol is NOT available when the downstream is DB.
         type: string
@@ -1003,6 +1011,11 @@ definitions:
       write_timeout:
         type: string
     type: object
+  v2.OpenProtocolConfig:
+    properties:
+      output_old_value:
+        type: boolean
+    type: object
   v2.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -1192,6 +1205,8 @@ definitions:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
         type: boolean
+      open:
+        $ref: '#/definitions/v2.OpenProtocolConfig'
       protocol:
         type: string
       pulsar_config:

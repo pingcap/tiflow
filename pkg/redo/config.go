@@ -36,7 +36,7 @@ var (
 
 const (
 	// DefaultTimeout is the default timeout for writing external storage.
-	DefaultTimeout = 15 * time.Minute
+	DefaultTimeout = 5 * time.Minute
 	// CloseTimeout is the default timeout for close redo writer.
 	CloseTimeout = 15 * time.Second
 
@@ -192,7 +192,8 @@ func IsBlackholeStorage(scheme string) bool {
 var InitExternalStorage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	s, err := util.GetExternalStorageWithTimeout(ctx, uri.String(), DefaultTimeout)
 	if err != nil {
-		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
+		return nil, errors.WrapError(errors.ErrStorageInitialize, err,
+			fmt.Sprintf("can't init external storage for %s", uri.String()))
 	}
 	return s, nil
 }

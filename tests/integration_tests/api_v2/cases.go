@@ -82,6 +82,7 @@ var customReplicaConfig = &ReplicaConfig{
 		SendBootstrapIntervalInSec:  util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition: util.AddressOf(true),
+		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -131,6 +132,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		SendBootstrapIntervalInSec:  util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:     util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition: util.AddressOf(true),
+		OpenProtocolConfig:          &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

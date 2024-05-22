@@ -64,7 +64,7 @@ type SinkFactory struct {
 	category Category
 }
 
-// New creates a new SinkFactory by schema.
+// New creates a new SinkFactory by scheme.
 func New(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
@@ -79,8 +79,8 @@ func New(
 	}
 
 	s := &SinkFactory{}
-	schema := sink.GetScheme(sinkURI)
-	switch schema {
+	scheme := sink.GetScheme(sinkURI)
+	switch scheme {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			txn.DefaultConflictDetectorSlots)
@@ -123,7 +123,7 @@ func New(
 		s.category = CategoryMQ
 	default:
 		return nil,
-			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
 	}
 
 	return s, nil

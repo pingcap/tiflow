@@ -18,6 +18,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
@@ -123,6 +124,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
@@ -134,16 +136,18 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
+	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
+	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
 	forceReplicate bool,
 	filter filter.Filter,
 ) (*Snapshot, error) {
+	start := time.Now()
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
@@ -151,7 +155,6 @@ func NewSnapshotFromMeta(
 	}
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
-
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
@@ -164,16 +167,30 @@ func NewSnapshotFromMeta(
 		vname := newVersionedEntityName(-1, dbinfo.Name.O, tag) // -1 means the entity is a schema.
 		vname.target = dbinfo.ID
 		snap.inner.schemaNameToID.ReplaceOrInsert(vname)
-
-		tableInfos, err := meta.ListTables(dbinfo.ID)
+		// get all tables Name
+		tableNames, err := meta.ListSimpleTables(dbinfo.ID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
-		for _, tableInfo := range tableInfos {
-			if filter.ShouldIgnoreTable(dbinfo.Name.O, tableInfo.Name.O) {
-				log.Debug("ignore table", zap.String("table", tableInfo.Name.O))
+		tableNeeded := make([]*timodel.TableNameInfo, 0, len(tableNames))
+		// filter tables
+		for _, table := range tableNames {
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, table.Name.O) {
+				log.Debug("ignore table", zap.String("table", table.Name.O))
 				continue
 			}
+			tableNeeded = append(tableNeeded, table)
+		}
+		tableInfos := make([]*timodel.TableInfo, 0, len(tableNeeded))
+		for _, table := range tableNeeded {
+			tableInfo, err := meta.GetTable(dbinfo.ID, table.ID)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			tableInfos = append(tableInfos, tableInfo)
+		}
+
+		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
@@ -204,6 +221,11 @@ func NewSnapshotFromMeta(
 		}
 	}
 	snap.inner.currentTs = currentTs
+
+	log.Info("schema snapshot created",
+		zap.Stringer("changefeed", id),
+		zap.Uint64("currentTs", currentTs),
+		zap.Any("duration", time.Since(start).Seconds()))
 	return snap, nil
 }
 

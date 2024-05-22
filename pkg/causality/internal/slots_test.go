@@ -30,14 +30,14 @@ func TestSlotsTrivial(t *testing.T) {
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
-		node := NewNode()
-		node.RandWorkerID = func() workerID { return 100 }
-		slots.Add(node, []uint64{1, 2, 3, 4, 5})
+		node := NewNode([]uint64{1, 2, 3, 4, 5})
+		node.RandCacheID = func() cacheID { return 100 }
+		slots.Add(node)
 		nodes = append(nodes, node)
 	}
 
 	for i := 0; i < count; i++ {
-		slots.Free(nodes[i], []uint64{1, 2, 3, 4, 5})
+		slots.Free(nodes[i])
 	}
 
 	require.Equal(t, 0, len(slots.slots[1].nodes))
@@ -55,8 +55,8 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
 	newNode := func() *Node {
-		node := NewNode()
-		node.RandWorkerID = func() workerID { return 100 }
+		node := NewNode([]uint64{1, 9, 17, 25, 33})
+		node.RandCacheID = func() cacheID { return 100 }
 		return node
 	}
 	for i := 0; i < N; i++ {
@@ -77,7 +77,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 				return
 			case node := <-freeNodeChan:
 				// keys belong to the same slot after hash, since slot num is 8
-				slots.Add(node, []uint64{1, 9, 17, 25, 33})
+				slots.Add(node)
 				inuseNodeChan <- node
 			}
 		}
@@ -92,7 +92,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 				return
 			case node := <-inuseNodeChan:
 				// keys belong to the same slot after hash, since slot num is 8
-				slots.Free(node, []uint64{1, 9, 17, 25, 33})
+				slots.Free(node)
 				freeNodeChan <- newNode()
 			}
 		}

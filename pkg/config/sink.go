@@ -182,6 +182,9 @@ type SinkConfig struct {
 	// If set to false, bootstrap message will only be sent to the first partition of each topic.
 	// Default value is true.
 	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
+
+	// OpenProtocol related configurations
+	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -900,4 +903,9 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 // NoCredentials returns true if no credentials are set.
 func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
+}
+
+// OpenProtocolConfig represents the configurations for open protocol encoding
+type OpenProtocolConfig struct {
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }

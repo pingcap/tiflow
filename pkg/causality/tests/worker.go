@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/containers"
+	"github.com/pingcap/tiflow/pkg/causality"
 )
 
 type txnForTest struct {
@@ -39,7 +40,6 @@ func (t *txnForTest) Finish(err error) {
 
 type txnWithUnlock struct {
 	*txnForTest
-	unlock func()
 }
 
 type workerForTest struct {
@@ -49,7 +49,7 @@ type workerForTest struct {
 	execFunc func(*txnForTest) error
 }
 
-func newWorkerForTest() *workerForTest {
+func newWorkerForTest(txnCh <-chan causality.TxnWithNotifier[*txnForTest]) *workerForTest {
 	ret := &workerForTest{
 		txnQueue: containers.NewSliceQueue[txnWithUnlock](),
 		closeCh:  make(chan struct{}),
@@ -58,14 +58,10 @@ func newWorkerForTest() *workerForTest {
 	ret.wg.Add(1)
 	go func() {
 		defer ret.wg.Done()
-		ret.run()
+		ret.run(txnCh)
 	}()
 
 	return ret
-}
-
-func (w *workerForTest) Add(txn *txnForTest, unlock func()) {
-	w.txnQueue.Push(txnWithUnlock{txnForTest: txn, unlock: unlock})
 }
 
 func (w *workerForTest) Close() {
@@ -73,31 +69,22 @@ func (w *workerForTest) Close() {
 	w.wg.Wait()
 }
 
-func (w *workerForTest) run() {
-outer:
+func (w *workerForTest) run(txnCh <-chan causality.TxnWithNotifier[*txnForTest]) {
 	for {
 		select {
 		case <-w.closeCh:
 			return
-		case <-w.txnQueue.C:
-		}
-
-		for {
-			txn, ok := w.txnQueue.Pop()
-			if !ok {
-				continue outer
-			}
-
+		case txn := <-txnCh:
 			var err error
 			if w.execFunc != nil {
-				err = errors.Trace(w.execFunc(txn.txnForTest))
+				err = errors.Trace(w.execFunc(txn.TxnEvent))
 			}
-			txn.unlock()
+			txn.PostTxnExecuted()
 
 			// Finish must be called after unlock,
 			// because the conflictTestDriver needs to make sure
 			// that all conflicts have been resolved before exiting.
-			txn.Finish(err)
+			txn.TxnEvent.Finish(err)
 		}
 	}
 }

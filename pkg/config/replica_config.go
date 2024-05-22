@@ -45,6 +45,7 @@ const (
 	// Note: The SQL Mode of TiDB is not the same as ORACLE.
 	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
 	defaultSQLMode = mysql.DefaultSQLMode
+
 	// DefaultTiDBSourceID is the default source ID of TiDB cluster.
 	DefaultTiDBSourceID = 1
 )
@@ -77,11 +78,12 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		TiDBSourceID:                     1,
+		TiDBSourceID:                     DefaultTiDBSourceID,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
 		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
+		OpenProtocol:                     &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

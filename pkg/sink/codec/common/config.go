@@ -75,6 +75,8 @@ type Config struct {
 	TimeZone *time.Location
 	// for the simple protocol, can be "json" and "avro", default to "json"
 	EncodingFormat EncodingFormatType
+	// Whether old value should be excluded in the output.
+	OpenOutputOldValue bool
 }
 
 // EncodingFormatType is the type of encoding format
@@ -109,6 +111,9 @@ func NewConfig(protocol config.Protocol) *Config {
 
 		EncodingFormat: EncodingFormatJSON,
 		TimeZone:       time.Local,
+
+		// default value is true
+		OpenOutputOldValue: true,
 	}
 }
 
@@ -216,6 +221,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
 				c.LargeMessageHandle.LargeMessageHandleOption)
+		}
+		if replicaConfig.Sink.OpenProtocol != nil {
+			c.OpenOutputOldValue = replicaConfig.Sink.OpenProtocol.OutputOldValue
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

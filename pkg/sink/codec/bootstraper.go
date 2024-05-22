@@ -75,6 +75,7 @@ func newBootstrapWorker(
 }
 
 func (b *bootstrapWorker) run(ctx context.Context) error {
+	log.Info("Bootstrap worker is started", zap.Stringer("changefeed", b.changefeedID))
 	sendTicker := time.NewTicker(bootstrapWorkerTickerInterval)
 	gcTicker := time.NewTicker(bootstrapWorkerGCInterval)
 	defer func() {
