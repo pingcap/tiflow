@@ -20,7 +20,6 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
-	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/master"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/pkg/column-mapping"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"gopkg.in/yaml.v2"
