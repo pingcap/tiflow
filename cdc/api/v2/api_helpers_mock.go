@@ -43,33 +43,33 @@ func (m *MockAPIV2Helpers) EXPECT() *MockAPIV2HelpersMockRecorder {
 }
 
 // createTiStore mocks base method.
-func (m *MockAPIV2Helpers) createTiStore(pdAddrs []string, credential *security.Credential) (kv.Storage, error) {
+func (m *MockAPIV2Helpers) createTiStore(ctx context.Context, pdAddrs []string, credential *security.Credential) (kv.Storage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "createTiStore", pdAddrs, credential)
+	ret := m.ctrl.Call(m, "createTiStore", ctx, pdAddrs, credential)
 	ret0, _ := ret[0].(kv.Storage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // createTiStore indicates an expected call of createTiStore.
-func (mr *MockAPIV2HelpersMockRecorder) createTiStore(pdAddrs, credential interface{}) *gomock.Call {
+func (mr *MockAPIV2HelpersMockRecorder) createTiStore(ctx, pdAddrs, credential interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).createTiStore), pdAddrs, credential)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).createTiStore), ctx, pdAddrs, credential)
 }
 
 // getEtcdClient mocks base method.
-func (m *MockAPIV2Helpers) getEtcdClient(pdAddrs []string, tlsConfig *tls.Config) (*v3.Client, error) {
+func (m *MockAPIV2Helpers) getEtcdClient(ctx context.Context, pdAddrs []string, tlsConfig *tls.Config) (*v3.Client, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getEtcdClient", pdAddrs, tlsConfig)
+	ret := m.ctrl.Call(m, "getEtcdClient", ctx, pdAddrs, tlsConfig)
 	ret0, _ := ret[0].(*v3.Client)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getEtcdClient indicates an expected call of getEtcdClient.
-func (mr *MockAPIV2HelpersMockRecorder) getEtcdClient(pdAddrs, tlsConfig interface{}) *gomock.Call {
+func (mr *MockAPIV2HelpersMockRecorder) getEtcdClient(ctx, pdAddrs, tlsConfig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getEtcdClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getEtcdClient), pdAddrs, tlsConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getEtcdClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getEtcdClient), ctx, pdAddrs, tlsConfig)
 }
 
 // getPDClient mocks base method.
@@ -88,9 +88,9 @@ func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential int
 }
 
 // getVerifiedTables mocks base method.
-func (m *MockAPIV2Helpers) getVerifiedTables(replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64, scheme, topic string, protocol config.Protocol) ([]model.TableName, []model.TableName, error) {
+func (m *MockAPIV2Helpers) getVerifiedTables(ctx context.Context, replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64, scheme, topic string, protocol config.Protocol) ([]model.TableName, []model.TableName, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getVerifiedTables", replicaConfig, storage, startTs, scheme, topic, protocol)
+	ret := m.ctrl.Call(m, "getVerifiedTables", ctx, replicaConfig, storage, startTs, scheme, topic, protocol)
 	ret0, _ := ret[0].([]model.TableName)
 	ret1, _ := ret[1].([]model.TableName)
 	ret2, _ := ret[2].(error)
@@ -98,9 +98,9 @@ func (m *MockAPIV2Helpers) getVerifiedTables(replicaConfig *config.ReplicaConfig
 }
 
 // getVerifiedTables indicates an expected call of getVerifiedTables.
-func (mr *MockAPIV2HelpersMockRecorder) getVerifiedTables(replicaConfig, storage, startTs, scheme, topic, protocol interface{}) *gomock.Call {
+func (mr *MockAPIV2HelpersMockRecorder) getVerifiedTables(ctx, replicaConfig, storage, startTs, scheme, topic, protocol interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getVerifiedTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).getVerifiedTables), replicaConfig, storage, startTs, scheme, topic, protocol)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getVerifiedTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).getVerifiedTables), ctx, replicaConfig, storage, startTs, scheme, topic, protocol)
 }
 
 // verifyCreateChangefeedConfig mocks base method.
