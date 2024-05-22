@@ -15,11 +15,11 @@ package diff
 
 import (
 	"container/heap"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 )
 
 var _ = Suite(&testMergerSuite{})

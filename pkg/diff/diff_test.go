@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tiflow/pkg/importer"
 )
 

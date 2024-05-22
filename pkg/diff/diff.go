@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"go.uber.org/zap"
 )
 
