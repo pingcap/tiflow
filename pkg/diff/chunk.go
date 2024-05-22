@@ -29,14 +29,9 @@ import (
 )
 
 var (
-	equal = "="
-	lt    = "<"
-	lte   = "<="
-	gt    = ">"
-	gte   = ">="
-
-	bucketMode = "bucketMode"
-	normalMode = "normalMode"
+	lt  = "<"
+	lte = "<="
+	gt  = ">"
 )
 
 // Bound represents a bound for a column
@@ -204,11 +199,6 @@ func (c *ChunkRange) copyAndUpdate(column, lower, upper string, updateLower, upd
 	newChunk := c.copy()
 	newChunk.update(column, lower, upper, updateLower, updateUpper)
 	return newChunk
-}
-
-type spliter interface {
-	// split splits a table's data to several chunks.
-	split(table *TableInstance, columns []*model.ColumnInfo, chunkSize int, limits string, collation string) ([]*ChunkRange, error)
 }
 
 type randomSpliter struct {

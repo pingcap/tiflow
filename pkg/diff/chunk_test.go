@@ -27,12 +27,6 @@ var _ = Suite(&testChunkSuite{})
 
 type testChunkSuite struct{}
 
-type chunkTestCase struct {
-	chunk        *ChunkRange
-	chunkCnt     int64
-	expectChunks []*ChunkRange
-}
-
 func (*testChunkSuite) TestSplitRange(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
