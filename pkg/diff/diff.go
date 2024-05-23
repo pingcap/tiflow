@@ -76,7 +76,7 @@ type TableDiff struct {
 	// how many goroutines are created to check data
 	CheckThreadCount int `json:"-"`
 
-	// set false if want to comapre the data directly
+	// set false if want to compare the data directly
 	UseChecksum bool `json:"-"`
 
 	// set true if just want compare data by checksum, will skip select data when checksum is not equal
@@ -349,7 +349,7 @@ func (t *TableDiff) LoadCheckpoint(ctx context.Context) ([]*ChunkRange, error) {
 		}
 	}
 
-	// clean old checkpoint infomation, and initial table summary
+	// clean old checkpoint information, and initial table summary
 	err = cleanCheckpoint(ctx1, t.CpDB, t.TargetTable.Schema, t.TargetTable.Table)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -574,6 +574,9 @@ func (t *TableDiff) compareRows(ctx context.Context, chunk *ChunkRange) (bool, e
 		t.TargetTable.info, chunk.Where, args, t.Collation)
 	if err != nil {
 		return false, errors.Trace(err)
+	}
+	if targetRows.Err() != nil {
+		return false, errors.Trace(targetRows.Err())
 	}
 	defer targetRows.Close()
 
@@ -805,7 +808,7 @@ func (t *TableDiff) WriteSqls(ctx context.Context, writeFixSQL func(string) erro
 	return stopWriteCh
 }
 
-// UpdateSummaryInfo updaets summary infomation
+// UpdateSummaryInfo updates summary information
 func (t *TableDiff) UpdateSummaryInfo(ctx context.Context) chan bool {
 	t.wg.Add(1)
 	stopUpdateCh := make(chan bool)

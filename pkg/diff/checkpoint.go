@@ -158,9 +158,8 @@ func initChunks(ctx context.Context, db *sql.DB, instanceID, schema, table strin
 
 // getChunk gets chunk info from table `chunk` by chunkID
 func getChunk(ctx context.Context, db *sql.DB, instanceID, schema, table string, chunkID int) (*ChunkRange, error) {
-	query := fmt.Sprintf(
-		"SELECT `chunk_str` FROM `%s`.`%s` WHERE `instance_id` = ? "+
-			"AND `schema` = ? AND `table` = ? AND `chunk_id` = ? limit 1",
+	query := fmt.Sprintf("SELECT `chunk_str` FROM `%s`.`%s` WHERE "+
+		"`instance_id` = ? AND `schema` = ? AND `table` = ? AND `chunk_id` = ? limit 1",
 		checkpointSchemaName, chunkTableName)
 	rows, err := db.QueryContext(ctx, query, instanceID, schema, table, chunkID)
 	if err != nil {
@@ -194,8 +193,7 @@ func getChunk(ctx context.Context, db *sql.DB, instanceID, schema, table string,
 func loadChunks(ctx context.Context, db *sql.DB, instanceID, schema, table string) ([]*ChunkRange, error) {
 	chunks := make([]*ChunkRange, 0, 100)
 
-	query := fmt.Sprintf(
-		"SELECT `chunk_str` FROM `%s`.`%s` WHERE `instance_id` = ? AND `schema` = ? AND `table` = ?",
+	query := fmt.Sprintf("SELECT `chunk_str` FROM `%s`.`%s` WHERE `instance_id` = ? AND `schema` = ? AND `table` = ?",
 		checkpointSchemaName, chunkTableName)
 	rows, err := db.QueryContext(ctx, query, instanceID, schema, table)
 	if err != nil {

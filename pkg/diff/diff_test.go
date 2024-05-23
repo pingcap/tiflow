@@ -201,6 +201,7 @@ func testStructEqual(ctx context.Context, conn *sql.DB, c *C) {
 			fmt.Println(sql)
 			return nil
 		})
+		c.Assert(err, IsNil)
 		c.Assert(structEqual, Equals, testCase.structEqual)
 
 		_, err = conn.ExecContext(ctx, testCase.dropSourceTable)

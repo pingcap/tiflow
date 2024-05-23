@@ -76,11 +76,6 @@ func (d *datum) uniqInt64() int64 {
 	return data
 }
 
-func (d *datum) uniqFloat64() float64 {
-	data := d.uniqInt64()
-	return float64(data)
-}
-
 func (d *datum) uniqString(n int) string {
 	d.Lock()
 	d.intValue++

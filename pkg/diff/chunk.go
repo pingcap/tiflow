@@ -208,9 +208,9 @@ func (c *ChunkRange) copy() *ChunkRange {
 	return newChunk
 }
 
-func (c *ChunkRange) copyAndUpdate(column, lower, upper string, updateLower, updateUpper bool) *ChunkRange {
+func (c *ChunkRange) copyAndUpdate(column, lower, upper string) *ChunkRange {
 	newChunk := c.copy()
-	newChunk.update(column, lower, upper, updateLower, updateUpper)
+	newChunk.update(column, lower, upper, true, true)
 	return newChunk
 }
 
@@ -305,7 +305,7 @@ type bucketSpliter struct {
 }
 
 func (s *bucketSpliter) split(
-	table *TableInstance, columns []*model.ColumnInfo,
+	table *TableInstance,
 	chunkSize int, limits string, collation string,
 ) ([]*ChunkRange, error) {
 	s.table = table
@@ -406,7 +406,7 @@ func getChunksForTable(table *TableInstance, columns []*model.ColumnInfo, chunkS
 ) ([]*ChunkRange, error) {
 	if useTiDBStatsInfo {
 		s := bucketSpliter{}
-		chunks, err := s.split(table, columns, chunkSize, limits, collation)
+		chunks, err := s.split(table, chunkSize, limits, collation)
 		if err == nil && len(chunks) > 0 {
 			return chunks, nil
 		}

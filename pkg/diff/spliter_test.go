@@ -45,7 +45,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *C) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))",
 			3,
-			NewChunkRange().copyAndUpdate("a", "0", "10", true, true).copyAndUpdate("b", "a", "z", true, true),
+			NewChunkRange().copyAndUpdate("a", "0", "10").copyAndUpdate("b", "a", "z"),
 			[][]interface{}{
 				{5, 7},
 				{"g", "n"},
@@ -65,7 +65,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *C) {
 		}, {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			NewChunkRange().copyAndUpdate("b", "a", "z", true, true),
+			NewChunkRange().copyAndUpdate("b", "a", "z"),
 			[][]interface{}{
 				{"g", "n"},
 			},
@@ -84,7 +84,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *C) {
 		}, {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			2,
-			NewChunkRange().copyAndUpdate("b", "a", "z", true, true),
+			NewChunkRange().copyAndUpdate("b", "a", "z"),
 			[][]interface{}{
 				{"g"},
 			},
@@ -100,7 +100,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *C) {
 		}, {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			NewChunkRange().copyAndUpdate("b", "a", "z", true, true),
+			NewChunkRange().copyAndUpdate("b", "a", "z"),
 			[][]interface{}{
 				{},
 			},
@@ -425,7 +425,7 @@ func (s *testSpliterSuite) TestBucketSpliter(c *C) {
 	for i, testCase := range testCases {
 		createFakeResultForBucketSplit(mock, testCase.aRandomValues, testCase.bRandomValues)
 		bSpliter := new(bucketSpliter)
-		chunks, err := bSpliter.split(tableInstance, tableInfo.Columns, testCase.chunkSize, "TRUE", "")
+		chunks, err := bSpliter.split(tableInstance, testCase.chunkSize, "TRUE", "")
 		c.Assert(err, IsNil)
 		for j, chunk := range chunks {
 			chunkStr, args := chunk.toString("")

@@ -133,7 +133,7 @@ func (*testChunkSuite) TestChunkUpdate(c *C) {
 	}
 
 	for _, cs := range testCases {
-		newChunk := chunk.copyAndUpdate(cs.boundArgs[0], cs.boundArgs[1], cs.boundArgs[2], true, true)
+		newChunk := chunk.copyAndUpdate(cs.boundArgs[0], cs.boundArgs[1], cs.boundArgs[2])
 		conditions, args := newChunk.toString("")
 		c.Assert(conditions, Equals, cs.expectStr)
 		c.Assert(args, DeepEquals, cs.expectArgs)
@@ -251,6 +251,7 @@ func (*testChunkSuite) TestRangeLimit(c *C) {
 		for rows.Next() {
 			count++
 		}
+		_ = rows.Close()
 	}
 	c.Assert(count, Equals, 2)
 }
