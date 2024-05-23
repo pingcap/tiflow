@@ -251,7 +251,7 @@ func (*testChunkSuite) TestRangeLimit(c *C) {
 		for rows.Next() {
 			count++
 		}
-		_ = rows.Close()
+		defer rows.Close()
 	}
 	c.Assert(count, Equals, 2)
 }
