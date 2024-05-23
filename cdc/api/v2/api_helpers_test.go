@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"

@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -64,7 +63,7 @@ type APIV2Helpers interface {
 		ctx context.Context,
 		cfg *ChangefeedConfig,
 		pdClient pd.Client,
-		ctrl controller.Controller,
+		provider owner.StatusProvider,
 		ensureGCServiceID string,
 		kvStorage tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
@@ -133,7 +132,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
-	ctrl controller.Controller,
+	provider owner.StatusProvider,
 	ensureGCServiceID string,
 	kvStorage tidbkv.Storage,
 ) (*model.ChangeFeedInfo, error) {
@@ -160,7 +159,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 			"invalid namespace: %s", cfg.Namespace)
 	}
 
-	exists, err := ctrl.IsChangefeedExists(ctx,
+	exists, err := provider.IsChangefeedExists(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
