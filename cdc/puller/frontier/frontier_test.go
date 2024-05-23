@@ -15,13 +15,12 @@ package frontier
 
 import (
 	"bytes"
-	"context"
 	"math"
 	"math/rand"
 	"sort"
+    "fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
