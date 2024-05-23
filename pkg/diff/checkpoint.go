@@ -156,39 +156,6 @@ func initChunks(ctx context.Context, db *sql.DB, instanceID, schema, table strin
 	return nil
 }
 
-// getChunk gets chunk info from table `chunk` by chunkID
-func getChunk(ctx context.Context, db *sql.DB, instanceID, schema, table string, chunkID int) (*ChunkRange, error) {
-	query := fmt.Sprintf("SELECT `chunk_str` FROM `%s`.`%s` WHERE "+
-		"`instance_id` = ? AND `schema` = ? AND `table` = ? AND `chunk_id` = ? limit 1",
-		checkpointSchemaName, chunkTableName)
-	rows, err := db.QueryContext(ctx, query, instanceID, schema, table, chunkID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		fields, err1 := dbutil.ScanRow(rows)
-		if err1 != nil {
-			return nil, errors.Trace(err1)
-		}
-
-		chunkStr := fields["chunk_str"].Data
-		chunk := new(ChunkRange)
-		err := json.Unmarshal(chunkStr, &chunk)
-		if err != nil {
-			return nil, err
-		}
-		return chunk, nil
-	}
-
-	if rows.Err() != nil {
-		return nil, errors.Trace(rows.Err())
-	}
-
-	return nil, errors.NotFoundf("instanceID %d, schema %s, table %s, chunk %d", instanceID, schema, table, chunkID)
-}
-
 // loadChunks loads chunk info from table `chunk`
 func loadChunks(ctx context.Context, db *sql.DB, instanceID, schema, table string) ([]*ChunkRange, error) {
 	chunks := make([]*ChunkRange, 0, 100)
@@ -218,42 +185,6 @@ func loadChunks(ctx context.Context, db *sql.DB, instanceID, schema, table strin
 	}
 
 	return chunks, errors.Trace(rows.Err())
-}
-
-// getTableSummary returns a table's total chunk num, check success chunk num, check failed chunk num, check ignore chunk num and the state
-func getTableSummary(
-	ctx context.Context, db *sql.DB, schema, table string,
-) (total int64, success int64, failed int64, ignore int64, state string, err error) {
-	query := fmt.Sprintf(
-		"SELECT `chunk_num`, `check_success_num`, `check_failed_num`, `check_ignore_num`, `state`"+
-			" FROM `%s`.`%s` WHERE `schema` = ? AND `table` = ? LIMIT 1",
-		checkpointSchemaName, summaryTableName)
-	rows, err := db.QueryContext(ctx, query, schema, table)
-	if err != nil {
-		return 0, 0, 0, 0, "", errors.Trace(err)
-	}
-	defer rows.Close()
-
-	var totalNum, successNum, failedNum, ignoreNum sql.NullInt64
-	var stateStr sql.NullString
-	for rows.Next() {
-		err1 := rows.Scan(&totalNum, &successNum, &failedNum, &ignoreNum, &stateStr)
-		if err1 != nil {
-			return 0, 0, 0, 0, "", errors.Trace(err1)
-		}
-
-		if !totalNum.Valid || !successNum.Valid || !failedNum.Valid || !ignoreNum.Valid || !stateStr.Valid {
-			return 0, 0, 0, 0, "", errors.Errorf("some values are invalid, query: %s, args: %v", query, []interface{}{schema, table})
-		}
-
-		return totalNum.Int64, successNum.Int64, failedNum.Int64, ignoreNum.Int64, stateStr.String, nil
-
-	}
-	if rows.Err() != nil {
-		return 0, 0, 0, 0, "", errors.Trace(rows.Err())
-	}
-
-	return 0, 0, 0, 0, "", errors.NotFoundf("schema %s, table %s summary info", schema, table)
 }
 
 // initTableSummary initials a table's summary info in table `summary`
