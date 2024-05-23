@@ -103,6 +103,14 @@ linters-settings:
     excludes:
       - G404
       - G601
+<<<<<<< HEAD
+=======
+      - G108
+      - G114
+      - G201
+      - G401
+      - G501
+>>>>>>> 9515070f8e (dep(*): move diff package to the tiflow and get rid of the tidb-tools (#11164))
 
 issues:
   exclude-rules:
