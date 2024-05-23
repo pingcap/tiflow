@@ -294,11 +294,10 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 // GetCachedEvents returns the cached events
 func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
-	result := d.CachedRowChangedEvents
-	d.CachedRowChangedEvents = nil
-
-	if len(result) != 0 {
-		log.Info("cached message resolved", zap.Int("resolved", len(result)))
+	var result []*model.RowChangedEvent
+	if len(d.CachedRowChangedEvents) != 0 {
+		result = d.CachedRowChangedEvents
+		d.CachedRowChangedEvents = nil
 	}
 	return result
 }

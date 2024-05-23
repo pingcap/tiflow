@@ -636,14 +636,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						}
 						group.Append(row)
 					}
+					if len(cachedEvents) != 0 {
+						log.Warn("resolve simple protocol cached events", zap.Int("count", len(cachedEvents)))
+					}
 				}
 
 				// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 				if partition == 0 && ddl.Query != "" {
 					c.appendDDL(ddl)
 				}
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
@@ -695,8 +696,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				group.Append(row)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -737,10 +736,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 				atomic.StoreUint64(&sink.resolvedTs, ts)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
 			}
-
+			// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+			session.MarkMessage(message, "")
 		}
 
 		if counter > c.option.maxBatchSize {
