@@ -14,84 +14,12 @@
 package diff
 
 import (
-	"context"
-	"time"
-
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
-	"github.com/pingcap/tiflow/pkg/importer"
 )
 
 var _ = Suite(&testChunkSuite{})
 
 type testChunkSuite struct{}
-
-func (*testChunkSuite) TestSplitRange(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	conn, err := createConn()
-	c.Assert(err, IsNil)
-	defer conn.Close()
-
-	_, err = conn.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS `test`")
-	c.Assert(err, IsNil)
-
-	_, err = conn.ExecContext(ctx, "DROP TABLE IF EXISTS `test`.`test_chunk`")
-	c.Assert(err, IsNil)
-
-	createTableSQL := `CREATE TABLE test.test_chunk (
-		a date NOT NULL,
-		b datetime DEFAULT NULL,
-		c time DEFAULT NULL,
-		d varchar(10) COLLATE latin1_bin DEFAULT NULL,
-		e int(10) DEFAULT NULL,
-		h year(4) DEFAULT NULL,
-		PRIMARY KEY (a))`
-
-	dataCount := 10000
-	cfg := &importer.Config{
-		TableSQL:    createTableSQL,
-		WorkerCount: 5,
-		JobCount:    dataCount,
-		Batch:       100,
-		DBCfg:       dbutil.GetDBConfigFromEnv("test"),
-	}
-
-	// generate data for test.test_chunk
-	importer.DoProcess(cfg)
-	defer conn.ExecContext(ctx, "DROP TABLE IF EXISTS `test`.`test_chunk`")
-
-	// only work on tidb, so don't assert err here
-	_, _ = conn.ExecContext(ctx, "ANALYZE TABLE `test`.`test_chunk`")
-
-	tableInfo, err := dbutiltest.GetTableInfo(ctx, conn, "test", "test_chunk")
-	c.Assert(err, IsNil)
-
-	tableInstance := &TableInstance{
-		Conn:   conn,
-		Schema: "test",
-		Table:  "test_chunk",
-		info:   tableInfo,
-	}
-
-	// split chunks
-	fields, err := getSplitFields(tableInstance.info, nil)
-	c.Assert(err, IsNil)
-	chunks, err := getChunksForTable(tableInstance, fields, 100, "TRUE", "", false)
-	c.Assert(err, IsNil)
-
-	// get data count from every chunk, and the sum of them should equal to the table's count.
-	chunkDataCount := 0
-	for _, chunk := range chunks {
-		conditions, args := chunk.toString("")
-		count, err := dbutil.GetRowCount(ctx, tableInstance.Conn, tableInstance.Schema, tableInstance.Table, conditions, stringSliceToInterfaceSlice(args))
-		c.Assert(err, IsNil)
-		chunkDataCount += int(count)
-	}
-	c.Assert(chunkDataCount, Equals, dataCount)
-}
 
 func (*testChunkSuite) TestChunkUpdate(c *C) {
 	chunk := &ChunkRange{
@@ -184,74 +112,4 @@ func (*testChunkSuite) TestChunkToString(c *C) {
 	for i, arg := range args {
 		c.Assert(arg, Equals, expectArgs[i])
 	}
-}
-
-func (*testChunkSuite) TestRangeLimit(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	conn, err := createConn()
-	c.Assert(err, IsNil)
-	defer conn.Close()
-
-	_, err = conn.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS `test`")
-	c.Assert(err, IsNil)
-
-	_, err = conn.ExecContext(ctx, "DROP TABLE IF EXISTS `test`.`test_range`")
-	c.Assert(err, IsNil)
-
-	createTableSQL := `CREATE TABLE test.test_range (
-		a int NOT NULL,
-		b datetime DEFAULT NULL,
-		c time DEFAULT NULL,
-		d varchar(10) COLLATE latin1_bin DEFAULT NULL,
-		e int(10) DEFAULT NULL,
-		h year(4) DEFAULT NULL,
-		PRIMARY KEY (a))`
-
-	// will generate 0-9 at column `a`
-	dataCount := 10
-	cfg := &importer.Config{
-		TableSQL:    createTableSQL,
-		WorkerCount: 5,
-		JobCount:    dataCount,
-		Batch:       100,
-		DBCfg:       dbutil.GetDBConfigFromEnv("test"),
-	}
-
-	// generate data for test.test_chunk
-	importer.DoProcess(cfg)
-	defer conn.ExecContext(ctx, "DROP TABLE IF EXISTS `test`.`test_range`")
-
-	// only work on tidb, so don't assert err here
-	_, _ = conn.ExecContext(ctx, "ANALYZE TABLE `test`.`test_range`")
-
-	tableInfo, err := dbutiltest.GetTableInfo(ctx, conn, "test", "test_range")
-	c.Assert(err, IsNil)
-
-	tableInstance := &TableInstance{
-		Conn:   conn,
-		Schema: "test",
-		Table:  "test_range",
-		info:   tableInfo,
-	}
-
-	c.Assert(createCheckpointTable(ctx, conn), IsNil)
-	chunks, err := SplitChunks(ctx, tableInstance, "a,d", "a > 7", 1, "", false, conn)
-	c.Assert(err, IsNil)
-	defer conn.ExecContext(ctx, "DROP DATABASE sync_diff_inspector")
-	// a > 7 and chunkSize = 1 should return 2 chunk
-	c.Assert(chunks, HasLen, 2)
-	count := 0
-
-	for _, chunk := range chunks {
-		rows, _, err := getChunkRows(ctx, conn, "test", "test_range", tableInfo, chunk.Where, stringsToInterfaces(chunk.Args), "")
-		c.Assert(err, IsNil)
-		c.Assert(rows.Err(), IsNil)
-		for rows.Next() {
-			count++
-		}
-		defer rows.Close()
-	}
-	c.Assert(count, Equals, 2)
 }

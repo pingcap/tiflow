@@ -387,18 +387,6 @@ func cleanCheckpoint(ctx context.Context, db *sql.DB, schema, table string) erro
 	return nil
 }
 
-// dropCheckpoint drops the database `sync_diff_inspector`
-func dropCheckpoint(ctx context.Context, db *sql.DB) error {
-	dropSchemaSQL := fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", checkpointSchemaName)
-	_, err := db.ExecContext(ctx, dropSchemaSQL)
-	if err != nil {
-		log.Error("drop schema", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
 // loadFromCheckPoint returns true if we should use the history checkpoint
 func loadFromCheckPoint(ctx context.Context, db *sql.DB, schema, table, configHash string) (bool, error) {
 	query := fmt.Sprintf("SELECT `state`, `config_hash` FROM `%s`.`%s` WHERE `schema` = ? AND `table` = ? LIMIT 1;",

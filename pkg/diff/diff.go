@@ -558,7 +558,8 @@ func (t *TableDiff) compareChecksum(ctx context.Context, chunk *ChunkRange) (boo
 		zap.String("table", dbutil.TableName(t.TargetTable.Schema, t.TargetTable.Table)),
 		zap.String("where", dbutil.ReplacePlaceholder(chunk.Where, chunk.Args)),
 		zap.Int64("sourceChecksum", sourceChecksum), zap.Int64("targetChecksum", targetChecksum),
-		zap.Duration("getSourceChecksumCost", getSourceChecksumDuration), zap.Duration("getTargetChecksumCostc", getTargetChecksumDuration))
+		zap.Duration("getSourceChecksumCost", getSourceChecksumDuration),
+		zap.Duration("getTargetChecksumCost", getTargetChecksumDuration))
 
 	return false, nil
 }
@@ -874,8 +875,7 @@ func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.Tab
 		}
 
 		sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES (%s);",
-			dbutil.TableName(schema, table.Name.O),
-			strings.Join(colNames, ","), strings.Join(values, ","))
+			dbutil.TableName(schema, table.Name.O), strings.Join(colNames, ","), strings.Join(values, ","))
 	case "delete":
 		kvs := make([]string, 0, len(table.Columns))
 		for _, col := range table.Columns {
@@ -894,9 +894,7 @@ func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.Tab
 					strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
 			} else {
 				kvs = append(kvs,
-					fmt.Sprintf("%s = %s",
-						dbutil.ColumnName(col.Name.O),
-						string(data[col.Name.O].Data)))
+					fmt.Sprintf("%s = %s", dbutil.ColumnName(col.Name.O), string(data[col.Name.O].Data)))
 			}
 		}
 		sql = fmt.Sprintf("DELETE FROM %s WHERE %s;", dbutil.TableName(schema, table.Name.O), strings.Join(kvs, " AND "))

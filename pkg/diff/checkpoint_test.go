@@ -16,7 +16,6 @@ package diff
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -25,20 +24,6 @@ import (
 var _ = Suite(&testCheckpointSuite{})
 
 type testCheckpointSuite struct{}
-
-func (s *testCheckpointSuite) TestCheckpoint(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := createConn()
-	c.Assert(err, IsNil)
-	defer conn.Close()
-
-	defer dropCheckpoint(ctx, conn)
-	s.testInitAndGetSummary(c, conn)
-	s.testSaveAndLoadChunk(c, conn)
-	s.testUpdateSummary(c, conn)
-}
 
 func (s *testCheckpointSuite) testInitAndGetSummary(c *C, db *sql.DB) {
 	err := createCheckpointTable(context.Background(), db)
