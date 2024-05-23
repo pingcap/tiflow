@@ -61,11 +61,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-<<<<<<< HEAD
-=======
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/protobuf/types/known/emptypb"
->>>>>>> de06be9be5 (dep(*): remove usage of tidb-tools/pkg/{dbutil, utils} (#11122))
 )
 
 const (
