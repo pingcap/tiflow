@@ -138,7 +138,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 				GrpcStreamConcurrent: 1,
 				AdvanceIntervalInMs:  10,
 			},
-			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
+			Debug: &config.DebugConfig{Puller: &config.PullerConfig{}},
 		},
 		false, pdClient, grpcPool, regionCache, pdClock, lockResolver,
 	)

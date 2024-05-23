@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
@@ -36,9 +37,7 @@ func newSharedClientForTestSharedRegionWorker() *SharedClient {
 			GrpcStreamConcurrent: 2,
 			AdvanceIntervalInMs:  10,
 		},
-		Debug: &config.DebugConfig{
-			Puller: &config.PullerConfig{LogRegionDetails: false},
-		},
+		Debug: &config.DebugConfig{Puller: &config.PullerConfig{}},
 	}
 	return NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 }
