@@ -15,10 +15,10 @@ package frontier
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
-    "fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
