@@ -71,8 +71,12 @@ require (
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
 	github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+<<<<<<< HEAD
 	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240410110152-5fc42c9be2f5
+=======
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240520031014-397a460dd067
+>>>>>>> 9515070f8e (dep(*): move diff package to the tiflow and get rid of the tidb-tools (#11164))
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0

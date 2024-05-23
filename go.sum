@@ -839,10 +839,15 @@ github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4 h1:ABG15lJCeFL
 github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4/go.mod h1:q7rWac5/DO6wMdzLiXyhZgq/jxl9fkFA7+/rsXKNJko=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
+<<<<<<< HEAD
 github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b h1:UC4lLT2OBHGImFJbiXQfIxIck7AoFLIiRJ6Eo6uFVaw=
 github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b/go.mod h1:FupVn04P2/dkvzK4Tt5URj5z2Y4ILcULw7dU3GnJXgQ=
 github.com/pingcap/tidb/pkg/parser v0.0.0-20240410110152-5fc42c9be2f5 h1:pAcwBObaCobuCvh+S56Ywwp7zelqzFHGJzWkLv8Ixz8=
 github.com/pingcap/tidb/pkg/parser v0.0.0-20240410110152-5fc42c9be2f5/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
+=======
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240520031014-397a460dd067 h1:aN4etvIXsJBynEXhq8ZGOdDnCfMC0Kz8sRsfmNZ6TYA=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240520031014-397a460dd067/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
+>>>>>>> 9515070f8e (dep(*): move diff package to the tiflow and get rid of the tidb-tools (#11164))
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50 h1:fVNBE06Rjec+EIHaYAKAHa/bIt5lnu3Zh9O6kV7ZAdg=
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
