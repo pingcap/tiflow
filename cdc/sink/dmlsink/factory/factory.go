@@ -76,13 +76,8 @@ func New(
 	}
 
 	s := &SinkFactory{}
-<<<<<<< HEAD
-	schema := strings.ToLower(sinkURI.Scheme)
-	switch schema {
-=======
-	scheme := sink.GetScheme(sinkURI)
+	scheme := strings.ToLower(sinkURI.Scheme)
 	switch scheme {
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {

@@ -26,19 +26,12 @@ import (
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/upstream"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/oracle"
-	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	"go.uber.org/zap"
 )
 
@@ -64,7 +57,9 @@ type SourceManager struct {
 	errChan chan error
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-	startTs model.Ts
+
+	safeModeAtStart bool
+	startTs         model.Ts
 
 	// pullerWrapperCreator is used to create a puller wrapper.
 	// Only used for testing.
@@ -73,6 +68,8 @@ type SourceManager struct {
 		tableName string,
 		startTs model.Ts,
 		bdrMode bool,
+		shouldSplitKVEntry pullerwrapper.ShouldSplitKVEntry,
+		splitUpdateKVEntry pullerwrapper.SplitUpdateKVEntry,
 	) pullerwrapper.Wrapper
 }
 
@@ -83,7 +80,7 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
-<<<<<<< HEAD
+	safeModeAtStart bool,
 ) *SourceManager {
 	return &SourceManager{
 		ready:                make(chan struct{}),
@@ -93,14 +90,9 @@ func New(
 		engine:               engine,
 		errChan:              make(chan error, 16),
 		bdrMode:              bdrMode,
+		safeModeAtStart:      safeModeAtStart,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapper,
 	}
-=======
-	enableTableMonitor bool,
-	safeModeAtStart bool,
-) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 }
 
 // NewForTest creates a new source manager for testing.
@@ -123,8 +115,6 @@ func NewForTest(
 	}
 }
 
-<<<<<<< HEAD
-=======
 func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
 	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
 }
@@ -142,77 +132,14 @@ func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVE
 	return &deleteKVEntry, &insertKVEntry, nil
 }
 
-func newSourceManager(
-	changefeedID model.ChangeFeedID,
-	up *upstream.Upstream,
-	mg entry.MounterGroup,
-	engine sorter.SortEngine,
-	bdrMode bool,
-	enableTableMonitor bool,
-	safeModeAtStart bool,
-) *SourceManager {
-	mgr := &SourceManager{
-		ready:              make(chan struct{}),
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
-	}
-
-	serverConfig := config.GetGlobalServerConfig()
-	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-	client := kv.NewSharedClient(
-		mgr.changefeedID, serverConfig, mgr.bdrMode,
-		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
-		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
-	)
-
-	// consume add raw kv entry to the engine.
-	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
-		if len(spans) > 1 {
-			log.Panic("DML puller subscribes multiple spans",
-				zap.String("namespace", mgr.changefeedID.Namespace),
-				zap.String("changefeed", mgr.changefeedID.ID))
-		}
-		if raw != nil {
-			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
-				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
-				if err != nil {
-					return err
-				}
-				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
-				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
-				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
-			} else {
-				pEvent := model.NewPolymorphicEvent(raw)
-				mgr.engine.Add(spans[0], pEvent)
-			}
-		}
-		return nil
-	}
-	slots, hasher := mgr.engine.SlotsAndHasher()
-
-	mgr.puller = puller.NewMultiplexingPuller(
-		mgr.changefeedID,
-		client,
-		up.PDClock,
-		consume,
-		slots,
-		hasher,
-		int(serverConfig.KVClient.FrontierConcurrent))
-
-	return mgr
-}
-
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
-	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
+	}
+	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
 	p.Start(m.ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
 }
@@ -264,6 +191,11 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
+	startTs, err := getCurrentTs(ctx, m.up.PDClient)
+	if err != nil {
+		return err
+	}
+	m.startTs = startTs
 	m.ctx = ctx
 	close(m.ready)
 	select {
@@ -272,15 +204,6 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	case <-m.ctx.Done():
 		return m.ctx.Err()
 	}
-<<<<<<< HEAD
-=======
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.startTs = startTs
-	return m.puller.Run(ctx)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 }
 
 // WaitForReady implements util.Runnable.

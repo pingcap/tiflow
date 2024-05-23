@@ -704,13 +704,8 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-<<<<<<< HEAD
-		sortEngine, p.changefeed.Info.Config.BDRMode)
-=======
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor),
+		sortEngine, p.changefeed.Info.Config.BDRMode,
 		pullerSafeModeAtStart)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 

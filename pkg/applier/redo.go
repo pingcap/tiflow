@@ -553,7 +553,7 @@ func (t *tempTxnInsertEventStorage) readFromFile() (*model.RowChangedEvent, erro
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrUnmarshalFailed, err)
 	}
-	return redoLog.RedoRow.Row.ToRowChangedEvent(), nil
+	return redoLog.RedoRow.Row, nil
 }
 
 func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, error) {
