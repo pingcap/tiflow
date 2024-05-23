@@ -14,10 +14,10 @@
 package filter
 
 import (
+	"github.com/pingcap/tidb/pkg/planner/core"
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -770,11 +770,11 @@ func TestGetColumnFromError(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
+			err:      core.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
 			expected: "mother",
 		},
 		{
-			err:      plannererrors.ErrUnknownColumn.FastGenByArgs("company", "expression"),
+			err:      core.ErrUnknownColumn.FastGenByArgs("company", "expression"),
 			expected: "company",
 		},
 		{

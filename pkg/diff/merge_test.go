@@ -19,7 +19,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 )
 
 var _ = Suite(&testMergerSuite{})
@@ -28,7 +27,7 @@ type testMergerSuite struct{}
 
 func (s *testMergerSuite) TestMerge(c *C) {
 	createTableSQL := "create table test.test(id int(24), name varchar(24), age int(24), primary key(id, name));"
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
 	c.Assert(err, IsNil)
 
 	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)

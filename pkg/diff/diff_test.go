@@ -20,7 +20,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 )
 
 func TestClient(t *testing.T) {
@@ -33,7 +32,7 @@ type testDiffSuite struct{}
 
 func (*testDiffSuite) TestGenerateSQLs(c *C) {
 	createTableSQL := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), `id_gen` int(11) GENERATED ALWAYS AS ((`id` + 1)) VIRTUAL, primary key(`id`, `name`))"
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
 	c.Assert(err, IsNil)
 
 	rowsData := map[string]*dbutil.ColumnData{
@@ -52,7 +51,7 @@ func (*testDiffSuite) TestGenerateSQLs(c *C) {
 
 	// test the unique key
 	createTableSQL2 := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), unique key(`id`, `name`))"
-	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
 	c.Assert(err, IsNil)
 	replaceSQL = generateDML("replace", rowsData, tableInfo2, "diff_test")
 	deleteSQL = generateDML("delete", rowsData, tableInfo2, "diff_test")

@@ -19,8 +19,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/pingcap/tidb/pkg/lightning/common"
-	"github.com/pingcap/tiflow/dm/tests/utils"
+github.com/pingcap/tidb/br/pkg/lightning/common""
+"github.com/pingcap/tiflow/dm/tests/utils"
 )
 
 // use show-ddl-locks request to test DM-master is online

@@ -18,8 +18,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tidb/pkg/lightning/common"
-	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
+
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/prometheus/client_golang/prometheus"

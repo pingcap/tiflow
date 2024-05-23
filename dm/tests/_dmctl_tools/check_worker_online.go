@@ -18,10 +18,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/pingcap/tidb/pkg/lightning/common"
-	"github.com/pingcap/tiflow/dm/pb"
-	"github.com/pingcap/tiflow/dm/tests/utils"
-	"google.golang.org/grpc"
+github.com/pingcap/tidb/br/pkg/lightning/common""
+"github.com/pingcap/tiflow/dm/pb"
+"github.com/pingcap/tiflow/dm/tests/utils"
+"google.golang.org/grpc"
 )
 
 // use query status request to test DM-worker is online

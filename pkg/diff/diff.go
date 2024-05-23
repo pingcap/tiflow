@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"go.uber.org/zap"
 )
 
@@ -211,14 +210,14 @@ func (t *TableDiff) adjustConfig() {
 }
 
 func (t *TableDiff) getTableInfo(ctx context.Context) error {
-	tableInfo, err := dbutiltest.GetTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
+	tableInfo, err := dbutil.GetTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.TargetTable.info = ignoreColumns(tableInfo, t.IgnoreColumns)
 
 	for _, sourceTable := range t.SourceTables {
-		tableInfo, err := dbutiltest.GetTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
+		tableInfo, err := dbutil.GetTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
