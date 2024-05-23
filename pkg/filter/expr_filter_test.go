@@ -14,10 +14,10 @@
 package filter
 
 import (
-	"github.com/pingcap/tidb/pkg/planner/core"
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"

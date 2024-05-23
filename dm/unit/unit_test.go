@@ -21,7 +21,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pb"

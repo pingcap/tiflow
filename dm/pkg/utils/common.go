@@ -197,7 +197,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		_ = variables.SetSystemVar(k, v)
 		if strings.EqualFold(k, "time_zone") {
 			loc, _ := ParseTimeZone(v)
-			variables.StmtCtx.TimeZone = loc
+			variables.TimeZone = loc
 		}
 	}
 

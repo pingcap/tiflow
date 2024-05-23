@@ -16,13 +16,13 @@ package syncer
 import (
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"strconv"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/stretchr/testify/require"
 )

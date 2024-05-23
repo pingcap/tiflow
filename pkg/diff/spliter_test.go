@@ -15,11 +15,11 @@ package diff
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 )
 
 var _ = Suite(&testSpliterSuite{})
