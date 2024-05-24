@@ -452,7 +452,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	f, err := eventsinkfactory.New(
 		ctx,
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		replicaConfig,
 		errChan,
 		nil,
 	)
@@ -475,7 +475,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		replicaConfig,
 	)
 	if err != nil {
 		cancel()
