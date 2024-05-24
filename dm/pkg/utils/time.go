@@ -44,7 +44,7 @@ func ParseTimeZone(s string) (*time.Location, error) {
 	// The time zone's value should in [-12:59,+14:00].
 	// See: https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html#time-zone-variables
 	if strings.HasPrefix(s, "+") || strings.HasPrefix(s, "-") {
-		d, _, err := types.ParseDuration(types.DefaultStmtNoWarningContext, s[1:], 0)
+		d, _, err := types.ParseDuration(nil, s[1:], 0)
 		if err == nil {
 			if s[0] == '-' {
 				if d.Duration > 12*time.Hour+59*time.Minute {

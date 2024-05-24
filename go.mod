@@ -20,7 +20,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-00010101000000-000000000000
 	github.com/chzyer/readline v1.5.1
-	github.com/cockroachdb/pebble v1.1.0
+	github.com/cockroachdb/pebble v0.0.0-20220415182917-06c9d3be25b3
 	github.com/coreos/go-semver v0.3.1
 	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/docker/go-units v0.5.0
@@ -107,7 +107,7 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
+	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842
 	golang.org/x/net v0.25.0
 	golang.org/x/oauth2 v0.18.0
 	golang.org/x/sync v0.7.0
@@ -140,7 +140,6 @@ require (
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
-	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -366,7 +365,7 @@ require (
 	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/term v0.20.0 // indirect
-	golang.org/x/tools v0.20.0 // indirect
+	golang.org/x/tools v0.21.0 // indirect
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
