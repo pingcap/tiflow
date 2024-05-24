@@ -86,6 +86,7 @@ func (br *MockReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, error) 
 func (br *MockReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
 	return br.checkpointTs, br.resolvedTs, nil
 }
+
 func TestApply(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
