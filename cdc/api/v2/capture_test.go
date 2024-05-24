@@ -16,7 +16,6 @@ package v2
 import (
 	"context"
 	"encoding/json"
-	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,6 +23,7 @@ import (
 	"github.com/golang/mock/gomock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/require"

@@ -15,13 +15,13 @@ package v2
 
 import (
 	"context"
-	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
