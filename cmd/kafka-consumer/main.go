@@ -440,9 +440,9 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errCh := make(chan error, 1)
-	sinkReplicaConfig := replicaConfig
-	if sinkReplicaConfig == nil {
-		sinkReplicaConfig = config.GetDefaultReplicaConfig()
+	sinkReplicaConfig := config.GetDefaultReplicaConfig()
+	if replicaConfig != nil {
+		sinkReplicaConfig.ForceReplicate = replicaConfig.ForceReplicate
 	}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx,
