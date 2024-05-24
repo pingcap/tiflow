@@ -192,38 +192,27 @@ func (p *ownerStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	return query.Data.(bool), nil
 }
 
-func (p *ownerStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
-	query := &Query{
-		Tp:           QueryOwner,
-		ChangeFeedID: id,
-	}
-	if err := p.sendQueryToOwner(ctx, query); err != nil {
-		return false, errors.Trace(err)
-	}
-	return query.Data.(bool), nil
-}
-
 // GetAllChangeFeedInfo returns all changefeed infos
-func (o *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
+func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
 	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
 ) {
 	query := &Query{
 		Tp: QueryAllChangeFeedInfo,
 	}
-	if err := o.sendQueryToOwner(ctx, query); err != nil {
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
 // GetAllChangeFeedCheckpointTs returns all changefeed checkpoints
-func (o *ownerStatusProvider) GetAllChangeFeedCheckpointTs(ctx context.Context) (
+func (p *ownerStatusProvider) GetAllChangeFeedCheckpointTs(ctx context.Context) (
 	map[model.ChangeFeedID]uint64, error,
 ) {
 	query := &Query{
 		Tp: QueryAllChangeFeedSCheckpointTs,
 	}
-	if err := o.sendQueryToOwner(ctx, query); err != nil {
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.ChangeFeedID]uint64), nil

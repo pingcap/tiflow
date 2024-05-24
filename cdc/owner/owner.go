@@ -762,6 +762,9 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 	case QueryOwner:
 		_, exist := o.changefeeds[query.ChangeFeedID]
 		query.Data = exist
+	case QueryExists:
+		_, ok := o.changefeeds[query.ChangeFeedID]
+		query.Data = ok
 	}
 	return nil
 }
