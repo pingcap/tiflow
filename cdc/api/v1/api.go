@@ -925,11 +925,3 @@ func SetLogLevel(c *gin.Context) {
 	log.Warn("log level changed", zap.String("level", data.Level))
 	c.Status(http.StatusOK)
 }
-
-// getChangefeedFromRequest returns the changefeed that parse from request
-func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
-	return model.ChangeFeedID{
-		Namespace: model.DefaultNamespace,
-		ID:        ctx.Param(api.APIOpVarChangefeedID),
-	}
-}

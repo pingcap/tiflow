@@ -717,7 +717,8 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		provider := cfReactor.GetInfoProvider()
 		if provider == nil {
 			// The scheduler has not been initialized yet.
-			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+			query.Data = make(map[model.CaptureID]*model.TaskStatus)
+			return nil
 		}
 
 		var err error
