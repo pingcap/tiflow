@@ -187,7 +187,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	sinkFactory, err := dmlfactory.New(
 		stdCtx,
 		downstreamURIStr,
-		replicaConfig,
+		config.GetDefaultReplicaConfig(),
 		errCh,
 		nil,
 	)
@@ -196,7 +196,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, replicaConfig)
+	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
