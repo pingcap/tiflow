@@ -317,33 +317,14 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 
 // newTableInfo converts from TableSchema to TableInfo.
 func newTableInfo(m *TableSchema) *model.TableInfo {
-	var (
-		database      string
-		table         string
-		tableID       int64
-		schemaVersion uint64
-	)
-	if m != nil {
-		database = m.Schema
-		table = m.Table
-		tableID = m.TableID
-		schemaVersion = m.Version
-	}
-	tidbTableInfo := &timodel.TableInfo{
-		ID:       tableID,
-		Name:     timodel.NewCIStr(table),
-		UpdateTS: schemaVersion,
+	if m == nil {
+		return nil
 	}
 
-	if m == nil {
-		return &model.TableInfo{
-			TableName: model.TableName{
-				Schema:  database,
-				Table:   table,
-				TableID: tableID,
-			},
-			TableInfo: tidbTableInfo,
-		}
+	tidbTableInfo := &timodel.TableInfo{
+		ID:       m.TableID,
+		Name:     timodel.NewCIStr(m.Table),
+		UpdateTS: m.Version,
 	}
 
 	nextMockID := int64(100)
@@ -356,25 +337,16 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		index := newTiIndexInfo(idx)
 		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
 	}
-	return model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
+	return model.WrapTableInfo(100, m.Schema, m.Version, tidbTableInfo)
 }
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	var (
-		tableInfo    *model.TableInfo
-		preTableInfo *model.TableInfo
-	)
-
-	tableInfo = newTableInfo(msg.TableSchema)
-	if msg.PreTableSchema != nil {
-		preTableInfo = newTableInfo(msg.PreTableSchema)
-	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
 		CommitTs:     msg.CommitTs,
-		TableInfo:    tableInfo,
-		PreTableInfo: preTableInfo,
+		TableInfo:    newTableInfo(msg.TableSchema),
+		PreTableInfo: newTableInfo(msg.PreTableSchema),
 		Query:        msg.SQL,
 	}
 }
