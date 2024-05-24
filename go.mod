@@ -159,7 +159,7 @@ require (
 	github.com/influxdata/tdigest v0.0.1 // indirect
 	github.com/jellydator/ttlcache/v3 v3.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/ks3sdklib/aws-sdk-go v1.2.9 // indirect
+	github.com/ks3sdklib/aws-sdk-go v1.2.6 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
