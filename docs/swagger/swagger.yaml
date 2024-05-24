@@ -44,6 +44,8 @@ definitions:
         type: boolean
       enable-tidb-extension:
         type: boolean
+      encoding-format:
+        type: string
       max-batch-size:
         type: integer
     type: object
@@ -380,6 +382,23 @@ definitions:
         description: SchemaRegistry is only available when the downstream is MQ using
           avro protocol.
         type: string
+      send-bootstrap-in-msg-count:
+        description: SendBootstrapInMsgCount means bootstrap messages are being sent
+          every SendBootstrapInMsgCount row change messages.
+        type: integer
+      send-bootstrap-interval-in-sec:
+        description: |-
+          Simple Protocol only config, use to control the behavior of sending bootstrap message.
+          Note: When one of the following conditions is set to negative value,
+          bootstrap sending function will be disabled.
+          SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+        type: integer
+      send-bootstrap-to-all-partition:
+        description: |-
+          SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+          If set to false, bootstrap message will only be sent to the first partition of each topic.
+          Default value is true.
+        type: boolean
       terminator:
         description: Terminator is NOT available when the downstream is DB.
         type: string
@@ -731,6 +750,8 @@ definitions:
         type: boolean
       enable_tidb_extension:
         type: boolean
+      encoding_format:
+        type: string
       max_batch_size:
         type: integer
     type: object
@@ -1215,6 +1236,12 @@ definitions:
         type: boolean
       schema_registry:
         type: string
+      send_bootstrap_in_msg_count:
+        type: integer
+      send_bootstrap_interval_in_sec:
+        type: integer
+      send_bootstrap_to_all_partition:
+        type: boolean
       terminator:
         type: string
       transaction_atomicity:
