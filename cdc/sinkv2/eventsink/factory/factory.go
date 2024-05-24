@@ -59,15 +59,8 @@ type SinkFactory struct {
 	category Category
 }
 
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 // New creates a new SinkFactory by schema.
 func New(ctx context.Context,
-=======
-// New creates a new SinkFactory by scheme.
-func New(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/factory/factory.go
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
@@ -79,13 +72,8 @@ func New(
 	}
 
 	s := &SinkFactory{}
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
-	schema := strings.ToLower(sinkURI.Scheme)
-	switch schema {
-=======
-	scheme := sink.GetScheme(sinkURI)
+	scheme := strings.ToLower(sinkURI.Scheme)
 	switch scheme {
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/factory/factory.go
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {

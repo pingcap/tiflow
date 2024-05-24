@@ -196,12 +196,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-<<<<<<< HEAD
-	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
-=======
-	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
-		downstreamURIStr, replicaConfig)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
+	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, replicaConfig)
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err

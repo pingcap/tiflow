@@ -847,8 +847,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
+		pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.changefeed.Info.SinkURI)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, p.changefeed.Info.Config.EnableTableMonitor)
+			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, p.changefeed.Info.Config.EnableTableMonitor, pullerSafeModeAtStart)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
@@ -909,33 +913,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
-=======
-	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	p.sourceManager.r = sourcemanager.New(
-		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor),
-		pullerSafeModeAtStart)
-	p.sourceManager.name = "SourceManager"
-	p.sourceManager.changefeedID = p.changefeedID
-	p.sourceManager.spawn(prcCtx)
-
-	p.sinkManager.r = sinkmanager.New(
-		p.changefeedID, p.latestInfo, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
-	p.sinkManager.name = "SinkManager"
-	p.sinkManager.changefeedID = p.changefeedID
-	p.sinkManager.spawn(prcCtx)
-
-	// Bind them so that sourceManager can notify sinkManager.r.
-	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	if err != nil {
 		return err
 	}

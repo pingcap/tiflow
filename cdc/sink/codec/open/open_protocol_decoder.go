@@ -198,7 +198,7 @@ func (b *BatchDecoder) buildColumns(
 		case mysql.TypeJSON:
 			value = string(value.([]uint8))
 		case mysql.TypeBit:
-			value = common.MustBinaryLiteralToInt(value.([]uint8))
+			value, _ = common.BinaryLiteralToInt(value.([]uint8))
 		}
 
 		column := &model.Column{

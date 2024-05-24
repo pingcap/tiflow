@@ -14,6 +14,7 @@
 package sourcemanager
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -25,20 +26,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/puller"
-<<<<<<< HEAD
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/upstream"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/oracle"
-	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 	"go.uber.org/zap"
 )
 
@@ -60,13 +53,11 @@ type SourceManager struct {
 	// Used to report the error to the processor.
 	errChan chan error
 	// Used to indicate whether the changefeed is in BDR mode.
-<<<<<<< HEAD
-	bdrMode            bool
-=======
 	bdrMode bool
-	startTs model.Ts
 
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
+	safeModeAtStart bool
+	startTs         model.Ts
+
 	enableTableMonitor bool
 }
 
@@ -81,27 +72,23 @@ func New(
 	enableTableMonitor bool,
 	safeModeAtStart bool,
 ) *SourceManager {
-<<<<<<< HEAD
+	startTs, err := getCurrentTs(context.Background(), up.PDClient)
+	if err != nil {
+		log.Panic("Cannot get current ts when creating source manager",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID))
+		return nil
+	}
 	return &SourceManager{
-=======
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
-}
-
-// NewForTest creates a new source manager for testing.
-func NewForTest(
-	changefeedID model.ChangeFeedID,
-	up *upstream.Upstream,
-	mg entry.MounterGroup,
-	engine sorter.SortEngine,
-	bdrMode bool,
-) *SourceManager {
-	return &SourceManager{
-		ready:        make(chan struct{}),
-		changefeedID: changefeedID,
-		up:           up,
-		mg:           mg,
-		engine:       engine,
-		bdrMode:      bdrMode,
+		changefeedID:       changefeedID,
+		up:                 up,
+		mg:                 mg,
+		engine:             engine,
+		errChan:            errChan,
+		bdrMode:            bdrMode,
+		enableTableMonitor: enableTableMonitor,
+		safeModeAtStart:    safeModeAtStart,
+		startTs:            startTs,
 	}
 }
 
@@ -122,81 +109,14 @@ func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVE
 	return &deleteKVEntry, &insertKVEntry, nil
 }
 
-func newSourceManager(
-	changefeedID model.ChangeFeedID,
-	up *upstream.Upstream,
-	mg entry.MounterGroup,
-	engine sorter.SortEngine,
-	bdrMode bool,
-	enableTableMonitor bool,
-	safeModeAtStart bool,
-) *SourceManager {
-	mgr := &SourceManager{
-		ready:              make(chan struct{}),
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		errChan:            errChan,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
-	}
-<<<<<<< HEAD
-=======
-
-	serverConfig := config.GetGlobalServerConfig()
-	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-	client := kv.NewSharedClient(
-		mgr.changefeedID, serverConfig, mgr.bdrMode,
-		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
-		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
-	)
-
-	// consume add raw kv entry to the engine.
-	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
-		if len(spans) > 1 {
-			log.Panic("DML puller subscribes multiple spans",
-				zap.String("namespace", mgr.changefeedID.Namespace),
-				zap.String("changefeed", mgr.changefeedID.ID))
-		}
-		if raw != nil {
-			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
-				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
-				if err != nil {
-					return err
-				}
-				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
-				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
-				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
-			} else {
-				pEvent := model.NewPolymorphicEvent(raw)
-				mgr.engine.Add(spans[0], pEvent)
-			}
-		}
-		return nil
-	}
-	slots, hasher := mgr.engine.SlotsAndHasher()
-
-	mgr.puller = puller.NewMultiplexingPuller(
-		mgr.changefeedID,
-		client,
-		up.PDClock,
-		consume,
-		slots,
-		hasher,
-		int(serverConfig.KVClient.FrontierConcurrent))
-
-	return mgr
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
-}
-
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(tableID)
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode)
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
+	}
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
 	p.Start(ctx, m.up, m.engine, m.errChan, m.enableTableMonitor)
 	m.pullers.Store(tableID, p)
 }
@@ -242,36 +162,8 @@ func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats 
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
-<<<<<<< HEAD
 func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableStats {
 	return m.engine.GetStatsByTable(tableID)
-=======
-func (m *SourceManager) GetTableSorterStats(span tablepb.Span) sorter.TableStats {
-	return m.engine.GetStatsByTable(span)
-}
-
-// Run implements util.Runnable.
-func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-	close(m.ready)
-	// Only nil in unit tests.
-	if m.puller == nil {
-		return nil
-	}
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.startTs = startTs
-	return m.puller.Run(ctx)
-}
-
-// WaitForReady implements util.Runnable.
-func (m *SourceManager) WaitForReady(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-	case <-m.ready:
-	}
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919))
 }
 
 // Close closes the source manager. Stop all pullers and close the engine.

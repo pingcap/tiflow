@@ -297,14 +297,8 @@ func convertBinaryToString(cols []*model.Column) {
 }
 
 func (s *mysqlBackend) groupRowsByType(
-<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 	event *eventsink.TxnCallbackableEvent,
 	tableInfo *timodel.TableInfo,
-	spiltUpdate bool,
-=======
-	event *dmlsink.TxnCallbackableEvent,
-	tableInfo *model.TableInfo,
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/txn/mysql/mysql.go
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
 	preAllocateSize := len(event.Event.Rows)
 	if preAllocateSize > s.cfg.MaxTxnRow {
@@ -531,21 +525,11 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
-<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
-			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				flushCacheDMLs()
 				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.cfg.ForceReplicate)
-=======
-			// Update Event
-			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
-				query, args = prepareUpdate(
-					quoteTable,
-					row.GetPreColumns(),
-					row.GetColumns(),
-					s.cfg.ForceReplicate)
->>>>>>> c710066a51 (*(ticdc): split old update kv entry after restarting changefeed (#10919)):cdc/sink/dmlsink/txn/mysql/mysql.go
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
