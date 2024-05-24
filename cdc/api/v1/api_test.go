@@ -307,12 +307,13 @@ func TestPauseChangefeed(t *testing.T) {
 	mo := mock_owner.NewMockOwner(ctrl)
 	capture := mock_capture.NewMockCapture(ctrl)
 	capture.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
+	capture.EXPECT().IsOwner().Return(true).AnyTimes()
 	capture.EXPECT().IsReady().Return(true).AnyTimes()
 	statusProvider := mock_owner.NewMockStatusProvider(ctrl)
 	capture.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	router := newRouterWithoutStatusProvider(capture)
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).
-		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil).AnyTimes()
+		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil).Times(2)
 
 	// test pause changefeed succeeded
 	mo.EXPECT().
@@ -356,6 +357,9 @@ func TestPauseChangefeed(t *testing.T) {
 		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID.ID),
 		method: "POST",
 	}
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).
+		Return(new(model.ChangeFeedStatusForAPI),
+			cerror.ErrChangeFeedNotExists.GenWithStackByArgs(nonExistChangefeedID))
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -372,15 +376,13 @@ func TestResumeChangefeed(t *testing.T) {
 	mo := mock_owner.NewMockOwner(ctrl)
 	cp := mock_capture.NewMockCapture(ctrl)
 	cp.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	statusProvider := mock_owner.NewMockStatusProvider(ctrl)
-	statusProvider.EXPECT().IsChangefeedOwner(gomock.Any(), gomock.Any()).
-		Return(true, nil).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	dataProvider := newStatusProvider()
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).Return(
-		dataProvider.GetChangeFeedStatus(context.Background(), changeFeedID))
-	router := newRouter(cp, statusProvider)
+	router := newRouterWithoutStatusProvider(cp)
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).
+		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil)
 
 	// test resume changefeed succeeded
 	mo.EXPECT().
@@ -400,8 +402,8 @@ func TestResumeChangefeed(t *testing.T) {
 	require.Equal(t, 202, w.Code)
 
 	// test resume changefeed failed from owner side.
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).Return(
-		dataProvider.GetChangeFeedStatus(context.Background(), changeFeedID))
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).
+		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil)
 	mo.EXPECT().
 		EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
