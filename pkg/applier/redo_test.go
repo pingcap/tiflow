@@ -550,8 +550,8 @@ func getMockDB(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1").
-		WithArgs(1, "3", 1).
+	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1").
+		WithArgs(1, "3", 1, "2").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -566,13 +566,13 @@ func getMockDB(t *testing.T) *sql.DB {
 
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
 		WithArgs(10, "20").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
 		WithArgs(1, "3").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+	mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
 		WithArgs(100, "200").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
@@ -628,7 +628,7 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 
 	mock.ExpectBegin()
 	for i := 1; i <= 60; i++ {
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
 			WithArgs(i, fmt.Sprintf("%d", i+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
@@ -642,7 +642,7 @@ func getMockDBForBigTxn(t *testing.T) *sql.DB {
 	// First, apply row which commitTs equal to resolvedTs
 	mock.ExpectBegin()
 	for i := 1; i <= 60; i++ {
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a` = ? AND `b` = ?)").
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
 			WithArgs(i*10, fmt.Sprintf("%d", i*10+1)).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}

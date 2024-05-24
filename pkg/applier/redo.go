@@ -24,7 +24,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
@@ -285,6 +284,7 @@ func (ra *RedoApplier) applyDDL(
 	// Wait all tables to flush data before applying DDL.
 	// TODO: only block tables that are affected by this DDL.
 	for tableID := range ra.tableSinks {
+		log.Info("applyDDL")
 		if err := ra.waitTableFlush(ctx, tableID, ddl.CommitTs); err != nil {
 			return err
 		}
@@ -510,7 +510,7 @@ func (t *tempTxnInsertEventStorage) writeEventsToFile(events ...*model.RowChange
 	}
 	for _, event := range events {
 		redoLog := event.ToRedoLog()
-		data, err := codec.MarshalRedoLog(redoLog, nil)
+		data, err := redoLog.MarshalMsg(nil)
 		if err != nil {
 			return errors.WrapError(errors.ErrMarshalFailed, err)
 		}
@@ -548,11 +548,12 @@ func (t *tempTxnInsertEventStorage) readFromFile() (*model.RowChangedEvent, erro
 		return nil, errors.New("read size not equal to expected size")
 	}
 	t.eventSizes = t.eventSizes[1:]
-	redoLog, _, err := codec.UnmarshalRedoLog(data)
+	redoLog := new(model.RedoLog)
+	_, err = redoLog.UnmarshalMsg(data)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrUnmarshalFailed, err)
 	}
-	return redoLog.RedoRow.Row.ToRowChangedEvent(), nil
+	return model.LogToRow(redoLog.RedoRow), nil
 }
 
 func (t *tempTxnInsertEventStorage) readNextEvent() (*model.RowChangedEvent, error) {
