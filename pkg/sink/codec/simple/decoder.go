@@ -280,15 +280,6 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		ele = next
 	}
 
-	if ddl.TableInfo.TableName.Table == "finishmark" {
-		unresolved := d.cachedMessages.Len()
-		if unresolved != 0 {
-			log.Error("finishmark received, but not all cached message resolved",
-				zap.Int("unresolved", unresolved))
-		} else {
-			log.Info("finishmark received, and no cached message")
-		}
-	}
 	return ddl, nil
 }
 
@@ -333,10 +324,6 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 
 	_, ok := m.memo[key]
 	if ok {
-		log.Warn("table info not stored, since it already exists",
-			zap.String("schema", info.TableName.Schema),
-			zap.String("table", info.TableName.Table),
-			zap.Uint64("version", info.UpdateTS))
 		return
 	}
 
