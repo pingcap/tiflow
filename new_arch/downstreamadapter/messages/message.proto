@@ -1,0 +1,41 @@
+// Copyright 2024 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+package pingcap.tiflow.new_arch.downstreamadapter.messages
+option go_package = "github.com/pingcap/tiflow/new_arch/downstreamadapter/messages";
+
+message TableStatus {
+    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
+    new_arch.downstreamadapter.State state = 2;
+
+}
+
+message HeartBeatMessage {
+    repeated TableStatus table_status = 1
+    // todo
+}
+
+message TableResponse {
+    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
+    new_arch.downstreamadapter.Action action = 2; 
+}
+
+message NewTable {
+    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
+}
+
+message HeartBeatResponse {
+    repeated TableResponse table_response = 1;
+    repeated NewTable new_table =2;
+}
