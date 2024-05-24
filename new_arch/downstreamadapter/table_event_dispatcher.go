@@ -22,62 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
-// // use to store tableInfo info, and responsible to fetch tableInfo, and do gc
-// type TableInfoStore struct {
-// 	mutex        sync.Mutex
-// 	tableID      model.TableID
-// 	tableInfoMap map[uint64]*model.TableInfo
-// 	largestTs    uint64 // the largest commitTs query the tableInfo, which means if the ts is smaller then the largestTs, 他的 tableInfo 就是上面 map 中比他小的最近的 ts 对应的 map
-// }
-
-// func createTableInfoStore(tableID model.TableID) *TableInfoStore {
-// 	return &TableInfoStore{
-// 		tableID:      tableID,
-// 		tableInfoMap: make(map[uint64]*model.TableInfo),
-// 		largestTs:    0,
-// 	}
-// }
-
-// // get tableInfo from tableInfoMap, to get the tableInfo with the largest ts key smaller than the ts
-// // need lock
-// func (s *TableInfoStore) getTableInfo(ts uint64) (*model.TableInfo, error) {
-// 	largestTs := uint64(0)
-// 	for tsKey, _ := range s.tableInfoMap {
-// 		if tsKey < ts && tsKey > largestTs {
-// 			largestTs = tsKey
-// 		}
-// 	}
-// 	if largestTs == 0 {
-// 		return nil, errors.New("tableInfo is not found in tableInfoMap") // todo
-// 	}
-
-// 	return s.tableInfoMap[largestTs], nil
-// }
-
-// // 同时不会有多个 GettableInfo
-// func (s *TableInfoStore) GetTableInfo(ts uint64) (*model.TableInfo, error) {
-// 	s.mutex.Lock()
-// 	defer s.mutex.Unlock()
-// 	if s.largestTs > ts {
-// 		// 说明 tableInfoMap 里面有对应 ts 能用的 tableInfo,去 map 里拿
-// 		return s.getTableInfo(ts)
-// 	}
-
-// 	s.mutex.Unlock()
-
-// 	// todo(hyy): call api to get tableInfo from TableStreamManager, need to return tableInfo, related ts and the largest ts the tableInfo last for
-// 	tableInfo, ts, largestTs, err := API() // TODO
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	s.mutex.Lock()
-// 	s.tableInfoMap[ts] = tableInfo
-// 	s.largestTs = largestTs
-
-// 	return tableInfo, err
-
-// }
-
 // TableEventDispatcher is responsible to pull events from TableStreamManager, and dispatch them to downstream.
 // TableEventDispatcher only works for one table in one changefeed.
 // TODO:挂了的话也是应该重启
