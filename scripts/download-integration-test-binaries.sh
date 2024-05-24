@@ -61,7 +61,7 @@ tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branc
 minio_download_url="${file_server_url}/download/minio.tar.gz"
 go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-00998a9a_linux-amd64.tar.gz"
+sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-79f1fd1e_linux-amd64.tar.gz"
 jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 
 # Some temporary dir.
