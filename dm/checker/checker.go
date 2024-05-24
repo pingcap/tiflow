@@ -25,7 +25,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/br/pkg/lightning/importer"
 	"github.com/pingcap/tidb/br/pkg/lightning/importer/opts"
 	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
@@ -51,7 +50,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
-	pdhttp "github.com/tikv/pd/client/http"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -452,25 +451,18 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		var opts []pdhttp.ClientOption
-		tls, err := common.NewTLS(
-			lCfg.Security.CAPath,
-			lCfg.Security.CertPath,
-			lCfg.Security.KeyPath,
-			"",
-			lCfg.Security.CABytes,
-			lCfg.Security.CertBytes,
-			lCfg.Security.KeyBytes,
-		)
+		pdClient, err := pd.NewClientWithContext(
+			ctx, []string{lCfg.TiDB.PdAddr}, pd.SecurityOption{
+				CAPath:       lCfg.Security.CAPath,
+				CertPath:     lCfg.Security.CertPath,
+				KeyPath:      lCfg.Security.KeyPath,
+				SSLCABytes:   lCfg.Security.CABytes,
+				SSLCertBytes: lCfg.Security.CertBytes,
+				SSLKEYBytes:  lCfg.Security.KeyBytes,
+			})
 		if err != nil {
-			log.L().Fatal("failed to load TLS certificates", zap.Error(err))
+			return err
 		}
-		if o := tls.TLSConfig(); o != nil {
-			opts = append(opts, pdhttp.WithTLSConfig(o))
-		}
-		pdClient := pdhttp.NewClient(
-			"dm-check", []string{lCfg.TiDB.PdAddr}, opts...)
-
 		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB, pdClient)
 		if err != nil {
 			return err
