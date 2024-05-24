@@ -848,7 +848,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			// DDL can be executed, do it first.
-			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+			if err = c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 				return cerror.Trace(err)
 			}
 			c.popDDL()

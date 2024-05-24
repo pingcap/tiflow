@@ -146,8 +146,8 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		log.Debug("table info not found for the event, "+
-			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+		log.Warn("table info not found for the event, "+
+			"the consumer cache this event temporarily, and update the tableInfo after it's received",
 			zap.String("schema", d.msg.Schema),
 			zap.String("table", d.msg.Table),
 			zap.Uint64("version", d.msg.SchemaVersion))
@@ -158,8 +158,6 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
 	d.msg = nil
-
-	log.Debug("row changed event assembled", zap.Any("event", event))
 	return event, err
 }
 
