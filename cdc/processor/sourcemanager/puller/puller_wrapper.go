@@ -147,8 +147,19 @@ func (n *Wrapper) Start(
 				if rawKV == nil {
 					continue
 				}
-				pEvent := model.NewPolymorphicEvent(rawKV)
-				eventSortEngine.Add(n.tableID, pEvent)
+				if n.shouldSplitKVEntry(rawKV) {
+					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
+					if err != nil {
+						log.Panic("failed to split update kv entry", zap.Error(err))
+						return
+					}
+					deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+					insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+					eventSortEngine.Add(n.tableID, deleteEvent, insertEvent)
+				} else {
+					pEvent := model.NewPolymorphicEvent(rawKV)
+					eventSortEngine.Add(n.tableID, pEvent)
+				}
 			}
 		}
 	}()
