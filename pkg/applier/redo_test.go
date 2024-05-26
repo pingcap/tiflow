@@ -550,8 +550,8 @@ func getMockDB(t *testing.T) *sql.DB {
 	mock.ExpectCommit()
 
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1").
-		WithArgs(1, "3", 1, "2").
+	mock.ExpectExec("UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1").
+		WithArgs(1, "3", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
