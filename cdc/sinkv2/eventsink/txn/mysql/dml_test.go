@@ -65,7 +65,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, "test2", 1},
 		},
 		{
@@ -109,7 +109,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, "test2", 1, "test"},
 		},
 		{
@@ -153,7 +153,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
@@ -200,7 +200,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
@@ -247,7 +247,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, "世界", 1, "你好"},
 		},
 	}
