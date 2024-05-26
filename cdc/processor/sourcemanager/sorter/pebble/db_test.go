@@ -31,6 +31,7 @@ func TestIteratorWithTableFilter(t *testing.T) {
 	db, err := OpenPebble(
 		1, dbPath, &config.DBConfig{Count: 1},
 		nil,
+		nil,
 		// Disable auto compactions to make the case more stable.
 		func(opts *pebble.Options) { opts.DisableAutomaticCompactions = true },
 	)

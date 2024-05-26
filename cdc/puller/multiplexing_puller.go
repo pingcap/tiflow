@@ -118,9 +118,9 @@ func (p *tableProgress) resolveLock(currentTime time.Time) {
 		return
 	}
 
-	maxVersion := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
+	targetTs := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
 	for _, subID := range p.subscriptionIDs {
-		p.client.ResolveLock(subID, maxVersion)
+		p.client.ResolveLock(subID, targetTs)
 	}
 }
 

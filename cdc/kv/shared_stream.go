@@ -372,7 +372,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			// the table will be handled later.
 			c.onRegionFail(newRegionErrorInfo(region, &sendRequestToStoreErr{}))
 		} else {
-			connectTime := time.Since(region.lockedRange.Created).Milliseconds()
+			connectTime := time.Since(region.lockedRangeState.Created).Milliseconds()
 			c.metrics.regionConnectDuration.Observe(float64(connectTime))
 
 			state := newRegionFeedState(region, uint64(subscriptionID))

@@ -24,13 +24,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
-	"github.com/pingcap/tidb/br/pkg/lightning/common"
-	"github.com/pingcap/tidb/br/pkg/lightning/importer"
-	"github.com/pingcap/tidb/br/pkg/lightning/importer/opts"
-	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
-	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/importer"
+	"github.com/pingcap/tidb/lightning/pkg/importer/opts"
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
+	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/pkg/lightning/common"
+	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -438,6 +438,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		// Adjust will raise error when this field is empty, so we set any non empty value here.
 		lCfg.Mydumper.SourceDir = "noop://"
+		if lightningCheckGroupOnlyTableEmpty(c.checkingItems) {
+			lCfg.TiDB.PdAddr = "noop:2379"
+		}
 		err = lCfg.Adjust(ctx)
 		if err != nil {
 			return err
@@ -533,10 +536,27 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 			c.checkList = append(c.checkList, checker.NewLightningCDCPiTRChecker(lChecker))
 		}
+		if _, ok := c.checkingItems[config.LightningTableEmptyChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetTableEmpty)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningEmptyTableChecker(lChecker))
+		}
 	}
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
+}
+
+func lightningCheckGroupOnlyTableEmpty(checkingItems map[string]string) bool {
+	for _, item := range config.LightningPrechecks {
+		if _, ok := checkingItems[item]; ok && item != config.LightningTableEmptyChecking {
+			return false
+		}
+	}
+	_, ok := checkingItems[config.LightningTableEmptyChecking]
+	return ok
 }
 
 func (c *Checker) fetchSourceTargetDB(
@@ -611,58 +631,8 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	} else if !result.Summary.Passed {
 		errs = append(errs, unit.NewProcessError(errors.New("check was failed, please see detail")))
 	}
-	warnLeft, errLeft := c.warnCnt, c.errCnt
 
-	// remove success result if not pass
-	results := result.Results[:0]
-	for _, r := range result.Results {
-		if r.State == checker.StateSuccess {
-			continue
-		}
-
-		// handle results without r.Errors
-		if len(r.Errors) == 0 {
-			switch r.State {
-			case checker.StateWarning:
-				if warnLeft == 0 {
-					continue
-				}
-				warnLeft--
-				results = append(results, r)
-			case checker.StateFailure:
-				if errLeft == 0 {
-					continue
-				}
-				errLeft--
-				results = append(results, r)
-			}
-			continue
-		}
-
-		subErrors := make([]*checker.Error, 0, len(r.Errors))
-		for _, e := range r.Errors {
-			switch e.Severity {
-			case checker.StateWarning:
-				if warnLeft == 0 {
-					continue
-				}
-				warnLeft--
-				subErrors = append(subErrors, e)
-			case checker.StateFailure:
-				if errLeft == 0 {
-					continue
-				}
-				errLeft--
-				subErrors = append(subErrors, e)
-			}
-		}
-		// skip display an empty Result
-		if len(subErrors) > 0 {
-			r.Errors = subErrors
-			results = append(results, r)
-		}
-	}
-	result.Results = results
+	filterResults(result, c.warnCnt, c.errCnt)
 
 	c.updateInstruction(result)
 
@@ -688,6 +658,59 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		Errors:     errs,
 		Detail:     rawResult,
 	}
+}
+
+func filterResults(result *checker.Results, warnCnt, errCnt int64) {
+	// remove success result if not pass
+	results := result.Results[:0]
+	for _, r := range result.Results {
+		if r.State == checker.StateSuccess {
+			continue
+		}
+
+		// handle results without r.Errors
+		if len(r.Errors) == 0 {
+			switch r.State {
+			case checker.StateWarning:
+				if warnCnt == 0 {
+					continue
+				}
+				warnCnt--
+				results = append(results, r)
+			case checker.StateFailure:
+				if errCnt == 0 {
+					continue
+				}
+				errCnt--
+				results = append(results, r)
+			}
+			continue
+		}
+
+		subErrors := make([]*checker.Error, 0, len(r.Errors))
+		for _, e := range r.Errors {
+			switch e.Severity {
+			case checker.StateWarning:
+				if warnCnt == 0 {
+					continue
+				}
+				warnCnt--
+				subErrors = append(subErrors, e)
+			case checker.StateFailure:
+				if errCnt == 0 {
+					continue
+				}
+				errCnt--
+				subErrors = append(subErrors, e)
+			}
+		}
+		// skip display an empty Result
+		if len(subErrors) > 0 {
+			r.Errors = subErrors
+			results = append(results, r)
+		}
+	}
+	result.Results = results
 }
 
 // updateInstruction updates the check result's Instruction.

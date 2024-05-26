@@ -127,20 +127,18 @@ func newResolvedTsBatch(ts uint64, stream *requestedStream) statefulEvent {
 }
 
 type sharedRegionWorker struct {
-	changefeed    model.ChangeFeedID
-	client        *SharedClient
-	statesManager *regionStateManager
-	inputCh       chan statefulEvent
-	metrics       *regionWorkerMetrics
+	changefeed model.ChangeFeedID
+	client     *SharedClient
+	inputCh    chan statefulEvent
+	metrics    *regionWorkerMetrics
 }
 
 func newSharedRegionWorker(c *SharedClient) *sharedRegionWorker {
 	return &sharedRegionWorker{
-		changefeed:    c.changefeed,
-		client:        c,
-		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
-		statesManager: newRegionStateManager(-1),
-		metrics:       newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
+		changefeed: c.changefeed,
+		client:     c,
+		inputCh:    make(chan statefulEvent, regionWorkerInputChanSize),
+		metrics:    newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
 	}
 }
 
@@ -474,7 +472,7 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 	now := time.Now().UnixMilli()
 	lastAdvance := table.lastAdvanceTime.Load()
 	if now-lastAdvance > int64(w.client.config.KVClient.AdvanceIntervalInMs) && table.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
-		ts := table.rangeLock.CalculateMinResolvedTs()
+		ts := table.rangeLock.ResolvedTs()
 		if ts > table.startTs {
 			revent := model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpans{

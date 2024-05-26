@@ -27,7 +27,7 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="ticdc-simple-basic-avro"
+	TOPIC_NAME="ticdc-simple-basic-avro-$RANDOM"
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&encoding-format=avro"
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"

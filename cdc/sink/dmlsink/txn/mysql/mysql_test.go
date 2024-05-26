@@ -91,9 +91,10 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
 	})
+	// mock a different possible error for the second query
 	mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
-		Number:  1305,
-		Message: "FUNCTION test.tidb_version does not exist",
+		Number:  1044,
+		Message: "Access denied for user 'cdc'@'%' to database 'information_schema'",
 	})
 	require.Nil(t, err)
 	return
@@ -1033,12 +1034,12 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
-					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
-						"WHERE `a1`=? AND `a3`=? LIMIT 1",
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
+						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
 				values:          [][]interface{}{{3, 3, 2, 2}},
 				rowCount:        1,
-				approximateSize: 83,
+				approximateSize: 92,
 			},
 		}, {
 			name: "update with PK",
@@ -1066,11 +1067,11 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
-				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
-					"WHERE `a1`=? AND `a3`=? LIMIT 1"},
+				sqls: []string{"UPDATE `common_1`.`pk` SET `a1` = ?, `a3` = ? " +
+					"WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
 				values:          [][]interface{}{{3, 3, 2, 2}},
 				rowCount:        1,
-				approximateSize: 72,
+				approximateSize: 81,
 			},
 		}, {
 			name: "batch insert with PK",
@@ -1705,7 +1706,7 @@ func TestGroupRowsByType(t *testing.T) {
 				},
 			}
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
-			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo, false)
+			inserts, updates, deletes := ms.groupRowsByType(event, event.Event.TableInfo)
 			for _, rows := range inserts {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}

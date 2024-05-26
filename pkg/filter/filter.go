@@ -14,10 +14,10 @@
 package filter
 
 import (
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 

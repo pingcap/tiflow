@@ -27,6 +27,29 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
+type columnsArray []*model.Column
+
+func (a columnsArray) Len() int {
+	return len(a)
+}
+
+func (a columnsArray) Less(i, j int) bool {
+	return a[i].Name < a[j].Name
+}
+
+func (a columnsArray) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+// sortColumnArrays sort column arrays by name
+func sortColumnArrays(arrays ...[]*model.Column) {
+	for _, array := range arrays {
+		if array != nil {
+			sort.Sort(columnsArray(array))
+		}
+	}
+}
+
 type messageRow struct {
 	Update     map[string]internal.Column `json:"u,omitempty"`
 	PreColumns map[string]internal.Column `json:"p,omitempty"`
@@ -122,8 +145,11 @@ func rowChangeToMsg(
 		}
 	} else if e.IsUpdate() {
 		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
-		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
+		if config.OpenOutputOldValue {
+			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
+		}
+		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
+			(len(value.PreColumns) == 0 && !config.OpenOutputOldValue)) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
 		if config.OnlyOutputUpdatedColumns {
@@ -147,15 +173,15 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 
 	if len(value.Delete) != 0 {
 		preCols := codecColumns2RowChangeColumns(value.Delete)
-		internal.SortColumnArrays(preCols)
+		sortColumnArrays(preCols)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, preCols, indexColumns)
 		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
 	} else {
 		cols := codecColumns2RowChangeColumns(value.Update)
 		preCols := codecColumns2RowChangeColumns(value.PreColumns)
-		internal.SortColumnArrays(cols)
-		internal.SortColumnArrays(preCols)
+		sortColumnArrays(cols)
+		sortColumnArrays(preCols)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, cols, indexColumns)
 		e.Columns = model.Columns2ColumnDatas(cols, e.TableInfo)

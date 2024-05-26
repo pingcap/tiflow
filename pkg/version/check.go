@@ -37,13 +37,15 @@ import (
 
 var (
 	// minPDVersion is the version of the minimal compatible PD.
-	minPDVersion = semver.New("5.1.0-alpha")
+	// The min version should be 7.x because we adapt to tidb concurrency ddl implementations.
+	minPDVersion = semver.New("7.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
 	maxPDVersion = semver.New("10.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
-	MinTiKVVersion = semver.New("5.1.0-alpha")
+	// The min version should be 7.x because we adapt to tidb concurrency ddl implementations.
+	MinTiKVVersion = semver.New("7.1.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
 	maxTiKVVersion = semver.New("10.0.0")

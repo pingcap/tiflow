@@ -151,7 +151,8 @@ func (s *server) prepare(ctx context.Context) error {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		))
+		),
+		pd.WithForwardingOption(config.EnablePDForwarding))
 	if err != nil {
 		return errors.Trace(err)
 	}

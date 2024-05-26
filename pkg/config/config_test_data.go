@@ -70,7 +70,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -156,7 +162,7 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160
+      "compaction-l0-trigger": 16
     },
     "messages": {
       "client-max-batch-interval": 10000000,
@@ -331,7 +337,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -499,7 +511,13 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",

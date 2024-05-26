@@ -7,7 +7,7 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-output-dir = "/tmp/tidb_cdc_test/simple_handle_key_only_avro/output"
+output-dir = "/tmp/tidb_cdc_test/kafka_simple_handle_key_only_avro/output"
 
 source-instances = ["mysql1"]
 

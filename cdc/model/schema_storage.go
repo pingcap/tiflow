@@ -62,7 +62,7 @@ type TableInfo struct {
 	// ColumnID -> offset in RowChangedEvents.Columns.
 	RowColumnsOffset map[int64]int
 
-	ColumnsFlag map[int64]ColumnFlagType
+	ColumnsFlag map[int64]*ColumnFlagType
 
 	// the mounter will choose this index to output delete events
 	// special value:
@@ -115,7 +115,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		nameToColID:      make(map[string]int64, len(info.Columns)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
-		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
+		ColumnsFlag:      make(map[int64]*ColumnFlagType, len(info.Columns)),
 		handleColID:      []int64{-1},
 		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
@@ -261,7 +261,7 @@ func (ti *TableInfo) initColumnsFlag() {
 		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
-		ti.ColumnsFlag[colInfo.ID] = flag
+		ti.ColumnsFlag[colInfo.ID] = &flag
 	}
 
 	// In TiDB, just as in MySQL, only the first column of an index can be marked as "multiple key" or "unique key",
@@ -317,7 +317,7 @@ func (ti *TableInfo) ForceGetColumnFlagType(colID int64) *ColumnFlagType {
 	if !ok {
 		log.Panic("invalid column id", zap.Int64("columnID", colID))
 	}
-	return &flag
+	return flag
 }
 
 // ForceGetColumnName return the column name by ID
@@ -487,22 +487,16 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 // GetPrimaryKeyColumnNames returns the primary key column names
 func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
-	result := make([]string, 0)
-	for _, index := range ti.Indices {
-		if index.Primary {
-			for _, col := range index.Columns {
-				result = append(result, col.Name.O)
-			}
-			return result
-		}
+	var result []string
+	if ti.PKIsHandle {
+		result = append(result, ti.GetPkColInfo().Name.O)
+		return result
 	}
 
-	for _, columnsOffsets := range ti.IndexColumnsOffset {
-		for _, offset := range columnsOffsets {
-			columnInfo := ti.Columns[offset]
-			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
-				result = append(result, columnInfo.Name.O)
-			}
+	indexInfo := ti.GetPrimaryKey()
+	if indexInfo != nil {
+		for _, col := range indexInfo.Columns {
+			result = append(result, col.Name.O)
 		}
 	}
 	return result

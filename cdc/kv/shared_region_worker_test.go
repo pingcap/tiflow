@@ -77,7 +77,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		&tikv.RPCContext{},
 		&subscribedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh},
 	)
-	region.lockedRange = &regionlock.LockedRange{}
+	region.lockedRangeState = &regionlock.LockedRangeState{}
 	state := newRegionFeedState(region, 1)
 	state.start()
 
@@ -178,19 +178,19 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 
 	s1 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(1, 1, 1)}, 1)
 	s1.region.subscribedTable = client.newSubscribedTable(1, tablepb.Span{}, 0, eventCh)
-	s1.region.lockedRange = &regionlock.LockedRange{}
+	s1.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s1.setInitialized()
 	s1.updateResolvedTs(9)
 
 	s2 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(2, 2, 2)}, 2)
 	s2.region.subscribedTable = client.newSubscribedTable(2, tablepb.Span{}, 0, eventCh)
-	s2.region.lockedRange = &regionlock.LockedRange{}
+	s2.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s2.setInitialized()
 	s2.updateResolvedTs(11)
 
 	s3 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(3, 3, 3)}, 3)
 	s3.region.subscribedTable = client.newSubscribedTable(3, tablepb.Span{}, 0, eventCh)
-	s3.region.lockedRange = &regionlock.LockedRange{}
+	s3.region.lockedRangeState = &regionlock.LockedRangeState{}
 	s3.updateResolvedTs(8)
 
 	worker.handleResolvedTs(ctx, resolvedTsBatch{ts: 10, regions: []*regionFeedState{s1, s2, s3}})

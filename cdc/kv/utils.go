@@ -14,14 +14,46 @@
 package kv
 
 import (
-	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"fmt"
+
+	"github.com/pingcap/errors"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta"
+	"github.com/pingcap/tidb/pkg/store/driver"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/flags"
+	"github.com/pingcap/tiflow/pkg/security"
+	tikvconfig "github.com/tikv/client-go/v2/config"
 )
 
-func getChangeDataEventCommitTs(cevent *cdcpb.ChangeDataEvent) (commitTs uint64) {
-	if len(cevent.Events) != 0 {
-		if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok && len(entries.Entries.Entries) > 0 {
-			commitTs = entries.Entries.Entries[0].CommitTs
-		}
+// GetSnapshotMeta returns tidb meta information
+func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) *meta.Meta {
+	snapshot := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
+	return meta.NewSnapshotMeta(snapshot)
+}
+
+// CreateTiStore creates a tikv storage client
+// Note: It will return a same storage if the urls connect to a same pd cluster,
+// so must be careful when you call storage.Close().
+func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
+	urlv, err := flags.NewURLsValue(urls)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-	return
+
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	securityCfg := tikvconfig.Security{
+		ClusterSSLCA:    credential.CAPath,
+		ClusterSSLCert:  credential.CertPath,
+		ClusterSSLKey:   credential.KeyPath,
+		ClusterVerifyCN: credential.CertAllowedCN,
+	}
+	d := driver.TiKVDriver{}
+	// we should use OpenWithOptions to open a storage to avoid modifying tidb's GlobalConfig
+	// so that we can create different storage in TiCDC by different urls and credential
+	tiStore, err := d.OpenWithOptions(tiPath, driver.WithSecurity(securityCfg))
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrNewStore, err)
+	}
+	return tiStore, nil
 }

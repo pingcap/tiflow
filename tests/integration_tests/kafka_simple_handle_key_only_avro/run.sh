@@ -19,9 +19,13 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
+
+	# upstream tidb cluster enable row level checksum
+	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="simple-handle-key-only-avro"
+	TOPIC_NAME="simple-handle-key-only-avro-$RANDOM"
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 

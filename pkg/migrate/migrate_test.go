@@ -457,7 +457,7 @@ type mockPDClient struct {
 	check func(serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
 
-func (m *mockPDClient) GetLeaderAddr() string {
+func (m *mockPDClient) GetLeaderURL() string {
 	return m.url
 }
 

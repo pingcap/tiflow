@@ -38,6 +38,7 @@ import (
 	eventsinkfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	sutil "github.com/pingcap/tiflow/cdc/sink/util"
+	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -60,6 +61,9 @@ type ConsumerOption struct {
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+
+	// the replicaConfig of the changefeed which produce data to the kafka topic
+	replicaConfig *config.ReplicaConfig
 
 	logPath       string
 	logLevel      string
@@ -95,6 +99,15 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 	})
 
 	o.address = strings.Split(upstreamURI.Host, ",")
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	if configFile != "" {
+		err := cmdUtil.StrictDecodeFile(configFile, "pulsar consumer", replicaConfig)
+		if err != nil {
+			log.Panic("decode config file failed", zap.Error(err))
+		}
+	}
+	o.replicaConfig = replicaConfig
 
 	s := upstreamURI.Query().Get("protocol")
 	if s != "" {
@@ -377,7 +390,7 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("pulsar-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -394,7 +407,7 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig())
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

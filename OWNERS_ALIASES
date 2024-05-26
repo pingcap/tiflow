@@ -1,8 +1,21 @@
 # Sort the member alphabetically.
 aliases:
   sig-critical-approvers-cdc:
-    - zhangjinpeng87
+    - kevin-xianliu
     - BenMeadowcroft
   sig-critical-approvers-dm:
     - yudongusa
     - easonn7
+  sig-approvers-cdc-api:
+    - hongyunyan
+    - sdojjy
+  sig-approvers-dm:
+    - Benjamin2037
+    - D3Hunter
+    - GMHDBJD
+    - lance6716
+  sig-approvers-engine:
+    - Benjamin2037
+    - D3Hunter
+    - GMHDBJD
+    - lance6716
