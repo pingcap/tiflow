@@ -332,6 +332,10 @@ var (
 		"MySQL txn error",
 		errors.RFCCodeText("CDC:ErrMySQLTxnError"),
 	)
+	ErrMySQLDuplicateEntry = errors.Normalize(
+		"MySQL duplicate entry error",
+		errors.RFCCodeText("CDC:ErrMySQLDuplicateEntry"),
+	)
 	ErrMySQLQueryError = errors.Normalize(
 		"MySQL query error",
 		errors.RFCCodeText("CDC:ErrMySQLQueryError"),

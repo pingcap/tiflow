@@ -72,8 +72,8 @@ func New(ctx context.Context,
 	}
 
 	s := &SinkFactory{}
-	schema := strings.ToLower(sinkURI.Scheme)
-	switch schema {
+	scheme := strings.ToLower(sinkURI.Scheme)
+	switch scheme {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {
@@ -106,7 +106,7 @@ func New(ctx context.Context,
 		s.category = CategoryBlackhole
 	default:
 		return nil,
-			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
 	}
 
 	return s, nil
