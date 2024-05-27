@@ -12,27 +12,46 @@
 // limitations under the License.
 
 syntax = "proto3";
-package pingcap.tiflow.new_arch.downstreamadapter.messages
+package pingcap.tiflow.new_arch.downstreamadapter.messages;
 option go_package = "github.com/pingcap/tiflow/new_arch/downstreamadapter/messages";
 
+message Span {
+    int64 table_id = 1;
+    bytes start_key = 2;
+    bytes end_key = 3;
+}
+
+message State {
+    bool isBlocked = 1;
+    uint64 checkpointTs = 2;
+    string blockType = 3;
+    repeated Span BlockFor = 4;
+}
+
 message TableStatus {
-    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
-    new_arch.downstreamadapter.State state = 2;
+    Span span = 1;
+    State state = 2;
 
 }
 
 message HeartBeatMessage {
-    repeated TableStatus table_status = 1
+    repeated TableStatus table_status = 1;
     // todo
 }
 
+enum Action {
+    WriteEvent = 0;
+	PassEvent = 1;
+	WaitEvent = 2;
+}
 message TableResponse {
-    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
-    new_arch.downstreamadapter.Action action = 2; 
+    Span span = 1;
+    Action action = 2; 
 }
 
 message NewTable {
-    processor.tablepb.Span span = 1 [(gogoproto.nullable) = false];
+    Span span = 1;
+    uint64 startTs = 2;
 }
 
 message HeartBeatResponse {

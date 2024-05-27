@@ -22,6 +22,8 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/new_arch/downstreamadapter/messages"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
@@ -36,35 +38,6 @@ const (
 )
 
 const expiredTime = 10 * time.Second //超时时间
-
-// 实现 container/heap
-type TaskHeap []*PullEventTask
-
-func (th TaskHeap) Len() int {
-	return len(th)
-}
-
-// 自定义比较顺序: 按照任务的timestamp降序
-func (th TaskHeap) Less(i, j int) bool {
-	return th[i].StartTs < th[j].StartTs
-}
-
-func (th TaskHeap) Swap(i, j int) {
-	th[i], th[j] = th[j], th[i]
-}
-
-// Push 和 Pop 的实现 必须由 接口调用者来实现, heap 包并不提供这样的实现
-func (th *TaskHeap) Push(x interface{}) {
-	item := x.(*PullEventTask)
-	*th = append(*th, item)
-}
-
-// 弹出最后一个元素
-func (th *TaskHeap) Pop() interface{} {
-	item := (*th)[len(*th)-1]
-	*th = (*th)[:len(*th)-1]
-	return item
-}
 
 type worker struct {
 	ctx  context.Context
@@ -89,34 +62,33 @@ func (w *worker) run() error {
 }
 
 func (w *worker) processTask() {
-	pool := w.pool
-	pool.mutex.Lock()
-	if pool.queue.Len() == 0 {
-		pool.mutex.Unlock()
+	w.pool.queueMutex.Lock()
+	if w.pool.queue.Len() == 0 {
+		w.pool.queueMutex.Unlock()
 		// sleep?
 		return
 	}
 
 	// 弹出任务队列中优先级最高的任务（即时间戳最早的任务）
-	task := heap.Pop(&pool.queue).(PullEventTask)
-	pool.mutex.Unlock()
+	task := heap.Pop(&w.pool.queue).(PullEventTask)
+	w.pool.queueMutex.Unlock()
 
 	// 执行任务
-	memoryUsageMap, _ := task.fn()
+	memoryUsageMap, _ := task.fn() // 这里本质要限制每次能拿到的内存开销最大不超过多少，这样才能比较平稳。
 
 	// 更新内存使用情况
-	pool.mutex.Lock()
+	w.pool.memoryMutex.Lock()
 	for commitTs, memoryUsage := range memoryUsageMap {
-		pool.memoryCostMap[task.span][commitTs] = memoryUsage
-		pool.usedMemory += memoryUsage
+		w.pool.memoryCostMap[task.span][commitTs] = memoryUsage
+		w.pool.usedMemory += memoryUsage
 	}
 
 	// 检查内存是否超过限制
-	for pool.usedMemory >= pool.maxMemory {
+	for w.pool.usedMemory >= w.pool.maxMemory {
 		// 可以这边直接持续拿锁，直到内存合适了再释放，这样就阻塞所有的 worker 去做新任务（最多做一个）
 		time.Sleep(10 * time.Millisecond) // TODO:有没有更优雅的
 	}
-	pool.mutex.Unlock()
+	w.pool.memoryMutex.Unlock()
 }
 
 type TableCheckpointTsPair struct {
@@ -136,18 +108,20 @@ type PullEventTaskThreadPool struct {
 	maxMemory         uint64
 	usedMemory        uint64
 
-	mutex sync.Mutex // for pq
-	queue TaskHeap
-	cond  *sync.Cond
+	queueMutex sync.Mutex // for queue
+	queue      TaskHeap
+
+	cond *sync.Cond
 
 	workers []*worker
 
 	checkpointCh chan TableCheckpointTsPair
 
+	memoryMutex   sync.Mutex // for queue
 	memoryCostMap map[*tablepb.Span]map[uint64]uint64
 }
 
-func createPullEventTaskScheduler(ctx context.Context, maxMemory uint64) *PullEventTaskThreadPool {
+func createPullEventTaskThreadPool(ctx context.Context, maxMemory uint64) *PullEventTaskThreadPool {
 	pullEventTaskThreadPool := PullEventTaskThreadPool{
 		ctx:               ctx,
 		pullEventTaskChan: make(chan *PullEventTask, 200), // 这个值要想一想
@@ -161,34 +135,35 @@ func createPullEventTaskScheduler(ctx context.Context, maxMemory uint64) *PullEv
 	heap.Init(&pullEventTaskThreadPool.queue)
 	for i := 0; i < workerNum; i++ {
 		pullEventTaskThreadPool.workers[i] = newWorker(ctx, i, &pullEventTaskThreadPool)
-		go pullEventTaskThreadPool.workers[i].run()
 	}
 
 	return &pullEventTaskThreadPool
 }
 
 func (p *PullEventTaskThreadPool) Run() error {
+	for i := 0; i < workerNum; i++ {
+		go p.workers[i].run()
+	}
 	for {
 		select {
 		case <-p.ctx.Done():
 			log.Info("PullEventTaskScheduler exits as canceled")
 			return nil
 		case pullEventTask := <-p.pullEventTaskChan:
-			p.mutex.Lock()
+			p.queueMutex.Lock()
 			heap.Push(&p.queue, pullEventTask)
-			p.mutex.Unlock()
+			p.queueMutex.Unlock()
 		case tableCheckpointTsPair := <-p.checkpointCh:
-			p.mutex.Lock()
+			p.memoryMutex.Lock()
 			// TODO：可以做个排序，然后二分优化
 			for commitTs, memoryCost := range p.memoryCostMap[tableCheckpointTsPair.span] {
 				if commitTs <= tableCheckpointTsPair.checkpointTs {
 					p.usedMemory -= memoryCost
 				}
 			}
-			p.mutex.Unlock()
+			p.memoryMutex.Unlock()
 		}
 	}
-
 }
 
 // 用来管理所有的 event dispatcher，以及收集 table event dispatcher 的 status， 传给 maintainer，协调后通知回去
@@ -197,6 +172,7 @@ func (p *PullEventTaskThreadPool) Run() error {
 type EventDispatcherManager struct {
 	ctx          context.Context
 	changefeedID model.ChangeFeedID
+	sinkType     SinkType
 	//filter                      filter.Filter
 	eventDispatcherMap          map[*tablepb.Span]*TableEventDispatcher // store all tables' event
 	tableTriggerEventDispatcher *TableTriggerEventDispatcher            // table trigger event dispatcher
@@ -207,7 +183,9 @@ type EventDispatcherManager struct {
 	heartBeatInterval time.Duration
 	lastCommunication time.Time
 
-	pullEventTaskThreadPool PullEventTaskThreadPool
+	pullEventTaskThreadPool *PullEventTaskThreadPool
+
+	trans transport.Transport
 }
 
 func createEventDispatcherManager(changefeedID model.ChangeFeedID, filter filter.Filter, startTs uint64) *EventDispatcherManager { // TODO :应该还需要一个 capture 的编号
@@ -217,9 +195,10 @@ func createEventDispatcherManager(changefeedID model.ChangeFeedID, filter filter
 		cancel:       cancel, // 这个刚好用来取消对应的 ctx
 		changefeedID: changefeedID,
 		//filter:             filter,
-		eventDispatcherMap: map[*tablepb.Span]*TableEventDispatcher{},
-		barrierTs:          -1,
-		heartBeatInterval:  50 * time.Millisecond,
+		eventDispatcherMap:      map[*tablepb.Span]*TableEventDispatcher{},
+		barrierTs:               -1,
+		heartBeatInterval:       50 * time.Millisecond,
+		pullEventTaskThreadPool: createPullEventTaskThreadPool(ctx, 10*1024*1024*1024), // 先拍个10G
 	}
 	eventDispatcherManager.tableTriggerEventDispatcher = createTableTriggerEventDispatcher(eventDispatcherManager.ctx, changefeedID, startTs, filter)
 	go eventDispatcherManager.run()
@@ -233,20 +212,18 @@ func (e *EventDispatcherManager) run() {
 
 	defer e.cancel() // 也就是如果 eventDispatcherManager 退出了要先 canel （但这个是不是不应该放在 run 里？应该放在 close？)
 
-	//go e.handleHeartBeatResponse() //这个到底要不要跟 send 拼在一起，先收处理了以后再发？ -- 感觉可以先按一起做，后面再分开
-
 	ticker := time.NewTicker(e.heartBeatInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		// case <-e.ctx.Done(): //要这个么
-		// 	e.close()
-		// 	log.Error("Event Dispatcher Manager Exits as cancelled", zap.Any("ChangefeedID", e.changefeedID))
-		// 	return
 		case <-ticker.C:
 			// TODO: 拆分 handle 和 send 成两个单独的线程，测一下有没有必要为这个性能增加额外的复杂性
-			e.handleHeartBeatResponse()
+			recvMsgs, err := e.recvMsgs(e.ctx)
+			if err != nil {
+				log.Error("Event Dispatcher Manager failed to receive heart bear response message")
+			}
+			e.handleHeartBeatResponse(recvMsgs)
 
 			if time.Since(e.lastCommunication) > expiredTime {
 				e.close()
@@ -276,14 +253,11 @@ func (e *EventDispatcherManager) sendHeartBeat() {
 	// send heartbeat
 }
 
-func (e *EventDispatcherManager) handleHeartBeatResponse() {
-	// 这边会收到哪些
-	// do recv
-	// 收到要创建新的 table 的 event dispatcher
-	for _, new_table := range tableRepsonse.NewTables {
-		createTableEventDispatcher(e.ctx, new_table.span, changefeedID, new_table.startTs) // if needed
+func (e *EventDispatcherManager) handleHeartBeatResponse(messages *messages.HeartBeatResponse) {
+	for _, new_table := range messages.NewTable {
+		createTableEventDispatcher(e.ctx, new_table.Span, e.changefeedID, e.sinkType, new_table.StartTs, e.pullEventTaskThreadPool) // if needed
 	}
-	e.tableTriggerEventDispatcher.handleHeartBeatResponse(tableRepsonse.NewTables)
+	e.tableTriggerEventDispatcher.handleHeartBeatResponse(messages.NewTables)
 
 	for _, tableResponse := range tableRepsonse.table_response {
 		if dispatcher, ok := e.eventDispatcherMap[tableResponse.tableSpan]; ok {
@@ -294,6 +268,23 @@ func (e *EventDispatcherManager) handleHeartBeatResponse() {
 	// 有新消息就 update lastCommunication
 	// 收到哪些 table 的 block 完成了，可以推进或者需要当前节点推进
 
+}
+
+// 理论上只能有且只有一条？
+func (e *EventDispatcherManager) recvMsgs(ctx context.Context) (*messages.HeartBeatResponse, error) {
+	recvMsgs, err := e.trans.Recv(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	n := 0
+	for _, msg := range recvMsgs {
+		// TODO:Filter stale messages and lost messages.
+		recvMsgs[n] = msg
+		n++
+	}
+	//e.compat.AfterTransportReceive(recvMsgs[:n]) 先不做 compact
+	return recvMsgs[:n], nil
 }
 
 func (e *EventDispatcherManager) createNewTableEventDispatcher(tableSpan *tablepb.Span) {

@@ -22,15 +22,8 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
-
-type PullEventTask struct {
-	span    *tablepb.Span
-	StartTs uint64
-	fn      func() (map[uint64]uint64, error)
-}
 
 type EventType int8
 

@@ -19,21 +19,19 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/new_arch/downstreamadapter/messages"
 )
 
 // TableEventDispatcher is responsible to pull events from TableStreamManager, and dispatch them to downstream.
 // TableEventDispatcher only works for one table in one changefeed.
 // TODO:挂了的话也是应该重启
 type TableEventDispatcher struct {
-	span         *tablepb.Span
+	span         *messages.Span
 	changefeedID model.ChangeFeedID
 
 	mutex           sync.Mutex  // use to protect txnEvents and largestCommitTs
 	txnEvents       []*TxnEvent // use to store the events pulled but not dispatched to downstream，不如用 channel
 	largestCommitTs uint64      // the largest commitTs in the txnEvents, 主要用于判断 txnEvent 是不是不会有新数据了，这个在 pullEvents 更新，如果 endTs 没拉完就 commitTs - 1
-
-	//tableInfoStore *TableInfoStore // use to store the latest table info, to be used get the tableInfo when event need to push downstream
 
 	// sink is used to encode the event, and push downstream
 	// sink is a interface, it could be supported for different downstream,
@@ -50,16 +48,15 @@ type TableEventDispatcher struct {
 	pool   *PullEventTaskThreadPool
 }
 
-func createTableEventDispatcher(ctx context.Context, span *tablepb.Span, changeFeedID model.ChangeFeedID, sinkType SinkType, startTs uint64, pool *PullEventTaskThreadPool) *TableEventDispatcher {
+func createTableEventDispatcher(ctx context.Context, span *messages.Span, changeFeedID model.ChangeFeedID, sinkType SinkType, startTs uint64, pool *PullEventTaskThreadPool) *TableEventDispatcher {
 	ctx, cancel := context.WithCancel(ctx)
 	tableEventDispatcher := TableEventDispatcher{
-		span:           span,
-		changefeedID:   changeFeedID,
-		tableInfoStore: createTableInfoStore(span.TableID),
-		blockCh:        make(chan int, 1),
-		ctx:            ctx,
-		cancel:         cancel,
-		pool:           pool,
+		span:         span,
+		changefeedID: changeFeedID,
+		blockCh:      make(chan int, 1),
+		ctx:          ctx,
+		cancel:       cancel,
+		pool:         pool,
 	}
 	tableEventDispatcher.sink = createSink(ctx, sinkType)
 	tableEventDispatcher.generatePullEventsTask(startTs)
@@ -117,7 +114,7 @@ func (d *TableEventDispatcher) Run() error {
 			d.mutex.Unlock()
 
 			if event.eventType == DMLEvent {
-				err = d.sink.WriteTxnEvent(event)
+				err := d.sink.WriteTxnEvent(event)
 				if err != nil {
 					return err
 				}
