@@ -15,7 +15,6 @@ package dumpling
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"strings"
 	"sync"
@@ -418,7 +417,6 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
-	dumpConfig.MinTLSVersion = tls.VersionTLS10
 
 	return dumpConfig, nil
 }

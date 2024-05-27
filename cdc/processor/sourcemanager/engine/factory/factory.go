@@ -81,7 +81,7 @@ func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, 
 			return e, nil
 		}
 		if len(f.dbs) == 0 {
-			f.dbs, f.cache, f.writeStalls, err = createPebbleDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
+			f.dbs, f.writeStalls, err = createPebbleDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
 			if err != nil {
 				return
 			}
