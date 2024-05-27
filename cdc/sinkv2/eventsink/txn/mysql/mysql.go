@@ -512,6 +512,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if hasHandleKey(tableColumns) {
 				// TODO(dongmen): find a better way to get table info.
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				flushCacheDMLs()
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
