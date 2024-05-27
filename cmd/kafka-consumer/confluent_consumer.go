@@ -87,8 +87,6 @@ func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer 
 	}
 	c.writer = w
 	c.option = o
-	// async write to downstream
-	// go c.AsyncWrite(ctx)
 	return c
 }
 
@@ -108,7 +106,7 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 		"auto.offset.reset": "earliest",
 		// Whether or not we store offsets automatically.
 		"enable.auto.offset.store": false,
-		"enable.auto.commit":       true,
+		"enable.auto.commit":       false,
 	}
 	if len(c.option.ca) != 0 {
 		_ = configMap.SetKey("security.protocol", "SSL")
@@ -138,7 +136,7 @@ func (c *confluentConsumer) Consume(ctx context.Context) error {
 				log.Panic("Error decode message", zap.Error(err))
 			}
 			if needCommit {
-				// TODO: retry commit
+				// TODO: retry commit if fail
 				if _, err := client.CommitMessage(msg); err != nil {
 					log.Error("Error commit message", zap.Error(err))
 				}
