@@ -41,12 +41,14 @@ function prepare() {
 
 trap stop_tidb_cluster EXIT
 # storage is not supported yet.
+# test without fast create table
 if [ "$SINK_TYPE" != "storage" ]; then
 	# TODO(dongmen): enable pulsar in the future.
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		exit 0
 	fi
 	prepare $*
+	run_sql "set global tidb_enable_fast_create_table=off" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	cd "$(dirname "$0")"
 	set -o pipefail
 	GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
@@ -55,6 +57,29 @@ if [ "$SINK_TYPE" != "storage" ]; then
 	check_table_exists mark.finish_mark_2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	check_table_exists mark.finish_mark_3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	check_table_exists mark.finish_mark_4 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_5 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_sync_diff $WORK_DIR $CUR/diff_config.toml
+	cleanup_process $CDC_BINARY
+	check_logs $WORK_DIR
+fi
+# test with fast create table
+if [ "$SINK_TYPE" != "storage" ]; then
+	# TODO(dongmen): enable pulsar in the future.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		exit 0
+	fi
+	prepare $*
+	run_sql "set global tidb_enable_fast_create_table=on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	cd "$(dirname "$0")"
+	set -o pipefail
+	GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
+	check_table_exists mark.finish_mark_0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_4 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists mark.finish_mark_5 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	check_table_exists mark.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	check_sync_diff $WORK_DIR $CUR/diff_config.toml
 	cleanup_process $CDC_BINARY

@@ -75,11 +75,8 @@ type ddlJobPullerImpl struct {
 	resolvedTs    uint64
 	schemaVersion int64
 	filter        filter.Filter
-	// ddlJobsTable is initialized when receive the first concurrent DDL job.
-	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
-	ddlJobsTable *model.TableInfo
-	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	jobMetaColumnID int64
+	// ddlTableInfo is initialized when receive the first concurrent DDL job.
+	ddlTableInfo *entry.DDLTableInfo
 	// outputCh sends the DDL job entries to the caller.
 	outputCh chan *model.DDLJobEntry
 }
@@ -239,13 +236,14 @@ func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
-	if p.ddlJobsTable == nil && !entry.IsLegacyFormatJob(rawKV) {
-		err := p.initJobTableMeta()
+	if p.ddlTableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
+		err := p.initDDLTableInfo()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
+
+	return entry.ParseDDLJob(rawKV, p.ddlTableInfo)
 }
 
 func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
@@ -256,7 +254,7 @@ func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
 	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
-func (p *ddlJobPullerImpl) initJobTableMeta() error {
+func (p *ddlJobPullerImpl) initDDLTableInfo() error {
 	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return errors.Trace(err)
@@ -277,6 +275,8 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// for tidb_ddl_job
 	tableInfo, err := findTableByName(tbls, "tidb_ddl_job")
 	if err != nil {
 		return errors.Trace(err)
@@ -287,8 +287,24 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 		return errors.Trace(err)
 	}
 
-	p.ddlJobsTable = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
-	p.jobMetaColumnID = col.ID
+	p.ddlTableInfo = &entry.DDLTableInfo{}
+	p.ddlTableInfo.DDLJobTable = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
+	p.ddlTableInfo.JobMetaColumnIDinJobTable = col.ID
+
+	// for tidb_ddl_history
+	historyTableInfo, err := findTableByName(tbls, "tidb_ddl_history")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	historyTableCol, err := findColumnByName(historyTableInfo.Columns, "job_meta")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.ddlTableInfo.DDLHistoryTable = model.WrapTableInfo(db.ID, db.Name.L, 0, historyTableInfo)
+	p.ddlTableInfo.JobMetaColumnIDinHistoryTable = historyTableCol.ID
+
 	return nil
 }
 

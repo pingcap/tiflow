@@ -752,6 +752,7 @@ function test_start_task_with_condition() {
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
 	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
+	curl http://127.0.0.1:8261/api/v1/tasks/incremental_task_use_start_time_after_create/sources/mysql-01/migrate_targets
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2

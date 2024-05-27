@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -42,7 +41,7 @@ func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	up *upstream.Upstream,
-	ctrl controller.Controller,
+	provider owner.StatusProvider,
 	ectdClient etcd.CDCEtcdClient,
 ) (*model.ChangeFeedInfo, error) {
 	// verify sinkURI
@@ -55,7 +54,7 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	ok, err := ctrl.IsChangefeedExists(ctx, model.DefaultChangeFeedID(changefeedConfig.ID))
+	ok, err := provider.IsChangefeedExists(ctx, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -120,7 +119,7 @@ func verifyCreateChangefeedConfig(
 		return nil, err
 	}
 
-	captureInfos, err := ctrl.GetCaptures(ctx)
+	captureInfos, err := provider.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}
