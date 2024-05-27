@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"math"
 	"sort"
 	"time"
@@ -722,7 +723,9 @@ func getDefaultOrZeroValue(
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		datum := types.NewDatum(col.GetOriginDefaultValue())
-		d, err = datum.ConvertTo(nil, &col.FieldType)
+		sc := new(stmtctx.StatementContext)
+		sc.SetTimeZone(tz)
+		d, err = datum.ConvertTo(sc, &col.FieldType)
 		if err != nil {
 			return d, d.GetValue(), sizeOfDatum(d), "", errors.Trace(err)
 		}
