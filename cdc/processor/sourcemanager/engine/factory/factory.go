@@ -61,7 +61,6 @@ type SortEngineFactory struct {
 	// Following fields are valid if engineType is pebbleEngine.
 	pebbleConfig *config.DBConfig
 	dbs          []*pebble.DB
-	cache        *pebble.Cache
 	writeStalls  []writeStall
 
 	// dbs is also readed in the background metrics collector.
@@ -125,9 +124,6 @@ func (f *SortEngineFactory) Close() (err error) {
 	}
 	for _, db := range f.dbs {
 		err = multierr.Append(err, db.Close())
-	}
-	if f.cache != nil {
-		f.cache.Unref()
 	}
 	return
 }

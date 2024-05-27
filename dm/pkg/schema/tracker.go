@@ -94,10 +94,6 @@ func (se executorContext) ParseWithParams(context.Context, string, ...interface{
 	return nil, nil
 }
 
-func (se executorContext) GetRestrictedSQLExecutor() sqlexec.RestrictedSQLExecutor {
-	return se
-}
-
 func (se executorContext) ExecRestrictedStmt(context.Context, ast.StmtNode, ...sqlexec.OptionFuncAlias) ([]chunk.Row, []*ast.ResultField, error) {
 	return nil, nil, nil
 }

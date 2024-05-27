@@ -22,7 +22,6 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -33,8 +32,6 @@ import (
 )
 
 func main() {
-	collate.SetNewCollationEnabledForTest(false)
-
 	cfg := worker.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
