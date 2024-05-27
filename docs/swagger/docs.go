@@ -1459,6 +1459,9 @@ var doc = `{
                 "enable-tidb-extension": {
                     "type": "boolean"
                 },
+                "encoding-format": {
+                    "type": "string"
+                },
                 "max-batch-size": {
                     "type": "integer"
                 }
@@ -1904,6 +1907,18 @@ var doc = `{
                 "schema-registry": {
                     "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
+                },
+                "send-bootstrap-in-msg-count": {
+                    "description": "SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.",
+                    "type": "integer"
+                },
+                "send-bootstrap-interval-in-sec": {
+                    "description": "Simple Protocol only config, use to control the behavior of sending bootstrap message.\nNote: When one of the following conditions is set to negative value,\nbootstrap sending function will be disabled.\nSendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.",
+                    "type": "integer"
+                },
+                "send-bootstrap-to-all-partition": {
+                    "description": "SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.\nIf set to false, bootstrap message will only be sent to the first partition of each topic.\nDefault value is true.",
+                    "type": "boolean"
                 },
                 "terminator": {
                     "description": "Terminator is NOT available when the downstream is DB.",
@@ -2422,6 +2437,9 @@ var doc = `{
                 },
                 "enable_tidb_extension": {
                     "type": "boolean"
+                },
+                "encoding_format": {
+                    "type": "string"
                 },
                 "max_batch_size": {
                     "type": "integer"
@@ -3154,6 +3172,15 @@ var doc = `{
                 },
                 "schema_registry": {
                     "type": "string"
+                },
+                "send_bootstrap_in_msg_count": {
+                    "type": "integer"
+                },
+                "send_bootstrap_interval_in_sec": {
+                    "type": "integer"
+                },
+                "send_bootstrap_to_all_partition": {
+                    "type": "boolean"
                 },
                 "terminator": {
                     "type": "string"

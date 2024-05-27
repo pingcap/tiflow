@@ -18,6 +18,7 @@ import (
 
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbterror"
@@ -136,7 +137,8 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
-		mysql.ErrPartitionMgmtOnNonpartitioned:
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		errno.ErrTableWithoutPrimaryKey:
 		return false
 	}
 	return true
