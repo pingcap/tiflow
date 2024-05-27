@@ -42,7 +42,6 @@ func main() {
 	var (
 		upstreamURIStr string
 		configFile     string
-		consumerClient string
 		consumer       KakfaConsumer
 	)
 
@@ -50,7 +49,6 @@ func main() {
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
-	flag.StringVar(&consumerClient, "client", "confluent", "Kafka client")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
@@ -95,16 +93,7 @@ func main() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	switch consumerClient {
-	case "kafka-go":
-		consumer = NewKafkaGoConsumer(ctx, consumerOption)
-	case "sarama":
-		consumer = NewSaramaConsumer(ctx, consumerOption)
-	case "confluent":
-		consumer = NewConfluentConsumer(ctx, consumerOption)
-	default:
-		log.Panic("unsupport consumer client", zap.String("client", consumerClient))
-	}
+	consumer = NewConfluentConsumer(ctx, consumerOption)
 
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {
