@@ -146,24 +146,26 @@ func newProducer(
 	client pulsar.Client,
 	topicName string,
 ) (pulsar.Producer, error) {
-	po := pulsar.ProducerOptions{
-		Topic: topicName,
+	maxReconnectToBroker := uint(config.DefaultMaxReconnectToPulsarBroker)
+	option := pulsar.ProducerOptions{
+		Topic:                topicName,
+		MaxReconnectToBroker: &maxReconnectToBroker,
 	}
 	if pConfig.BatchingMaxMessages != nil {
-		po.BatchingMaxMessages = *pConfig.BatchingMaxMessages
+		option.BatchingMaxMessages = *pConfig.BatchingMaxMessages
 	}
 	if pConfig.BatchingMaxPublishDelay != nil {
-		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
+		option.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
 	}
 	if pConfig.CompressionType != nil {
-		po.CompressionType = pConfig.CompressionType.Value()
-		po.CompressionLevel = pulsar.Default
+		option.CompressionType = pConfig.CompressionType.Value()
+		option.CompressionLevel = pulsar.Default
 	}
 	if pConfig.SendTimeout != nil {
-		po.SendTimeout = pConfig.SendTimeout.Duration()
+		option.SendTimeout = pConfig.SendTimeout.Duration()
 	}
 
-	producer, err := client.CreateProducer(po)
+	producer, err := client.CreateProducer(option)
 	if err != nil {
 		return nil, err
 	}
@@ -205,8 +207,10 @@ func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.
 // Close close all producers
 func (p *pulsarProducers) Close() {
 	keys := p.producers.Keys()
+
 	p.producersMutex.Lock()
 	defer p.producersMutex.Unlock()
+	p.client.Close()
 	for _, topic := range keys {
 		p.producers.Remove(topic) // callback func will be called
 	}
