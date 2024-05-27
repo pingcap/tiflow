@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
@@ -84,12 +83,12 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ForwardToControllerMiddleware forward a request to controller if current server
+// ForwardToOwnerMiddleware forward a request to controller if current server
 // is not controller, or handle it locally.
-func ForwardToControllerMiddleware(p capture.Capture) gin.HandlerFunc {
+func ForwardToOwnerMiddleware(p capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if !p.IsController() {
-			api.ForwardToController(ctx, p)
+		if !p.IsOwner() {
+			api.ForwardToOwner(ctx, p)
 
 			// Without calling Abort(), Gin will continue to process the next handler,
 			// execute code which should only be run by the owner, and cause a panic.
@@ -99,81 +98,6 @@ func ForwardToControllerMiddleware(p capture.Capture) gin.HandlerFunc {
 		}
 		ctx.Next()
 	}
-}
-
-// ForwardToChangefeedOwnerMiddleware forward a request to controller if current server
-// is not the changefeed owner, or handle it locally.
-func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
-	changefeedIDFunc func(ctx *gin.Context) model.ChangeFeedID,
-) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		changefeedID := changefeedIDFunc(ctx)
-		// check if this capture is the changefeed owner
-		if handleRequestIfIsChnagefeedOwner(ctx, p, changefeedID) {
-			return
-		}
-
-		// forward to the controller to find the changefeed owner capture
-		if !p.IsController() {
-			api.ForwardToController(ctx, p)
-			// Without calling Abort(), Gin will continue to process the next handler,
-			// execute code which should only be run by the owner, and cause a panic.
-			// See https://github.com/pingcap/tiflow/issues/5888
-			ctx.Abort()
-			return
-		}
-
-		controller, err := p.GetController()
-		if err != nil {
-			_ = ctx.Error(err)
-			ctx.Abort()
-			return
-		}
-		// controller check if the changefeed is exists, so we don't need to forward again
-		ok, err := controller.IsChangefeedExists(ctx, changefeedID)
-		if err != nil {
-			_ = ctx.Error(err)
-			ctx.Abort()
-			return
-		}
-		if !ok {
-			_ = ctx.Error(cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID))
-			ctx.Abort()
-			return
-		}
-
-		info, err := p.Info()
-		if err != nil {
-			_ = ctx.Error(err)
-			ctx.Abort()
-			return
-		}
-		changefeedCaptureOwner := controller.GetChangefeedOwnerCaptureInfo(changefeedID)
-		if changefeedCaptureOwner.ID == info.ID {
-			log.Warn("changefeed owner is the same as controller",
-				zap.String("captureID", info.ID))
-			return
-		}
-		api.ForwardToCapture(ctx, info.ID, changefeedCaptureOwner.AdvertiseAddr)
-		ctx.Abort()
-	}
-}
-
-func handleRequestIfIsChnagefeedOwner(ctx *gin.Context, p capture.Capture, changefeedID model.ChangeFeedID) bool {
-	// currently not only controller capture has the owner, remove this check in the future
-	if p.StatusProvider() != nil {
-		ok, err := p.StatusProvider().IsChangefeedOwner(ctx, changefeedID)
-		if err != nil {
-			_ = ctx.Error(err)
-			return true
-		}
-		// this capture is the changefeed owner's capture, handle this request directly
-		if ok {
-			ctx.Next()
-			return true
-		}
-	}
-	return false
 }
 
 // CheckServerReadyMiddleware checks if the server is ready

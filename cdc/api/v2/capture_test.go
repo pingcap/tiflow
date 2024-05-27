@@ -22,8 +22,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
-	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/require"
@@ -37,9 +37,9 @@ func TestListCaptures(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsController().Return(true).AnyTimes()
-		statusProvider := mock_controller.NewMockController(ctrl)
-		cp.EXPECT().GetController().Return(statusProvider, nil)
+		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		statusProvider := mock_owner.NewMockStatusProvider(ctrl)
+		cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 		statusProvider.EXPECT().GetCaptures(gomock.Any()).Return(nil, errors.New("fake"))
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
@@ -64,9 +64,9 @@ func TestListCaptures(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsController().Return(true).AnyTimes()
-		statusProvider := mock_controller.NewMockController(ctrl)
-		cp.EXPECT().GetController().Return(statusProvider, nil)
+		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		statusProvider := mock_owner.NewMockStatusProvider(ctrl)
+		cp.EXPECT().StatusProvider().Return(statusProvider)
 		statusProvider.EXPECT().GetCaptures(gomock.Any()).Return([]*model.CaptureInfo{}, nil)
 		cp.EXPECT().Info().Return(model.CaptureInfo{}, errors.New("fake info"))
 
@@ -92,9 +92,9 @@ func TestListCaptures(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsController().Return(true).AnyTimes()
-		statusProvider := mock_controller.NewMockController(ctrl)
-		cp.EXPECT().GetController().Return(statusProvider, nil)
+		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		statusProvider := mock_owner.NewMockStatusProvider(ctrl)
+		cp.EXPECT().StatusProvider().Return(statusProvider)
 		statusProvider.EXPECT().GetCaptures(gomock.Any()).Return([]*model.CaptureInfo{
 			{
 				ID:            "owner-id",
