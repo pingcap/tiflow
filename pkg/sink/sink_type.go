@@ -13,6 +13,11 @@
 
 package sink
 
+import (
+	"net/url"
+	"strings"
+)
+
 // Type is the type of sink.
 type Type int
 
@@ -80,4 +85,9 @@ func IsMySQLCompatibleScheme(scheme string) bool {
 func IsStorageScheme(scheme string) bool {
 	return scheme == FileScheme || scheme == S3Scheme || scheme == GCSScheme ||
 		scheme == GSScheme || scheme == AzblobScheme || scheme == AzureScheme || scheme == CloudStorageNoopScheme
+}
+
+// GetScheme returns the scheme of the url.
+func GetScheme(url *url.URL) string {
+	return strings.ToLower(url.Scheme)
 }
