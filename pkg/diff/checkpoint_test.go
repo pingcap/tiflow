@@ -65,9 +65,14 @@ func (s *testUtilSuite) TestInitChunks(c *C) {
 		},
 	}
 
-	// init chunks will insert chunk's information with update time, which use time.Now(), so can't know the value and can't fill the `WithArgs`
+	// init chunks will insert chunk's information with update time, which use time.Now(),
+	// so can't know the value and can't fill the `WithArgs`
 	// so just skip the `ExpectQuery` and check the error message
-	// mock.ExpectQuery("INSERT INTO `sync_diff_inspector`.`chunk` VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?)").WithArgs(......)
+	// mock.ExpectQuery("INSERT INTO `sync_diff_inspector`.`chunk`
+	// VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?)").WithArgs(......)
 	err = initChunks(context.Background(), db, "target", "diff_test", "test", chunks)
-	c.Assert(err, ErrorMatches, ".*INSERT INTO `sync_diff_inspector`.`chunk` VALUES\\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\).*")
+	c.Assert(err,
+		ErrorMatches,
+		".*INSERT INTO `sync_diff_inspector`.`chunk` "+
+			"VALUES\\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\).*")
 }

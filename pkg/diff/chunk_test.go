@@ -55,7 +55,10 @@ func (*testChunkSuite) TestChunkUpdate(c *C) {
 			[]string{"1", "1", "5", "2", "2", "6"},
 		}, {
 			[]string{"c", "7", "8"},
-			"((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))",
+			"((`a` > ?) OR (`a` = ? AND `b` > ?) OR " +
+				"(`a` = ? AND `b` = ? AND `c` > ?)) AND " +
+				"((`a` < ?) OR (`a` = ? AND `b` < ?) OR " +
+				"(`a` = ? AND `b` = ? AND `c` <= ?))",
 			[]string{"1", "1", "3", "1", "3", "7", "2", "2", "4", "2", "4", "8"},
 		},
 	}
@@ -100,14 +103,22 @@ func (*testChunkSuite) TestChunkToString(c *C) {
 	}
 
 	conditions, args := chunk.toString("")
-	c.Assert(conditions, Equals, "((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
+	c.Assert(conditions,
+		Equals,
+		"((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) "+
+			"OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
 	expectArgs := []string{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"}
 	for i, arg := range args {
 		c.Assert(arg, Equals, expectArgs[i])
 	}
 
 	conditions, args = chunk.toString("latin1")
-	c.Assert(conditions, Equals, "((`a` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' > ?)) AND ((`a` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' <= ?))")
+	c.Assert(conditions,
+		Equals,
+		"((`a` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` COLLATE 'latin1' > ?) OR"+
+			" (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' > ?)) AND"+
+			" ((`a` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` COLLATE 'latin1' < ?) OR"+
+			" (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' <= ?))")
 	expectArgs = []string{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"}
 	for i, arg := range args {
 		c.Assert(arg, Equals, expectArgs[i])
