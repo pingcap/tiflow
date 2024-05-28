@@ -91,7 +91,6 @@ func (n *Wrapper) Start(
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
-	enableTableMonitor bool,
 ) {
 	failpoint.Inject("ProcessorAddTableError", func() {
 		errChan <- cerrors.New("processor add table injected error")
@@ -116,7 +115,6 @@ func (n *Wrapper) Start(
 		n.tableID,
 		n.tableName,
 		n.bdrMode,
-		enableTableMonitor,
 	)
 	n.wg.Add(1)
 	go func() {

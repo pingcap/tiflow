@@ -79,7 +79,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	ts uint64,
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
-	enableTableMonitor bool,
 ) error {
 	for {
 		select {
@@ -132,7 +131,7 @@ func newPullerForTest(
 	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		checkpointTs, spans, config.GetDefaultServerConfig(),
-		model.DefaultChangeFeedID("changefeed-id-test"), 0, "table-test", false, false)
+		model.DefaultChangeFeedID("changefeed-id-test"), 0, "table-test", false)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

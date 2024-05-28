@@ -189,7 +189,6 @@ type ReplicaConfig struct {
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
-	EnableTableMonitor    bool   `json:"enable_table_monitor,omitempty"`
 	BDRMode               bool   `json:"bdr_mode"`
 
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
@@ -220,7 +219,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.EnableTableMonitor = c.EnableTableMonitor
 	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = c.SyncPointInterval.duration
@@ -394,7 +392,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable:        false,
 		CheckGCSafePoint:             cloned.CheckGCSafePoint,
 		EnableSyncPoint:              cloned.EnableSyncPoint,
-		EnableTableMonitor:           cloned.EnableTableMonitor,
 		SyncPointInterval:            &JSONDuration{cloned.SyncPointInterval},
 		SyncPointRetention:           &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:                      cloned.BDRMode,
