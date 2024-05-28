@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -88,50 +88,49 @@ type writer struct {
 	eventRouter *dispatcher.EventRouter
 }
 
-// NewWriter will create a writer to decode kafka message and write to the downstream.
-func NewWriter(ctx context.Context, o *option) (*writer, error) {
+func newWriter(ctx context.Context, o *option) *writer {
 	w := &writer{
 		option: o,
-	}
-
-	config.GetGlobalServerConfig().TZ = o.timezone
-
-	w.fakeTableIDGenerator = &fakeTableIDGenerator{
-		tableIDs: make(map[string]int64),
+		fakeTableIDGenerator: &fakeTableIDGenerator{
+			tableIDs: make(map[string]int64),
+		},
+		sinks:        make([]*partitionSinks, o.partitionNum),
+		eventsGroups: make([]map[int64]*eventsGroup, o.partitionNum),
 	}
 
 	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
 	if err != nil {
-		return nil, cerror.Trace(err)
+		log.Panic("initialize the event router failed",
+			zap.Error(err),
+			zap.Any("protocol", o.protocol),
+			zap.Any("topic", o.topic), zap.Any("replicaConfig", o.replicaConfig))
 	}
 	w.eventRouter = eventRouter
-
-	w.sinks = make([]*partitionSinks, o.partitionNum)
-	w.eventsGroups = make([]map[int64]*eventsGroup, o.partitionNum)
-	w.decoders = make([]codec.RowEventDecoder, o.partitionNum)
-	errChan := make(chan error, 1)
 
 	var db *sql.DB
 	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
 		db, err = openDB(ctx, o.upstreamTiDBDSN)
 		if err != nil {
-			return nil, err
+			log.Panic("cannot open the upstream TiDB, handle key only enabled",
+				zap.String("dsn", o.upstreamTiDBDSN))
 		}
 	}
 	for i := 0; i < int(o.partitionNum); i++ {
 		w.sinks[i] = &partitionSinks{}
 		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {
-			log.Panic("Error create decoder", zap.Error(err))
+			log.Panic("cannot create the decoder", zap.Error(err))
 		}
 		w.decoders[i] = decoder
 		w.eventsGroups[i] = make(map[int64]*eventsGroup)
 	}
 
-	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
+	config.GetGlobalServerConfig().TZ = o.timezone
+	errChan := make(chan error, 1)
+	changefeed := model.DefaultChangeFeedID("kafka-consumer")
+	f, err := eventsinkfactory.New(ctx, changefeed, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
-		return nil, cerror.Trace(err)
+		log.Panic("cannot create the event sink factory", zap.Error(err))
 	}
 	w.sinkFactory = f
 
@@ -144,12 +143,12 @@ func NewWriter(ctx context.Context, o *option) (*writer, error) {
 		}
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeed, o.downstreamURI, o.replicaConfig)
 	if err != nil {
-		return nil, cerror.Trace(err)
+		log.Panic("cannot create the ddl sink factory", zap.Error(err))
 	}
 	w.ddlSink = ddlSink
-	return w, nil
+	return w
 }
 
 // append DDL wait to be handled, only consider the constraint among DDLs.

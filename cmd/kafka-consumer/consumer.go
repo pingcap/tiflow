@@ -78,11 +78,6 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 	if o.partitionNum == 0 {
 		o.partitionNum = partitionNum
 	}
-	w, err := NewWriter(ctx, o)
-	if err != nil {
-		log.Panic("cannot create the writer", zap.Error(err))
-	}
-
 	topics := strings.Split(o.topic, ",")
 	if len(topics) == 0 {
 		log.Panic("no topic provided for the consumer")
@@ -114,7 +109,7 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 		log.Panic("subscribe topics failed", zap.Error(err))
 	}
 	return &consumer{
-		writer: w,
+		writer: newWriter(ctx, o),
 		client: client,
 	}
 }
