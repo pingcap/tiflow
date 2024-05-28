@@ -37,14 +37,13 @@ import (
 func main() {
 	debug.SetMemoryLimit(14 * 1024 * 1024 * 1024)
 
-	consumerOption := newOption()
-
 	var (
 		upstreamURIStr string
 		configFile     string
 	)
 	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 
+	consumerOption := newOption()
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
@@ -68,8 +67,7 @@ func main() {
 		logutil.WithInitSaramaLogger(),
 	)
 	if err != nil {
-		log.Error("init logger failed", zap.Error(err))
-		return
+		log.Panic("init logger failed", zap.Error(err))
 	}
 
 	version.LogVersionInfo("kafka consumer")
@@ -88,16 +86,15 @@ func main() {
 	if err != nil {
 		log.Panic("adjust consumer option failed", zap.Error(err))
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-
 	consumer := newConsumer(ctx, consumerOption)
-
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := http.ListenAndServe(":6060", nil); err != nil {
+			if err = http.ListenAndServe(":6060", nil); err != nil {
 				log.Panic("Error starting pprof", zap.Error(err))
 			}
 		}()
@@ -105,9 +102,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := consumer.Consume(ctx); err != nil {
-			log.Panic("Error consume", zap.Error(err))
-		}
+		consumer.Consume(ctx)
 	}()
 
 	sigterm := make(chan os.Signal, 1)

@@ -115,7 +115,7 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 }
 
 // Consume will read message from Kafka.
-func (c *consumer) Consume(ctx context.Context) error {
+func (c *consumer) Consume(ctx context.Context) {
 	defer func() {
 		if err := c.client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
@@ -130,15 +130,15 @@ func (c *consumer) Consume(ctx context.Context) error {
 			if err.(kafka.Error).IsTimeout() {
 				continue
 			}
-			return errors.Trace(err)
+			log.Panic("read message failed", zap.Error(err))
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
-		if needCommit {
-			// TODO: retry commit if fail
-			if _, err := c.client.CommitMessage(msg); err != nil {
-				log.Error("commit message failed", zap.Error(err))
-				return errors.Trace(err)
-			}
+		if !needCommit {
+			continue
+		}
+		// TODO: retry commit if fail
+		if _, err = c.client.CommitMessage(msg); err != nil {
+			log.Panic("commit message failed", zap.Error(err))
 		}
 	}
 }
