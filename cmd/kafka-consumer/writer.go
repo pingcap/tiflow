@@ -18,12 +18,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
-	"sync"
-	"sync/atomic"
-	"time"
-
-	cerror "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -32,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
@@ -41,6 +36,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // NewDecoder will create a new event decoder
@@ -54,9 +53,6 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder, err = open.NewBatchDecoder(ctx, option.codecConfig, upstreamTiDB)
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, option.codecConfig, upstreamTiDB)
-		if err != nil {
-			return decoder, err
-		}
 	case config.ProtocolAvro:
 		schemaM, err := avro.NewConfluentSchemaManager(ctx, option.schemaRegistryURI, nil)
 		if err != nil {
@@ -67,6 +63,9 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", option.protocol))
+	}
+	if err != nil {
+		return nil, cerror.Trace(err)
 	}
 	return decoder, err
 }

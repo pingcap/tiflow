@@ -37,18 +37,15 @@ import (
 func main() {
 	debug.SetMemoryLimit(14 * 1024 * 1024 * 1024)
 
-	consumerOption := NewConsumerOption()
+	consumerOption := newOption()
 
 	var (
 		upstreamURIStr string
 		configFile     string
-		consumer       KakfaConsumer
 	)
-
 	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
-
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
@@ -93,7 +90,7 @@ func main() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	consumer = NewConfluentConsumer(ctx, consumerOption)
+	consumer := newConsumer(ctx, consumerOption)
 
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {

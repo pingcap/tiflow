@@ -73,8 +73,7 @@ type option struct {
 	timeout time.Duration
 }
 
-// NewConsumerOption will create a new consumer option
-func NewConsumerOption() *option {
+func newOption() *option {
 	return &option{
 		version:         defaultVersion,
 		maxMessageBytes: math.MaxInt64,

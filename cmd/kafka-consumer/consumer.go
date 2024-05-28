@@ -64,12 +64,12 @@ func getPartitionNum(o *option) (int32, error) {
 }
 
 type consumer struct {
-	option *option
+	client *kafka.Consumer
 	writer *writer
 }
 
-// NewConfluentConsumer will create a consumer client.
-func NewConfluentConsumer(ctx context.Context, o *option) *consumer {
+// newConsumer will create a consumer client.
+func newConsumer(ctx context.Context, o *option) *consumer {
 	partitionNum, err := getPartitionNum(o)
 	if err != nil {
 		log.Panic("cannot get the partition number", zap.String("topic", o.topic), zap.Error(err))
@@ -81,21 +81,14 @@ func NewConfluentConsumer(ctx context.Context, o *option) *consumer {
 	if err != nil {
 		log.Panic("cannot create the writer", zap.Error(err))
 	}
-	return &consumer{
-		writer: w,
-		option: o,
-	}
-}
 
-// Consume will read message from Kafka.
-func (c *consumer) Consume(ctx context.Context) error {
-	topics := strings.Split(c.option.topic, ",")
+	topics := strings.Split(o.topic, ",")
 	if len(topics) == 0 {
 		log.Panic("no topic provided for the consumer")
 	}
 	configMap := &kafka.ConfigMap{
-		"bootstrap.servers":  strings.Join(c.option.address, ","),
-		"group.id":           c.option.groupID,
+		"bootstrap.servers":  strings.Join(o.address, ","),
+		"group.id":           o.groupID,
 		"session.timeout.ms": 6000,
 		// Start reading from the first message of each assigned
 		// partition if there are no previously committed offsets
@@ -105,25 +98,36 @@ func (c *consumer) Consume(ctx context.Context) error {
 		"enable.auto.offset.store": false,
 		"enable.auto.commit":       false,
 	}
-	if len(c.option.ca) != 0 {
+	if len(o.ca) != 0 {
 		_ = configMap.SetKey("security.protocol", "SSL")
-		_ = configMap.SetKey("ssl.ca.location", c.option.ca)
-		_ = configMap.SetKey("ssl.key.location", c.option.key)
-		_ = configMap.SetKey("ssl.certificate.location", c.option.cert)
+		_ = configMap.SetKey("ssl.ca.location", o.ca)
+		_ = configMap.SetKey("ssl.key.location", o.key)
+		_ = configMap.SetKey("ssl.certificate.location", o.cert)
 	}
 	client, err := kafka.NewConsumer(configMap)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
+	err = client.SubscribeTopics(topics, nil)
+	if err != nil {
+		log.Panic("subscribe topics failed", zap.Error(err))
+	}
+	return &consumer{
+		writer: w,
+		client: client,
+	}
+}
+
+// Consume will read message from Kafka.
+func (c *consumer) Consume(ctx context.Context) error {
 	defer func() {
-		if err = client.Close(); err != nil {
+		if err := c.client.Close(); err != nil {
 			log.Panic("Error closing client", zap.Error(err))
 		}
 	}()
 
-	err = client.SubscribeTopics(topics, nil)
 	for {
-		msg, err := client.ReadMessage(100 * time.Millisecond)
+		msg, err := c.client.ReadMessage(100 * time.Millisecond)
 		if err != nil {
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.
@@ -140,7 +144,7 @@ func (c *consumer) Consume(ctx context.Context) error {
 		}
 		if needCommit {
 			// TODO: retry commit if fail
-			if _, err := client.CommitMessage(msg); err != nil {
+			if _, err := c.client.CommitMessage(msg); err != nil {
 				log.Error("Error commit message", zap.Error(err))
 				return errors.Trace(err)
 			}
