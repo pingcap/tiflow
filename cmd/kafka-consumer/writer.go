@@ -18,6 +18,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -35,10 +40,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
-	"math"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // NewDecoder will create a new event decoder

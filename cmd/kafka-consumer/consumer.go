@@ -15,12 +15,13 @@ package main
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 func getPartitionNum(o *option) (int32, error) {

@@ -14,7 +14,6 @@
 package main
 
 import (
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"math"
 	"net/url"
 	"strconv"
@@ -25,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
