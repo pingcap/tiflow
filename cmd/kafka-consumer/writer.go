@@ -81,7 +81,7 @@ type writer struct {
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory  *eventsinkfactory.SinkFactory
-	sinks        []*partitionSinks
+	progresses   []*partitionProgress
 	eventsGroups []map[int64]*eventsGroup
 	decoders     []codec.RowEventDecoder
 
@@ -94,7 +94,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 		fakeTableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
-		sinks:        make([]*partitionSinks, o.partitionNum),
+		progresses:   make([]*partitionProgress, o.partitionNum),
 		eventsGroups: make([]map[int64]*eventsGroup, o.partitionNum),
 	}
 
@@ -116,7 +116,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 		}
 	}
 	for i := 0; i < int(o.partitionNum); i++ {
-		w.sinks[i] = &partitionSinks{}
+		w.progresses[i] = &partitionProgress{}
 		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {
 			log.Panic("cannot create the decoder", zap.Error(err))
@@ -190,30 +190,26 @@ func (w *writer) popDDL() {
 	}
 }
 
-func (w *writer) forEachSink(fn func(sink *partitionSinks) error) error {
-	for _, sink := range w.sinks {
-		if err := fn(sink); err != nil {
-			return cerror.Trace(err)
+func (w *writer) getMinResolvedTs() uint64 {
+	result := uint64(math.MaxUint64)
+	for _, p := range w.progresses {
+		watermark := atomic.LoadUint64(&p.watermark)
+		if watermark < result {
+			result = watermark
 		}
 	}
-	return nil
+	return result
 }
 
-func (w *writer) getMinPartitionResolvedTs() uint64 {
-	result := uint64(math.MaxUint64)
-	_ = w.forEachSink(func(sink *partitionSinks) error {
-		a := atomic.LoadUint64(&sink.resolvedTs)
-		if a < result {
-			result = a
-		}
-		return nil
-	})
-	return result
+func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
+	for _, p := range w.progresses {
+		fn(p)
+	}
 }
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
-	resolvedTs := w.getMinPartitionResolvedTs()
+	resolvedTs := w.getMinResolvedTs()
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
@@ -221,11 +217,9 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 			break
 		}
 		// flush DMLs
-		if err := w.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-		}); err != nil {
-			return false, cerror.Trace(err)
-		}
+		w.forEachPartition(func(sink *partitionProgress) {
+			syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+		})
 		// DDL can be executed, do it first.
 		if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 			return false, cerror.Trace(err)
@@ -241,11 +235,9 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 
 	// todo: why check message type here ?
 	if messageType == model.MessageTypeResolved {
-		if err := w.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, resolvedTs)
-		}); err != nil {
-			return false, cerror.Trace(err)
-		}
+		w.forEachPartition(func(sink *partitionProgress) {
+			syncFlushRowChangedEvents(ctx, sink, resolvedTs)
+		})
 	}
 	return true, nil
 }
@@ -258,7 +250,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		partition = message.TopicPartition.Partition
 	)
 
-	sink := w.sinks[partition]
+	progress := w.progresses[partition]
 	decoder := w.decoders[partition]
 	eventGroups := w.eventsGroups[partition]
 	if err := decoder.AddKeyValue(key, value); err != nil {
@@ -343,11 +335,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				)
 			}
 
-			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if row.CommitTs <= partitionResolvedTs {
+			watermark := atomic.LoadUint64(&progress.watermark)
+			if row.CommitTs <= watermark {
 				log.Panic("RowChangedEvent fallback row, ignore it",
 					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+					zap.Uint64("watermark", watermark),
 					zap.Int32("partition", partition),
 					zap.Any("row", row))
 			}
@@ -374,11 +366,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Error(err))
 			}
 
-			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if ts < partitionResolvedTs {
+			watermark := atomic.LoadUint64(&progress.watermark)
+			if ts < watermark {
 				log.Panic("partition resolved ts fallback, skip it",
 					zap.Uint64("ts", ts),
-					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+					zap.Uint64("watermark", watermark),
 					zap.Int32("partition", partition))
 			}
 
@@ -387,22 +379,18 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				if len(events) == 0 {
 					continue
 				}
-				if _, ok := sink.tableSinksMap.Load(tableID); !ok {
-					sink.tableSinksMap.Store(tableID, w.sinkFactory.CreateTableSinkForConsumer(
+				tableSink, ok := progress.tableSinkMap.Load(tableID)
+				if !ok {
+					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
 						model.DefaultChangeFeedID("kafka-consumer"),
 						spanz.TableIDToComparableSpan(tableID),
 						events[0].CommitTs,
-					))
+					)
+					progress.tableSinkMap.Store(tableID, tableSink)
 				}
-				s, _ := sink.tableSinksMap.Load(tableID)
-				s.(tablesink.TableSink).AppendRowChangedEvents(events...)
-				commitTs := events[len(events)-1].CommitTs
-				lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
-				if !ok || lastCommitTs.(uint64) < commitTs {
-					sink.tablesCommitTsMap.Store(tableID, commitTs)
-				}
+				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
 			}
-			atomic.StoreUint64(&sink.resolvedTs, ts)
+			atomic.StoreUint64(&progress.watermark, ts)
 			needFlush = true
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType))
@@ -444,32 +432,30 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	return g.currentTableID
 }
 
-// partitionSinks maintained for each partition, it may sync data for multiple tables.
-type partitionSinks struct {
-	tablesCommitTsMap sync.Map
-	tableSinksMap     sync.Map
-	// resolvedTs record the maximum timestamp of the received event
-	resolvedTs uint64
+type partitionProgress struct {
+	watermark uint64
+	// tableSinkMap -> [tableID]tableSink
+	tableSinkMap sync.Map
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, resolvedTs uint64) {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			log.Warn("sync flush row changed event canceled", zap.Error(ctx.Err()))
+			return
 		default:
 		}
 		flushedResolvedTs := true
-		sink.tablesCommitTsMap.Range(func(key, value interface{}) bool {
+		progress.tableSinkMap.Range(func(key, _ interface{}) bool {
 			tableID := key.(int64)
 			resolvedTs := model.NewResolvedTs(resolvedTs)
-			tableSink, ok := sink.tableSinksMap.Load(tableID)
+			tableSink, ok := progress.tableSinkMap.Load(tableID)
 			if !ok {
 				log.Panic("Table sink not found", zap.Int64("tableID", tableID))
 			}
 			if err := tableSink.(tablesink.TableSink).UpdateResolvedTs(resolvedTs); err != nil {
-				log.Error("Failed to update resolved ts", zap.Error(err))
-				return false
+				log.Panic("Failed to update resolved ts", zap.Error(err))
 			}
 			checkpoint := tableSink.(tablesink.TableSink).GetCheckpointTs()
 			if !checkpoint.EqualOrGreater(resolvedTs) {
@@ -478,7 +464,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 			return true
 		})
 		if flushedResolvedTs {
-			return nil
+			return
 		}
 	}
 }
