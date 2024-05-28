@@ -127,7 +127,7 @@ func (c *consumer) Consume(ctx context.Context) error {
 	}()
 
 	for {
-		msg, err := c.client.ReadMessage(100 * time.Millisecond)
+		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
 			// Timeout is not considered an error because it is raised by
 			// ReadMessage in absence of messages.
