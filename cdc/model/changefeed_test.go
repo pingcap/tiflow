@@ -148,6 +148,7 @@ func TestVerifyAndComplete(t *testing.T) {
 			MemoryQuota:        1073741824,
 			CaseSensitive:      false,
 			EnableOldValue:     true,
+			EnableTableMonitor: false,
 			CheckGCSafePoint:   true,
 			SyncPointInterval:  time.Minute * 10,
 			SyncPointRetention: time.Hour * 24,
