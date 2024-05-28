@@ -146,8 +146,8 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
-		log.Debug("table info not found for the event, "+
-			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+		log.Warn("table info not found for the event, "+
+			"the consumer cache this event temporarily, and update the tableInfo after it's received",
 			zap.String("schema", d.msg.Schema),
 			zap.String("table", d.msg.Table),
 			zap.Uint64("version", d.msg.SchemaVersion))
@@ -158,8 +158,6 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
 	d.msg = nil
-
-	log.Debug("row changed event assembled", zap.Any("event", event))
 	return event, err
 }
 
@@ -271,19 +269,25 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		if err != nil {
 			return nil, err
 		}
-		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
 
 		next := ele.Next()
-		d.cachedMessages.Remove(ele)
+		if event != nil {
+			d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
+			d.cachedMessages.Remove(ele)
+		}
 		ele = next
 	}
+
 	return ddl, nil
 }
 
 // GetCachedEvents returns the cached events
 func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
-	result := d.CachedRowChangedEvents
-	d.CachedRowChangedEvents = nil
+	var result []*model.RowChangedEvent
+	if len(d.CachedRowChangedEvents) != 0 {
+		result = d.CachedRowChangedEvents
+		d.CachedRowChangedEvents = nil
+	}
 	return result
 }
 
@@ -318,10 +322,6 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 
 	_, ok := m.memo[key]
 	if ok {
-		log.Warn("table info not stored, since it already exists",
-			zap.String("schema", info.TableName.Schema),
-			zap.String("table", info.TableName.Table),
-			zap.Uint64("version", info.UpdateTS))
 		return
 	}
 

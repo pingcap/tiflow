@@ -192,6 +192,74 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	require.Nil(t, decodedRow)
 }
 
+func TestUnionPrimaryKeyIndex(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	createTableDDL := `create table test.t(
+		pk varchar(32) not null,
+		sk varchar(32) not null,
+		ts timestamp(6) not null,
+		primary key (pk, sk, ts))`
+	ddlEvent := helper.DDL2Event(createTableDDL)
+
+	insertSQL := "insert into test.t(pk, sk, ts) values('pk1', 'sk1', '2023-12-27 12:27:23.123456')"
+	insertEvent := helper.DML2Event(insertSQL, "test", "t")
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
+
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
+
+			m, err := enc.EncodeDDLEvent(ddlEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
+			require.True(t, dec.msg.TableSchema.Indexes[0].Nullable)
+
+			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+			require.NoError(t, err)
+
+			messages := enc.Build()
+			require.Len(t, messages, 1)
+
+			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, messageType)
+
+			decodedRow, err := dec.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.NotNil(t, decodedRow)
+		}
+	}
+}
+
 func TestEncodeDDLSequence(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()

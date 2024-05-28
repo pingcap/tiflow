@@ -317,50 +317,36 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 
 // newTableInfo converts from TableSchema to TableInfo.
 func newTableInfo(m *TableSchema) *model.TableInfo {
-	var (
-		database      string
-		schemaVersion uint64
-	)
-
-	tidbTableInfo := &timodel.TableInfo{}
-	if m != nil {
-		database = m.Schema
-		schemaVersion = m.Version
-
-		tidbTableInfo.ID = m.TableID
-		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
-		tidbTableInfo.UpdateTS = m.Version
-
-		nextMockID := int64(100)
-		for _, col := range m.Columns {
-			tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
-			nextMockID += 100
-			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
-		}
-		for _, idx := range m.Indexes {
-			index := newTiIndexInfo(idx)
-			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
-		}
+	if m == nil {
+		return nil
 	}
-	return model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
+
+	tidbTableInfo := &timodel.TableInfo{
+		ID:       m.TableID,
+		Name:     timodel.NewCIStr(m.Table),
+		UpdateTS: m.Version,
+	}
+
+	nextMockID := int64(100)
+	for _, col := range m.Columns {
+		tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
+		nextMockID += 100
+		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
+	}
+	for _, idx := range m.Indexes {
+		index := newTiIndexInfo(idx)
+		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+	}
+	return model.WrapTableInfo(100, m.Schema, m.Version, tidbTableInfo)
 }
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	var (
-		tableInfo    *model.TableInfo
-		preTableInfo *model.TableInfo
-	)
-
-	tableInfo = newTableInfo(msg.TableSchema)
-	if msg.PreTableSchema != nil {
-		preTableInfo = newTableInfo(msg.PreTableSchema)
-	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
 		CommitTs:     msg.CommitTs,
-		TableInfo:    tableInfo,
-		PreTableInfo: preTableInfo,
+		TableInfo:    newTableInfo(msg.TableSchema),
+		PreTableInfo: newTableInfo(msg.PreTableSchema),
 		Query:        msg.SQL,
 	}
 }
