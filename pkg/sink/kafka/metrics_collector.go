@@ -52,7 +52,6 @@ const (
 	requestsInFlightMetricNamePrefix   = "requests-in-flight-for-broker-"
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
 
-	p80 = "p80"
 	p99 = "p99"
 )
 
@@ -133,29 +132,21 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	changefeedID := m.changefeedID.ID
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
-		percentiles := histogram.Snapshot().Percentiles([]float64{0.8, 0.99})
 		compressionRatioGauge.
 			WithLabelValues(namespace, changefeedID, "avg").
 			Set(histogram.Snapshot().Mean() / 100)
-		compressionRatioGauge.
-			WithLabelValues(namespace, changefeedID, p80).
-			Set(histogram.Snapshot().Percentile(percentiles[0]) / 100)
 		compressionRatioGauge.WithLabelValues(namespace, changefeedID, p99).
-			Set(histogram.Snapshot().Percentile(percentiles[1]) / 100)
+			Set(histogram.Snapshot().Percentile(0.99) / 100)
 	}
 
 	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
 	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
-		percentiles := histogram.Snapshot().Percentiles([]float64{0.8, 0.99})
 		recordsPerRequestGauge.
 			WithLabelValues(namespace, changefeedID, "avg").
 			Set(histogram.Snapshot().Mean())
 		recordsPerRequestGauge.
-			WithLabelValues(namespace, changefeedID, p80).
-			Set(histogram.Snapshot().Percentile(percentiles[0]))
-		recordsPerRequestGauge.
 			WithLabelValues(namespace, changefeedID, p99).
-			Set(histogram.Snapshot().Percentile(percentiles[1]))
+			Set(histogram.Snapshot().Percentile(0.99))
 	}
 }
 
@@ -183,16 +174,12 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		requestLatencyMetric := m.registry.Get(
 			getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-			percentiles := histogram.Snapshot().Percentiles([]float64{0.8, 0.99})
 			RequestLatencyGauge.
 				WithLabelValues(namespace, changefeedID, brokerID, "avg").
 				Set(histogram.Snapshot().Mean() / 1000)
 			RequestLatencyGauge.
-				WithLabelValues(namespace, changefeedID, brokerID, p80).
-				Set(percentiles[0] / 1000) // convert millisecond to second.
-			RequestLatencyGauge.
 				WithLabelValues(namespace, changefeedID, brokerID, p99).
-				Set(percentiles[1] / 1000)
+				Set(histogram.Snapshot().Percentile(0.99) / 1000)
 		}
 
 		requestsInFlightMetric := m.registry.Get(getBrokerMetricName(
