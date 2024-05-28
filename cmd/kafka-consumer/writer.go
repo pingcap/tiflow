@@ -73,8 +73,6 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 type writer struct {
 	option *option
 
-	interval time.Duration
-
 	ddlList              []*model.DDLEvent
 	ddlWithMaxCommitTs   *model.DDLEvent
 	ddlSink              ddlsink.Sink
@@ -113,7 +111,6 @@ func NewWriter(ctx context.Context, o *option) (*writer, error) {
 	w.sinks = make([]*partitionSinks, o.partitionNum)
 	w.eventsGroups = make([]map[int64]*eventsGroup, o.partitionNum)
 	w.decoders = make([]codec.RowEventDecoder, o.partitionNum)
-	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
 
 	var db *sql.DB
@@ -136,7 +133,6 @@ func NewWriter(ctx context.Context, o *option) (*writer, error) {
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
-		cancel()
 		return nil, cerror.Trace(err)
 	}
 	w.sinkFactory = f
@@ -148,16 +144,13 @@ func NewWriter(ctx context.Context, o *option) (*writer, error) {
 		} else {
 			log.Info("consumer exited")
 		}
-		cancel()
 	}()
 
 	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
 	if err != nil {
-		cancel()
 		return nil, cerror.Trace(err)
 	}
 	w.ddlSink = ddlSink
-	w.interval = 100 * time.Millisecond
 	return w, nil
 }
 
