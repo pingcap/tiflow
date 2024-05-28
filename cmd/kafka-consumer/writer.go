@@ -322,18 +322,11 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			if simple, ok := decoder.(*simple.Decoder); ok {
 				cachedEvents := simple.GetCachedEvents()
 				for _, row := range cachedEvents {
-					var partitionID int64
-					if row.TableInfo.IsPartitionTable() {
-						partitionID = row.PhysicalTableID
-					}
-					tableID := w.fakeTableIDGenerator.
-						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-					row.TableInfo.TableName.TableID = tableID
-
-					group, ok := eventGroups[tableID]
+					row.TableInfo.TableName.TableID = row.PhysicalTableID
+					group, ok := eventGroups[row.PhysicalTableID]
 					if !ok {
 						group = NewEventsGroup()
-						eventGroups[tableID] = group
+						eventGroups[row.PhysicalTableID] = group
 					}
 					group.Append(row)
 				}
@@ -353,7 +346,7 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			}
 			// when using simple protocol, the row may be nil, since it's table info not received yet,
 			// it's cached in the decoder, so just continue here.
-			if row == nil {
+			if w.option.protocol == config.ProtocolSimple && row == nil {
 				continue
 			}
 			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
@@ -372,7 +365,7 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
-				log.Warn("RowChangedEvent fallback row, ignore it",
+				log.Panic("RowChangedEvent fallback row, ignore it",
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("globalResolvedTs", globalResolvedTs),
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
@@ -380,20 +373,20 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 					zap.Any("row", row))
 				continue
 			}
-			var partitionID int64
-			if row.TableInfo.IsPartitionTable() {
-				partitionID = row.PhysicalTableID
+
+			tableID := row.PhysicalTableID
+			// simple protocol decoder should have set the table id already.
+			if w.option.protocol != config.ProtocolSimple {
+				tableID = w.fakeTableIDGenerator.
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.PhysicalTableID)
+				row.TableInfo.TableName.TableID = tableID
 			}
-			tableID := w.fakeTableIDGenerator.
-				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-			row.TableInfo.TableName.TableID = tableID
 
 			group, ok := eventGroups[tableID]
 			if !ok {
 				group = NewEventsGroup()
 				eventGroups[tableID] = group
 			}
-
 			group.Append(row)
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
@@ -406,7 +399,7 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 			if ts < globalResolvedTs || ts < partitionResolvedTs {
-				log.Warn("partition resolved ts fallback, skip it",
+				log.Panic("partition resolved ts fallback, skip it",
 					zap.Uint64("ts", ts),
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 					zap.Uint64("globalResolvedTs", globalResolvedTs),
