@@ -14,6 +14,7 @@
 package main
 
 import (
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"math"
 	"net/url"
 	"strconv"
@@ -150,6 +151,12 @@ func (o *option) Adjust(upstreamURI *url.URL, configFile string) error {
 	if err = o.codecConfig.Apply(upstreamURI, o.replicaConfig); err != nil {
 		return cerror.Trace(err)
 	}
+	tz, err := util.GetTimezone(o.timezone)
+	if err != nil {
+		return cerrors.Trace(err)
+	}
+	o.codecConfig.TimeZone = tz
+
 	if protocol == config.ProtocolAvro {
 		o.codecConfig.AvroEnableWatermark = true
 	}

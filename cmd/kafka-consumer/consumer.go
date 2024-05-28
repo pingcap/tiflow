@@ -138,7 +138,7 @@ func (c *consumer) Consume(ctx context.Context) error {
 		}
 		// Process the message received.
 		partition := msg.TopicPartition.Partition
-		needCommit, err := c.writer.Decode(ctx, c.option, partition, msg.Key, msg.Value)
+		needCommit, err := c.writer.Decode(ctx, partition, msg.Key, msg.Value)
 		if err != nil {
 			log.Panic("Error decode message", zap.Error(err))
 		}

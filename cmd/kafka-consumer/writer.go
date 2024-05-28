@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"math"
 	"sync"
@@ -71,6 +70,8 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 }
 
 type writer struct {
+	option *option
+
 	interval time.Duration
 
 	ddlList              []*model.DDLEvent
@@ -88,31 +89,18 @@ type writer struct {
 	globalResolvedTs uint64
 
 	eventRouter *dispatcher.EventRouter
-
-	upstreamTiDB *sql.DB
 }
 
 // NewWriter will create a writer to decode kafka message and write to the downstream.
 func NewWriter(ctx context.Context, o *option) (*writer, error) {
-	w := new(writer)
-
-	tz, err := util.GetTimezone(o.timezone)
-	if err != nil {
-		return nil, cerror.Annotate(err, "can not load timezone")
+	w := &writer{
+		option: o,
 	}
+
 	config.GetGlobalServerConfig().TZ = o.timezone
-	o.codecConfig.TimeZone = tz
 
 	w.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
-	}
-
-	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
-		db, err := openDB(ctx, o.upstreamTiDBDSN)
-		if err != nil {
-			return nil, err
-		}
-		w.upstreamTiDB = db
 	}
 
 	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
@@ -127,9 +115,16 @@ func NewWriter(ctx context.Context, o *option) (*writer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
 
+	var db *sql.DB
+	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+		db, err = openDB(ctx, o.upstreamTiDBDSN)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for i := 0; i < int(o.partitionNum); i++ {
 		w.sinks[i] = &partitionSinks{}
-		decoder, err := NewDecoder(ctx, o, w.upstreamTiDB)
+		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {
 			log.Panic("Error create decoder", zap.Error(err))
 		}
@@ -287,7 +282,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 }
 
 // Decode is to decode kafka message to event.
-func (w *writer) Decode(ctx context.Context, option *option, partition int32, key []byte, value []byte) (bool, error) {
+func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value []byte) (bool, error) {
 	sink := w.sinks[partition]
 	decoder := w.decoders[partition]
 	eventGroups := w.eventsGroups[partition]
@@ -309,9 +304,9 @@ func (w *writer) Decode(ctx context.Context, option *option, partition int32, ke
 		}
 		counter++
 		// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
-		if len(key)+len(value) > option.maxMessageBytes && counter > 1 {
+		if len(key)+len(value) > w.option.maxMessageBytes && counter > 1 {
 			log.Panic("kafka max-messages-bytes exceeded",
-				zap.Int("max-message-bytes", option.maxMessageBytes),
+				zap.Int("max-message-bytes", w.option.maxMessageBytes),
 				zap.Int("receivedBytes", len(key)+len(value)))
 		}
 		messageType = tp
@@ -367,7 +362,7 @@ func (w *writer) Decode(ctx context.Context, option *option, partition int32, ke
 			if row == nil {
 				continue
 			}
-			target, _, err := w.eventRouter.GetPartitionForRowChange(row, option.partitionNum)
+			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
 			if err != nil {
 				return false, cerror.Trace(err)
 			}
@@ -375,7 +370,7 @@ func (w *writer) Decode(ctx context.Context, option *option, partition int32, ke
 				log.Panic("RowChangedEvent dispatched to wrong partition",
 					zap.Int32("obtained", partition),
 					zap.Int32("expected", target),
-					zap.Int32("partitionNum", option.partitionNum),
+					zap.Int32("partitionNum", w.option.partitionNum),
 					zap.Any("row", row),
 				)
 			}
@@ -450,8 +445,8 @@ func (w *writer) Decode(ctx context.Context, option *option, partition int32, ke
 		}
 	}
 
-	if counter > option.maxBatchSize {
-		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", option.maxBatchSize),
+	if counter > w.option.maxBatchSize {
+		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", w.option.maxBatchSize),
 			zap.Int("actual-batch-size", counter))
 	}
 	// flush when received DDL event or resolvedTs
