@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -622,6 +623,7 @@ type ddlPullerImpl struct {
 	ddlJobPuller DDLJobPuller
 
 	mu             sync.Mutex
+	gcTs           uint64
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
@@ -674,6 +676,15 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	lastJob := h.pendingDDLJobs[len(h.pendingDDLJobs)-1]
+	if lastJob.BinlogInfo.FinishedTS >= job.BinlogInfo.FinishedTS {
+		log.Panic("ddl job is not sorted, please report a bug",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.Any("lastJob", lastJob),
+			zap.Any("newJob", job),
+		)
+	}
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
 	h.lastDDLJobID = job.ID
 	log.Info("ddl puller receives new pending job",
@@ -734,16 +745,36 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-// PopFrontDDL return the first pending DDL job and remove it from the pending list
-func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
+// DoGC do garbage collection for the ddl puller
+func (h *ddlPullerImpl) DoGC(gcTs uint64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil
+	idx := sort.Search(len(h.pendingDDLJobs), func(i int) bool {
+		return h.pendingDDLJobs[i].BinlogInfo.FinishedTS > gcTs
+	})
+
+	newPendingDDLJobs := h.pendingDDLJobs[idx:]
+	if len(h.pendingDDLJobs) > 4096 {
+		newPendingDDLJobs = make([]*timodel.Job, 0, len(newPendingDDLJobs)-idx)
+		copy(newPendingDDLJobs, h.pendingDDLJobs[idx:])
 	}
-	job := h.pendingDDLJobs[0]
-	h.pendingDDLJobs = h.pendingDDLJobs[1:]
-	return job.BinlogInfo.FinishedTS, job
+	h.pendingDDLJobs = newPendingDDLJobs
+	h.gcTs = gcTs
+}
+
+// PopFrontDDL return the first pending DDL job and remove it from the pending list
+func (h *ddlPullerImpl) PopFrontDDL(ts uint64) []*timodel.Job {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	lastJob := h.pendingDDLJobs[len(h.pendingDDLJobs)-1]
+	if lastJob.BinlogInfo.FinishedTS < ts {
+		return nil
+	}
+
+	idx := sort.Search(len(h.pendingDDLJobs), func(i int) bool {
+		return h.pendingDDLJobs[i].BinlogInfo.FinishedTS > ts
+	})
+	return h.pendingDDLJobs[idx:]
 }
 
 // Close the ddl puller, release all resources.
