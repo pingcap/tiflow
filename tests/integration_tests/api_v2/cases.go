@@ -240,6 +240,8 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		Do(ctx)
 	assertResponseIsOK(resp)
 
+	// sleep to wait owner to tick
+	time.Sleep(2 * time.Second)
 	resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1?namespace=test").Do(ctx)
 	assertResponseIsOK(resp)
 	cf := &ChangeFeedInfo{}
