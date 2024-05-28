@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	"github.com/docker/go-units"
-	"github.com/pingcap/tidb/lightning/pkg/importer"
-	"github.com/pingcap/tidb/lightning/pkg/precheck"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer"
+	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
@@ -171,17 +171,9 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	var (
-		clusterAvail uint64
-		avail        int64
-	)
+	clusterAvail := uint64(0)
 	for _, store := range storeInfo.Stores {
-		avail, err = units.RAMInBytes(store.Status.Available)
-		if err != nil {
-			markCheckError(result, err)
-			return result
-		}
-		clusterAvail += uint64(avail)
+		clusterAvail += uint64(store.Status.Available)
 	}
 	if clusterAvail < uint64(c.sourceDataSize) {
 		result.State = StateFailure
@@ -194,12 +186,12 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	maxReplicas, err := c.infoGetter.GetMaxReplica(ctx)
+	replConfig, err := c.infoGetter.GetReplicationConfig(ctx)
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	safeSize := uint64(c.sourceDataSize) * maxReplicas * 2
+	safeSize := uint64(c.sourceDataSize) * replConfig.MaxReplicas * 2
 	if clusterAvail < safeSize {
 		result.State = StateWarning
 		result.Errors = append(result.Errors, &Error{

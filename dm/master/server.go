@@ -30,7 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/common"
@@ -61,6 +61,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -174,18 +175,20 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		return
 	}
 
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(s.cfg.SSLCA),
+		util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+		util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+	)
 	if err != nil {
 		return terror.ErrMasterTLSConfigNotValid.Delegate(err)
 	}
 
-	// tls2 is used for grpc client in grpc gateway
-	tls2, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
-	if err != nil {
-		return terror.ErrMasterTLSConfigNotValid.Delegate(err)
+	grpcTLS := grpc.WithInsecure()
+	if tlsConfig != nil {
+		grpcTLS = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
-
-	apiHandler, err := getHTTPAPIHandler(ctx, s.cfg.AdvertiseAddr, tls2.ToGRPCDialOption())
+	apiHandler, err := getHTTPAPIHandler(ctx, s.cfg.AdvertiseAddr, grpcTLS)
 	if err != nil {
 		return
 	}
@@ -206,18 +209,13 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/debug/": getDebugHandler(),
 	}
 	if s.cfg.OpenAPI {
-		// tls3 is used to openapi reverse proxy
-		tls3, err1 := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
-		if err1 != nil {
-			return terror.ErrMasterTLSConfigNotValid.Delegate(err1)
-		}
-		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
+		if initOpenAPIErr := s.InitOpenAPIHandles(tlsConfig); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 
 		const dashboardPrefix = "/dashboard/"
 		scheme := "http://"
-		if tls3.TLSConfig() != nil {
+		if tlsConfig != nil {
 			scheme = "https://"
 		}
 		log.L().Info("Web UI enabled", zap.String("dashboard", scheme+s.cfg.AdvertiseAddr+dashboardPrefix))
@@ -238,7 +236,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// create an etcd client used in the whole server instance.
 	// NOTE: we only use the local member's address now, but we can use all endpoints of the cluster if needed.
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tls.TLSConfig())
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tlsConfig)
 	if err != nil {
 		return
 	}
@@ -2153,11 +2151,15 @@ func (s *Server) listMemberMaster(ctx context.Context, names []string) (*pb.Memb
 
 	client := &http.Client{}
 	if len(s.cfg.SSLCA) != 0 {
-		inner, err := toolutils.ToTLSConfigWithVerify(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.CertAllowedCN)
+		tlsConfig, err := util.NewTLSConfig(
+			util.WithCAPath(s.cfg.SSLCA),
+			util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+			util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+		)
 		if err != nil {
 			return resp, err
 		}
-		client = toolutils.ClientWithTLS(inner)
+		client = util.ClientWithTLS(tlsConfig)
 	}
 	client.Timeout = 1 * time.Second
 
@@ -2402,15 +2404,25 @@ func (s *Server) createMasterClientByName(ctx context.Context, name string) (pb.
 	if len(clientURLs) == 0 {
 		return nil, nil, errors.New("master not found")
 	}
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(s.cfg.SSLCA),
+		util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+		util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+	)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	grpcTLS := grpc.WithInsecure()
+	if tlsConfig != nil {
+		grpcTLS = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
 	var conn *grpc.ClientConn
 	for _, clientURL := range clientURLs {
 		//nolint:staticcheck
-		conn, err = grpc.Dial(clientURL, tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second))
+		conn, err = grpc.Dial(clientURL, grpcTLS, grpc.WithBackoffMaxDelay(3*time.Second))
 		if err == nil {
 			masterClient := pb.NewMasterClient(conn)
 			return masterClient, conn, nil

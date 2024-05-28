@@ -15,7 +15,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"net"
@@ -105,7 +104,6 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 			util.WithCAContent(config.Security.SSLCABytes),
 			util.WithCertAndKeyContent(config.Security.SSLCertBytes, config.Security.SSLKeyBytes),
 			util.WithVerifyCommonName(config.Security.CertAllowedCN),
-			util.WithMinTLSVersion(tls.VersionTLS10),
 		)
 		if err != nil {
 			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)

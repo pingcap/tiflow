@@ -103,6 +103,9 @@ linters-settings:
     excludes:
       - G404
       - G601
+      - G201
+      - G401
+      - G501
 
 issues:
   exclude-rules:

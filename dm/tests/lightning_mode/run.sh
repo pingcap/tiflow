@@ -57,7 +57,7 @@ function run() {
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
 		'"progress": "100.00 %"' 2 \
-		"please check \`dm_meta_test\`.\`conflict_error_v2\` to see the duplication" 1
+		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 3

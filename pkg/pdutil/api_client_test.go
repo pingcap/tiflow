@@ -38,7 +38,7 @@ type mockPDClient struct {
 	url        string
 }
 
-func (m *mockPDClient) GetLeaderURL() string {
+func (m *mockPDClient) GetLeaderAddr() string {
 	return m.url
 }
 

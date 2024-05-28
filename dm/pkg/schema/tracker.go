@@ -94,10 +94,6 @@ func (se executorContext) ParseWithParams(context.Context, string, ...interface{
 	return nil, nil
 }
 
-func (se executorContext) GetRestrictedSQLExecutor() sqlexec.RestrictedSQLExecutor {
-	return se
-}
-
 func (se executorContext) ExecRestrictedStmt(context.Context, ast.StmtNode, ...sqlexec.OptionFuncAlias) ([]chunk.Row, []*ast.ResultField, error) {
 	return nil, nil, nil
 }
@@ -138,7 +134,7 @@ func (tr *Tracker) Init(
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
-	dsSession.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
+	dsSession.GetSessionVars().StrictSQLMode = false
 	downTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
 		se:             dsSession,
@@ -471,12 +467,12 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	}
 
 	// suppress ErrTooLongKey
-	dt.se.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
+	strictSQLModeBackup := dt.se.GetSessionVars().StrictSQLMode
 	// support drop PK
 	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
 	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
 	defer func() {
-		dt.se.ClearValue(ddl.SuppressErrorTooLongKeyKey)
+		dt.se.GetSessionVars().StrictSQLMode = strictSQLModeBackup
 		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
 	}()
 

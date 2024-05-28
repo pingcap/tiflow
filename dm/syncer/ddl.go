@@ -1091,7 +1091,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.AlterTable, err
 	}
 	// handle column options
-	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
 		ddl.logger.Warn("process column options failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
