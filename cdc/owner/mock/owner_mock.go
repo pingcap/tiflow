@@ -50,6 +50,20 @@ func (mr *MockOwnerMockRecorder) AsyncStop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncStop", reflect.TypeOf((*MockOwner)(nil).AsyncStop))
 }
 
+// CreateChangefeed mocks base method.
+func (m *MockOwner) CreateChangefeed(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateChangefeed", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateChangefeed indicates an expected call of CreateChangefeed.
+func (mr *MockOwnerMockRecorder) CreateChangefeed(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangefeed", reflect.TypeOf((*MockOwner)(nil).CreateChangefeed), arg0, arg1, arg2)
+}
+
 // DrainCapture mocks base method.
 func (m *MockOwner) DrainCapture(query *scheduler.Query, done chan<- error) {
 	m.ctrl.T.Helper()

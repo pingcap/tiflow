@@ -20,7 +20,7 @@ import (
 	"net/http/pprof"
 	"time"
 
-	cpu "github.com/pingcap/tidb-tools/pkg/utils"
+	cpu "github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"

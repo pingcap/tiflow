@@ -223,3 +223,16 @@ func TestGRPCStatusCode(t *testing.T) {
 		require.Equal(t, gRPCCode, GRPCStatusCode(err))
 	}
 }
+
+func TestOriginError(t *testing.T) {
+	require.NoError(t, OriginError(nil))
+
+	err1 := errors.New("err1")
+	require.Equal(t, err1, OriginError(err1))
+
+	err2 := errors.Trace(err1)
+	require.Equal(t, err1, OriginError(err2))
+
+	err3 := errors.Trace(err2)
+	require.Equal(t, err1, OriginError(err3))
+}

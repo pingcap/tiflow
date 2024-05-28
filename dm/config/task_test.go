@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/coreos/go-semver/semver"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -31,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/require"
 )
 

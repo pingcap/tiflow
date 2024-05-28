@@ -178,7 +178,7 @@ func TestParseCfg(t *testing.T) {
 				WriterBufferSize:    8388608,
 				Compression:         "snappy",
 				WriteL0PauseTrigger: math.MaxInt32,
-				CompactionL0Trigger: 160,
+				CompactionL0Trigger: 16,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -464,7 +464,7 @@ cert-allowed-cn = ["dd","ee"]
 				WriterBufferSize:    8388608,
 				Compression:         "snappy",
 				WriteL0PauseTrigger: math.MaxInt32,
-				CompactionL0Trigger: 160,
+				CompactionL0Trigger: 16,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -529,7 +529,7 @@ unknown3 = 3
 			WriterBufferSize:    8388608,
 			Compression:         "snappy",
 			WriteL0PauseTrigger: math.MaxInt32,
-			CompactionL0Trigger: 160,
+			CompactionL0Trigger: 16,
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{

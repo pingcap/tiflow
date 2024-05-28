@@ -24,6 +24,14 @@ import (
 // StatusProvider provide some func to get meta-information from owner
 // The interface is thread-safe.
 type StatusProvider interface {
+	// GetAllChangeFeedInfo returns all changefeed infos
+	GetAllChangeFeedInfo(ctx context.Context) (
+		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+	)
+	// GetAllChangeFeedCheckpointTs returns all changefeed checkpoints
+	GetAllChangeFeedCheckpointTs(ctx context.Context) (
+		map[model.ChangeFeedID]uint64, error,
+	)
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
 	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error)
 
@@ -44,8 +52,8 @@ type StatusProvider interface {
 
 	// IsHealthy return true if the cluster is healthy
 	IsHealthy(ctx context.Context) (bool, error)
-	// IsChangefeedOwner return true if this capture is the owner of the changefeed
-	IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error)
+	// IsChangefeedExists returns true if a changefeed exits
+	IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error)
 }
 
 // QueryType is the type of different queries.
@@ -68,6 +76,12 @@ const (
 	QueryChangeFeedStatuses
 	// QueryChangeFeedSyncedStatus is the type of query changefeed synced status
 	QueryChangeFeedSyncedStatus
+	// QueryAllChangeFeedInfo is the type of query all changefeed info.
+	QueryAllChangeFeedInfo
+	// QueryAllChangeFeedSCheckpointTs query all changefeed checkpoint ts.
+	QueryAllChangeFeedSCheckpointTs
+	// QueryExists is the type of query check if a changefeed exists
+	QueryExists
 )
 
 // Query wraps query command and return results.
@@ -178,9 +192,36 @@ func (p *ownerStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	return query.Data.(bool), nil
 }
 
-func (p *ownerStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+// GetAllChangeFeedInfo returns all changefeed infos
+func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+) {
 	query := &Query{
-		Tp:           QueryOwner,
+		Tp: QueryAllChangeFeedInfo,
+	}
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+}
+
+// GetAllChangeFeedCheckpointTs returns all changefeed checkpoints
+func (p *ownerStatusProvider) GetAllChangeFeedCheckpointTs(ctx context.Context) (
+	map[model.ChangeFeedID]uint64, error,
+) {
+	query := &Query{
+		Tp: QueryAllChangeFeedSCheckpointTs,
+	}
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return query.Data.(map[model.ChangeFeedID]uint64), nil
+}
+
+// IsChangefeedExists returns true if a changefeed is exits
+func (p *ownerStatusProvider) IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	query := &Query{
+		Tp:           QueryExists,
 		ChangeFeedID: id,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {

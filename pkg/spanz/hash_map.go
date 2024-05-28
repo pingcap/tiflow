@@ -15,8 +15,8 @@ package spanz
 
 import (
 	"encoding/binary"
-	"hash/fnv"
 
+	"blainsmith.com/go/seahash"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
@@ -80,10 +80,8 @@ func (m *HashMap[T]) Range(iterator ItemIterator[T]) {
 
 // HashTableSpan hashes the given span to a slot offset.
 func HashTableSpan(span tablepb.Span, slots int) int {
-	h := fnv.New64()
 	b := make([]byte, 8+len(span.StartKey))
 	binary.LittleEndian.PutUint64(b[0:8], uint64(span.TableID))
 	copy(b[8:], span.StartKey)
-	h.Write(b[:])
-	return int(h.Sum64() % uint64(slots))
+	return int(seahash.Sum64(b) % uint64(slots))
 }
