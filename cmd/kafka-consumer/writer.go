@@ -84,9 +84,6 @@ type writer struct {
 	eventsGroups []map[int64]*eventsGroup
 	decoders     []codec.RowEventDecoder
 
-	// initialize to 0 by default
-	globalResolvedTs uint64
-
 	eventRouter *dispatcher.EventRouter
 }
 
@@ -216,61 +213,42 @@ func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
-	minPartitionResolvedTs, err := w.getMinPartitionResolvedTs()
+	resolvedTs, err := w.getMinPartitionResolvedTs()
 	if err != nil {
 		return false, cerror.Trace(err)
 	}
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
-			// flush DMLs
-			if err := w.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			}); err != nil {
-				return false, cerror.Trace(err)
-			}
-			// DDL can be executed, do it first.
-			if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return false, cerror.Trace(err)
-			}
-			w.popDDL()
-			if todoDDL.CommitTs < minPartitionResolvedTs {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.String("DDL", todoDDL.Query))
-				minPartitionResolvedTs = todoDDL.CommitTs
-			}
-		} else {
+		if todoDDL == nil || todoDDL.CommitTs > resolvedTs {
 			break
 		}
-	}
-	// update global resolved ts
-	if w.globalResolvedTs > minPartitionResolvedTs {
-		log.Panic("global ResolvedTs fallback",
-			zap.Uint64("globalResolvedTs", w.globalResolvedTs),
-			zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
-	}
-
-	if w.globalResolvedTs < minPartitionResolvedTs {
-		w.globalResolvedTs = minPartitionResolvedTs
-	}
-
-	if messageType == model.MessageTypeResolved {
-		if err := w.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, w.globalResolvedTs)
+		// flush DMLs
+		if err = w.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 		}); err != nil {
 			return false, cerror.Trace(err)
 		}
+		// DDL can be executed, do it first.
+		if err = w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+			return false, cerror.Trace(err)
+		}
+		w.popDDL()
+		if todoDDL.CommitTs < resolvedTs {
+			log.Info("update resolvedTs by DDL",
+				zap.Uint64("resolvedTs", resolvedTs),
+				zap.String("DDL", todoDDL.Query))
+			resolvedTs = todoDDL.CommitTs
+		}
 	}
-	// The DDL events will only excute in partition0
-	if messageType == model.MessageTypeDDL && todoDDL != nil {
-		log.Debug("DDL event will be flushed in the future",
-			zap.String("Query", todoDDL.Query),
-			zap.Uint64("CommitTs", todoDDL.CommitTs),
-			zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-			zap.Uint64("globalResolvedTs", w.globalResolvedTs))
-		return false, nil
+
+	// todo: why check message type here ?
+	if messageType == model.MessageTypeResolved {
+		if err = w.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, resolvedTs)
+		}); err != nil {
+			return false, cerror.Trace(err)
+		}
 	}
 	return true, nil
 }
@@ -362,16 +340,13 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 				)
 			}
 
-			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
+			if row.CommitTs <= partitionResolvedTs {
 				log.Panic("RowChangedEvent fallback row, ignore it",
 					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 					zap.Int32("partition", partition),
 					zap.Any("row", row))
-				continue
 			}
 
 			tableID := row.PhysicalTableID
@@ -396,15 +371,12 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 					zap.Error(err))
 			}
 
-			globalResolvedTs := atomic.LoadUint64(&w.globalResolvedTs)
 			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if ts < globalResolvedTs || ts < partitionResolvedTs {
+			if ts < partitionResolvedTs {
 				log.Panic("partition resolved ts fallback, skip it",
 					zap.Uint64("ts", ts),
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
 					zap.Int32("partition", partition))
-				continue
 			}
 
 			for tableID, group := range eventGroups {
