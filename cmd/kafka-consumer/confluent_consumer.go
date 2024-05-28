@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func confluentGetPartitionNum(o *consumerOption) (int32, error) {
+func confluentGetPartitionNum(o *option) (int32, error) {
 	configMap := &confluent.ConfigMap{
 		"bootstrap.servers": strings.Join(o.address, ","),
 	}
@@ -65,14 +65,14 @@ func confluentGetPartitionNum(o *consumerOption) (int32, error) {
 }
 
 type confluentConsumer struct {
-	option *consumerOption
+	option *option
 	writer *writer
 }
 
 var _ KakfaConsumer = (*confluentConsumer)(nil)
 
 // NewConfluentConsumer will create a consumer client.
-func NewConfluentConsumer(ctx context.Context, o *consumerOption) KakfaConsumer {
+func NewConfluentConsumer(ctx context.Context, o *option) KakfaConsumer {
 	c := new(confluentConsumer)
 	partitionNum, err := confluentGetPartitionNum(o)
 	if err != nil {

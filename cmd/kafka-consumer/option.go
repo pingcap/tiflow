@@ -36,7 +36,7 @@ var (
 	defaultTimeout   = time.Second * 10
 )
 
-type consumerOption struct {
+type option struct {
 	address      []string
 	version      string
 	topic        string
@@ -46,9 +46,9 @@ type consumerOption struct {
 	maxMessageBytes int
 	maxBatchSize    int
 
-	protocol    config.Protocol
-	codecConfig *common.Config
+	protocol config.Protocol
 
+	codecConfig *common.Config
 	// the replicaConfig of the changefeed which produce data to the kafka topic
 	replicaConfig *config.ReplicaConfig
 
@@ -74,8 +74,8 @@ type consumerOption struct {
 }
 
 // NewConsumerOption will create a new consumer option
-func NewConsumerOption() *consumerOption {
-	return &consumerOption{
+func NewConsumerOption() *option {
+	return &option{
 		version:         defaultVersion,
 		maxMessageBytes: math.MaxInt64,
 		maxBatchSize:    math.MaxInt64,
@@ -85,7 +85,7 @@ func NewConsumerOption() *consumerOption {
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
+func (o *option) Adjust(upstreamURI *url.URL, configFile string) error {
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		o.version = s

@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ func NewEventsGroup() *eventsGroup {
 	}
 }
 
-// Append will append a event to event groups.
+// Append will append an event to event groups.
 func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 	g.events = append(g.events, e)
 }

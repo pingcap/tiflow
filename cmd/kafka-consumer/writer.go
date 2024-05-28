@@ -44,7 +44,7 @@ import (
 )
 
 // NewDecoder will create a new event decoder
-func NewDecoder(ctx context.Context, option *consumerOption, upstreamTiDB *sql.DB) (codec.RowEventDecoder, error) {
+func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (codec.RowEventDecoder, error) {
 	var (
 		decoder codec.RowEventDecoder
 		err     error
@@ -94,7 +94,7 @@ type writer struct {
 }
 
 // NewWriter will create a writer to decode kafka message and write to the downstream.
-func NewWriter(ctx context.Context, o *consumerOption) (*writer, error) {
+func NewWriter(ctx context.Context, o *option) (*writer, error) {
 	w := new(writer)
 
 	tz, err := util.GetTimezone(o.timezone)
@@ -288,7 +288,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 }
 
 // Decode is to decode kafka message to event.
-func (w *writer) Decode(ctx context.Context, option *consumerOption, partition int32, key []byte, value []byte) (bool, error) {
+func (w *writer) Decode(ctx context.Context, option *option, partition int32, key []byte, value []byte) (bool, error) {
 	sink := w.sinks[partition]
 	decoder := w.decoders[partition]
 	eventGroups := w.eventsGroups[partition]
