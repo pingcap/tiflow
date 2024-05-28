@@ -137,16 +137,11 @@ func (c *consumer) Consume(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		// Process the message received.
-		partition := msg.TopicPartition.Partition
-		needCommit, err := c.writer.Decode(ctx, partition, msg.Key, msg.Value)
-		if err != nil {
-			log.Panic("Error decode message", zap.Error(err))
-		}
+		needCommit := c.writer.WriteMessage(ctx, msg)
 		if needCommit {
 			// TODO: retry commit if fail
 			if _, err := c.client.CommitMessage(msg); err != nil {
-				log.Error("Error commit message", zap.Error(err))
+				log.Error("commit message failed", zap.Error(err))
 				return errors.Trace(err)
 			}
 		}

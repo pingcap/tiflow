@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -199,24 +200,21 @@ func (w *writer) forEachSink(fn func(sink *partitionSinks) error) error {
 	return nil
 }
 
-func (w *writer) getMinPartitionResolvedTs() (result uint64, err error) {
-	result = uint64(math.MaxUint64)
-	err = w.forEachSink(func(sink *partitionSinks) error {
+func (w *writer) getMinPartitionResolvedTs() uint64 {
+	result := uint64(math.MaxUint64)
+	_ = w.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
 		if a < result {
 			result = a
 		}
 		return nil
 	})
-	return result, err
+	return result
 }
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
-	resolvedTs, err := w.getMinPartitionResolvedTs()
-	if err != nil {
-		return false, cerror.Trace(err)
-	}
+	resolvedTs := w.getMinPartitionResolvedTs()
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
@@ -224,13 +222,13 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 			break
 		}
 		// flush DMLs
-		if err = w.forEachSink(func(sink *partitionSinks) error {
+		if err := w.forEachSink(func(sink *partitionSinks) error {
 			return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 		}); err != nil {
 			return false, cerror.Trace(err)
 		}
 		// DDL can be executed, do it first.
-		if err = w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+		if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 			return false, cerror.Trace(err)
 		}
 		w.popDDL()
@@ -244,7 +242,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 
 	// todo: why check message type here ?
 	if messageType == model.MessageTypeResolved {
-		if err = w.forEachSink(func(sink *partitionSinks) error {
+		if err := w.forEachSink(func(sink *partitionSinks) error {
 			return syncFlushRowChangedEvents(ctx, sink, resolvedTs)
 		}); err != nil {
 			return false, cerror.Trace(err)
@@ -253,21 +251,27 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 	return true, nil
 }
 
-// Decode is to decode kafka message to event.
-func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value []byte) (bool, error) {
+// WriteMessage is to decode kafka message to event.
+func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool {
+	var (
+		key       = message.Key
+		value     = message.Value
+		partition = message.TopicPartition.Partition
+	)
+
 	sink := w.sinks[partition]
 	decoder := w.decoders[partition]
 	eventGroups := w.eventsGroups[partition]
-
 	if err := decoder.AddKeyValue(key, value); err != nil {
-		log.Error("add key value to the decoder failed", zap.Error(err))
-		return false, cerror.Trace(err)
+		log.Panic("add key value to the decoder failed", zap.Error(err))
 	}
-	counter := 0
-	var messageType model.MessageType
-	needFlush := false
+	var (
+		counter     int
+		needFlush   bool
+		messageType model.MessageType
+	)
 	for {
-		tp, hasNext, err := decoder.HasNext()
+		messageType, hasNext, err := decoder.HasNext()
 		if err != nil {
 			log.Panic("decode message key failed", zap.Error(err))
 		}
@@ -281,8 +285,7 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 				zap.Int("max-message-bytes", w.option.maxMessageBytes),
 				zap.Int("receivedBytes", len(key)+len(value)))
 		}
-		messageType = tp
-		switch tp {
+		switch messageType {
 		case model.MessageTypeDDL:
 			// for some protocol, DDL would be dispatched to all partitions,
 			// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
@@ -329,7 +332,8 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			}
 			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
 			if err != nil {
-				return false, cerror.Trace(err)
+				log.Panic("cannot calculate partition for the row changed event",
+					zap.Int32("partitionNum", w.option.partitionNum), zap.Error(err), zap.Any("event", row))
 			}
 			if partition != target {
 				log.Panic("RowChangedEvent dispatched to wrong partition",
@@ -401,6 +405,8 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
 			needFlush = true
+		default:
+			log.Panic("unknown message type", zap.Any("messageType", messageType))
 		}
 	}
 
@@ -408,11 +414,17 @@ func (w *writer) Decode(ctx context.Context, partition int32, key []byte, value 
 		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", w.option.maxBatchSize),
 			zap.Int("actual-batch-size", counter))
 	}
-	// flush when received DDL event or resolvedTs
-	if needFlush {
-		return w.Write(ctx, messageType)
+
+	if !needFlush {
+		return false
 	}
-	return false, nil
+
+	// flush when received DDL event or resolvedTs
+	needCommit, err := w.Write(ctx, messageType)
+	if err != nil {
+		log.Panic("write to downstream failed", zap.Error(err))
+	}
+	return needCommit
 }
 
 type fakeTableIDGenerator struct {
