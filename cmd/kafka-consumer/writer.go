@@ -71,6 +71,15 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 	return decoder, err
 }
 
+type partitionProgress struct {
+	watermark uint64
+	// tableSinkMap -> [tableID]tableSink
+	tableSinkMap sync.Map
+
+	eventGroups map[int64]*eventsGroup
+	decoder     codec.RowEventDecoder
+}
+
 type writer struct {
 	option *option
 
@@ -80,10 +89,8 @@ type writer struct {
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	// sinkFactory is used to create table sink for each table.
-	sinkFactory  *eventsinkfactory.SinkFactory
-	progresses   []*partitionProgress
-	eventsGroups []map[int64]*eventsGroup
-	decoders     []codec.RowEventDecoder
+	sinkFactory *eventsinkfactory.SinkFactory
+	progresses  []*partitionProgress
 
 	eventRouter *dispatcher.EventRouter
 }
@@ -94,8 +101,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 		fakeTableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
-		progresses:   make([]*partitionProgress, o.partitionNum),
-		eventsGroups: make([]map[int64]*eventsGroup, o.partitionNum),
+		progresses: make([]*partitionProgress, o.partitionNum),
 	}
 
 	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
@@ -116,13 +122,14 @@ func newWriter(ctx context.Context, o *option) *writer {
 		}
 	}
 	for i := 0; i < int(o.partitionNum); i++ {
-		w.progresses[i] = &partitionProgress{}
 		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {
 			log.Panic("cannot create the decoder", zap.Error(err))
 		}
-		w.decoders[i] = decoder
-		w.eventsGroups[i] = make(map[int64]*eventsGroup)
+		w.progresses[i] = &partitionProgress{
+			eventGroups: make(map[int64]*eventsGroup),
+			decoder:     decoder,
+		}
 	}
 
 	config.GetGlobalServerConfig().TZ = o.timezone
@@ -208,7 +215,7 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 }
 
 // Write will synchronously write data downstream
-func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool, error) {
+func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
 	resolvedTs := w.getMinResolvedTs()
 	var todoDDL *model.DDLEvent
 	for {
@@ -222,7 +229,8 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 		})
 		// DDL can be executed, do it first.
 		if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-			return false, cerror.Trace(err)
+			log.Panic("write DDL event failed", zap.Error(err),
+				zap.String("DDL", todoDDL.Query), zap.Uint64("commitTs", todoDDL.CommitTs))
 		}
 		w.popDDL()
 		if todoDDL.CommitTs < resolvedTs {
@@ -239,7 +247,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) (bool
 			syncFlushRowChangedEvents(ctx, sink, resolvedTs)
 		})
 	}
-	return true, nil
+	return true
 }
 
 // WriteMessage is to decode kafka message to event.
@@ -251,8 +259,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	)
 
 	progress := w.progresses[partition]
-	decoder := w.decoders[partition]
-	eventGroups := w.eventsGroups[partition]
+	decoder := progress.decoder
+	eventGroup := progress.eventGroups
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Panic("add key value to the decoder failed", zap.Error(err))
 	}
@@ -295,10 +303,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				cachedEvents := simple.GetCachedEvents()
 				for _, row := range cachedEvents {
 					row.TableInfo.TableName.TableID = row.PhysicalTableID
-					group, ok := eventGroups[row.PhysicalTableID]
+					group, ok := eventGroup[row.PhysicalTableID]
 					if !ok {
 						group = NewEventsGroup()
-						eventGroups[row.PhysicalTableID] = group
+						eventGroup[row.PhysicalTableID] = group
 					}
 					group.Append(row)
 				}
@@ -352,10 +360,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				row.TableInfo.TableName.TableID = tableID
 			}
 
-			group, ok := eventGroups[tableID]
+			group, ok := eventGroup[tableID]
 			if !ok {
 				group = NewEventsGroup()
-				eventGroups[tableID] = group
+				eventGroup[tableID] = group
 			}
 			group.Append(row)
 		case model.MessageTypeResolved:
@@ -374,7 +382,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Int32("partition", partition))
 			}
 
-			for tableID, group := range eventGroups {
+			for tableID, group := range eventGroup {
 				events := group.Resolve(ts)
 				if len(events) == 0 {
 					continue
@@ -405,13 +413,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	if !needFlush {
 		return false
 	}
-
 	// flush when received DDL event or resolvedTs
-	needCommit, err := w.Write(ctx, messageType)
-	if err != nil {
-		log.Panic("write to downstream failed", zap.Error(err))
-	}
-	return needCommit
+	return w.Write(ctx, messageType)
 }
 
 type fakeTableIDGenerator struct {
@@ -430,12 +433,6 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
-}
-
-type partitionProgress struct {
-	watermark uint64
-	// tableSinkMap -> [tableID]tableSink
-	tableSinkMap sync.Map
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, resolvedTs uint64) {
