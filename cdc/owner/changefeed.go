@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/cdc/schema"
 	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -425,6 +426,7 @@ func (c *changefeed) tick(ctx context.Context,
 		}
 	}
 
+	c.globalVars.SchemaManager.UpdateGCTs(c.id, util.RoleOwner, preCheckpointTs)
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
@@ -635,17 +637,6 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, cfInfo.GetTargetTs())
 
-	filter, err := pfilter.NewFilter(cfInfo.Config, "")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.schema, err = entry.NewSchemaStorage(
-		c.upstream.KVStorage, ddlStartTs,
-		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	cancelCtx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -664,12 +655,23 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, filter)
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		c.Throw(ctx)(c.ddlPuller.Run(cancelCtx))
-	}()
+	filter, err := pfilter.NewFilter(cfInfo.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.ddlPuller, c.schema, err = c.globalVars.SchemaManager.GetOrCreateSchemaStorage(&schema.StorageWrapperConfig{
+		ID:             c.id,
+		Role:           util.RoleOwner,
+		ErrHandler:     c.Throw(ctx),
+		GCInterval:     schema.DefaultGCInterval,
+		ForceReplicate: cfInfo.Config.ForceReplicate,
+		Filter:         filter,
+		StartTs:        ddlStartTs,
+		Upstream:       c.upstream,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, cfInfo.SinkURI, cfInfo.Config)
 	if err != nil {
@@ -780,7 +782,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.cancel = func() {}
 
 	if c.ddlPuller != nil {
-		c.ddlPuller.Close()
+		c.globalVars.SchemaManager.ReleaseSchemaStorage(c.id, util.RoleOwner)
 	}
 	c.wg.Wait()
 

@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/cdc/schema"
 	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -49,7 +50,6 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -742,7 +742,6 @@ func (p *processor) handleErrorCh() (err error) {
 func (p *processor) initDDLHandler(ctx context.Context) error {
 	checkpointTs := p.latestInfo.GetCheckpointTs(p.latestStatus)
 	minTableBarrierTs := p.latestStatus.MinTableBarrierTs
-	forceReplicate := p.latestInfo.Config.ForceReplicate
 
 	// if minTableBarrierTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
@@ -757,18 +756,32 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, f)
+
+	_, schemaStorage, err := p.globalVars.SchemaManager.GetOrCreateSchemaStorage(&schema.StorageWrapperConfig{
+		ID:   p.changefeedID,
+		Role: util.RoleProcessor,
+		ErrHandler: func(err error) {
+			log.Error("processor sub-component fails",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.String("name", p.ddlHandler.name),
+				zap.Error(err))
+			select {
+			case <-ctx.Done():
+			case p.ddlHandler.errors <- err:
+			}
+		},
+		GCInterval:     schema.DefaultGCInterval,
+		ForceReplicate: p.latestInfo.Config.ForceReplicate,
+		Filter:         f,
+		StartTs:        ddlStartTs,
+		Upstream:       p.upstream,
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	serverCfg := config.GetGlobalServerConfig()
-	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
-	ddlPuller := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
-	)
-	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
+	p.ddlHandler.r = &ddlHandler{schemaStorage: schemaStorage}
 	return nil
 }
 
@@ -842,16 +855,18 @@ func (p *processor) doGCSchemaStorage() {
 
 	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
 	// for why we need -1.
-	lastSchemaTs := p.ddlHandler.r.schemaStorage.DoGC(p.latestStatus.CheckpointTs - 1)
-	if p.lastSchemaTs == lastSchemaTs {
-		return
-	}
-	p.lastSchemaTs = lastSchemaTs
+	p.globalVars.SchemaManager.UpdateGCTs(p.changefeedID, util.RoleProcessor, p.latestStatus.CheckpointTs-1)
+	// TODO(CharlesCheung): add this metrics to schema pkg
+	// if p.lastSchemaTs == lastSchemaTs {
+	// 	return
+	// }
+	// p.lastSchemaTs = lastSchemaTs
 
-	log.Debug("finished gc in schema storage",
-		zap.Uint64("gcTs", lastSchemaTs),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
+	// log.Debug("finished gc in schema storage",
+	// 	zap.Uint64("gcTs", lastSchemaTs),
+	// 	zap.String("namespace", p.changefeedID.Namespace),
+	// 	zap.String("changefeed", p.changefeedID.ID))
+	lastSchemaTs := p.latestStatus.CheckpointTs - 1
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }
@@ -911,6 +926,8 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID.ID))
 		p.agent = nil
 	}
+
+	p.globalVars.SchemaManager.ReleaseSchemaStorage(p.changefeedID, util.RoleProcessor)
 
 	// mark tables share the same ctx with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
@@ -1032,29 +1049,11 @@ func (c *component[R]) stop() {
 }
 
 type ddlHandler struct {
-	puller        puller.DDLJobPuller
 	schemaStorage entry.SchemaStorage
 }
 
-func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
-	g, ctx := errgroup.WithContext(ctx)
-	// d.puller will update the schemaStorage.
-	g.Go(func() error { return d.puller.Run(ctx) })
-	g.Go(func() error {
-		for {
-			var jobEntry *model.DDLJobEntry
-			select {
-			case <-ctx.Done():
-				return nil
-			case jobEntry = <-d.puller.Output():
-			}
-			failpoint.Inject("processorDDLResolved", nil)
-			if jobEntry.OpType == model.OpTypeResolved {
-				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
-			}
-		}
-	})
-	return g.Wait()
+func (d *ddlHandler) Run(_ context.Context, _ ...chan<- error) error {
+	return nil
 }
 
 func (d *ddlHandler) WaitForReady(_ context.Context) {}

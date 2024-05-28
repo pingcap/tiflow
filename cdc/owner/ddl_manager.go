@@ -564,7 +564,7 @@ func (m *ddlManager) cleanCache(msg string) {
 	// Set it to nil first to accelerate GC.
 	m.pendingDDLs[tableName][0] = nil
 	m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-	m.schema.DoGC(m.executingDDL.CommitTs - 1)
+	// m.schema.DoGC(m.executingDDL.CommitTs - 1)
 	m.justSentDDL = m.executingDDL
 	m.executingDDL = nil
 

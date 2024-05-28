@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,13 +30,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
-	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -553,7 +554,11 @@ func TestHandleJob(t *testing.T) {
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 
-	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	changefeedInfo := &model.ChangeFeedInfo{
+		ID:      "changefeed-id-test",
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(changefeedInfo.Config, "")
@@ -683,7 +688,11 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	startTs := uint64(10)
 
-	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	changefeedInfo := &model.ChangeFeedInfo{
+		ID:      "changefeed-id-test",
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")

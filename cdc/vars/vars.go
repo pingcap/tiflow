@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
+	"github.com/pingcap/tiflow/cdc/schema"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -28,7 +29,7 @@ import (
 
 // GlobalVars contains some vars which can be used anywhere in a pipeline
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
-// All field in Vars should be READ-ONLY and THREAD-SAFE
+// All field in Vars should be READ-ONLY and THREAD-SAFE.
 type GlobalVars struct {
 	CaptureInfo *model.CaptureInfo
 	EtcdClient  etcd.CDCEtcdClient
@@ -39,12 +40,15 @@ type GlobalVars struct {
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
 
-	// MessageServer and MessageRouter are for peer-messaging
+	// MessageServer and MessageRouter are for peer-messaging.
 	MessageServer *p2p.MessageServer
 	MessageRouter p2p.MessageRouter
 
-	// ChangefeedThreadPool is the thread pool for changefeed initialization
+	// ChangefeedThreadPool is the thread pool for changefeed initialization.
 	ChangefeedThreadPool workerpool.AsyncPool
+
+	// SchemaManager manages one schema storage and ddl puller for each changefeed.
+	SchemaManager *schema.SchemaManager
 }
 
 // NewGlobalVars4Test returns a GlobalVars for test,
