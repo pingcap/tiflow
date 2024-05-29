@@ -216,11 +216,15 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
-	resolvedTs := w.getMinWatermark()
+	watermark := w.getMinWatermark()
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
-		if todoDDL == nil || todoDDL.CommitTs > resolvedTs {
+		// watermark is the min value for all partitions,
+		// the DDL only executed by the first partition, other partitions may be slow
+		// so that the watermark can be smaller than the DDL's commitTs,
+		// which means some DML events may not be consumed yet, so cannot execute the DDL right now.
+		if todoDDL == nil || todoDDL.CommitTs > watermark {
 			break
 		}
 		// flush DMLs
@@ -233,25 +237,18 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 				zap.String("DDL", todoDDL.Query), zap.Uint64("commitTs", todoDDL.CommitTs))
 		}
 		w.popDDL()
-		if todoDDL.CommitTs < resolvedTs {
-			log.Info("update resolvedTs by DDL",
-				zap.Uint64("resolvedTs", resolvedTs),
-				zap.String("DDL", todoDDL.Query))
-			resolvedTs = todoDDL.CommitTs
-		}
 	}
 
-	// todo: why check message type here ?
 	if messageType == model.MessageTypeResolved {
 		w.forEachPartition(func(sink *partitionProgress) {
-			syncFlushRowChangedEvents(ctx, sink, resolvedTs)
+			syncFlushRowChangedEvents(ctx, sink, watermark)
 		})
 	}
 
 	// The DDL events will only execute in partition0
 	if messageType == model.MessageTypeDDL && todoDDL != nil {
 		log.Info("DDL event will be flushed in the future",
-			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("watermark", watermark),
 			zap.Uint64("CommitTs", todoDDL.CommitTs),
 			zap.String("Query", todoDDL.Query))
 		return false
@@ -444,7 +441,7 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	return g.currentTableID
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, resolvedTs uint64) {
+func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, watermark uint64) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -454,13 +451,14 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 		}
 		flushedResolvedTs := true
 		progress.tableSinkMap.Range(func(_, value interface{}) bool {
-			resolvedTs := model.NewResolvedTs(resolvedTs)
+			resolvedTs := model.NewResolvedTs(watermark)
 			tableSink := value.(tablesink.TableSink)
+			// todo: can we update resolved ts for each table sink concurrently ?
+			// this maybe helpful to accelerate the consume process, and reduce the memory usage.
 			if err := tableSink.UpdateResolvedTs(resolvedTs); err != nil {
 				log.Panic("Failed to update resolved ts", zap.Error(err))
 			}
-			checkpoint := tableSink.GetCheckpointTs()
-			if !checkpoint.EqualOrGreater(resolvedTs) {
+			if tableSink.GetCheckpointTs().Less(resolvedTs) {
 				flushedResolvedTs = false
 			}
 			return true

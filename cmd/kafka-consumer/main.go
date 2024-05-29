@@ -41,8 +41,8 @@ func main() {
 		upstreamURIStr string
 		configFile     string
 	)
-	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 
+	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 	consumerOption := newOption()
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
