@@ -40,13 +40,11 @@ func isSysSchema(db string) bool {
 // and returns an invalid rule error if the verification fails,
 // otherwise it will return a table filter.
 func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
-	var f tfilter.Filter
-	var err error
 	rules := cfg.Rules
 	if len(rules) == 0 {
 		rules = []string{"*.*"}
 	}
-	f, err = tfilter.Parse(rules)
+	f, err := tfilter.Parse(rules)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, cfg)
 	}
