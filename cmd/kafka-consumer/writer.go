@@ -372,6 +372,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				eventGroup[tableID] = group
 			}
 			group.Append(row)
+			log.Info("append row to event group",
+				zap.String("schema", row.TableInfo.GetSchemaName()),
+				zap.String("table", row.TableInfo.GetTableName()),
+				zap.Int64("physicalTableID", row.PhysicalTableID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("commitTs", row.CommitTs))
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -403,9 +409,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					progress.tableSinkMap.Store(tableID, tableSink)
 				}
 				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
+				log.Info("append row changed events to table sink",
+					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)))
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
 			needFlush = true
+			log.Info("partition watermark updated", zap.Int32("partition", partition), zap.Uint64("watermark", ts))
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType))
 		}
@@ -450,7 +459,7 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 		default:
 		}
 		flushedResolvedTs := true
-		progress.tableSinkMap.Range(func(_, value interface{}) bool {
+		progress.tableSinkMap.Range(func(key, value interface{}) bool {
 			resolvedTs := model.NewResolvedTs(watermark)
 			tableSink := value.(tablesink.TableSink)
 			// todo: can we update resolved ts for each table sink concurrently ?
@@ -458,8 +467,13 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 			if err := tableSink.UpdateResolvedTs(resolvedTs); err != nil {
 				log.Panic("Failed to update resolved ts", zap.Error(err))
 			}
+			checkpoint := tableSink.GetCheckpointTs()
 			if tableSink.GetCheckpointTs().Less(resolvedTs) {
 				flushedResolvedTs = false
+			} else {
+				log.Info("events flushed",
+					zap.Uint64("checkpoint", checkpoint.Ts),
+					zap.Uint64("resolvedTs", resolvedTs.Ts), zap.Int64("tableID", key.(int64)))
 			}
 			return true
 		})
