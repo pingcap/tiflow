@@ -32,6 +32,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error)
+
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper struct {
 	changefeed model.ChangeFeedID
@@ -44,6 +50,9 @@ type Wrapper struct {
 	// wg is used to wait the puller to exit.
 	wg      sync.WaitGroup
 	bdrMode bool
+
+	shouldSplitKVEntry ShouldSplitKVEntry
+	splitUpdateKVEntry SplitUpdateKVEntry
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -53,13 +62,17 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
+	shouldSplitKVEntry ShouldSplitKVEntry,
+	splitUpdateKVEntry SplitUpdateKVEntry,
 ) *Wrapper {
 	return &Wrapper{
-		changefeed: changefeed,
-		tableID:    tableID,
-		tableName:  tableName,
-		startTs:    startTs,
-		bdrMode:    bdrMode,
+		changefeed:         changefeed,
+		tableID:            tableID,
+		tableName:          tableName,
+		startTs:            startTs,
+		bdrMode:            bdrMode,
+		shouldSplitKVEntry: shouldSplitKVEntry,
+		splitUpdateKVEntry: splitUpdateKVEntry,
 	}
 }
 
@@ -134,8 +147,19 @@ func (n *Wrapper) Start(
 				if rawKV == nil {
 					continue
 				}
-				pEvent := model.NewPolymorphicEvent(rawKV)
-				eventSortEngine.Add(n.tableID, pEvent)
+				if n.shouldSplitKVEntry(rawKV) {
+					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
+					if err != nil {
+						log.Panic("failed to split update kv entry", zap.Error(err))
+						return
+					}
+					deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+					insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+					eventSortEngine.Add(n.tableID, deleteEvent, insertEvent)
+				} else {
+					pEvent := model.NewPolymorphicEvent(rawKV)
+					eventSortEngine.Add(n.tableID, pEvent)
+				}
 			}
 		}
 	}()
