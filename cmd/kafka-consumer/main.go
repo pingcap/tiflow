@@ -62,14 +62,10 @@ func main() {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
-	},
-		logutil.WithInitGRPCLogger(),
-		logutil.WithInitSaramaLogger(),
-	)
+	})
 	if err != nil {
 		log.Panic("init logger failed", zap.Error(err))
 	}
-
 	version.LogVersionInfo("kafka consumer")
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
@@ -95,7 +91,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			if err = http.ListenAndServe(":6060", nil); err != nil {
-				log.Panic("Error starting pprof", zap.Error(err))
+				log.Panic("cannot start the pprof", zap.Error(err))
 			}
 		}()
 	}

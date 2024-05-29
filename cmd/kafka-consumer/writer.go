@@ -197,7 +197,7 @@ func (w *writer) popDDL() {
 	}
 }
 
-func (w *writer) getMinResolvedTs() uint64 {
+func (w *writer) getMinWatermark() uint64 {
 	result := uint64(math.MaxUint64)
 	for _, p := range w.progresses {
 		watermark := atomic.LoadUint64(&p.watermark)
@@ -216,7 +216,7 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
-	resolvedTs := w.getMinResolvedTs()
+	resolvedTs := w.getMinWatermark()
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
@@ -453,17 +453,13 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 		default:
 		}
 		flushedResolvedTs := true
-		progress.tableSinkMap.Range(func(key, _ interface{}) bool {
-			tableID := key.(int64)
+		progress.tableSinkMap.Range(func(_, value interface{}) bool {
 			resolvedTs := model.NewResolvedTs(resolvedTs)
-			tableSink, ok := progress.tableSinkMap.Load(tableID)
-			if !ok {
-				log.Panic("Table sink not found", zap.Int64("tableID", tableID))
-			}
-			if err := tableSink.(tablesink.TableSink).UpdateResolvedTs(resolvedTs); err != nil {
+			tableSink := value.(tablesink.TableSink)
+			if err := tableSink.UpdateResolvedTs(resolvedTs); err != nil {
 				log.Panic("Failed to update resolved ts", zap.Error(err))
 			}
-			checkpoint := tableSink.(tablesink.TableSink).GetCheckpointTs()
+			checkpoint := tableSink.GetCheckpointTs()
 			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}

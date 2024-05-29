@@ -102,7 +102,7 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 	}
 	client, err := kafka.NewConsumer(configMap)
 	if err != nil {
-		log.Panic("Error creating consumer group client", zap.Error(err))
+		log.Panic("create kafka consumer failed", zap.Error(err))
 	}
 	err = client.SubscribeTopics(topics, nil)
 	if err != nil {
@@ -118,18 +118,13 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 func (c *consumer) Consume(ctx context.Context) {
 	defer func() {
 		if err := c.client.Close(); err != nil {
-			log.Panic("Error closing client", zap.Error(err))
+			log.Panic("close kafka consumer failed", zap.Error(err))
 		}
 	}()
 
 	for {
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
-			// Timeout is not considered an error because it is raised by
-			// ReadMessage in absence of messages.
-			if err.(kafka.Error).IsTimeout() {
-				continue
-			}
 			log.Panic("read message failed", zap.Error(err))
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
