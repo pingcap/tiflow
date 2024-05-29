@@ -247,6 +247,15 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 			syncFlushRowChangedEvents(ctx, sink, resolvedTs)
 		})
 	}
+
+	// The DDL events will only execute in partition0
+	if messageType == model.MessageTypeDDL && todoDDL != nil {
+		log.Info("DDL event will be flushed in the future",
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("CommitTs", todoDDL.CommitTs),
+			zap.String("Query", todoDDL.Query))
+		return false
+	}
 	return true
 }
 
