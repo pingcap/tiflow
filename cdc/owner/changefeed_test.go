@@ -53,15 +53,15 @@ type mockDDLPuller struct {
 	schemaStorage entry.SchemaStorage
 }
 
-func (m *mockDDLPuller) PopPendingDDLs() (uint64, *timodel.Job) {
+func (m *mockDDLPuller) PopPendingDDLs(ts uint64) (uint64, []*timodel.Job) {
 	if len(m.ddlQueue) > 0 {
-		job := m.ddlQueue[0]
-		m.ddlQueue = m.ddlQueue[1:]
-		err := m.schemaStorage.HandleDDLJob(job)
-		if err != nil {
-			panic(fmt.Sprintf("handle ddl job failed: %v", err))
+		for _, job := range m.ddlQueue {
+			err := m.schemaStorage.HandleDDLJob(job)
+			if err != nil {
+				panic(fmt.Sprintf("handle ddl job failed: %v", err))
+			}
 		}
-		return job.BinlogInfo.FinishedTS, job
+		return m.resolvedTs, m.ddlQueue
 	}
 	return m.resolvedTs, nil
 }
@@ -73,11 +73,7 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockDDLPuller) ResolvedTs() model.Ts {
-	if len(m.ddlQueue) > 0 {
-		return m.ddlQueue[0].BinlogInfo.FinishedTS
-	}
-	return m.resolvedTs
+func (m *mockDDLPuller) DoGC(ts uint64) {
 }
 
 type mockDDLSink struct {
