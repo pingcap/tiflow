@@ -123,16 +123,16 @@ func rowChangeToMsg(
 	e *model.RowChangedEvent,
 	config *common.Config,
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
-	var partition *int64
+	var partition int64
 	if e.TableInfo.IsPartitionTable() {
-		partition = &e.PhysicalTableID
+		partition = e.GetTableID()
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,
 		Schema:        e.TableInfo.GetSchemaName(),
 		Table:         e.TableInfo.GetTableName(),
 		RowID:         e.RowID,
-		Partition:     partition,
+		Partition:     &partition,
 		Type:          model.MessageTypeRow,
 		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
 	}

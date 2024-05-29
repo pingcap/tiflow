@@ -298,7 +298,7 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		Table: &TableName{
 			Schema:      r.TableInfo.GetSchemaName(),
 			Table:       r.TableInfo.GetTableName(),
-			TableID:     r.PhysicalTableID,
+			TableID:     r.GetTableID(),
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
 		Columns:      r.GetColumns(),
@@ -431,6 +431,14 @@ func getDMLOrder(event *RowChangedEvent) int {
 
 func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
+}
+
+// GetTableID returns the table ID of the event.
+func (r *RowChangedEvent) GetTableID() int64 {
+	if r.TableInfo.IsPartitionTable() {
+		return r.PhysicalTableID
+	}
+	return r.TableInfo.ID
 }
 
 // GetCommitTs returns the commit timestamp of this event.
@@ -1265,7 +1273,7 @@ func SplitUpdateEvent(
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.PhysicalTableID != t.GetPhysicalTableID() {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.GetTableID() != t.GetPhysicalTableID() {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),
