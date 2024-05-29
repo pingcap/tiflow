@@ -25,8 +25,8 @@ type ChangefeedState interface {
 	GetChangefeedStatus() *model.ChangeFeedStatus
 	// RemoveChangefeed removes the changefeed and clean the information and status.
 	RemoveChangefeed()
-	// ResumeChnagefeed resumes the changefeed and set the checkpoint ts.
-	ResumeChnagefeed(uint64)
+	// ResumeChangefeed resumes the changefeed and set the checkpoint ts.
+	ResumeChangefeed(uint64)
 	// SetWarning sets the warning to changefeed
 	SetWarning(*model.RunningError)
 	// TakeProcessorWarnings reuturns the warning of the changefeed and clean the warning.

@@ -25,7 +25,6 @@ fi
 
 # CDC mock
 "$MOCKGEN" -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
-"$MOCKGEN" -source cdc/controller/controller.go -destination cdc/controller/mock/controller_mock.go
 "$MOCKGEN" -source cdc/owner/status_provider.go -destination cdc/owner/mock/status_provider_mock.go
 "$MOCKGEN" -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
 "$MOCKGEN" -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go

@@ -381,7 +381,6 @@ func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
 	require.Equal(t, "test", tableInfo.TableName.Schema)
 	require.Equal(t, "t", tableInfo.TableName.Table)
 	require.Equal(t, 3, len(tableInfo.columnsOffset))
-	require.Equal(t, 1, len(tableInfo.indicesOffset))
 	require.Equal(t, 3, len(tableInfo.Columns))
 
 	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
@@ -428,7 +427,6 @@ func TestBuildTiDBTableInfoWithCommonPrimaryKey(t *testing.T) {
 	require.Equal(t, "test", tableInfo.TableName.Schema)
 	require.Equal(t, "t", tableInfo.TableName.Table)
 	require.Equal(t, 4, len(tableInfo.columnsOffset))
-	require.Equal(t, 3, len(tableInfo.indicesOffset))
 	require.Equal(t, 4, len(tableInfo.Columns))
 
 	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
@@ -481,7 +479,6 @@ func TestBuildTiDBTableInfoWithUniqueKey(t *testing.T) {
 	require.Equal(t, "test", tableInfo.TableName.Schema)
 	require.Equal(t, "t", tableInfo.TableName.Table)
 	require.Equal(t, 4, len(tableInfo.columnsOffset))
-	require.Equal(t, 2, len(tableInfo.indicesOffset))
 	require.Equal(t, 4, len(tableInfo.Columns))
 
 	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
