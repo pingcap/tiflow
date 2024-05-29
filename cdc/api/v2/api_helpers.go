@@ -57,6 +57,8 @@ const RegisterImportTaskPrefix = "/tidb/brie/import"
 
 // APIV2Helpers is a collections of helper functions of OpenAPIV2.
 // Defining it as an interface to make APIs more testable.
+// Note: Every method in this interface should check the context before returning.
+// If the context is canceled, the method should return an error immediately.
 type APIV2Helpers interface {
 	// verifyCreateChangefeedConfig verifies the changefeedConfig,
 	// and yield a valid changefeedInfo or error
@@ -105,18 +107,22 @@ type APIV2Helpers interface {
 	// getEtcdClient returns an Etcd client given the PD endpoints and
 	// tls config
 	getEtcdClient(
+		ctx context.Context,
 		pdAddrs []string,
 		tlsConfig *tls.Config,
 	) (*clientv3.Client, error)
 
 	// getKVCreateTiStore wraps kv.createTiStore method to increase testability
 	createTiStore(
+		ctx context.Context,
 		pdAddrs []string,
 		credential *security.Credential,
 	) (tidbkv.Storage, error)
 
 	// getVerifiedTables wraps entry.VerifyTables to increase testability
-	getVerifiedTables(replicaConfig *config.ReplicaConfig,
+	getVerifiedTables(
+		ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
 		storage tidbkv.Storage, startTs uint64,
 		scheme string, topic string, protocol config.Protocol,
 	) (ineligibleTables,
@@ -256,7 +262,8 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 }
 
 // verifyUpstream verifies the upstream config before updating a changefeed
-func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
+func (h APIV2HelpersImpl) verifyUpstream(
+	ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
 ) error {
@@ -396,7 +403,16 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
+<<<<<<< HEAD
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
+=======
+// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
+// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
+// or it is the checkpointTs of the changefeed before it is paused.
+// we need to check weather the resuming changefeed is gc safe or not.
+func (APIV2HelpersImpl) verifyResumeChangefeedConfig(
+	ctx context.Context,
+>>>>>>> de3a888a64 (api (ticdc): check http request context in api helper (#11165))
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
@@ -425,7 +441,8 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 }
 
 // getPDClient returns a PDClient given the PD cluster addresses and a credential
-func (APIV2HelpersImpl) getPDClient(ctx context.Context,
+func (APIV2HelpersImpl) getPDClient(
+	ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
 ) (pd.Client, error) {
@@ -457,7 +474,9 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 }
 
 func (h APIV2HelpersImpl) getEtcdClient(
-	pdAddrs []string, tlsCfg *tls.Config,
+	ctx context.Context,
+	pdAddrs []string,
+	tlsCfg *tls.Config,
 ) (*clientv3.Client, error) {
 	conf := config.GetGlobalServerConfig()
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
@@ -466,7 +485,7 @@ func (h APIV2HelpersImpl) getEtcdClient(
 	}
 	logConfig := &logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	return clientv3.New(
+	res, err := clientv3.New(
 		clientv3.Config{
 			Endpoints:   pdAddrs,
 			TLS:         tlsCfg,
@@ -489,16 +508,33 @@ func (h APIV2HelpersImpl) getEtcdClient(
 			},
 		},
 	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if ctx.Err() != nil {
+		return nil, errors.Trace(ctx.Err())
+	}
+	return res, nil
 }
 
 // getTiStore wrap the kv.createTiStore method to increase testability
-func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
+func (h APIV2HelpersImpl) createTiStore(
+	ctx context.Context,
+	pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {
-	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
+	res, err := kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if ctx.Err() != nil {
+		return nil, errors.Trace(ctx.Err())
+	}
+	return res, nil
 }
 
 func (h APIV2HelpersImpl) getVerifiedTables(
+	ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64,
 	scheme string, topic string, protocol config.Protocol,
@@ -533,6 +569,10 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	err = selectors.VerifyTables(tableInfos, eventRouter)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if ctx.Err() != nil {
+		return nil, nil, errors.Trace(ctx.Err())
 	}
 
 	return ineligibleTables, eligibleTables, nil
