@@ -71,7 +71,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
-		}, []string{"namespace", "changefeed", "table", "type"})
+		}, []string{"channel"})
 	clientRegionTokenSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -110,20 +110,6 @@ var (
 			Help:      "region events batch size",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
 		})
-	workerBusyRatio = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "kvclient",
-			Name:      "region_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for region worker.",
-		}, []string{"namespace", "changefeed", "table", "store", "type"})
-	workerChannelSize = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "kvclient",
-			Name:      "region_worker_channel_size",
-			Help:      "size of each channel in region worker",
-		}, []string{"namespace", "changefeed", "table", "store", "type"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -140,8 +126,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(grpcPoolStreamGauge)
 	registry.MustRegister(regionEventsBatchSize)
-	registry.MustRegister(workerBusyRatio)
-	registry.MustRegister(workerChannelSize)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)

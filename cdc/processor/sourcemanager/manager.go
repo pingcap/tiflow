@@ -57,8 +57,6 @@ type SourceManager struct {
 
 	safeModeAtStart bool
 	startTs         model.Ts
-
-	enableTableMonitor bool
 }
 
 // New creates a new source manager.
@@ -69,7 +67,6 @@ func New(
 	engine engine.SortEngine,
 	errChan chan error,
 	bdrMode bool,
-	enableTableMonitor bool,
 	safeModeAtStart bool,
 ) *SourceManager {
 	startTs, err := getCurrentTs(context.Background(), up.PDClient)
@@ -80,15 +77,14 @@ func New(
 		return nil
 	}
 	return &SourceManager{
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		errChan:            errChan,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
-		safeModeAtStart:    safeModeAtStart,
-		startTs:            startTs,
+		changefeedID:    changefeedID,
+		up:              up,
+		mg:              mg,
+		engine:          engine,
+		errChan:         errChan,
+		bdrMode:         bdrMode,
+		safeModeAtStart: safeModeAtStart,
+		startTs:         startTs,
 	}
 }
 
@@ -117,7 +113,7 @@ func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, 
 		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
 	}
 	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
-	p.Start(ctx, m.up, m.engine, m.errChan, m.enableTableMonitor)
+	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 }
 
