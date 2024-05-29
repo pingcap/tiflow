@@ -53,7 +53,7 @@ type mockDDLPuller struct {
 	schemaStorage entry.SchemaStorage
 }
 
-func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
+func (m *mockDDLPuller) PopPendingDDLs() (uint64, *timodel.Job) {
 	if len(m.ddlQueue) > 0 {
 		job := m.ddlQueue[0]
 		m.ddlQueue = m.ddlQueue[1:]

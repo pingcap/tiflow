@@ -75,10 +75,10 @@ func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
 	puller.Input(context.Background(), rawTs, []tablepb.Span{})
 }
 
-func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
+func waitResolvedTs(t *testing.T, p *ddlJobPullerImpl, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
-			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
+		if p.getResolvedTs() < targetTs {
+			return fmt.Errorf("resolvedTs %d < targetTs %d", p.getResolvedTs(), targetTs)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
@@ -88,7 +88,7 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 func newMockDDLJobPuller(
 	t *testing.T,
 	needSchemaStorage bool,
-) (DDLJobPuller, *entry.SchemaTestHelper) {
+) (*ddlJobPullerImpl, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
 		outputCh: make(
 			chan *model.DDLJobEntry,
@@ -122,8 +122,7 @@ func TestHandleRenameTable(t *testing.T) {
 	defer helper.Close()
 
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
-	ddlJobPullerImpl.setResolvedTs(startTs)
+	ddlJobPuller.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
@@ -144,7 +143,7 @@ func TestHandleRenameTable(t *testing.T) {
 	}
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
-	ddlJobPullerImpl.filter = f
+	ddlJobPuller.filter = f
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -158,6 +157,7 @@ func TestHandleRenameTable(t *testing.T) {
 		}
 	}()
 
+	ddlJobPullerImpl := ddlJobPuller
 	// table t3, t5 not found in snapshot, skip it.
 	// only table t1 remain.
 	{
@@ -347,7 +347,7 @@ func TestHandleJob(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := ddlJobPuller
 	ddlJobPullerImpl.setResolvedTs(startTs)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
@@ -571,9 +571,10 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
-	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
-	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	puller := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
+	p := puller.(*ddlPullerImpl)
+	p.ddlJobPuller, _ = newMockDDLJobPuller(t, false)
+	ddlJobPullerImpl := p.ddlJobPuller
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
@@ -586,9 +587,8 @@ func TestDDLPuller(t *testing.T) {
 	defer wg.Wait()
 	defer p.Close()
 
-	resolvedTs, ddl := p.PopFrontDDL()
-	require.Equal(t, resolvedTs, startTs)
-	require.Nil(t, ddl)
+	lastDDLTs := startTs
+	require.Equal(t, p.resolvedTs(), startTs)
 
 	// test send resolvedTs
 	inputTs(t, ddlJobPullerImpl, 15)
@@ -611,21 +611,19 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 16},
 		Query:      "create table t2(id int primary key)",
 	})
-	resolvedTs, ddl = p.PopFrontDDL()
+	resolvedTs, ddls := p.PopPendingDDLs(lastDDLTs)
 	require.Equal(t, resolvedTs, uint64(15))
-	require.Nil(t, ddl)
+	require.Nil(t, ddls)
+	lastDDLTs = resolvedTs
 
 	inputTs(t, ddlJobPullerImpl, 20)
-	waitResolvedTsGrowing(t, p, 16)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(16))
-	require.Equal(t, ddl.ID, int64(1))
-
-	// DDL could be processed with a delay, wait here for a pending DDL job is added
-	waitResolvedTsGrowing(t, p, 18)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(18))
-	require.Equal(t, ddl.ID, int64(2))
+	waitResolvedTsGrowing(t, p, 20)
+	resolvedTs, ddls = p.PopPendingDDLs(lastDDLTs)
+	require.Equal(t, resolvedTs, uint64(20))
+	require.Equal(t, len(ddls), 2)
+	require.Equal(t, ddls[0].ID, int64(1))
+	require.Equal(t, ddls[1].ID, int64(2))
+	lastDDLTs = resolvedTs
 
 	// test add ddl job repeated
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
@@ -647,19 +645,19 @@ func TestDDLPuller(t *testing.T) {
 	})
 
 	inputTs(t, ddlJobPullerImpl, 30)
-	waitResolvedTsGrowing(t, p, 25)
-
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(25))
-	require.Equal(t, ddl.ID, int64(3))
-	_, ddl = p.PopFrontDDL()
-	require.Nil(t, ddl)
-
 	waitResolvedTsGrowing(t, p, 30)
-	resolvedTs, ddl = p.PopFrontDDL()
-	require.Equal(t, resolvedTs, uint64(30))
-	require.Nil(t, ddl)
 
+	resolvedTs, ddls = p.PopPendingDDLs(lastDDLTs)
+	require.Equal(t, resolvedTs, uint64(30))
+	require.Equal(t, len(ddls), 1)
+	require.Equal(t, ddls[0].ID, int64(3))
+	lastDDLTs = resolvedTs
+
+	_, ddls = p.PopPendingDDLs(lastDDLTs)
+	require.Nil(t, ddls)
+	lastDDLTs = resolvedTs
+
+	require.Equal(t, p.lastDDLJob.ID, int64(3))
 	inputDDL(t, ddlJobPullerImpl, &timodel.Job{
 		ID:         5,
 		Type:       timodel.ActionCreateTable,
@@ -668,13 +666,14 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 36},
 		Query:      "create table t4(id int primary key)",
 	})
-
 	inputTs(t, ddlJobPullerImpl, 40)
 	waitResolvedTsGrowing(t, p, 40)
-	resolvedTs, ddl = p.PopFrontDDL()
+	require.Equal(t, p.lastDDLJob.ID, int64(3))
+
+	resolvedTs, ddls = p.PopPendingDDLs(lastDDLTs)
 	// no ddl should be received
 	require.Equal(t, resolvedTs, uint64(40))
-	require.Nil(t, ddl)
+	require.Nil(t, ddls)
 }
 
 func TestResolvedTsStuck(t *testing.T) {
@@ -708,7 +707,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
-	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
@@ -725,10 +724,6 @@ func TestResolvedTsStuck(t *testing.T) {
 	defer p.Close()
 
 	// test initialize state
-	resolvedTs, ddl := p.PopFrontDDL()
-	require.Equal(t, resolvedTs, startTs)
-	require.Nil(t, ddl)
-
 	inputTs(t, ddlJobPullerImpl, 30)
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
@@ -739,9 +734,10 @@ func TestResolvedTsStuck(t *testing.T) {
 
 // waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
 // DDL, DDL resolved ts reaches targetTs.
-func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
+func waitResolvedTsGrowing(t *testing.T, puller DDLPuller, targetTs model.Ts) {
+	p := puller.(*ddlPullerImpl)
 	err := retry.Do(context.Background(), func() error {
-		resolvedTs := p.ResolvedTs()
+		resolvedTs := p.resolvedTs()
 		if resolvedTs < targetTs {
 			return errors.New("resolvedTs < targetTs")
 		}
@@ -755,7 +751,7 @@ func TestCcheckIneligibleTableDDL(t *testing.T) {
 	defer helper.Close()
 
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := ddlJobPuller
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
