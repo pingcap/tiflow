@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	tidbkv "github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
@@ -391,12 +390,6 @@ type eventFeedSession struct {
 
 	rangeLock *regionspan.RegionRangeLock
 
-	// To identify metrics of different eventFeedSession
-	id                string
-	regionChSizeGauge prometheus.Gauge
-	errChSizeGauge    prometheus.Gauge
-	rangeChSizeGauge  prometheus.Gauge
-
 	// storeStreamsCache is used to cache the established gRPC streams to TiKV stores.
 	// Note: The cache is not thread-safe, so it should be accessed in the same goroutine.
 	// For now, it is only accessed in the `requestRegionToStore` goroutine.
@@ -474,7 +467,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case task := <-s.requestRangeCh.Out():
-				s.rangeChSizeGauge.Dec()
 				// divideAndSendEventFeedToRegions could be blocked for some time,
 				// since it must wait for the region lock available. In order to
 				// consume region range request from `requestRangeCh` as soon as
@@ -496,7 +488,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case errInfo := <-s.errCh.Out():
-				s.errChSizeGauge.Dec()
 				if err := s.handleError(ctx, errInfo); err != nil {
 					return err
 				}
@@ -506,7 +497,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	})
 
 	s.requestRangeCh.In() <- rangeRequestTask{span: s.totalSpan}
-	s.rangeChSizeGauge.Inc()
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -527,7 +517,6 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(
 	task := rangeRequestTask{span: span}
 	select {
 	case s.requestRangeCh.In() <- task:
-		s.rangeChSizeGauge.Inc()
 	case <-ctx.Done():
 	}
 }
@@ -541,7 +530,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			sri.lockedRange = res.LockedRange
 			select {
 			case s.regionCh.In() <- sri:
-				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
 		case regionspan.LockRangeStatusStale:
@@ -603,7 +591,6 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 		zap.Error(errorInfo.err))
 	select {
 	case s.errCh.In() <- errorInfo:
-		s.errChSizeGauge.Inc()
 	case <-ctx.Done():
 	}
 }
@@ -779,7 +766,6 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionCh.Out():
-			s.regionChSizeGauge.Dec()
 		}
 
 		// Send a resolved ts to event channel first, for two reasons:
