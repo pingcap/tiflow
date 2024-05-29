@@ -64,6 +64,7 @@ func NewGlobalVars4Test() *GlobalVars {
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
 		ChangefeedThreadPool: &NonAsyncPool{},
+		SchemaManager:        &schema.SchemaManager{},
 	}
 }
 

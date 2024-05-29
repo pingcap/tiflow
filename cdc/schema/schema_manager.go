@@ -167,7 +167,7 @@ func (w *storageWrapper) init(cfg *StorageWrapperConfig) (err error) {
 		return err
 	}
 
-	w.ddlPuller = puller.NewDDLPuller(ctx, cfg.Upstream, cfg.StartTs, cfg.ID, w.storage, cfg.Filter)
+	w.ddlPuller = puller.NewDDLPuller(cfg.Upstream, cfg.StartTs, cfg.ID, w.storage, cfg.Filter)
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
@@ -243,7 +243,7 @@ func (w *storageWrapper) doGC() (ok bool) {
 
 	if gcTs != math.MaxUint64 {
 		w.storage.DoGC(gcTs)
-		// w.ddlPuller.DoGC(gcTs)
+		w.ddlPuller.DoGC(gcTs)
 		return true
 	}
 	return false
