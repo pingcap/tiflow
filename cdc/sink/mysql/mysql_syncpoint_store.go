@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"go.uber.org/zap"
 )
 
@@ -120,11 +121,13 @@ func newMySQLSyncPointStore(
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+
+	testDB, err := pmysql.GetTestDB(ctx, dsn, GetDBConnImpl)
 	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection when configuring sink")
+		return nil, err
 	}
 	defer testDB.Close()
+
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
