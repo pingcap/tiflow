@@ -209,7 +209,7 @@ func createChangefeed4Test(globalVars *vars.GlobalVars,
 	cf := newChangefeed4Test(model.DefaultChangeFeedID(changefeedInfo.ID),
 		state.Info, state.Status, NewFeedStateManager(up, state), up,
 		// new ddl puller
-		func(ctx context.Context,
+		func(
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,

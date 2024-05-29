@@ -40,7 +40,7 @@ type SchemaManager struct {
 func (m *SchemaManager) Reset() {
 	m.storageWrapperMap.Range(func(key, value interface{}) bool {
 		w := value.(*storageWrapper)
-		w.close(nil, "schema storage manager reset")
+		w.CloseWithLock(nil, "schema storage manager reset")
 		return true
 	})
 	m.storageWrapperMap = sync.Map{}
@@ -172,10 +172,9 @@ func (w *storageWrapper) init(cfg *StorageWrapperConfig) (err error) {
 	go func() {
 		defer w.wg.Done()
 
-		defer w.ddlPuller.Close()
 		err := w.ddlPuller.Run(ctx)
 		if err != nil {
-			w.close(err, "ddl puller meet error")
+			w.CloseWithLock(err, "ddl puller meet error")
 		}
 	}()
 
@@ -199,10 +198,14 @@ func (w *storageWrapper) init(cfg *StorageWrapperConfig) (err error) {
 	return nil
 }
 
-func (w *storageWrapper) close(err error, reason string) {
+func (w *storageWrapper) CloseWithLock(err error, reason string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	w.close(err, reason)
+}
+
+func (w *storageWrapper) close(err error, reason string) {
 	log.Warn("schema wrapper closing",
 		zap.String("namespace", w.id.Namespace),
 		zap.String("changefeed", w.id.ID),
@@ -215,6 +218,7 @@ func (w *storageWrapper) close(err error, reason string) {
 		}
 	}
 
+	w.ddlPuller.Close()
 	w.cancel()
 	w.isClosed = true
 	w.wg.Wait()

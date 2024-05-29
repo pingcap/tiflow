@@ -155,7 +155,7 @@ type changefeed struct {
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -234,7 +234,7 @@ func newChangefeed4Test(
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
 	cfstateManager FeedStateManager, up *upstream.Upstream,
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
