@@ -435,10 +435,7 @@ func (e txnRows) Swap(i, j int) {
 
 // GetTableID returns the table ID of the event.
 func (r *RowChangedEvent) GetTableID() int64 {
-	if r.TableInfo.IsPartitionTable() {
-		return r.PhysicalTableID
-	}
-	return r.TableInfo.ID
+	return r.PhysicalTableID
 }
 
 // GetCommitTs returns the commit timestamp of this event.
