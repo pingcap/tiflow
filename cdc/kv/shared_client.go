@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"blainsmith.com/go/seahash"
+	"github.com/dim13/seahash"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -940,5 +940,5 @@ func (s *SharedClient) clearMetrics() {
 func hashRegionID(regionID uint64, slots int) int {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, regionID)
-	return int(seahash.Sum64(b) % uint64(slots))
+	return int(seahash.Sum(b) % uint64(slots))
 }
