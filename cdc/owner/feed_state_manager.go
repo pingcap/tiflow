@@ -322,7 +322,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.isRetrying = false
 		jobsPending = true
 		m.patchState(model.StateNormal)
-		m.state.ResumeChnagefeed(job.OverwriteCheckpointTs)
+		m.state.ResumeChangefeed(job.OverwriteCheckpointTs)
 
 	case model.AdminFinish:
 		switch m.state.GetChangefeedInfo().State {

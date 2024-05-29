@@ -128,7 +128,3 @@ func (m *mockStatusProvider) GetChangeFeedSyncedStatus(_ context.Context, change
 ) {
 	return m.changeFeedSyncedStatus, m.err
 }
-
-func (m *mockStatusProvider) IsChangefeedOwner(_ context.Context, id model.ChangeFeedID) (bool, error) {
-	return true, nil
-}

@@ -35,6 +35,36 @@ func (m *MockStatusProvider) EXPECT() *MockStatusProviderMockRecorder {
 	return m.recorder
 }
 
+// GetAllChangeFeedCheckpointTs mocks base method.
+func (m *MockStatusProvider) GetAllChangeFeedCheckpointTs(ctx context.Context) (map[model.ChangeFeedID]uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedCheckpointTs", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedCheckpointTs indicates an expected call of GetAllChangeFeedCheckpointTs.
+func (mr *MockStatusProviderMockRecorder) GetAllChangeFeedCheckpointTs(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedCheckpointTs", reflect.TypeOf((*MockStatusProvider)(nil).GetAllChangeFeedCheckpointTs), ctx)
+}
+
+// GetAllChangeFeedInfo mocks base method.
+func (m *MockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedInfo", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedInfo indicates an expected call of GetAllChangeFeedInfo.
+func (mr *MockStatusProviderMockRecorder) GetAllChangeFeedInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedInfo", reflect.TypeOf((*MockStatusProvider)(nil).GetAllChangeFeedInfo), ctx)
+}
+
 // GetAllTaskStatuses mocks base method.
 func (m *MockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
 	m.ctrl.T.Helper()
@@ -125,19 +155,19 @@ func (mr *MockStatusProviderMockRecorder) GetProcessors(ctx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProcessors", reflect.TypeOf((*MockStatusProvider)(nil).GetProcessors), ctx)
 }
 
-// IsChangefeedOwner mocks base method.
-func (m *MockStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+// IsChangefeedExists mocks base method.
+func (m *MockStatusProvider) IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsChangefeedOwner", ctx, id)
+	ret := m.ctrl.Call(m, "IsChangefeedExists", ctx, id)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// IsChangefeedOwner indicates an expected call of IsChangefeedOwner.
-func (mr *MockStatusProviderMockRecorder) IsChangefeedOwner(ctx, id interface{}) *gomock.Call {
+// IsChangefeedExists indicates an expected call of IsChangefeedExists.
+func (mr *MockStatusProviderMockRecorder) IsChangefeedExists(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedOwner", reflect.TypeOf((*MockStatusProvider)(nil).IsChangefeedOwner), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedExists", reflect.TypeOf((*MockStatusProvider)(nil).IsChangefeedExists), ctx, id)
 }
 
 // IsHealthy mocks base method.

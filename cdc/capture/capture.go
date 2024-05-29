@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
@@ -65,9 +64,8 @@ type Capture interface {
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
-	GetController() (controller.Controller, error)
-	GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsController() bool
+	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	IsOwner() bool
 
 	Info() (model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
@@ -93,7 +91,6 @@ type captureImpl struct {
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
 	owner           owner.Owner
-	controller      controller.Controller
 	upstreamManager *upstream.Manager
 
 	// session keeps alive between the capture and etcd
@@ -134,7 +131,6 @@ type captureImpl struct {
 	) processor.Manager
 	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig,
 		globalVars *vars.GlobalVars) owner.Owner
-	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo, client etcd.CDCEtcdClient) controller.Controller
 }
 
 func (c *captureImpl) GetUpstreamInfo(ctx context.Context, id model.UpstreamID, namespace string) (*model.UpstreamInfo, error) {
@@ -158,7 +154,6 @@ func NewCapture(pdEndpoints []string,
 		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
-		newController:       controller.NewController,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
 		migrator:            migrate.NewMigrator(etcdClient, pdEndpoints, conf),
@@ -181,10 +176,8 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 	return res
 }
 
-// NewCaptureWithController4Test returns a new Capture instance for test.
-func NewCaptureWithController4Test(o owner.Owner,
-	manager controller.Controller,
-) *captureImpl {
+// NewCaptureWithOwner4Test returns a new Capture instance for test.
+func NewCaptureWithOwner4Test(o owner.Owner) *captureImpl {
 	res := &captureImpl{
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
@@ -194,7 +187,6 @@ func NewCaptureWithController4Test(o owner.Owner,
 		migrator: &migrate.NoOpMigrator{},
 		config:   config.GetGlobalServerConfig(),
 	}
-	res.controller = manager
 	res.owner = o
 	return res
 }
@@ -521,10 +513,8 @@ func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *vars.Global
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		controller := c.newController(c.upstreamManager, c.info, c.EtcdClient)
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler, newGlobalVars)
 		c.setOwner(owner)
-		c.setController(controller)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
@@ -544,25 +534,10 @@ func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *vars.Global
 			}
 		})
 
-		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			return c.runEtcdWorker(ctx, owner.(orchestrator.Reactor),
-				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
-				ownerFlushInterval, util.RoleOwner.String())
-		})
-		g.Go(func() error {
-			er := c.runEtcdWorker(ctx, controller.(orchestrator.Reactor),
-				globalState,
-				// todo: do not use owner flush interval
-				ownerFlushInterval, util.RoleController.String())
-			// controller has exited, stop owner.
-			c.owner.AsyncStop()
-			return er
-		})
-		err = g.Wait()
+		err = c.runEtcdWorker(ctx, owner.(orchestrator.Reactor),
+			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
+			ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
-		c.controller.AsyncStop()
-		c.setController(nil)
 		c.setOwner(nil)
 
 		if !cerror.ErrNotOwner.Equal(err) {
@@ -642,12 +617,6 @@ func (c *captureImpl) setOwner(owner owner.Owner) {
 	c.owner = owner
 }
 
-func (c *captureImpl) setController(controller controller.Controller) {
-	c.ownerMu.Lock()
-	defer c.ownerMu.Unlock()
-	c.controller = controller
-}
-
 // GetOwner returns owner if it is the owner.
 func (c *captureImpl) GetOwner() (owner.Owner, error) {
 	c.ownerMu.Lock()
@@ -656,16 +625,6 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
 	return c.owner, nil
-}
-
-// GetController returns `controller.Controller` if not nil
-func (c *captureImpl) GetController() (controller.Controller, error) {
-	c.ownerMu.Lock()
-	defer c.ownerMu.Unlock()
-	if c.owner == nil {
-		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
-	}
-	return c.controller, nil
 }
 
 // campaign to be an owner.
@@ -787,15 +746,15 @@ func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	wait(doneM)
 }
 
-// IsController returns whether the capture is a controller
-func (c *captureImpl) IsController() bool {
+// IsOwner returns whether the capture is an owner
+func (c *captureImpl) IsOwner() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
-	return c.controller != nil
+	return c.owner != nil
 }
 
-// GetControllerCaptureInfo return the controller capture info of current TiCDC cluster
-func (c *captureImpl) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+// GetOwnerCaptureInfo return the controller capture info of current TiCDC cluster
+func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
