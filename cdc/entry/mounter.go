@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
@@ -102,10 +101,16 @@ type mounter struct {
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
 
-	// encoder is used to calculate the checksum.
-	encoder *rowcodec.Encoder
-	// sctx hold some information can be used by the encoder to calculate the checksum.
-	sctx *stmtctx.StatementContext
+	datumProvider sync.Pool
+}
+
+func (m *mounter) allocDatums() map[int64]types.Datum {
+	return m.datumProvider.Get().(map[int64]types.Datum)
+}
+
+func (m *mounter) releaseDatums(datums map[int64]types.Datum) {
+	clear(datums)
+	m.datumProvider.Put(datums)
 }
 
 // NewMounter creates a mounter
@@ -126,8 +131,11 @@ func NewMounter(schemaStorage SchemaStorage,
 		tz:        tz,
 		integrity: integrity,
 
-		encoder: &rowcodec.Encoder{},
-		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
+		datumProvider: sync.Pool{
+			New: func() any {
+				return make(map[int64]types.Datum)
+			},
+		},
 	}
 }
 
@@ -234,21 +242,6 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	return row, err
 }
 
-var datumsPool = sync.Pool{
-	New: func() any {
-		return make(map[int64]types.Datum)
-	},
-}
-
-func requestDatums() map[int64]types.Datum {
-	return datumsPool.Get().(map[int64]types.Datum)
-}
-
-func releaseDatums(datums map[int64]types.Datum) {
-	clear(datums)
-	datumsPool.Put(datums)
-}
-
 func (m *mounter) unmarshalRowKVEntry(
 	tableInfo *model.TableInfo,
 	rawKey []byte,
@@ -300,7 +293,7 @@ func (m *mounter) decodeRow(
 		} else {
 			m.decoder = decoder
 		}
-		datums = requestDatums()
+		datums = m.allocDatums()
 		datums, err = decodeRowV2(decoder, rawValue, datums)
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
@@ -572,8 +565,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	defer func() {
-		releaseDatums(row.Row)
-		releaseDatums(row.PreRow)
+		m.releaseDatums(row.Row)
+		m.releaseDatums(row.PreRow)
 	}()
 
 	// Decode previous columns.
