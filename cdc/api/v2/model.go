@@ -57,7 +57,6 @@ type Tables struct {
 type TableName struct {
 	Schema      string `json:"database_name"`
 	Table       string `json:"table_name"`
-	TableID     int64  `json:"table_id"`
 	IsPartition bool   `json:"is_partition"`
 }
 
