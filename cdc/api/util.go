@@ -177,8 +177,8 @@ func HandleOwnerScheduleTable(
 	}
 }
 
-// ForwardToController forwards a request to the controller
-func ForwardToController(c *gin.Context, p capture.Capture) {
+// ForwardToOwner forwards a request to the controller
+func ForwardToOwner(c *gin.Context, p capture.Capture) {
 	ctx := c.Request.Context()
 	info, err := p.Info()
 	if err != nil {
@@ -186,15 +186,15 @@ func ForwardToController(c *gin.Context, p capture.Capture) {
 		return
 	}
 
-	var controller *model.CaptureInfo
-	// get controller info
-	controller, err = p.GetControllerCaptureInfo(ctx)
+	var owner *model.CaptureInfo
+	// get owner info
+	owner, err = p.GetOwnerCaptureInfo(ctx)
 	if err != nil {
-		log.Info("get controller failed", zap.Error(err))
+		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
 		return
 	}
-	ForwardToCapture(c, info.ID, controller.AdvertiseAddr)
+	ForwardToCapture(c, info.ID, owner.AdvertiseAddr)
 }
 
 // ForwardToCapture forward request to another

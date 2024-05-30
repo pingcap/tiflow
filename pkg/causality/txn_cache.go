@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,15 +20,22 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// BlockStrategyWaitAvailable means the cache will block until there is an available slot.
+	BlockStrategyWaitAvailable BlockStrategy = "waitAvailable"
+	// BlockStrategyWaitEmpty means the cache will block until all cached txns are consumed.
+	BlockStrategyWaitEmpty = "waitEmpty"
+	// TODO: maybe we can implement a strategy that can automatically adapt to different scenarios
+)
+
+// BlockStrategy is the strategy to handle the situation when the cache is full.
+type BlockStrategy string
+
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
 	OnConflictResolved()
-
-	// Hashes are in range [0, math.MaxUint64) and must be deduped.
-	//
-	// NOTE: if the conflict detector is accessed by multiple threads concurrently,
-	// GenSortedDedupKeysHash must also be sorted based on `key % numSlots`.
-	GenSortedDedupKeysHash(numSlots uint64) []uint64
+	// ConflictKeys returns the keys that the event conflicts with.
+	ConflictKeys() []uint64
 }
 
 // TxnWithNotifier is a wrapper of txnEvent with a PostTxnExecuted.
@@ -129,14 +136,3 @@ func (w *boundedTxnCacheWithBlock[Txn]) add(txn TxnWithNotifier[Txn]) bool {
 func (w *boundedTxnCacheWithBlock[Txn]) out() <-chan TxnWithNotifier[Txn] {
 	return w.ch
 }
-
-// BlockStrategy is the strategy to handle the situation when the cache is full.
-type BlockStrategy string
-
-const (
-	// BlockStrategyWaitAvailable means the cache will block until there is an available slot.
-	BlockStrategyWaitAvailable BlockStrategy = "waitAvailable"
-	// BlockStrategyWaitEmpty means the cache will block until all cached txns are consumed.
-	BlockStrategyWaitEmpty = "waitAll"
-	// TODO: maybe we can implement a strategy that can automatically adapt to different scenarios
-)

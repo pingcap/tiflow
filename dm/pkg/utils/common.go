@@ -214,7 +214,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
-	sessionCtx.exprctx = contextsession.NewExprExtendedImpl(&sessionCtx)
+	sessionCtx.exprctx = contextsession.NewSessionExprContext(&sessionCtx)
 	return &sessionCtx
 }
 
