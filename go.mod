@@ -22,7 +22,6 @@ require (
 	github.com/cockroachdb/pebble v1.1.0
 	github.com/coreos/go-semver v0.3.1
 	github.com/deepmap/oapi-codegen v1.9.0
-	github.com/dim13/seahash v1.0.0
 	github.com/docker/go-units v0.5.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17

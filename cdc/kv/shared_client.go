@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dim13/seahash"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -38,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/util/seahash"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
@@ -940,5 +940,5 @@ func (s *SharedClient) clearMetrics() {
 func hashRegionID(regionID uint64, slots int) int {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, regionID)
-	return int(seahash.Sum(b) % uint64(slots))
+	return int(seahash.Sum64(b) % uint64(slots))
 }
