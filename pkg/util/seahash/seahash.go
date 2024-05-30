@@ -24,6 +24,7 @@ const (
 	seed4     = 0x14f994a4c5259381
 )
 
+// Hasher is an instance to calculate checksum.
 type Hasher struct {
 	state state
 	// Cumulative # of bytes written.
@@ -42,6 +43,7 @@ func New() *Hasher {
 	return &h
 }
 
+// Reset resets the Hasher.
 func (h *Hasher) Reset() {
 	h.state.a = seed1
 	h.state.b = seed2
@@ -57,6 +59,7 @@ func (h *Hasher) Size() int { return Size }
 // BlockSize returns BlockSize constant to satisfy hash.Hash interface
 func (h *Hasher) BlockSize() int { return BlockSize }
 
+// Write writes the given buffer into the Hasher.
 func (h *Hasher) Write(b []byte) (nn int, err error) {
 	nn = len(b)
 	h.inputSize += len(b)
@@ -82,13 +85,15 @@ func (h *Hasher) Write(b []byte) (nn int, err error) {
 	return
 }
 
-func (d *Hasher) Sum(b []byte) []byte {
-	d.Write(b)
+// Sum calculates the checksum bytes.
+func (h *Hasher) Sum(b []byte) []byte {
+	_ = h.Write(b)
 	r := make([]byte, Size)
-	binary.LittleEndian.PutUint64(r, d.Sum64())
+	binary.LittleEndian.PutUint64(r, h.Sum64())
 	return r
 }
 
+// Sum64 calculates the checksum.
 func (h *Hasher) Sum64() uint64 {
 	if h.bufSize > 0 {
 		s := h.state
@@ -109,7 +114,7 @@ func Sum(b []byte) []byte {
 func Sum64(b []byte) uint64 {
 	var h Hasher
 	h.Reset()
-	h.Write(b)
+	_ = h.Write(b)
 	return h.Sum64()
 }
 
