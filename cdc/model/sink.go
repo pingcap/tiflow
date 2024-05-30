@@ -205,9 +205,8 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" msg:"db-name"`
-	Table       string `toml:"tbl-name" msg:"tbl-name"`
-	IsPartition bool   `toml:"is-partition" msg:"is-partition"`
+	Schema string `toml:"db-name" msg:"db-name"`
+	Table  string `toml:"tbl-name" msg:"tbl-name"`
 }
 
 // String implements fmt.Stringer interface.
@@ -290,9 +289,8 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		StartTs:  r.StartTs,
 		CommitTs: r.CommitTs,
 		Table: &TableName{
-			Schema:      r.TableInfo.GetSchemaName(),
-			Table:       r.TableInfo.GetTableName(),
-			IsPartition: r.TableInfo.IsPartitionTable(),
+			Schema: r.TableInfo.GetSchemaName(),
+			Table:  r.TableInfo.GetTableName(),
 		},
 		Columns:      r.GetColumns(),
 		PreColumns:   r.GetPreColumns(),
@@ -386,7 +384,6 @@ func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
 		r.Table.Table,
 		cols,
 		r.IndexColumns)
-	tableInfo.TableName.IsPartition = r.Table.IsPartition
 	row := &RowChangedEvent{
 		StartTs:  r.StartTs,
 		CommitTs: r.CommitTs,

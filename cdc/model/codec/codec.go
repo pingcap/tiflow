@@ -209,9 +209,8 @@ func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 
 func tableNameFromV1(t *codecv1.TableName) *model.TableName {
 	return &model.TableName{
-		Schema:      t.Schema,
-		Table:       t.Table,
-		IsPartition: t.IsPartition,
+		Schema: t.Schema,
+		Table:  t.Table,
 	}
 }
 

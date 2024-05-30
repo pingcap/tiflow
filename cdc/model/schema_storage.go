@@ -102,9 +102,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		TableInfo: info,
 		SchemaID:  schemaID,
 		TableName: TableName{
-			Schema:      schemaName,
-			Table:       info.Name.O,
-			IsPartition: info.GetPartitionInfo() != nil,
+			Schema: schemaName,
+			Table:  info.Name.O,
 		},
 		hasUniqueColumn:  false,
 		Version:          version,
@@ -354,7 +353,7 @@ func (ti *TableInfo) GetTableNamePtr() *string {
 
 // IsPartitionTable returns whether the table is partition table
 func (ti *TableInfo) IsPartitionTable() bool {
-	return ti.TableName.IsPartition
+	return ti.GetPartitionInfo() != nil
 }
 
 func (ti *TableInfo) String() string {

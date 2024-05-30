@@ -753,12 +753,6 @@ func (z *RedoDDLEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 						err = msgp.WrapError(err, "TableName", "Table")
 						return
 					}
-				case "is-partition":
-					z.TableName.IsPartition, err = dc.ReadBool()
-					if err != nil {
-						err = msgp.WrapError(err, "TableName", "IsPartition")
-						return
-					}
 				default:
 					err = dc.Skip()
 					if err != nil {
@@ -839,9 +833,9 @@ func (z *RedoDDLEvent) EncodeMsg(en *msgp.Writer) (err error) {
 	if err != nil {
 		return
 	}
-	// map header, size 3
+	// map header, size 2
 	// write "db-name"
-	err = en.Append(0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -858,16 +852,6 @@ func (z *RedoDDLEvent) EncodeMsg(en *msgp.Writer) (err error) {
 	err = en.WriteString(z.TableName.Table)
 	if err != nil {
 		err = msgp.WrapError(err, "TableName", "Table")
-		return
-	}
-	// write "is-partition"
-	err = en.Append(0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-	if err != nil {
-		return
-	}
-	err = en.WriteBool(z.TableName.IsPartition)
-	if err != nil {
-		err = msgp.WrapError(err, "TableName", "IsPartition")
 		return
 	}
 	return
@@ -898,16 +882,13 @@ func (z *RedoDDLEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.AppendByte(o, z.Type)
 	// string "table-name"
 	o = append(o, 0xaa, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
-	// map header, size 3
+	// map header, size 2
 	// string "db-name"
-	o = append(o, 0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.TableName.Schema)
 	// string "tbl-name"
 	o = append(o, 0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.TableName.Table)
-	// string "is-partition"
-	o = append(o, 0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-	o = msgp.AppendBool(o, z.TableName.IsPartition)
 	return
 }
 
@@ -1014,12 +995,6 @@ func (z *RedoDDLEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 						err = msgp.WrapError(err, "TableName", "Table")
 						return
 					}
-				case "is-partition":
-					z.TableName.IsPartition, bts, err = msgp.ReadBoolBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "TableName", "IsPartition")
-						return
-					}
 				default:
 					bts, err = msgp.Skip(bts)
 					if err != nil {
@@ -1048,7 +1023,7 @@ func (z *RedoDDLEvent) Msgsize() (s int) {
 	} else {
 		s += 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6 + msgp.StringPrefixSize + len(z.DDL.Query)
 	}
-	s += 5 + msgp.ByteSize + 11 + 1 + 8 + msgp.StringPrefixSize + len(z.TableName.Schema) + 9 + msgp.StringPrefixSize + len(z.TableName.Table) + 13 + msgp.BoolSize
+	s += 5 + msgp.ByteSize + 11 + 1 + 8 + msgp.StringPrefixSize + len(z.TableName.Schema) + 9 + msgp.StringPrefixSize + len(z.TableName.Table)
 	return
 }
 
@@ -1835,12 +1810,6 @@ func (z *RowChangedEventInRedoLog) DecodeMsg(dc *msgp.Reader) (err error) {
 							err = msgp.WrapError(err, "Table", "Table")
 							return
 						}
-					case "is-partition":
-						z.Table.IsPartition, err = dc.ReadBool()
-						if err != nil {
-							err = msgp.WrapError(err, "Table", "IsPartition")
-							return
-						}
 					default:
 						err = dc.Skip()
 						if err != nil {
@@ -1989,9 +1958,9 @@ func (z *RowChangedEventInRedoLog) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	} else {
-		// map header, size 3
+		// map header, size 2
 		// write "db-name"
-		err = en.Append(0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		err = en.Append(0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 		if err != nil {
 			return
 		}
@@ -2008,16 +1977,6 @@ func (z *RowChangedEventInRedoLog) EncodeMsg(en *msgp.Writer) (err error) {
 		err = en.WriteString(z.Table.Table)
 		if err != nil {
 			err = msgp.WrapError(err, "Table", "Table")
-			return
-		}
-		// write "is-partition"
-		err = en.Append(0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-		if err != nil {
-			return
-		}
-		err = en.WriteBool(z.Table.IsPartition)
-		if err != nil {
-			err = msgp.WrapError(err, "Table", "IsPartition")
 			return
 		}
 	}
@@ -2111,16 +2070,13 @@ func (z *RowChangedEventInRedoLog) MarshalMsg(b []byte) (o []byte, err error) {
 	if z.Table == nil {
 		o = msgp.AppendNil(o)
 	} else {
-		// map header, size 3
+		// map header, size 2
 		// string "db-name"
-		o = append(o, 0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		o = append(o, 0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 		o = msgp.AppendString(o, z.Table.Schema)
 		// string "tbl-name"
 		o = append(o, 0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 		o = msgp.AppendString(o, z.Table.Table)
-		// string "is-partition"
-		o = append(o, 0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-		o = msgp.AppendBool(o, z.Table.IsPartition)
 	}
 	// string "columns"
 	o = append(o, 0xa7, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
@@ -2227,12 +2183,6 @@ func (z *RowChangedEventInRedoLog) UnmarshalMsg(bts []byte) (o []byte, err error
 						z.Table.Table, bts, err = msgp.ReadStringBytes(bts)
 						if err != nil {
 							err = msgp.WrapError(err, "Table", "Table")
-							return
-						}
-					case "is-partition":
-						z.Table.IsPartition, bts, err = msgp.ReadBoolBytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "Table", "IsPartition")
 							return
 						}
 					default:
@@ -2354,7 +2304,7 @@ func (z *RowChangedEventInRedoLog) Msgsize() (s int) {
 	if z.Table == nil {
 		s += msgp.NilSize
 	} else {
-		s += 1 + 8 + msgp.StringPrefixSize + len(z.Table.Schema) + 9 + msgp.StringPrefixSize + len(z.Table.Table) + 13 + msgp.BoolSize
+		s += 1 + 8 + msgp.StringPrefixSize + len(z.Table.Schema) + 9 + msgp.StringPrefixSize + len(z.Table.Table)
 	}
 	s += 8 + msgp.ArrayHeaderSize
 	for za0001 := range z.Columns {
@@ -2409,12 +2359,6 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Table")
 				return
 			}
-		case "is-partition":
-			z.IsPartition, err = dc.ReadBool()
-			if err != nil {
-				err = msgp.WrapError(err, "IsPartition")
-				return
-			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -2428,9 +2372,9 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z TableName) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 3
+	// map header, size 2
 	// write "db-name"
-	err = en.Append(0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -2449,32 +2393,19 @@ func (z TableName) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Table")
 		return
 	}
-	// write "is-partition"
-	err = en.Append(0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-	if err != nil {
-		return
-	}
-	err = en.WriteBool(z.IsPartition)
-	if err != nil {
-		err = msgp.WrapError(err, "IsPartition")
-		return
-	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z TableName) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 3
+	// map header, size 2
 	// string "db-name"
-	o = append(o, 0x83, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0x82, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Schema)
 	// string "tbl-name"
 	o = append(o, 0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Table)
-	// string "is-partition"
-	o = append(o, 0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
-	o = msgp.AppendBool(o, z.IsPartition)
 	return
 }
 
@@ -2508,12 +2439,6 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Table")
 				return
 			}
-		case "is-partition":
-			z.IsPartition, bts, err = msgp.ReadBoolBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "IsPartition")
-				return
-			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -2528,7 +2453,7 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z TableName) Msgsize() (s int) {
-	s = 1 + 8 + msgp.StringPrefixSize + len(z.Schema) + 9 + msgp.StringPrefixSize + len(z.Table) + 13 + msgp.BoolSize
+	s = 1 + 8 + msgp.StringPrefixSize + len(z.Schema) + 9 + msgp.StringPrefixSize + len(z.Table)
 	return
 }
 

@@ -132,6 +132,8 @@ type VersionedTableName struct {
 	TableInfoVersion uint64
 
 	PhysicalTableID int64
+
+	IsPartitioned bool
 }
 
 // FilePathGenerator is used to generate data file path and index file path.
@@ -318,7 +320,7 @@ func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date str
 	elems = append(elems, tbl.TableName.Table)
 	elems = append(elems, fmt.Sprintf("%d", f.versionMap[tbl]))
 
-	if f.config.EnablePartitionSeparator && tbl.TableName.IsPartition {
+	if f.config.EnablePartitionSeparator && tbl.IsPartitioned {
 		elems = append(elems, fmt.Sprintf("%d", tbl.PhysicalTableID))
 	}
 
