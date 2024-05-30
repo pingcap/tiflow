@@ -411,12 +411,9 @@ func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.J
 
 func datum2Column(
 	tableInfo *model.TableInfo, datums map[int64]types.Datum, tz *time.Location,
-) ([]*model.ColumnData, []types.Datum, []*timodel.ColumnInfo, error) {
+) ([]*model.ColumnData, []types.Datum, error) {
 	cols := make([]*model.ColumnData, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-
-	// columnInfos should have the same length and order with cols
-	columnInfos := make([]*timodel.ColumnInfo, 0, len(tableInfo.Columns))
 
 	for _, colInfo := range tableInfo.Columns {
 		if !model.IsColCDCVisible(colInfo) {
@@ -440,7 +437,7 @@ func datum2Column(
 			colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo, tz)
 		}
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
@@ -455,19 +452,23 @@ func datum2Column(
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
-		columnInfos[offset] = colInfo
 	}
-	return cols, rawCols, columnInfos, nil
+	return cols, rawCols, nil
 }
 
 func (m *mounter) calculateChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+	tableInfo *model.TableInfo, rawColumns []types.Datum,
 ) (uint32, error) {
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
-	for idx, col := range columnInfos {
+	for _, colInfo := range tableInfo.Columns {
+		if !model.IsColCDCVisible(colInfo) {
+			continue
+		}
+		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		datum := rawColumns[offset]
 		column := rowcodec.ColData{
-			ColumnInfo: col,
-			Datum:      &rawColumns[idx],
+			ColumnInfo: colInfo,
+			Datum:      &datum,
 		}
 		columns = append(columns, column)
 	}
@@ -490,7 +491,7 @@ func (m *mounter) calculateChecksum(
 // return error when calculate the checksum failed.
 // return false if the checksum is not matched
 func (m *mounter) verifyChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
+	tableInfo *model.TableInfo, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
@@ -510,7 +511,7 @@ func (m *mounter) verifyChecksum(
 		return 0, true, nil
 	}
 
-	checksum, err := m.calculateChecksum(columnInfos, rawColumns)
+	checksum, err := m.calculateChecksum(tableInfo, rawColumns)
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, false, err
@@ -547,10 +548,9 @@ func (m *mounter) verifyChecksum(
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
-		rawRow      model.RowChangedDatums
-		columnInfos []*timodel.ColumnInfo
-		matched     bool
-		err         error
+		rawRow  model.RowChangedDatums
+		matched bool
+		err     error
 
 		checksum *integrity.Checksum
 
@@ -578,12 +578,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow, m.tz)
+		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.tz)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, preRawCols, true)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
@@ -610,12 +610,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		currentChecksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, m.tz)
+		cols, rawCols, err = datum2Column(tableInfo, row.Row, m.tz)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, rawCols, false)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
