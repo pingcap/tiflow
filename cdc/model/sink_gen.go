@@ -1797,6 +1797,12 @@ func (z *RowChangedEventInRedoLog) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "CommitTs")
 				return
 			}
+		case "table-id":
+			z.TableID, err = dc.ReadInt64()
+			if err != nil {
+				err = msgp.WrapError(err, "TableID")
+				return
+			}
 		case "table":
 			if dc.IsNil() {
 				err = dc.ReadNil()
@@ -1957,9 +1963,9 @@ func (z *RowChangedEventInRedoLog) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEventInRedoLog) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 6
+	// map header, size 7
 	// write "start-ts"
-	err = en.Append(0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	err = en.Append(0x87, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -1976,6 +1982,16 @@ func (z *RowChangedEventInRedoLog) EncodeMsg(en *msgp.Writer) (err error) {
 	err = en.WriteUint64(z.CommitTs)
 	if err != nil {
 		err = msgp.WrapError(err, "CommitTs")
+		return
+	}
+	// write "table-id"
+	err = en.Append(0xa8, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x64)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt64(z.TableID)
+	if err != nil {
+		err = msgp.WrapError(err, "TableID")
 		return
 	}
 	// write "table"
@@ -2099,13 +2115,16 @@ func (z *RowChangedEventInRedoLog) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *RowChangedEventInRedoLog) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 6
+	// map header, size 7
 	// string "start-ts"
-	o = append(o, 0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = append(o, 0x87, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
 	// string "commit-ts"
 	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.CommitTs)
+	// string "table-id"
+	o = append(o, 0xa8, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x64)
+	o = msgp.AppendInt64(o, z.TableID)
 	// string "table"
 	o = append(o, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
 	if z.Table == nil {
@@ -2190,6 +2209,12 @@ func (z *RowChangedEventInRedoLog) UnmarshalMsg(bts []byte) (o []byte, err error
 			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "CommitTs")
+				return
+			}
+		case "table-id":
+			z.TableID, bts, err = msgp.ReadInt64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "TableID")
 				return
 			}
 		case "table":
@@ -2350,7 +2375,7 @@ func (z *RowChangedEventInRedoLog) UnmarshalMsg(bts []byte) (o []byte, err error
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *RowChangedEventInRedoLog) Msgsize() (s int) {
-	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6
+	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 9 + msgp.Int64Size + 6
 	if z.Table == nil {
 		s += msgp.NilSize
 	} else {
