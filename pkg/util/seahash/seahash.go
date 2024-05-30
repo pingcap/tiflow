@@ -87,7 +87,7 @@ func (h *Hasher) Write(b []byte) (nn int, err error) {
 
 // Sum calculates the checksum bytes.
 func (h *Hasher) Sum(b []byte) []byte {
-	_ = h.Write(b)
+	_, _ = h.Write(b)
 	r := make([]byte, Size)
 	binary.LittleEndian.PutUint64(r, h.Sum64())
 	return r
@@ -114,7 +114,7 @@ func Sum(b []byte) []byte {
 func Sum64(b []byte) uint64 {
 	var h Hasher
 	h.Reset()
-	_ = h.Write(b)
+	_, _ = h.Write(b)
 	return h.Sum64()
 }
 
