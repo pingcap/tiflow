@@ -74,7 +74,6 @@ func TestV1toV2(t *testing.T) {
 				Table: &model.TableName{
 					Schema:      "schema",
 					Table:       "table",
-					TableID:     1,
 					IsPartition: false,
 				},
 				Columns: []*model.Column{
@@ -138,7 +137,7 @@ func TestRowRedoConvert(t *testing.T) {
 	row := &model.RowChangedEventInRedoLog{
 		StartTs:  100,
 		CommitTs: 120,
-		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
+		Table:    &model.TableName{Schema: "test", Table: "table1"},
 		PreColumns: []*model.Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
@@ -198,7 +197,7 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 	row := &model.RowChangedEventInRedoLog{
 		StartTs:  100,
 		CommitTs: 120,
-		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
+		Table:    &model.TableName{Schema: "test", Table: "table1"},
 		PreColumns: []*model.Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,

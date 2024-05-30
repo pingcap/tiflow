@@ -61,7 +61,7 @@ func newFakeDDLEvent(
 	commitTs uint64,
 ) *model.DDLEvent {
 	info := &model.TableInfo{
-		TableName: model.TableName{Table: tableName, TableID: tableID},
+		TableName: model.TableName{Table: tableName},
 	}
 	info.TableInfo = &timodel.TableInfo{
 		ID:   tableID,
@@ -96,7 +96,7 @@ func TestBarriers(t *testing.T) {
 	dm := createDDLManagerForTest(t)
 
 	tableID1 := int64(1)
-	tableName1 := model.TableName{Table: "test_1", TableID: tableID1}
+	tableName1 := model.TableName{Table: "test_1"}
 	// this ddl commitTs will be minTableBarrierTs
 	dm.justSentDDL = newFakeDDLEvent(tableID1,
 		"test_1", timodel.ActionDropColumn, 1)
@@ -104,7 +104,7 @@ func TestBarriers(t *testing.T) {
 		newFakeDDLEvent(tableID1, tableName1.Table, timodel.ActionAddColumn, 2))
 
 	tableID2 := int64(2)
-	tableName2 := model.TableName{Table: "test_2", TableID: tableID2}
+	tableName2 := model.TableName{Table: "test_2"}
 	dm.pendingDDLs[tableName2] = append(dm.pendingDDLs[tableName2],
 		// this ddl commitTs will become globalBarrierTs
 		newFakeDDLEvent(tableID2, tableName2.Table, timodel.ActionCreateTable, 4))
@@ -131,7 +131,7 @@ func TestBarriers(t *testing.T) {
 	dm.ddlResolvedTs = 1024
 	for i := 0; i < 512; i++ {
 		tableID := int64(i)
-		tableName := model.TableName{Table: fmt.Sprintf("test_%d", i), TableID: tableID}
+		tableName := model.TableName{Table: fmt.Sprintf("test_%d", i)}
 		dm.pendingDDLs[tableName] = append(dm.pendingDDLs[tableName],
 			newFakeDDLEvent(tableID, tableName.Table, timodel.ActionAddColumn, uint64(i)))
 	}

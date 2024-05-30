@@ -812,7 +812,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			event, err := dec.NextDDLEvent()
 
 			require.NoError(t, err)
-			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
+			require.Equal(t, createTableDDLEvent.TableInfo.ID, event.TableInfo.ID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
 
 			// because we don't we don't set startTs in the encoded message,
@@ -864,7 +864,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
-			require.Equal(t, renameTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
+			require.Equal(t, renameTableDDLEvent.TableInfo.ID, event.TableInfo.ID)
 			require.Equal(t, renameTableDDLEvent.CommitTs, event.CommitTs)
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
@@ -1192,7 +1192,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
-			require.Equal(t, ddlEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
+			require.Equal(t, ddlEvent.TableInfo.ID, event.TableInfo.ID)
 			// Bootstrap event doesn't have query
 			require.Equal(t, "", event.Query)
 			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))

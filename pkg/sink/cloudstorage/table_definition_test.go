@@ -68,9 +68,8 @@ func generateTableDef() (TableDefinition, *model.TableInfo) {
 		TableInfo: &timodel.TableInfo{Columns: columns},
 		Version:   100,
 		TableName: model.TableName{
-			Schema:  "schema1",
-			Table:   "table1",
-			TableID: 20,
+			Schema: "schema1",
+			Table:  "table1",
 		},
 	}
 

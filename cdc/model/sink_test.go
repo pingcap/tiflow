@@ -75,15 +75,13 @@ func TestFlagValue(t *testing.T) {
 func TestTableNameFuncs(t *testing.T) {
 	t.Parallel()
 	tbl := &TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 1071,
+		Schema: "test",
+		Table:  "t1",
 	}
 	require.Equal(t, "test.t1", tbl.String())
 	require.Equal(t, "`test`.`t1`", tbl.QuoteString())
 	require.Equal(t, "test", tbl.GetSchema())
 	require.Equal(t, "t1", tbl.GetTable())
-	require.Equal(t, int64(1071), tbl.GetTableID())
 }
 
 func TestRowChangedEventFuncs(t *testing.T) {
@@ -163,9 +161,8 @@ func TestDDLEventFromJob(t *testing.T) {
 	}
 	preTableInfo := &TableInfo{
 		TableName: TableName{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: 49,
+			Schema: "test",
+			Table:  "t1",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   49,
@@ -179,7 +176,7 @@ func TestDDLEventFromJob(t *testing.T) {
 	event := &DDLEvent{}
 	event.FromJob(job, preTableInfo, tableInfo)
 	require.Equal(t, uint64(420536581131337731), event.StartTs)
-	require.Equal(t, int64(49), event.TableInfo.TableName.TableID)
+	require.Equal(t, int64(49), event.TableInfo.ID)
 	require.Equal(t, 1, len(event.PreTableInfo.TableInfo.Columns))
 
 	event = &DDLEvent{}
@@ -230,9 +227,8 @@ func TestRenameTables(t *testing.T) {
 
 	preTableInfo := &TableInfo{
 		TableName: TableName{
-			Schema:  "test1",
-			Table:   "t1",
-			TableID: 67,
+			Schema: "test1",
+			Table:  "t1",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   67,
@@ -250,9 +246,8 @@ func TestRenameTables(t *testing.T) {
 
 	tableInfo := &TableInfo{
 		TableName: TableName{
-			Schema:  "test1",
-			Table:   "t10",
-			TableID: 67,
+			Schema: "test1",
+			Table:  "t10",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   67,
@@ -270,10 +265,10 @@ func TestRenameTables(t *testing.T) {
 
 	event := &DDLEvent{}
 	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
-	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.PreTableInfo.ID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t1")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
-	require.Equal(t, event.TableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.TableInfo.ID, int64(67))
 	require.Equal(t, event.TableInfo.TableName.Table, "t10")
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t1` TO `test1`.`t10`")
@@ -281,9 +276,8 @@ func TestRenameTables(t *testing.T) {
 
 	preTableInfo = &TableInfo{
 		TableName: TableName{
-			Schema:  "test1",
-			Table:   "t2",
-			TableID: 69,
+			Schema: "test1",
+			Table:  "t2",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   69,
@@ -301,9 +295,8 @@ func TestRenameTables(t *testing.T) {
 
 	tableInfo = &TableInfo{
 		TableName: TableName{
-			Schema:  "test1",
-			Table:   "t20",
-			TableID: 69,
+			Schema: "test1",
+			Table:  "t20",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   69,
@@ -321,10 +314,10 @@ func TestRenameTables(t *testing.T) {
 
 	event = &DDLEvent{}
 	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
-	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.PreTableInfo.ID, int64(69))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
-	require.Equal(t, event.TableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.TableInfo.ID, int64(69))
 	require.Equal(t, event.TableInfo.TableName.Table, "t20")
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t2` TO `test1`.`t20`")
@@ -349,9 +342,8 @@ func TestExchangeTablePartition(t *testing.T) {
 	// source table
 	preTableInfo := &TableInfo{
 		TableName: TableName{
-			Schema:  "test2",
-			Table:   "t2",
-			TableID: 67,
+			Schema: "test2",
+			Table:  "t2",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   67,
@@ -370,9 +362,8 @@ func TestExchangeTablePartition(t *testing.T) {
 	// target table
 	tableInfo := &TableInfo{
 		TableName: TableName{
-			Schema:  "test1",
-			Table:   "t1",
-			TableID: 69,
+			Schema: "test1",
+			Table:  "t1",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   69,
@@ -390,10 +381,10 @@ func TestExchangeTablePartition(t *testing.T) {
 
 	event := &DDLEvent{}
 	event.FromJob(job, preTableInfo, tableInfo)
-	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.PreTableInfo.ID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
-	require.Equal(t, event.TableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.TableInfo.ID, int64(69))
 	require.Equal(t, event.TableInfo.TableName.Table, "t1")
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2`", event.Query)
@@ -654,7 +645,7 @@ func TestToRedoLog(t *testing.T) {
 	eventInRedoLog := event.ToRedoLog()
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
 	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)
-	require.Equal(t, event.GetTableID(), eventInRedoLog.RedoRow.Row.Table.TableID)
+	require.Equal(t, event.GetTableID(), eventInRedoLog.RedoRow.Row.TableID)
 	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
 	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
 	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, tableInfo))

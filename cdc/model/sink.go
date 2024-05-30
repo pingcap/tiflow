@@ -366,9 +366,9 @@ type RowChangedEventInRedoLog struct {
 	StartTs  uint64 `msg:"start-ts"`
 	CommitTs uint64 `msg:"commit-ts"`
 
-	// Table contains the table name and table ID.
 	// NOTICE: We store the physical table ID here, not the logical table ID.
-	Table *TableName `msg:"table"`
+	TableID int64      `msg:"table-id"`
+	Table   *TableName `msg:"table"`
 
 	Columns      []*Column `msg:"columns"`
 	PreColumns   []*Column `msg:"pre-columns"`

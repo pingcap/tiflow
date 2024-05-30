@@ -89,7 +89,6 @@ func getTestRows() []*model.RowChangedEvent {
 		TableName: model.TableName{
 			Schema:      "test",
 			Table:       "t1",
-			TableID:     1,
 			IsPartition: false,
 		},
 	}

@@ -89,9 +89,8 @@ func TestCreate(t *testing.T) {
 	}
 	preTableInfo := &model.TableInfo{
 		TableName: model.TableName{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: 49,
+			Schema: "test",
+			Table:  "t1",
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   49,
