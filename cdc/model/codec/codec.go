@@ -211,7 +211,6 @@ func tableNameFromV1(t *codecv1.TableName) *model.TableName {
 	return &model.TableName{
 		Schema:      t.Schema,
 		Table:       t.Table,
-		TableID:     t.TableID,
 		IsPartition: t.IsPartition,
 	}
 }

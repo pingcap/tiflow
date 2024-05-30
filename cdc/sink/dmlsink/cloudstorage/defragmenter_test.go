@@ -82,11 +82,11 @@ func TestDeframenter(t *testing.T) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
 				versionedTable: cloudstorage.VersionedTableName{
-					TableNameWithPhysicTableID: model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
+					TableName: model.TableName{
+						Schema: "test",
+						Table:  "table1",
 					},
+					PhysicalTableID: 100,
 				},
 				seqNumber: seq,
 				event: &dmlsink.TxnCallbackableEvent{

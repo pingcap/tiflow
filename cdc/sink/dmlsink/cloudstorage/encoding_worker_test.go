@@ -77,11 +77,11 @@ func TestEncodeEvents(t *testing.T) {
 
 	err := encodingWorker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTableName{
-			TableNameWithPhysicTableID: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 100,
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "table1",
 			},
+			PhysicalTableID: 100,
 		},
 		seqNumber: 1,
 		event: &dmlsink.TxnCallbackableEvent{
@@ -126,9 +126,8 @@ func TestEncodingWorkerRun(t *testing.T) {
 	})
 
 	table := model.TableName{
-		Schema:  "test",
-		Table:   "table1",
-		TableID: 100,
+		Schema: "test",
+		Table:  "table1",
 	}
 	tidbTableInfo := &timodel.TableInfo{
 		ID:   100,
@@ -156,7 +155,8 @@ func TestEncodingWorkerRun(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
 			versionedTable: cloudstorage.VersionedTableName{
-				TableNameWithPhysicTableID: table,
+				TableName:       table,
+				PhysicalTableID: 100,
 			},
 			seqNumber: uint64(i + 1),
 			event: &dmlsink.TxnCallbackableEvent{
