@@ -125,7 +125,8 @@ func rowChangeToMsg(
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
 	if e.TableInfo.IsPartitionTable() {
-		partition = &e.PhysicalTableID
+		tableID := e.GetTableID()
+		partition = &tableID
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,

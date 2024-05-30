@@ -526,7 +526,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 			}
 			var partitionID int64
 			if row.TableInfo.IsPartitionTable() {
-				partitionID = row.PhysicalTableID
+				partitionID = row.GetTableID()
 			}
 			// use schema, table and tableID to identify a table
 			tableID := c.fakeTableIDGenerator.
