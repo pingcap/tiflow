@@ -234,13 +234,11 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	return row, err
 }
 
-var (
-	datumsPool = sync.Pool{
-		New: func() any {
-			return make(map[int64]types.Datum)
-		},
-	}
-)
+var datumsPool = sync.Pool{
+	New: func() any {
+		return make(map[int64]types.Datum)
+	},
+}
 
 func requestDatums() map[int64]types.Datum {
 	return datumsPool.Get().(map[int64]types.Datum)
