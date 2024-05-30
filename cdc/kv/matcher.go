@@ -43,16 +43,23 @@ func newMatcher() *matcher {
 
 func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	key := newMatchKey(row)
-	// tikv may send a fake prewrite event with empty value caused by txn heartbeat.
-	// here we need to avoid the fake prewrite event overwrite the prewrite value.
+	if old, exist := m.unmatchedValue[key]; exist {
+		// tikv may send a fake prewrite event with empty value caused by txn heartbeat.
+		// here we need to avoid the fake prewrite event overwrite the prewrite value.
 
-	// when the old-value is disabled, the value of the fake prewrite event is empty.
-	// when the old-value is enabled, the value of the fake prewrite event is also empty,
-	// but the old value of the fake prewrite event is not empty.
-	// We can distinguish fake prewrite events by whether the value is empty,
-	// no matter the old-value is enabled or disabled
-	if _, exist := m.unmatchedValue[key]; exist && len(row.GetValue()) == 0 {
-		return
+		// when the old-value is disabled, the value of the fake prewrite event is empty.
+		// when the old-value is enabled, the value of the fake prewrite event is also empty,
+		// but the old value of the fake prewrite event is not empty.
+		// We can distinguish fake prewrite events by whether the value is empty,
+		// no matter the old-value is enabled or disabled
+		if len(row.GetValue()) == 0 {
+			return
+		}
+
+		// For pipelined-DML transactions, the row with latest Generation will be kept.
+		if row.Generation < old.Generation {
+			return
+		}
 	}
 	m.unmatchedValue[key] = row
 }
@@ -62,10 +69,13 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 func (m *matcher) matchRow(row *cdcpb.Event_Row, initialized bool) bool {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
 		// TiKV may send a fake prewrite event with empty value caused by txn heartbeat.
-		//
 		// We need to skip match if the region is not initialized,
 		// as prewrite events may be sent out of order.
 		if !initialized && len(value.GetValue()) == 0 {
+			return false
+		}
+		// Pipelined-DML transactions can only be matched after initialized.
+		if !initialized && value.Generation > 0 {
 			return false
 		}
 		row.Value = value.GetValue()
