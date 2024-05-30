@@ -531,7 +531,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 			// use schema, table and tableID to identify a table
 			tableID := c.fakeTableIDGenerator.
 				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-			row.TableInfo.TableName.TableID = tableID
 
 			group, ok := c.eventGroups[tableID]
 			if !ok {
