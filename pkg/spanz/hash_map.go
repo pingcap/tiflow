@@ -16,8 +16,8 @@ package spanz
 import (
 	"encoding/binary"
 
-	"github.com/dim13/seahash"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/util/seahash"
 )
 
 // HashMap is a specialized hash map that map a Span to a value.
@@ -83,5 +83,5 @@ func HashTableSpan(span tablepb.Span, slots int) int {
 	b := make([]byte, 8+len(span.StartKey))
 	binary.LittleEndian.PutUint64(b[0:8], uint64(span.TableID))
 	copy(b[8:], span.StartKey)
-	return int(seahash.Sum(b) % uint64(slots))
+	return int(seahash.Sum64(b) % uint64(slots))
 }
