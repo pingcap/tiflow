@@ -40,7 +40,7 @@ func TestMetricsCollector(t *testing.T) {
 		{[]string{changefeedID.Namespace, changefeedID.ID}, pkafka.BatchMessageCountGauge},
 		{[]string{changefeedID.Namespace, changefeedID.ID}, pkafka.BatchSizeGauge},
 		{[]string{changefeedID.Namespace, changefeedID.ID, "v2"}, pkafka.RequestRateGauge},
-		{[]string{changefeedID.Namespace, changefeedID.ID, "v2"}, pkafka.RequestLatencyGauge},
+		{[]string{changefeedID.Namespace, changefeedID.ID, "v2", "avg"}, pkafka.RequestLatencyGauge},
 		{[]string{changefeedID.Namespace, changefeedID.ID, "v2"}, pkafka.OutgoingByteRateGauge},
 		{[]string{changefeedID.Namespace, changefeedID.ID}, pkafka.ClientRetryGauge},
 		{[]string{changefeedID.Namespace, changefeedID.ID}, pkafka.ClientErrorGauge},

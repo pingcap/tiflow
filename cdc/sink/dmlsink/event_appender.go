@@ -115,7 +115,7 @@ func (t *TxnEventAppender) createSingleTableTxn(
 	txn := &model.SingleTableTxn{
 		StartTs:         row.StartTs,
 		CommitTs:        row.CommitTs,
-		PhysicalTableID: row.PhysicalTableID,
+		PhysicalTableID: row.GetTableID(),
 		TableInfo:       row.TableInfo,
 	}
 	if row.TableInfo != nil {

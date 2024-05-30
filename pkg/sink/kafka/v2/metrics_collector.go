@@ -81,7 +81,7 @@ func (m *MetricsCollector) collectMetrics() {
 	// since kafka-go does not support per broker metrics, so we add `v2` as the broker ID.
 	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(float64(statistics.Writes / 5))
-	pkafka.RequestLatencyGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
+	pkafka.RequestLatencyGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2", "avg").
 		Set(statistics.WriteTime.Avg.Seconds())
 	pkafka.OutgoingByteRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(float64(statistics.Bytes / 5))
@@ -103,7 +103,7 @@ func (m *MetricsCollector) cleanupMetrics() {
 	pkafka.RequestRateGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
 	pkafka.RequestLatencyGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2", "avg")
 	pkafka.OutgoingByteRateGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
 
