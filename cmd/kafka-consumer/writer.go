@@ -276,7 +276,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		messageType model.MessageType
 	)
 	for {
-		messageType, hasNext, err := decoder.HasNext()
+		mt, hasNext, err := decoder.HasNext()
 		if err != nil {
 			log.Panic("decode message key failed", zap.Error(err))
 		}
@@ -290,6 +290,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int("max-message-bytes", w.option.maxMessageBytes),
 				zap.Int("receivedBytes", len(key)+len(value)))
 		}
+		messageType = mt
 		switch messageType {
 		case model.MessageTypeDDL:
 			// for some protocol, DDL would be dispatched to all partitions,
