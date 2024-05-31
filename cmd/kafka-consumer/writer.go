@@ -208,10 +208,17 @@ func (w *writer) getMinWatermark() uint64 {
 	return result
 }
 
+// partition progress could be executed at the same time
 func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
+	var wg sync.WaitGroup
 	for _, p := range w.progresses {
-		fn(p)
+		wg.Add(1)
+		go func(p *partitionProgress) {
+			defer wg.Done()
+			fn(p)
+		}(p)
 	}
+	wg.Wait()
 }
 
 // Write will synchronously write data downstream

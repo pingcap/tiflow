@@ -83,9 +83,8 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 		log.Panic("no topic provided for the consumer")
 	}
 	configMap := &kafka.ConfigMap{
-		"bootstrap.servers":  strings.Join(o.address, ","),
-		"group.id":           o.groupID,
-		"session.timeout.ms": 6000,
+		"bootstrap.servers": strings.Join(o.address, ","),
+		"group.id":          o.groupID,
 		// Start reading from the first message of each assigned
 		// partition if there are no previously committed offsets
 		// for this group.
