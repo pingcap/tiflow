@@ -51,7 +51,7 @@ func NewSchedulerManager(
 	}
 
 	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(
-		cfg.AddTableBatchSize, changefeedID)
+		cfg.GetAddTableBatchSize(), cfg.GetMaxTableCount(), changefeedID)
 	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(
 		cfg.MaxTaskConcurrency, changefeedID)
 	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(

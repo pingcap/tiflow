@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
@@ -33,19 +34,42 @@ var _ scheduler = &basicScheduler{}
 // 2. DDL CREATE/DROP/TRUNCATE TABLE
 // 3. Capture offline.
 type basicScheduler struct {
-	batchSize    int
-	changefeedID model.ChangeFeedID
+	batchSize     int
+	maxTableCount int
+	changefeedID  model.ChangeFeedID
 }
 
-func newBasicScheduler(batchSize int, changefeed model.ChangeFeedID) *basicScheduler {
+func newBasicScheduler(batchSize int, maxTableCount int, changefeed model.ChangeFeedID) *basicScheduler {
+	log.Info("schedulerv3: create basic scheduler",
+		zap.String("namespace", changefeed.Namespace),
+		zap.String("changefeed", changefeed.ID),
+		zap.Int("batchSize", batchSize),
+		zap.Int("maxTableCount", maxTableCount))
 	return &basicScheduler{
-		batchSize:    batchSize,
-		changefeedID: changefeed,
+		batchSize:     batchSize,
+		maxTableCount: maxTableCount,
+		changefeedID:  changefeed,
 	}
 }
 
 func (b *basicScheduler) Name() string {
 	return "basic-scheduler"
+}
+
+func (b *basicScheduler) getOrAdjustBatchSize(tableCount int) int {
+	if b.batchSize != 0 {
+		return b.batchSize
+	}
+
+	// Adjust the batch size by the number of tables.
+	batch := tableCount / 10
+	if batch < config.MinAdjustedAddTableBatchSize {
+		batch = config.MinAdjustedAddTableBatchSize
+	}
+	if batch > config.MaxAdjustedAddTableBatchSize {
+		batch = config.MaxAdjustedAddTableBatchSize
+	}
+	return batch
 }
 
 func (b *basicScheduler) Schedule(
@@ -58,8 +82,9 @@ func (b *basicScheduler) Schedule(
 	tablesLenEqual := len(currentSpans) == replications.Len()
 	tablesAllFind := true
 	newSpans := make([]tablepb.Span, 0)
+	batchSize := b.getOrAdjustBatchSize(len(currentSpans))
 	for _, span := range currentSpans {
-		if len(newSpans) >= b.batchSize {
+		if len(newSpans) >= batchSize {
 			break
 		}
 		rep, ok := replications.Get(span)
@@ -81,6 +106,15 @@ func (b *basicScheduler) Schedule(
 		for captureID, status := range captures {
 			if status.State == member.CaptureStateStopping {
 				log.Warn("schedulerv3: capture is stopping, "+
+					"skip the capture when add new table",
+					zap.String("namespace", b.changefeedID.Namespace),
+					zap.String("changefeed", b.changefeedID.ID),
+					zap.Any("captureStatus", status))
+				continue
+			}
+			// limit the maxTableCount for each capture to avoid unbalance.
+			if len(status.Tables) >= b.maxTableCount {
+				log.Warn("schedulerv3: capture has too many tables, "+
 					"skip the capture when add new table",
 					zap.String("namespace", b.changefeedID.Namespace),
 					zap.String("changefeed", b.changefeedID.ID),

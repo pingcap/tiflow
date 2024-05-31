@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func TestSchedulerBasic(t *testing.T) {
 	// Initial table dispatch.
 	// AddTable only
 	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
-	b := newBasicScheduler(2, model.ChangeFeedID{})
+	b := newBasicScheduler(2, config.DefaultMaxTableCount, model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
 	captures["a"].State = member.CaptureStateStopping
@@ -224,7 +225,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		}
 		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 		name = fmt.Sprintf("AddTable %d", total)
-		sched = newBasicScheduler(50, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, config.DefaultMaxTableCount, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -251,7 +252,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 				})
 		}
 		name = fmt.Sprintf("RemoveTable %d", total)
-		sched = newBasicScheduler(50, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, config.DefaultMaxTableCount, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -281,7 +282,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 				})
 		}
 		name = fmt.Sprintf("AddRemoveTable %d", total)
-		sched = newBasicScheduler(50, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, config.DefaultMaxTableCount, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }

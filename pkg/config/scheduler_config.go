@@ -15,13 +15,38 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+)
+
+const (
+	// DefaultAddTableBatchSize is set to 0, which means that AddTableBatchSize
+	// could be adjusted by scheduler based on statistics information.
+	DefaultAddTableBatchSize = 0
+	// MinAdjustedAddTableBatchSize is the minimum batch size of adding tables when adjusted.
+	MinAdjustedAddTableBatchSize = 50
+	// MaxAdjustedAddTableBatchSize is the maximum batch size of adding tables when adjusted.
+	MaxAdjustedAddTableBatchSize = 1000
+	// DefaultMaxTableCount is the default maximum number of tables that a capture can be scheduled.
+	// TODO(CharlesCheung): find a more reasonable value.
+	DefaultMaxTableCount = 30000
 )
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 type ChangefeedSchedulerConfig struct {
+	// AddTableBatchSize is the batch size of adding tables on each tick,
+	// used by the `BasicScheduler`.
+	// When the new owner in power, other captures may not online yet, there might have hundreds of
+	// tables need to be dispatched, add tables in a batch way to prevent suddenly resource usage
+	// spikes, also wait for other captures join the cluster
+	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
+	// oom caused by all tables dispatched to only one capture.
+	AddTableBatchSize int `toml:"add-table-batch-size" json:"add-table-batch-size"`
+	// MaxTableCount is the maximum number of tables that a capture can be scheduled.
+	MaxTableCount int `toml:"max-table-count" json:"max-table-count"`
 	// EnableTableAcrossNodes set true to split one table to multiple spans and
 	// distribute to multiple TiCDC nodes.
 	EnableTableAcrossNodes bool `toml:"enable-table-across-nodes" json:"enable-table-across-nodes"`
@@ -44,6 +69,9 @@ func (c *ChangefeedSchedulerConfig) Validate() error {
 	if c.WriteKeyThreshold < 0 {
 		return errors.New("write-key-threshold must be larger than 0")
 	}
+	if c.AddTableBatchSize < 0 {
+		return errors.New("add-table-batch-size must not be negative")
+	}
 	return nil
 }
 
@@ -57,13 +85,7 @@ type SchedulerConfig struct {
 	MaxTaskConcurrency int `toml:"max-task-concurrency" json:"max-task-concurrency"`
 	// CheckBalanceInterval the interval of balance tables between each capture.
 	CheckBalanceInterval TomlDuration `toml:"check-balance-interval" json:"check-balance-interval"`
-	// AddTableBatchSize is the batch size of adding tables on each tick,
-	// used by the `BasicScheduler`.
-	// When the new owner in power, other captures may not online yet, there might have hundreds of
-	// tables need to be dispatched, add tables in a batch way to prevent suddenly resource usage
-	// spikes, also wait for other captures join the cluster
-	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
-	// oom caused by all tables dispatched to only one capture.
+	// Deprecated. Use `ChangefeedSettings.AddTableBatchSize` instead.
 	AddTableBatchSize int `toml:"add-table-batch-size" json:"add-table-batch-size"`
 
 	// ChangefeedSettings is setting by changefeed.
@@ -80,7 +102,8 @@ func NewDefaultSchedulerConfig() *SchedulerConfig {
 		MaxTaskConcurrency: 10,
 		// TODO: no need to check balance each minute, relax the interval.
 		CheckBalanceInterval: TomlDuration(time.Minute),
-		AddTableBatchSize:    50,
+		// Disabled by default since it has been replaced by `ChangefeedSettings.AddTableBatchSize`.
+		AddTableBatchSize: DefaultAddTableBatchSize,
 	}
 }
 
@@ -102,9 +125,30 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"check-balance-interval must be larger than 1s")
 	}
-	if c.AddTableBatchSize <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
-			"add-table-batch-size must be large than 0")
+	if c.AddTableBatchSize != 0 {
+		log.Warn("debug.scheduler.add-table-batch-size is deprecated, use changefeed configuration instead")
+		if c.AddTableBatchSize < 0 {
+			return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+				fmt.Sprintf("add-table-batch-size must not be negative: %d", c.AddTableBatchSize))
+		}
 	}
 	return nil
+}
+
+// GetAddTableBatchSize is used to keep backward compatibility. And c.ChangefeedSettings.AddTableBatchSize
+// is take procedure over c.AddTableBatchSize, since the latter is deprecated.
+func (c *SchedulerConfig) GetAddTableBatchSize() int {
+	batch := c.ChangefeedSettings.AddTableBatchSize
+	if batch == 0 {
+		batch = c.AddTableBatchSize
+	}
+	return batch
+}
+
+// GetMaxTableCount is used to keep backward compatibility.
+func (c *SchedulerConfig) GetMaxTableCount() int {
+	if c.ChangefeedSettings.MaxTableCount <= 0 {
+		return DefaultMaxTableCount
+	}
+	return c.ChangefeedSettings.MaxTableCount
 }
