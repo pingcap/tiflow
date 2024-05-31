@@ -318,7 +318,7 @@ func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 	err := row.Scan(&tidbVer)
 	if err != nil {
 		log.Error("check tidb version error", zap.Error(err))
-		return false, errors.Trace(err)
+		return false, nil
 	}
 	return true, nil
 }
