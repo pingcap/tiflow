@@ -310,7 +310,7 @@ func (ra *RedoApplier) applyRow(
 	}
 	ra.pendingQuota -= rowSize
 
-	tableID := row.PhysicalTableID
+	tableID := row.GetTableID()
 	if _, ok := ra.tableSinks[tableID]; !ok {
 		tableSink := ra.sinkFactory.CreateTableSink(
 			model.DefaultChangeFeedID(applierChangefeed),
