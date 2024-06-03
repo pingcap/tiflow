@@ -45,9 +45,9 @@ type PullerSplitUpdateMode int32
 
 // PullerSplitUpdateMode constants.
 const (
-	PullerSplitUpdateMode_None    PullerSplitUpdateMode = 0
-	PullerSplitUpdateMode_AtStart PullerSplitUpdateMode = 1
-	PullerSplitUpdateMode_Always  PullerSplitUpdateMode = 2
+	PullerSplitUpdateModeNone    PullerSplitUpdateMode = 0
+	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
 )
 
 // SourceManager is the manager of the source engine and puller.
@@ -112,9 +112,12 @@ func shouldSplitUpdateKVEntry(
 	raw *model.RawKVEntry,
 	thresholdTs model.Ts,
 ) bool {
-	if splitUpdateMode == PullerSplitUpdateMode_None {
+	if !raw.IsUpdate() {
+		log.Panic("Should only check update entry")
+	}
+	if splitUpdateMode == PullerSplitUpdateModeNone {
 		return false
-	} else if splitUpdateMode == PullerSplitUpdateMode_AtStart {
+	} else if splitUpdateMode == PullerSplitUpdateModeAtStart {
 		return isOldUpdateKVEntry(raw, thresholdTs)
 	} else {
 		return true
@@ -170,7 +173,7 @@ func newSourceManager(
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			if shouldSplitUpdateKVEntry(splitUpdateMode, raw, mgr.thresholdTs) {
+			if raw.IsUpdate() && shouldSplitUpdateKVEntry(splitUpdateMode, raw, mgr.thresholdTs) {
 				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
 				if err != nil {
 					return err
