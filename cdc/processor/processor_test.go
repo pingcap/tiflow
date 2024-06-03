@@ -815,22 +815,22 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 		{
 			sinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 			config:  nil,
-			mode:    sourcemanager.PullerSplitUpdateMode_None,
+			mode:    sourcemanager.PullerSplitUpdateModeNone,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/",
 			config:  nil,
-			mode:    sourcemanager.PullerSplitUpdateMode_AtStart,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
 			config:  nil,
-			mode:    sourcemanager.PullerSplitUpdateMode_Always,
+			mode:    sourcemanager.PullerSplitUpdateModeAlways,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
 			config:  nil,
-			mode:    sourcemanager.PullerSplitUpdateMode_AtStart,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/",
@@ -839,7 +839,7 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 					SafeMode: util.AddressOf(true),
 				},
 			},
-			mode: sourcemanager.PullerSplitUpdateMode_Always,
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/",
@@ -848,7 +848,7 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 					SafeMode: util.AddressOf(false),
 				},
 			},
-			mode: sourcemanager.PullerSplitUpdateMode_AtStart,
+			mode: sourcemanager.PullerSplitUpdateModeAtStart,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
@@ -857,7 +857,7 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 					SafeMode: util.AddressOf(false),
 				},
 			},
-			mode: sourcemanager.PullerSplitUpdateMode_Always,
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
@@ -866,7 +866,7 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 					SafeMode: util.AddressOf(true),
 				},
 			},
-			mode: sourcemanager.PullerSplitUpdateMode_Always,
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
 		},
 	}
 	for _, tc := range testCases {

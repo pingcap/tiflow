@@ -501,21 +501,21 @@ func isProcessorIgnorableError(err error) bool {
 func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return sourcemanager.PullerSplitUpdateMode_None, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	scheme := sink.GetScheme(sinkURI)
 	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return sourcemanager.PullerSplitUpdateMode_None, nil
+		return sourcemanager.PullerSplitUpdateModeNone, nil
 	}
 	// must be mysql sink
 	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
 	if err != nil {
-		return sourcemanager.PullerSplitUpdateMode_None, err
+		return sourcemanager.PullerSplitUpdateModeNone, err
 	}
 	if isSinkInSafeMode {
-		return sourcemanager.PullerSplitUpdateMode_Always, nil
+		return sourcemanager.PullerSplitUpdateModeAlways, nil
 	}
-	return sourcemanager.PullerSplitUpdateMode_AtStart, nil
+	return sourcemanager.PullerSplitUpdateModeAtStart, nil
 }
 
 // Tick implements the `orchestrator.State` interface
