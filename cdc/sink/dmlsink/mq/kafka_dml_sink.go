@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
+	utilPkg "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -122,8 +123,8 @@ func NewKafkaDMLSink(
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
 	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, changefeedID)
-	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, trans, encoderGroup, protocol, scheme, errCh)
+	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager, eventRouter, trans, encoderGroup,
+		protocol, scheme, utilPkg.GetOrZero(replicaConfig.Sink.KafkaConfig.OutputRawChangeEvent), errCh)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeedID", changefeedID.ID))
