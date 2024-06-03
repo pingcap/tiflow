@@ -269,6 +269,9 @@ func IsSinkSafeMode(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) (bool
 	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return false, err
 	}
+	if urlParameter.SafeMode == nil {
+		return defaultSafeMode, nil
+	}
 	return *urlParameter.SafeMode, nil
 }
 
