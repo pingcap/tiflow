@@ -244,6 +244,7 @@ func mergeConfig(
 			dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
 		}
 	}
+	log.Info("merge sink config", zap.Any("dest", dest), zap.Any("urlParameters", urlParameters))
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}

@@ -830,6 +830,11 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 			mode:    sourcemanager.PullerSplitUpdateMode_Always,
 		},
 		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateMode_AtStart,
+		},
+		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/",
 			config: &config.ReplicaConfig{
 				Sink: &config.SinkConfig{
@@ -837,6 +842,15 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 				},
 			},
 			mode: sourcemanager.PullerSplitUpdateMode_Always,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(false),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateMode_AtStart,
 		},
 		{
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
@@ -861,6 +875,6 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 		log.Info("test case", zap.String("sinkURI", tc.sinkURI), zap.Any("config", tc.config))
 		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
 		require.Nil(t, err)
-		require.Equal(t, mode, tc.mode)
+		require.Equal(t, tc.mode, mode)
 	}
 }
