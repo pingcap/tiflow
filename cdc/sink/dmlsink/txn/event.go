@@ -16,6 +16,7 @@ package txn
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,12 +42,43 @@ func (e *txnEvent) OnConflictResolved() {
 }
 
 // ConflictKeys implements causality.txnEvent interface.
-func (e *txnEvent) ConflictKeys() []uint64 {
-	return genTxnKeys(e.TxnCallbackableEvent.Event)
+func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
+	hashes := genDedupedTxnKeys(e.TxnCallbackableEvent.Event)
+
+	// Sort hashes by `hash % numSlots` to avoid deadlock.
+	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
 }
 
-// genTxnKeys returns deduplicated hash keys of a transaction.
-func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
+func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	// Sort hashes by `hash % numSlots` to avoid deadlock.
+	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
+
+	// Dedup hashes
+	last := hashes[0]
+	j := 1
+	for i, hash := range hashes {
+		if i == 0 {
+			// skip first one, start checking duplication from 2nd one
+			continue
+		}
+		if hash == last {
+			continue
+		}
+		last = hash
+		hashes[j] = hash
+		j++
+	}
+	hashes = hashes[:j]
+
+	return hashes
+}
+
+// genDedupedTxnKeys returns deduplicated hash keys of a transaction.
+func genDedupedTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
@@ -58,7 +90,8 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
-			hashRes[uint64(hasher.Sum32())] = struct{}{}
+            hashValue = uint64(row.GetTableID()) << 32 + uint64(hasher.Sum32())
+			hashRes[hashValue] = struct{}{}
 			hasher.Reset()
 		}
 	}
