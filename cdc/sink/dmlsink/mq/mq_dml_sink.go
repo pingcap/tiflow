@@ -149,67 +149,84 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-	// Because we split txn to rows when sending to the MQ.
-	// So we need to convert the txn level callback to row level callback.
-	toRowCallback := func(txnCallback func(), totalCount uint64) func() {
-		var calledCount atomic.Uint64
-		// The callback of the last row will trigger the callback of the txn.
-		return func() {
-			if calledCount.Inc() == totalCount {
-				txnCallback()
-			}
-		}
-	}
 
 	for _, txn := range txns {
-		if txn.GetTableSinkState() != state.TableSinkSinking {
-			// The table where the event comes from is in stopping, so it's safe
-			// to drop the event directly.
-			txn.Callback()
+		if err := s.writeEvent(txn); err != nil {
+			s.cancel(err)
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// Note that writeEvent is not thread-safe.
+func (s *dmlSink) writeEvent(txn *dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
+	if len(txn.Event.Rows) == 0 || txn.GetTableSinkState() != state.TableSinkSinking {
+		// The table where the event comes from is in stopping, so it's safe
+		// to drop the event directly.
+		txn.Callback()
+		return nil
+	}
+	topic := s.alive.eventRouter.GetTopicForRowChange(txn.Event.Rows[0])
+	partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+	failpoint.Inject("MQSinkGetPartitionError", func() {
+		log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+		err = errors.New("MQSinkGetPartitionError")
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableInfo := txn.Event.Rows[0].TableInfo
+	partitionDispatcher := s.alive.eventRouter.GetPartitionDispatcher(tableInfo.TableName.Schema, tableInfo.TableName.Table)
+
+	// Split the update event to delete and insert event if the partition key is updated.
+	rows := make([]*model.RowChangedEvent, 0, len(txn.Event.Rows))
+	for _, row := range txn.Event.Rows {
+		changed, err := partitionDispatcher.IsPartitionKeyUpdated(row)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !changed {
+			rows = append(rows, row)
 			continue
 		}
-		rowCallback := toRowCallback(txn.Callback, uint64(len(txn.Event.Rows)))
-		for _, row := range txn.Event.Rows {
-			topic := s.alive.eventRouter.GetTopicForRowChange(row)
-			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
-			failpoint.Inject("MQSinkGetPartitionError", func() {
-				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
-				err = errors.New("MQSinkGetPartitionError")
-			})
-			if err != nil {
-				s.cancel(err)
-				return errors.Trace(err)
-			}
 
-			err = s.alive.transformer.Apply(row)
-			if err != nil {
-				s.cancel(err)
-				return errors.Trace(err)
-			}
-			// Note: Calculate the partition index after the transformer is applied.
-			// Because the transformer may change the row of the event.
-			index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
-			if err != nil {
-				s.cancel(err)
-				return errors.Trace(err)
-			}
+		deleteEvent, insertEvent, err := model.SplitUpdateEvent(row)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		rows = append(rows, deleteEvent, insertEvent)
+	}
 
-			// This never be blocked because this is an unbounded channel.
-			// We already limit the memory usage by MemoryQuota at SinkManager level.
-			// So it is safe to send the event to a unbounded channel here.
-			s.alive.worker.msgChan.In() <- mqEvent{
-				key: model.TopicPartitionKey{
-					Topic:          topic,
-					Partition:      index,
-					PartitionKey:   key,
-					TotalPartition: partitionNum,
-				},
-				rowEvent: &dmlsink.RowChangeCallbackableEvent{
-					Event:     row,
-					Callback:  rowCallback,
-					SinkState: txn.SinkState,
-				},
-			}
+	rowCallback := toRowCallback(txn.Callback, uint64(len(rows)))
+	for _, row := range rows {
+		err = s.alive.transformer.Apply(row)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// Note: Calculate the partition index after the transformer is applied.
+		// Because the transformer may change the row of the event.
+		index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// This never be blocked because this is an unbounded channel.
+		// We already limit the memory usage by MemoryQuota at SinkManager level.
+		// So it is safe to send the event to a unbounded channel here.
+		s.alive.worker.msgChan.In() <- mqEvent{
+			key: model.TopicPartitionKey{
+				Topic:          topic,
+				Partition:      index,
+				PartitionKey:   key,
+				TotalPartition: partitionNum,
+			},
+			rowEvent: &dmlsink.RowChangeCallbackableEvent{
+				Event:     row,
+				Callback:  rowCallback,
+				SinkState: txn.SinkState,
+			},
 		}
 	}
 	return nil
@@ -241,4 +258,16 @@ func (s *dmlSink) Dead() <-chan struct{} {
 // Scheme returns the scheme of this sink.
 func (s *dmlSink) SchemeOption() (string, bool) {
 	return s.scheme, s.outputRawChangeEvent
+}
+
+// Because we split txn to rows when sending to the MQ.
+// So we need to convert the txn level callback to row level callback.
+func toRowCallback(txnCallback func(), totalCount uint64) func() {
+	var calledCount atomic.Uint64
+	// The callback of the last row will trigger the callback of the txn.
+	return func() {
+		if calledCount.Inc() == totalCount {
+			txnCallback()
+		}
+	}
 }

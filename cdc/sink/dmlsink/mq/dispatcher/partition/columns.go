@@ -41,6 +41,38 @@ func NewColumnsDispatcher(columns []string) *ColumnsDispatcher {
 	}
 }
 
+// IsPartitionKeyUpdated checks whether the partition key is updated.
+func (r *ColumnsDispatcher) IsPartitionKeyUpdated(row *model.RowChangedEvent) (bool, error) {
+	if !row.IsUpdate() {
+		return false, nil
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	offsets, ok := row.TableInfo.OffsetsByNames(r.Columns)
+	if !ok {
+		log.Error("columns not found when dispatch event",
+			zap.Any("tableName", row.TableInfo.GetTableName()),
+			zap.Strings("columns", r.Columns))
+		return false, errors.ErrDispatcherFailed.GenWithStack(
+			"columns not found when dispatch event, table: %v, columns: %v", row.TableInfo.GetTableName(), r.Columns)
+	}
+
+	for _, idx := range offsets {
+		col := row.Columns[idx]
+		preCol := row.PreColumns[idx]
+		if col == nil || preCol == nil {
+			// TODO: handle the case where the column is nil
+			continue
+		}
+		if !col.Equal(preCol) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
@@ -66,6 +98,7 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 
 	for idx := 0; idx < len(r.Columns); idx++ {
 		col := dispatchCols[offsets[idx]]
+		// Note: what happens if the all columns are nil?
 		if col == nil {
 			continue
 		}

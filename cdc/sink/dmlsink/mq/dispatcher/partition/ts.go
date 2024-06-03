@@ -27,6 +27,11 @@ func NewTsDispatcher() *TsDispatcher {
 	return &TsDispatcher{}
 }
 
+// IsPartitionKeyUpdated returns whether the partition key is updated.
+func (t *TsDispatcher) IsPartitionKeyUpdated(row *model.RowChangedEvent) (bool, error) {
+	return false, nil
+}
+
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {

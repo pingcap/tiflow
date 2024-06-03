@@ -30,6 +30,11 @@ func NewKeyDispatcher(partitionKey string) *KeyDispatcher {
 	}
 }
 
+// IsPartitionKeyUpdated returns whether the partition key is updated.
+func (t *KeyDispatcher) IsPartitionKeyUpdated(*model.RowChangedEvent) (bool, error) {
+	return false, nil
+}
+
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (t *KeyDispatcher) DispatchRowChangedEvent(*model.RowChangedEvent, int32) (int32, string, error) {
