@@ -826,7 +826,11 @@ func TestAvroEncode(t *testing.T) {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
+<<<<<<< HEAD
 	require.Equal(t, int32(1), res.(map[string]interface{})["id"])
+=======
+	require.Equal(t, int32(127), res.(map[string]interface{})["tu1"])
+>>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)
