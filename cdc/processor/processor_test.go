@@ -42,6 +42,7 @@ import (
 	redoPkg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -811,7 +812,39 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 		config  *config.ReplicaConfig
 		mode    sourcemanager.PullerSplitUpdateMode
 	}{
-		{sinkURI: "kafka://127.0.0.1:9092/ticdc-test2", config: nil, mode: sourcemanager.PullerSplitUpdateMode_None},
+		{
+			sinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateMode_None,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateMode_AtStart,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateMode_Always,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(false),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateMode_Always,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(true),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateMode_Always,
+		},
 	}
 	for _, tc := range testCases {
 		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
