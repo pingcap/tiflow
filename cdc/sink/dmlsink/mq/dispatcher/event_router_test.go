@@ -14,6 +14,7 @@
 package dispatcher
 
 import (
+	"github.com/pingcap/tiflow/cdc/entry"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -196,67 +197,35 @@ func TestGetTopicForRowChange(t *testing.T) {
 }
 
 func TestGetPartitionForRowChange(t *testing.T) {
-	t.Parallel()
-
 	replicaConfig := newReplicaConfig4DispatcherTest()
 	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
 	require.NoError(t, err)
 
-	cols := []*model.Column{
-		{
-			Name:  "id",
-			Value: 1,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-		},
-	}
-	tableInfo := model.BuildTableInfo("test_default1", "table", cols, [][]int{{0}})
-	p, _, err := d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
-	}, 16)
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event("create table test.default1(id int primary key)")
+	event := helper.DML2Event("insert into test.default1 values (1)", "test", "default1")
+
+	p, _, err := d.GetPartitionForRowChange(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(14), p)
 
-	cols = []*model.Column{
-		{
-			Name:  "id",
-			Value: 1,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-		},
-	}
-	tableInfo = model.BuildTableInfo("test_default2", "table", cols, [][]int{{0}})
-	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
-	}, 16)
+	_ = helper.DDL2Event("create table test.default2(id int primary key)")
+	event = helper.DML2Event("insert into test.default2 values (1)", "test", "default2")
+	p, _, err = d.GetPartitionForRowChange(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(0), p)
 
-	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{Schema: "test_table", Table: "table"},
-		},
-		CommitTs: 1,
-	}, 16)
+	_ = helper.DDL2Event("create table test.table(id int primary key)")
+	event = helper.DML2Event("insert into test.table values (1)", "test", "table")
+	p, _, err = d.GetPartitionForRowChange(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(15), p)
 
-	cols = []*model.Column{
-		{
-			Name:  "a",
-			Value: 11,
-			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-		}, {
-			Name:  "b",
-			Value: 22,
-			Flag:  0,
-		},
-	}
-	tableInfo = model.BuildTableInfo("test_index_value", "table", cols, [][]int{{0}})
-	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
-		TableInfo: tableInfo,
-		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
-	}, 10)
+	_ = helper.DDL2Event("create table test.index_value(a int primary key, b int)")
+	event = helper.DML2Event("insert into test.index_value values (11, 22)", "test", "index_value")
+	p, _, err = d.GetPartitionForRowChange(event, 10)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), p)
 
