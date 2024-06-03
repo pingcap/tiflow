@@ -242,12 +242,19 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 }
 
 // newTiIndexInfo convert IndexSchema to a tidb index info.
-func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
+func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
+		var offset int
+		for idx, column := range columns {
+			if column.Name.O == col {
+				offset = idx
+				break
+			}
+		}
 		indexColumns[i] = &timodel.IndexColumn{
 			Name:   timodel.NewCIStr(col),
-			Offset: i,
+			Offset: offset,
 		}
 	}
 
@@ -338,7 +345,7 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
 		}
 		for _, idx := range m.Indexes {
-			index := newTiIndexInfo(idx)
+			index := newTiIndexInfo(idx, tidbTableInfo.Columns)
 			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
 		}
 	}
