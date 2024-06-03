@@ -107,11 +107,12 @@ func newWriter(ctx context.Context, o *option) *writer {
 	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
 	if err != nil {
 		log.Panic("initialize the event router failed",
-			zap.Error(err),
-			zap.Any("protocol", o.protocol),
-			zap.Any("topic", o.topic), zap.Any("replicaConfig", o.replicaConfig))
+			zap.Any("protocol", o.protocol), zap.Any("topic", o.topic),
+			zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules), zap.Error(err),)
 	}
 	w.eventRouter = eventRouter
+	log.Info("event router created", zap.Any("protocol", o.protocol),
+		zap.Any("topic", o.topic), zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules))
 
 	var db *sql.DB
 	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
@@ -275,7 +276,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	decoder := progress.decoder
 	eventGroup := progress.eventGroups
 	if err := decoder.AddKeyValue(key, value); err != nil {
-		log.Panic("add key value to the decoder failed", zap.Error(err))
+		log.Panic("add key value to the decoder failed",
+			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Error(err))
 	}
 	var (
 		counter     int
@@ -285,7 +288,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	for {
 		ty, hasNext, err := decoder.HasNext()
 		if err != nil {
-			log.Panic("decode message key failed", zap.Error(err))
+			log.Panic("decode message key failed",
+				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
+				zap.Error(err))
 		}
 		if !hasNext {
 			break
@@ -294,6 +299,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 		if len(key)+len(value) > w.option.maxMessageBytes && counter > 1 {
 			log.Panic("kafka max-messages-bytes exceeded",
+				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 				zap.Int("max-message-bytes", w.option.maxMessageBytes),
 				zap.Int("receivedBytes", len(key)+len(value)))
 		}
@@ -309,6 +315,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			ddl, err := decoder.NextDDLEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 					zap.ByteString("value", value),
 					zap.Error(err))
 			}
@@ -335,6 +342,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 					zap.ByteString("value", value),
 					zap.Error(err))
 			}
@@ -346,13 +354,15 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
 			if err != nil {
 				log.Panic("cannot calculate partition for the row changed event",
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 					zap.Int32("partitionNum", w.option.partitionNum), zap.Error(err), zap.Any("event", row))
 			}
 			if partition != target {
 				log.Panic("RowChangedEvent dispatched to wrong partition",
-					zap.Int32("obtained", partition),
+					zap.Int32("partition", partition),
 					zap.Int32("expected", target),
 					zap.Int32("partitionNum", w.option.partitionNum),
+					zap.Any("offset", message.TopicPartition.Offset),
 					zap.Any("row", row),
 				)
 			}
@@ -362,7 +372,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				log.Panic("RowChangedEvent fallback row, ignore it",
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("watermark", watermark),
-					zap.Int32("partition", partition),
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 					zap.Any("row", row))
 			}
 
@@ -385,11 +395,13 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.String("table", row.TableInfo.GetTableName()),
 				zap.Int64("physicalTableID", row.PhysicalTableID),
 				zap.Int64("tableID", tableID),
-				zap.Uint64("commitTs", row.CommitTs))
+				zap.Uint64("commitTs", row.CommitTs),
+				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 					zap.ByteString("value", value),
 					zap.Error(err))
 			}
@@ -399,7 +411,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				log.Panic("partition resolved ts fallback, skip it",
 					zap.Uint64("ts", ts),
 					zap.Uint64("watermark", watermark),
-					zap.Int32("partition", partition))
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 			}
 
 			for tableID, group := range eventGroup {
@@ -418,19 +430,23 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
 				log.Debug("append row changed events to table sink",
-					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)))
+					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
 			needFlush = true
-			log.Debug("partition watermark updated", zap.Int32("partition", partition), zap.Uint64("watermark", ts))
+			log.Debug("partition watermark updated", zap.Uint64("watermark", ts),
+				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 		default:
-			log.Panic("unknown message type", zap.Any("messageType", messageType))
+			log.Panic("unknown message type", zap.Any("messageType", messageType),
+				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 		}
 	}
 
 	if counter > w.option.maxBatchSize {
-		log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", w.option.maxBatchSize),
-			zap.Int("actual-batch-size", counter))
+		log.Panic("Open Protocol max-batch-size exceeded",
+			zap.Int("max-batch-size", w.option.maxBatchSize), zap.Int("actual-batch-size", counter),
+			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset)))
 	}
 
 	if !needFlush {
