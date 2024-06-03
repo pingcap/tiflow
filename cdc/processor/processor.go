@@ -489,8 +489,7 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// getPullerSplitUpdateMode returns how to split update kv entries
-// which modifies primary key or non-null unique key at puller.
+// getPullerSplitUpdateMode returns how to split update kv entries at puller.
 //
 // If the sinkURI is not mysql compatible, it returns PullerSplitUpdateMode_None
 // which means don't split any update kv entries at puller;
