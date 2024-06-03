@@ -124,8 +124,18 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
 
-			_, err = dec.NextDDLEvent()
+			decodedDDL, err := dec.NextDDLEvent()
 			require.NoError(t, err)
+
+			originFlags := createTableDDL.TableInfo.ColumnsFlag
+			obtainedFlags := decodedDDL.TableInfo.ColumnsFlag
+
+			for colID, expected := range originFlags {
+				name := createTableDDL.TableInfo.ForceGetColumnName(colID)
+				actualID := decodedDDL.TableInfo.ForceGetColumnIDByName(name)
+				actual := obtainedFlags[actualID]
+				require.Equal(t, expected, actual)
+			}
 
 			err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
 			require.NoError(t, err)
