@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -63,17 +62,12 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	encoder := newBatchEncoder(&common.Config{})
 	require.NotNil(t, encoder)
 
-	count := 0
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeVarchar}}, nil)
-	row := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "col1",
-			Value: []byte("aa"),
-		}}, tableInfo),
-	}
+	_ = helper.DDL2Event("create table test.t(col1 varchar(255) primary key)")
+	row := helper.DML2Event("insert into test.t values ('aa')", "test", "t")
+	count := 0
 
 	tests := []struct {
 		row      *model.RowChangedEvent
