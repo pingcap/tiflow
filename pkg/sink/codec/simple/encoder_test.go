@@ -1631,10 +1631,10 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
 				names, values := utils.LargeColumnKeyValues()
-				mock.ExpectQuery("select * from test.t where t = 127").
+				mock.ExpectQuery("select * from test.t where tu1 = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
-				mock.ExpectQuery("select * from test.t where t = 127").
+				mock.ExpectQuery("select * from test.t where tu1 = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
 			}
