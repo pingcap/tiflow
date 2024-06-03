@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -802,4 +803,19 @@ func TestProcessorNotInitialized(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
 	p, _, _ := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	require.Nil(t, p.WriteDebugInfo(os.Stdout))
+}
+
+func TestGetPullerSplitUpdateMode(t *testing.T) {
+	testCases := []struct {
+		sinkURI string
+		config  *config.ReplicaConfig
+		mode    sourcemanager.PullerSplitUpdateMode
+	}{
+		{sinkURI: "kafka://127.0.0.1:9092/ticdc-test2", config: nil, mode: sourcemanager.PullerSplitUpdateMode_None},
+	}
+	for _, tc := range testCases {
+		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
+		require.Nil(t, err)
+		require.Equal(t, mode, tc.mode)
+	}
 }
