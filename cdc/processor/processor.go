@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -488,16 +489,34 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
-// pullerSafeMode means to split all update kv entries whose commitTS
-// is older then the start time of this changefeed.
-func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
+// getPullerSplitUpdateMode returns how to split update kv entries
+// which modifies primary key or non-null unique key at puller.
+//
+// If the sinkURI is not mysql compatible, it returns PullerSplitUpdateMode_None
+// which means don't split any update kv entries at puller;
+// If the sinkURI is mysql compatible, it has the following two cases:
+//  1. if the user config safe mode in sink module, it returns PullerSplitUpdateMode_Always,
+//     which means split all update kv entries at puller;
+//  2. if the user does not config safe mode in sink module, it returns PullerSplitUpdateMode_AtStart,
+//     which means split update kv entries whose commitTS is older than the start time of this changefeed.
+func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return sourcemanager.PullerSplitUpdateMode_None, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	scheme := sink.GetScheme(sinkURI)
-	return sink.IsMySQLCompatibleScheme(scheme), nil
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return sourcemanager.PullerSplitUpdateMode_None, nil
+	}
+	// must be mysql sink
+	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateMode_None, err
+	}
+	if isSinkInSafeMode {
+		return sourcemanager.PullerSplitUpdateMode_Always, nil
+	}
+	return sourcemanager.PullerSplitUpdateMode_AtStart, nil
 }
 
 // Tick implements the `orchestrator.State` interface
@@ -659,15 +678,15 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
+	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.latestInfo.SinkURI, cfConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor),
-		pullerSafeModeAtStart)
+		sortEngine, pullerSplitUpdateMode,
+		util.GetOrZero(cfConfig.BDRMode),
+		util.GetOrZero(cfConfig.EnableTableMonitor))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)

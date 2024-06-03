@@ -40,6 +40,14 @@ import (
 
 const defaultMaxBatchSize = 256
 
+type PullerSplitUpdateMode int32
+
+const (
+	PullerSplitUpdateMode_None    PullerSplitUpdateMode = 0
+	PullerSplitUpdateMode_AtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateMode_Always  PullerSplitUpdateMode = 2
+)
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ready chan struct{}
@@ -55,7 +63,8 @@ type SourceManager struct {
 	engine sorter.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-	startTs model.Ts
+	// The timestamp fetched from pd when changefeed starts.
+	thresholdTs model.Ts
 
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
@@ -67,11 +76,11 @@ func New(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine sorter.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 	enableTableMonitor bool,
-	safeModeAtStart bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
+	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, enableTableMonitor)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -96,6 +105,20 @@ func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
 	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
 }
 
+func shouldSplitUpdateKVEntry(
+	splitUpdateMode PullerSplitUpdateMode,
+	raw *model.RawKVEntry,
+	thresholdTs model.Ts,
+) bool {
+	if splitUpdateMode == PullerSplitUpdateMode_None {
+		return false
+	} else if splitUpdateMode == PullerSplitUpdateMode_AtStart {
+		return isOldUpdateKVEntry(raw, thresholdTs)
+	} else {
+		return true
+	}
+}
+
 func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
 	if raw == nil {
 		return nil, nil, errors.New("nil event cannot be split")
@@ -114,9 +137,9 @@ func newSourceManager(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine sorter.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 	enableTableMonitor bool,
-	safeModeAtStart bool,
 ) *SourceManager {
 	mgr := &SourceManager{
 		ready:              make(chan struct{}),
@@ -145,7 +168,7 @@ func newSourceManager(
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
+			if shouldSplitUpdateKVEntry(splitUpdateMode, raw, mgr.thresholdTs) {
 				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
 				if err != nil {
 					return err
@@ -227,11 +250,11 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.puller == nil {
 		return nil
 	}
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
+	thresholdTs, err := getCurrentTs(ctx, m.up.PDClient)
 	if err != nil {
 		return err
 	}
-	m.startTs = startTs
+	m.thresholdTs = thresholdTs
 	return m.puller.Run(ctx)
 }
 
