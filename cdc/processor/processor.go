@@ -510,7 +510,6 @@ func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (
 	}
 	// must be mysql sink
 	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
-	log.Info("check sink safe mode", zap.String("sinkURI", sinkURIStr), zap.Bool("isSinkInSafeMode", isSinkInSafeMode))
 	if err != nil {
 		return sourcemanager.PullerSplitUpdateMode_None, err
 	}

@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -45,7 +44,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func newProcessor4Test(
@@ -868,11 +866,10 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 					SafeMode: util.AddressOf(true),
 				},
 			},
-			mode: sourcemanager.PullerSplitUpdateMode_AtStart,
+			mode: sourcemanager.PullerSplitUpdateMode_Always,
 		},
 	}
 	for _, tc := range testCases {
-		log.Info("test case", zap.String("sinkURI", tc.sinkURI), zap.Any("config", tc.config))
 		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
 		require.Nil(t, err)
 		require.Equal(t, tc.mode, mode)

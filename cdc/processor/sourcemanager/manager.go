@@ -40,8 +40,10 @@ import (
 
 const defaultMaxBatchSize = 256
 
+// PullerSplitUpdateMode is the mode to split update events in puller.
 type PullerSplitUpdateMode int32
 
+// PullerSplitUpdateMode constants.
 const (
 	PullerSplitUpdateMode_None    PullerSplitUpdateMode = 0
 	PullerSplitUpdateMode_AtStart PullerSplitUpdateMode = 1
