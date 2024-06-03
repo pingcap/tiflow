@@ -108,7 +108,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 	if err != nil {
 		log.Panic("initialize the event router failed",
 			zap.Any("protocol", o.protocol), zap.Any("topic", o.topic),
-			zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules), zap.Error(err),)
+			zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules), zap.Error(err))
 	}
 	w.eventRouter = eventRouter
 	log.Info("event router created", zap.Any("protocol", o.protocol),
@@ -446,7 +446,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	if counter > w.option.maxBatchSize {
 		log.Panic("Open Protocol max-batch-size exceeded",
 			zap.Int("max-batch-size", w.option.maxBatchSize), zap.Int("actual-batch-size", counter),
-			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset)))
+			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 	}
 
 	if !needFlush {
