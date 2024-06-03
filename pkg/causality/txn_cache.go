@@ -68,9 +68,6 @@ type txnCache[Txn txnEvent] interface {
 }
 
 func newTxnCache[Txn txnEvent](opt TxnCacheOption) txnCache[Txn] {
-	log.Info("create new worker cache in conflict detector",
-		zap.Int("cacheCount", opt.Count),
-		zap.Int("cacheSize", opt.Size), zap.String("BlockStrategy", string(opt.BlockStrategy)))
 	if opt.Size <= 0 {
 		log.Panic("WorkerOption.CacheSize should be greater than 0, please report a bug")
 	}

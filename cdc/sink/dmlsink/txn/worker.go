@@ -83,9 +83,6 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 				zap.Error(err))
 		}
 	}()
-	log.Info("Transaction dmlSink worker starts",
-		zap.String("changefeedID", w.changefeed),
-		zap.Int("workerID", w.ID))
 
 	start := time.Now()
 	for {

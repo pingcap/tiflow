@@ -60,6 +60,9 @@ func NewConflictDetector[Txn txnEvent](
 	for i := 0; i < opt.Count; i++ {
 		ret.resolvedTxnCaches[i] = newTxnCache[Txn](opt)
 	}
+	log.Info("create new workers cache in conflict detector",
+		zap.Int("cacheCount", opt.Count),
+		zap.Int("cacheSize", opt.Size), zap.String("BlockStrategy", string(opt.BlockStrategy)))
 
 	ret.wg.Add(1)
 	go func() {

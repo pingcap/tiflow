@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn/mysql"
@@ -120,6 +121,7 @@ func newSink(ctx context.Context,
 		g.Go(func() error { return w.runLoop(txnCh) })
 		sink.workers = append(sink.workers, w)
 	}
+	log.Info("All transaction dmlSink workers start")
 
 	sink.wg.Add(1)
 	go func() {
