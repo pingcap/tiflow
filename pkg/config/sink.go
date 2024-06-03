@@ -434,6 +434,9 @@ type KafkaConfig struct {
 	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -588,6 +591,9 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+
 	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
 	// This parameter is a part of the `sink-uri`. Internal use only.
 	BrokerURL string `toml:"-" json:"-"`
@@ -653,6 +659,9 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
@@ -796,21 +805,68 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Adjust that protocol is compatible with the scheme. For testing purposes,
-	// any protocol should be legal for blackhole.
-	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
-		if err != nil {
-			return err
-		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
-	}
-
 	log.Info("succeed to parse parameter from sink uri",
 		zap.String("protocol", util.GetOrZero(s.Protocol)),
 		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
+
+	// Check that protocol config is compatible with the scheme.
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
+	}
+	// For testing purposes, any protocol should be legal for blackhole.
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
+		s.ValidateProtocol(sinkURI.Scheme)
+	}
+
+	return nil
+}
+
+// ValidateOutputRawChangeEvent validates the output-raw-change-event configuration.
+func (s *SinkConfig) ValidateProtocol(scheme string) error {
+	protocol, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if err != nil {
+		return err
+	}
+	outputOldValue := false
+	switch protocol {
+	case ProtocolOpen:
+		if s.OpenProtocol != nil {
+			outputOldValue = s.OpenProtocol.OutputOldValue
+		}
+	case ProtocolDebezium:
+		if s.Debezium != nil {
+			outputOldValue = s.Debezium.OutputOldValue
+		}
+	case ProtocolCsv:
+		if s.CSVConfig != nil {
+			outputOldValue = s.CSVConfig.OutputOldValue
+		}
+	case ProtocolAvro:
+		outputOldValue = false
+	default:
+		return nil
+	}
+
+	outputRawChangeEvent := false
+	switch scheme {
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		if s.KafkaConfig != nil {
+			outputRawChangeEvent = util.GetOrZero(s.KafkaConfig.OutputRawChangeEvent)
+		}
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
+		if s.PulsarConfig != nil {
+			outputRawChangeEvent = util.GetOrZero(s.PulsarConfig.OutputRawChangeEvent)
+		}
+	default:
+		if sink.IsStorageScheme(scheme) && s.CloudStorageConfig != nil {
+			outputRawChangeEvent = util.GetOrZero(s.CloudStorageConfig.OutputRawChangeEvent)
+		}
+	}
+
+	if outputRawChangeEvent && !outputOldValue {
+		return cerror.ErrIncompatibleSinkConfig.GenWithStack("output-raw-change-event is true, but output-old-value is false")
+	}
 	return nil
 }
 
