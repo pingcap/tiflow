@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 const (
