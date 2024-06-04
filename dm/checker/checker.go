@@ -632,7 +632,7 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		errs = append(errs, unit.NewProcessError(errors.New("check was failed, please see detail")))
 	}
 
-	filterResults(result, c.warnCnt, c.errCnt)
+	filterResults(result, c.warnCnt, c.errCnt, false)
 
 	c.updateInstruction(result)
 
@@ -660,7 +660,11 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	}
 }
 
-func filterResults(result *checker.Results, warnCnt, errCnt int64) {
+func filterResults(
+	result *checker.Results,
+	warnCnt, errCnt int64,
+	keepSuccessWhenNoFailure bool,
+) {
 	// remove success result if not pass
 	results := result.Results[:0]
 	for _, r := range result.Results {
@@ -709,6 +713,9 @@ func filterResults(result *checker.Results, warnCnt, errCnt int64) {
 			r.Errors = subErrors
 			results = append(results, r)
 		}
+	}
+	if keepSuccessWhenNoFailure && len(results) == 0 {
+		return
 	}
 	result.Results = results
 }
