@@ -438,6 +438,13 @@ type KafkaConfig struct {
 	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
 }
 
+func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
+	if k == nil || k.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *k.OutputRawChangeEvent
+}
+
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
 	k.SASLPassword = aws.String("******")
@@ -600,6 +607,14 @@ type PulsarConfig struct {
 	SinkURI *url.URL `toml:"-" json:"-"`
 }
 
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (p *PulsarConfig) GetOutputRawChangeEvent() bool {
+	if p == nil || p.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *p.OutputRawChangeEvent
+}
+
 // MaskSensitiveData masks sensitive data in PulsarConfig
 func (c *PulsarConfig) MaskSensitiveData() {
 	if c.AuthenticationToken != nil {
@@ -661,6 +676,14 @@ type CloudStorageConfig struct {
 
 	// OutputRawChangeEvent controls whether to split the update pk/uk events.
 	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *CloudStorageConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
@@ -849,17 +872,11 @@ func (s *SinkConfig) ValidateProtocol(scheme string) error {
 	outputRawChangeEvent := false
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
-		if s.KafkaConfig != nil {
-			outputRawChangeEvent = util.GetOrZero(s.KafkaConfig.OutputRawChangeEvent)
-		}
+		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
 	case sink.PulsarScheme, sink.PulsarSSLScheme:
-		if s.PulsarConfig != nil {
-			outputRawChangeEvent = util.GetOrZero(s.PulsarConfig.OutputRawChangeEvent)
-		}
+		outputRawChangeEvent = s.PulsarConfig.GetOutputRawChangeEvent()
 	default:
-		if sink.IsStorageScheme(scheme) && s.CloudStorageConfig != nil {
-			outputRawChangeEvent = util.GetOrZero(s.CloudStorageConfig.OutputRawChangeEvent)
-		}
+		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
 	}
 
 	if outputRawChangeEvent && !outputOldValue {

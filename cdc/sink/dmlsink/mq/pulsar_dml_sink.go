@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
-	utilPkg "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -125,7 +124,7 @@ func NewPulsarDMLSink(
 	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, changefeedID)
 
 	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, trans, encoderGroup,
-		protocol, scheme, utilPkg.GetOrZero(replicaConfig.Sink.PulsarConfig.OutputRawChangeEvent), errCh)
+		protocol, scheme, pConfig.GetOutputRawChangeEvent(), errCh)
 
 	return s, nil
 }
