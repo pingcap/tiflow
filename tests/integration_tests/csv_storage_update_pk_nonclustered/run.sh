@@ -12,12 +12,17 @@ function run_changefeed() {
 	local changefeed_id=$1
 	local start_ts=$2
 	local expected_split_count=$3
+	local should_pass_check=$4
 	SINK_URI="file://$WORK_DIR/storage_test/$changefeed_id?flush-interval=5s"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config=$CUR/conf/$changefeed_id.toml -c "$changefeed_id"
 
 	run_storage_consumer $WORK_DIR $SINK_URI $CUR/conf/$changefeed_id.toml $changefeed_id
 	sleep 8
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
+	if [[ $should_pass_check == true ]]; then
+		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
+	else 
+		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 30 && exit 1 || echo "check_sync_diff failed as expected for $changefeed_id"
+	fi
 
 	real_split_count=$(grep "split update event" $WORK_DIR/cdc.log | wc -l)
 	if [[ $real_split_count  -ne $expected_split_count ]]; then
@@ -41,10 +46,10 @@ function run() {
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/run.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	run_changefeed "changefeed1" $start_ts 5
-	run_changefeed "changefeed2" $start_ts 5
-	run_changefeed "changefeed3" $start_ts 5
-	run_changefeed "changefeed4" $start_ts 10
+	run_changefeed "changefeed1" $start_ts 10 true
+	run_changefeed "changefeed2" $start_ts 10 true
+	run_changefeed "changefeed3" $start_ts 10 false
+	run_changefeed "changefeed4" $start_ts 20 true
 }
 
 trap stop_tidb_cluster EXIT
