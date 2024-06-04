@@ -9,8 +9,6 @@ protocol = "csv"
 terminator = "\n"
 # Directory date separator, Optional values are `none`, `year`, `month`, `date`. The default value is none.
 date-separator = 'day'
-# Whether to output the value before the row data changes. The default value is false. 
-output-old-value = true
 
 [sink.cloud-storage-config]
 output-raw-change-event = true
@@ -24,3 +22,5 @@ quote = '"'
 null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = true
+# Whether to output the value before the row data changes. The default value is false. 
+output-old-value = true
