@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	putil "github.com/pingcap/tiflow/pkg/util"
-	utilPkg "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -148,7 +147,7 @@ func NewDMLSink(ctx context.Context,
 	s := &DMLSink{
 		changefeedID:         changefeedID,
 		scheme:               strings.ToLower(sinkURI.Scheme),
-		outputRawChangeEvent: utilPkg.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputRawChangeEvent),
+		outputRawChangeEvent: replicaConfig.Sink.CloudStorageConfig.GetOutputRawChangeEvent(),
 		encodingWorkers:      make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:              make([]*dmlWorker, cfg.WorkerCount),
 		statistics:           metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),

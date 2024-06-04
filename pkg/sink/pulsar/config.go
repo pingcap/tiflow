@@ -67,6 +67,7 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 
 	c.SinkURI = sinkURI
 	c.BrokerURL = sinkURI.Scheme + "://" + sinkURI.Host
+	c.OutputRawChangeEvent = pulsarConfig.OutputRawChangeEvent
 
 	if pulsarConfig == nil {
 		log.L().Debug("new pulsar config", zap.Any("config", c))
