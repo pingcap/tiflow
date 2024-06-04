@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -57,7 +58,7 @@ type SyncProducer interface {
 	// SendMessages will return an error.
 	SendMessages(ctx context.Context,
 		topic string, partitionNum int32,
-		key []byte, value []byte) error
+		message *common.Message) error
 
 	// Close shuts down the producer; you must call this function before a producer
 	// object passes out of scope, as it may otherwise leak memory.
@@ -107,28 +108,26 @@ func (p *saramaSyncProducer) SendMessage(
 }
 
 func (p *saramaSyncProducer) SendMessages(ctx context.Context,
-	topic string, partitionNum int32,
-	key []byte, value []byte,
+	topic string, partitionNum int32, message *common.Message,
 ) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}
 
-	ts := ctx.Value("ts").(uint64)
 	err := p.producer.SendMessages(msgs)
 	if err != nil {
-		log.Error("write checkpoint failed", zap.Uint64("checkpoint", ts))
+		log.Error("write checkpoint failed", zap.Uint64("checkpoint", message.Ts))
 		return err
 	}
 
 	fields := make([]zap.Field, 0, partitionNum*2+1)
-	fields = append(fields, zap.Uint64("checkpoint", ts))
+	fields = append(fields, zap.Uint64("checkpoint", message.Ts))
 	for _, msg := range msgs {
 		fields = append(fields, zap.Int32("partition", msg.Partition))
 		fields = append(fields, zap.Int64("offset", msg.Offset))

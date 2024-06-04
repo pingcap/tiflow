@@ -70,7 +70,7 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 		return ctx.Err()
 	default:
 		err := k.syncProducer.SendMessages(ctx, topic,
-			totalPartitionsNum, message.Key, message.Value)
+			totalPartitionsNum, message)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }

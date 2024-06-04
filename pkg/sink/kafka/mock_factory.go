@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -107,14 +108,14 @@ func (m *MockSaramaSyncProducer) SendMessage(
 // SendMessages implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
 	topic string, partitionNum int32,
-	key []byte, value []byte,
+	message *common.Message,
 ) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"
@@ -292,14 +293,14 @@ func (s *syncWriter) SendMessage(
 func (s *syncWriter) SendMessages(
 	ctx context.Context,
 	topic string, partitionNum int32,
-	key []byte, value []byte,
+	message *common.Message,
 ) error {
 	msgs := make([]kafka.Message, int(partitionNum))
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = kafka.Message{
 			Topic:     topic,
-			Key:       key,
-			Value:     value,
+			Key:       message.Key,
+			Value:     message.Value,
 			Partition: i,
 		}
 	}
