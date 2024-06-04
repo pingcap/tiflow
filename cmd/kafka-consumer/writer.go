@@ -338,6 +338,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				w.appendDDL(ddl)
 				needFlush = true
 			}
+			log.Info("DDL message received",
+				zap.Int32("partition", partition),
+				zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("DDL", ddl.Query))
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
@@ -366,6 +371,13 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Any("row", row),
 				)
 			}
+
+			log.Info("DML event received",
+				zap.Int32("partition", partition),
+				zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("commitTs", row.CommitTs),
+				zap.String("schema", row.TableInfo.GetSchemaName()),
+				zap.String("table", row.TableInfo.GetTableName()))
 
 			watermark := atomic.LoadUint64(&progress.watermark)
 			if row.CommitTs <= watermark {
@@ -407,6 +419,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Error(err))
 			}
 
+			log.Info("watermark event received",
+				zap.Int32("partition", partition),
+				zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("watermark", ts))
+
 			watermark := atomic.LoadUint64(&progress.watermark)
 			if ts < watermark {
 				log.Panic("partition resolved ts fallback, skip it",
@@ -436,8 +453,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
 			needFlush = true
-			log.Debug("partition watermark updated", zap.Uint64("watermark", ts),
-				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
 				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
