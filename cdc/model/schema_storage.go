@@ -53,6 +53,9 @@ type TableInfo struct {
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 
+	// Column name -> ColumnID
+	nameToColID map[string]int64
+
 	hasUniqueColumn bool
 
 	// It's a mapping from ColumnID to the offset of the columns in row changed events.
@@ -90,6 +93,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
+		nameToColID:      make(map[string]int64, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
@@ -105,6 +109,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.columnsOffset[col.ID] = i
 		pkIsHandle := false
 		if IsColCDCVisible(col) {
+			ti.nameToColID[col.Name.O] = col.ID
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
 			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag())) || col.ID == model.ExtraHandleID
@@ -428,6 +433,16 @@ func (ti *TableInfo) ForceGetColumnFlagType(colID int64) *ColumnFlagType {
 // Caller must ensure `colID` exists
 func (ti *TableInfo) ForceGetColumnName(colID int64) string {
 	return ti.ForceGetColumnInfo(colID).Name.O
+}
+
+// ForceGetColumnIDByName return column ID by column name
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
+	colID, ok := ti.nameToColID[name]
+	if !ok {
+		log.Panic("invalid column name", zap.String("column", name))
+	}
+	return colID
 }
 
 // GetColumnDefaultValue returns the default definition of a column.
