@@ -52,7 +52,7 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 		return nil
 	}
 
-	keys := make([]uint64, 0, 128)
+	keys := make([]uint64, 0, len(txn.Rows))
 	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
 		if uint64(row.GetTableID()) > uint64(math.MaxUint32) {
