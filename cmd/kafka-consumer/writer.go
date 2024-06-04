@@ -373,7 +373,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("watermark", watermark),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Any("row", row))
+					zap.String("schema", row.TableInfo.GetSchemaName()),
+					zap.String("table", row.TableInfo.GetTableName()))
 			}
 
 			tableID := row.PhysicalTableID
