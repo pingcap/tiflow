@@ -153,6 +153,9 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	if msg == nil {
 		return nil
 	}
+
+	ctx = context.WithValue(ctx, "ts", ts)
+
 	// NOTICE: When there are no tables to replicate,
 	// we need to send checkpoint ts to the default topic.
 	// This will be compatible with the old behavior.
