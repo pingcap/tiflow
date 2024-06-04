@@ -63,9 +63,9 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20240112060601-a0e3fbb1eeee
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4
-	github.com/pingcap/tidb v1.1.0-beta.0.20240306032306-8cdacb705df6
+	github.com/pingcap/tidb v1.1.0-beta.0.20240604073126-607c846f4ca9
 	github.com/pingcap/tidb-tools v7.0.1-0.20231228094724-d6c7fc83380a+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20240306032306-8cdacb705df6
+	github.com/pingcap/tidb/parser v0.0.0-20240604073126-607c846f4ca9
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -329,7 +329,3 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace github.com/pingcap/tidb/parser => github.com/d3hunter/tidb/parser v0.0.0-20240604044438-dcddec0433b7
-
-replace github.com/pingcap/tidb => github.com/d3hunter/tidb v0.0.0-20240604044438-dcddec0433b7

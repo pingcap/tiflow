@@ -100,8 +100,8 @@ function run() {
 	echo "check full phase error"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status ${TASK_NAME}" \
-		"Error 1273: Unsupported collation when new collation is enabled: 'latin1_swedish_ci'" 1 \
-		"Error 1273: Unsupported collation when new collation is enabled: 'utf8mb4_0900_ai_ci'" 1
+		"Unsupported collation when new collation is enabled: 'latin1_swedish_ci'" 1 \
+		"Unsupported collation when new collation is enabled: 'utf8mb4_0900_ai_ci'" 1
 
 	dmctl_stop_task $TASK_NAME $MASTER_PORT
 
