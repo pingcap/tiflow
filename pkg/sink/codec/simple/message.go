@@ -200,14 +200,16 @@ func newTiColumnInfo(
 	}
 
 	for _, index := range indexes {
-		if index.Primary {
-			for _, name := range index.Columns {
-				if name == column.Name {
+		for _, name := range index.Columns {
+			if name == column.Name {
+				if index.Primary {
 					col.AddFlag(mysql.PriKeyFlag)
-					break
+				} else if index.Unique {
+					col.AddFlag(mysql.UniqueKeyFlag)
+				} else {
+					col.AddFlag(mysql.MultipleKeyFlag)
 				}
 			}
-			break
 		}
 	}
 
@@ -242,7 +244,11 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 }
 
 // newTiIndexInfo convert IndexSchema to a tidb index info.
+<<<<<<< HEAD
 func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
+=======
+func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo, indexID int64) *timodel.IndexInfo {
+>>>>>>> 667cea0175 (codec(ticdc): simple decoder set column flag incorrectly since miss index id  (#11235))
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
 		indexColumns[i] = &timodel.IndexColumn{
@@ -252,6 +258,7 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 	}
 
 	return &timodel.IndexInfo{
+		ID:      indexID,
 		Name:    timodel.NewCIStr(indexSchema.Name),
 		Columns: indexColumns,
 		Unique:  indexSchema.Unique,
@@ -328,6 +335,27 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 		table = m.Table
 		tableID = m.TableID
 		schemaVersion = m.Version
+<<<<<<< HEAD
+=======
+
+		tidbTableInfo.ID = m.TableID
+		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
+		tidbTableInfo.UpdateTS = m.Version
+
+		nextMockID := int64(100)
+		for _, col := range m.Columns {
+			tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
+			nextMockID += 100
+			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
+		}
+
+		mockIndexID := int64(1)
+		for _, idx := range m.Indexes {
+			index := newTiIndexInfo(idx, tidbTableInfo.Columns, mockIndexID)
+			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+			mockIndexID += 1
+		}
+>>>>>>> 667cea0175 (codec(ticdc): simple decoder set column flag incorrectly since miss index id  (#11235))
 	}
 	tidbTableInfo := &timodel.TableInfo{
 		ID:       tableID,
