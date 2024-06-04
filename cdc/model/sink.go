@@ -1252,6 +1252,13 @@ func SplitUpdateEvent(
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.PreColumns = nil
 
+	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
+		zap.Uint64("commitTs", updateEvent.CommitTs),
+		zap.String("schema", updateEvent.TableInfo.TableName.Schema),
+		zap.String("table", updateEvent.TableInfo.GetTableName()),
+		zap.Any("preCols", updateEvent.PreColumns),
+		zap.Any("cols", updateEvent.Columns))
+
 	return &deleteEvent, &insertEvent, nil
 }
 
