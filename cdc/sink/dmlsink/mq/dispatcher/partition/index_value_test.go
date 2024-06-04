@@ -14,6 +14,11 @@
 package partition
 
 import (
+	"context"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -183,4 +188,80 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), index)
+}
+
+func TestIndexValueDispatcherXXX(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	createTableDDL := `CREATE TABLE test.sbtest3 (
+	  id int(11) NOT NULL,
+	  k int(11) NOT NULL DEFAULT '0',
+	  PRIMARY KEY (id),
+	  KEY k_3 (k)
+	)`
+	createTableDDLEvent := helper.DDL2Event(createTableDDL)
+
+	insertDML := `insert into test.sbtest3 values (3670739, 5015099)`
+	event := helper.DML2Event(insertDML, "test", "sbtest3")
+
+	p := NewIndexValueDispatcher("")
+	origin, _, err := p.DispatchRowChangedEvent(event, 4)
+	require.NoError(t, err)
+	require.Equal(t, origin, int32(2))
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EncodingFormat = common.EncodingFormatAvro
+
+	builder, err := simple.NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	decoder, err := simple.NewDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	m, err := encoder.EncodeDDLEvent(createTableDDLEvent)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	ty, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, ty, model.MessageTypeDDL)
+
+	decodedDDL, err := decoder.NextDDLEvent()
+	require.NoError(t, err)
+
+	originFlags := createTableDDLEvent.TableInfo.ColumnsFlag
+	obtainedFlags := decodedDDL.TableInfo.ColumnsFlag
+
+	for colID, expected := range originFlags {
+		name := createTableDDLEvent.TableInfo.ForceGetColumnName(colID)
+		actualID := decodedDDL.TableInfo.ForceGetColumnIDByName(name)
+		actual := obtainedFlags[actualID]
+		require.Equal(t, expected, actual)
+	}
+
+	err = encoder.AppendRowChangedEvent(ctx, "", event, func() {})
+	require.NoError(t, err)
+
+	m = encoder.Build()[0]
+
+	err = decoder.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	ty, hasNext, err = decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, ty, model.MessageTypeRow)
+
+	decodedEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+
+	obtained, _, err := p.DispatchRowChangedEvent(decodedEvent, 4)
+	require.NoError(t, err)
+	require.Equal(t, origin, obtained)
 }
