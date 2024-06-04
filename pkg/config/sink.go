@@ -438,6 +438,7 @@ type KafkaConfig struct {
 	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
 }
 
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
 func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 	if k == nil || k.OutputRawChangeEvent == nil {
 		return false
@@ -608,11 +609,11 @@ type PulsarConfig struct {
 }
 
 // GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
-func (p *PulsarConfig) GetOutputRawChangeEvent() bool {
-	if p == nil || p.OutputRawChangeEvent == nil {
+func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
 		return false
 	}
-	return *p.OutputRawChangeEvent
+	return *c.OutputRawChangeEvent
 }
 
 // MaskSensitiveData masks sensitive data in PulsarConfig
@@ -843,7 +844,7 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	return nil
 }
 
-// ValidateOutputRawChangeEvent validates the output-raw-change-event configuration.
+// ValidateProtocol validates the protocol configuration.
 func (s *SinkConfig) ValidateProtocol(scheme string) error {
 	protocol, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
 	if err != nil {

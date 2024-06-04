@@ -1,4 +1,4 @@
-# Case 2: Split all update events into delete and insert events.
+# Case 3: Don't split any update event
 
 [filter]
 rules = ['test.*']
@@ -23,4 +23,4 @@ null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = true
 # Whether to output the value before the row data changes. The default value is false. 
-output-old-value = true
+output-old-value = false
