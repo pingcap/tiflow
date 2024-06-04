@@ -34,7 +34,7 @@ function run() {
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI2" --config=$CUR/conf/changefeed2.toml -c "changefeed2"
 
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 6
+	sleep 10
 	run_sql_file $CUR/data/run.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_storage_consumer $WORK_DIR $SINK_URI1 $CUR/conf/changefeed1.toml ""
