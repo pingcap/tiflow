@@ -437,3 +437,29 @@ func TestValidateAndAdjustStorageConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 16, util.GetOrZero(s.Sink.FileIndexWidth))
 }
+
+func TestShouldSendBootstrapMsg(t *testing.T) {
+	t.Parallel()
+	sinkConfig := GetDefaultReplicaConfig().Sink
+	require.False(t, sinkConfig.ShouldSendBootstrapMsg())
+
+	protocol := "simple"
+	sinkConfig.Protocol = &protocol
+	require.True(t, sinkConfig.ShouldSendBootstrapMsg())
+
+	count := int32(0)
+	sinkConfig.SendBootstrapInMsgCount = &count
+	require.False(t, sinkConfig.ShouldSendBootstrapMsg())
+}
+
+func TestShouldSendAllBootstrapAtStart(t *testing.T) {
+	t.Parallel()
+	sinkConfig := GetDefaultReplicaConfig().Sink
+	protocol := "simple"
+	sinkConfig.Protocol = &protocol
+	require.False(t, sinkConfig.ShouldSendAllBootstrapAtStart())
+
+	should := true
+	sinkConfig.SendAllBootstrapAtStart = &should
+	require.True(t, sinkConfig.ShouldSendAllBootstrapAtStart())
+}
