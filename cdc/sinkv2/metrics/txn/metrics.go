@@ -49,18 +49,11 @@ var (
 	WorkerTotalDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-<<<<<<< HEAD:cdc/sinkv2/metrics/txn/metrics.go
 			Subsystem: "sinkv2",
-			Name:      "txn_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for all workers.",
-		}, []string{"namespace", "changefeed"})
-=======
-			Subsystem: "sink",
 			Name:      "txn_worker_total_duration",
 			Help:      "total duration (s) for txn worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed", "id"})
->>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466)):cdc/sink/metrics/txn/metrics.go
 
 	WorkerHandledRows = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
