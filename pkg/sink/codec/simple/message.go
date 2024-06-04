@@ -196,14 +196,16 @@ func newTiColumnInfo(
 	}
 
 	for _, index := range indexes {
-		if index.Primary {
-			for _, name := range index.Columns {
-				if name == column.Name {
+		for _, name := range index.Columns {
+			if name == column.Name {
+				if index.Primary {
 					col.AddFlag(mysql.PriKeyFlag)
-					break
+				} else if index.Unique {
+					col.AddFlag(mysql.UniqueKeyFlag)
+				} else {
+					col.AddFlag(mysql.MultipleKeyFlag)
 				}
 			}
-			break
 		}
 	}
 
@@ -242,7 +244,7 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 }
 
 // newTiIndexInfo convert IndexSchema to a tidb index info.
-func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *timodel.IndexInfo {
+func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo, indexID int64) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
 		var offset int
@@ -259,6 +261,7 @@ func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *ti
 	}
 
 	return &timodel.IndexInfo{
+		ID:      indexID,
 		Name:    timodel.NewCIStr(indexSchema.Name),
 		Columns: indexColumns,
 		Unique:  indexSchema.Unique,
@@ -326,42 +329,31 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 func newTableInfo(m *TableSchema) *model.TableInfo {
 	var (
 		database      string
-		table         string
-		tableID       int64
 		schemaVersion uint64
 	)
+
+	tidbTableInfo := &timodel.TableInfo{}
 	if m != nil {
 		database = m.Schema
-		table = m.Table
-		tableID = m.TableID
 		schemaVersion = m.Version
-	}
-	tidbTableInfo := &timodel.TableInfo{
-		ID:       tableID,
-		Name:     timodel.NewCIStr(table),
-		UpdateTS: schemaVersion,
-	}
 
-	if m == nil {
-		return &model.TableInfo{
-			TableName: model.TableName{
-				Schema:  database,
-				Table:   table,
-				TableID: tableID,
-			},
-			TableInfo: tidbTableInfo,
+		tidbTableInfo.ID = m.TableID
+		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
+		tidbTableInfo.UpdateTS = m.Version
+
+		nextMockID := int64(100)
+		for _, col := range m.Columns {
+			tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
+			nextMockID += 100
+			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
 		}
-	}
 
-	nextMockID := int64(100)
-	for _, col := range m.Columns {
-		tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
-		nextMockID += 100
-		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
-	}
-	for _, idx := range m.Indexes {
-		index := newTiIndexInfo(idx, tidbTableInfo.Columns)
-		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+		mockIndexID := int64(1)
+		for _, idx := range m.Indexes {
+			index := newTiIndexInfo(idx, tidbTableInfo.Columns, mockIndexID)
+			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+			mockIndexID += 1
+		}
 	}
 	return model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
 }
