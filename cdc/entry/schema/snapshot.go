@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	timeta "github.com/pingcap/tidb/pkg/meta"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/structure"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -177,13 +176,35 @@ func NewSnapshotFromMeta(
 		vname.target = dbinfo.ID
 		snap.inner.schemaNameToID.ReplaceOrInsert(vname)
 
-		rawTables, err := meta.GetDBMeta(dbinfo.ID)
+		rawTables, err := meta.GetMetasByDBID(dbinfo.ID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
-		tableInfos, err := processRawTables(rawTables, dbinfo, filter)
-		if err != nil {
-			return nil, errors.Trace(err)
+		tableInfos := make([]*timodel.TableInfo, 0, len(rawTables)/2)
+		for _, r := range rawTables {
+			tableKey := string(r.Field)
+			if !strings.HasPrefix(tableKey, mTablePrefix) {
+				continue
+			}
+
+			tbName := &timodel.CIStr{}
+			err := json.Unmarshal(r.Value, tbName)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, tbName.O) {
+				log.Debug("ignore table", zap.String("db", dbinfo.Name.O),
+					zap.String("table", tbName.O))
+				continue
+			}
+
+			tbInfo := &timodel.TableInfo{}
+			err = json.Unmarshal(r.Value, tbInfo)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			tableInfos = append(tableInfos, tbInfo)
 		}
 
 		for _, tableInfo := range tableInfos {
@@ -225,93 +246,6 @@ func NewSnapshotFromMeta(
 		zap.Uint64("currentTs", currentTs),
 		zap.Any("duration", time.Since(start).Seconds()))
 	return snap, nil
-}
-
-func processRawTables(
-	rawTables []structure.HashPair,
-	dbinfo *timodel.DBInfo,
-	filter filter.Filter) ([]*timodel.TableInfo, error) {
-	var wg sync.WaitGroup
-
-	inCh := make(chan structure.HashPair, workerNumber)
-	outCh := make(chan *timodel.TableInfo, workerNumber)
-	errorChan := make(chan error, workerNumber)
-	done := make(chan struct{})
-
-	worker := func(inCh chan structure.HashPair, outCh chan *timodel.TableInfo) {
-		defer wg.Done()
-		for r := range inCh {
-			if len(r.Value) == 0 {
-				continue
-			}
-			// only handle table meta
-			tableKey := string(r.Field)
-			if !strings.HasPrefix(tableKey, mTablePrefix) {
-				continue
-			}
-
-			tbName := &timodel.CIStr{}
-			err := json.Unmarshal(r.Value, tbName)
-			if err != nil {
-				errorChan <- errors.Trace(err)
-				return
-			}
-
-			if filter.ShouldIgnoreTable(dbinfo.Name.O, tbName.O) {
-				log.Debug("ignore table", zap.String("db", dbinfo.Name.O), zap.String("table", tbName.O))
-				continue
-			}
-
-			tbInfo := &timodel.TableInfo{}
-			err = json.Unmarshal(r.Value, tbInfo)
-			if err != nil {
-				errorChan <- errors.Trace(err)
-				return
-			}
-			tbInfo.DBID = dbinfo.ID
-			outCh <- tbInfo
-		}
-	}
-
-	// map
-	for i := 0; i < workerNumber; i++ {
-		wg.Add(1)
-		go worker(inCh, outCh)
-	}
-
-	var wg2 sync.WaitGroup
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
-		for _, r := range rawTables {
-			inCh <- r
-		}
-		close(inCh)
-		wg.Wait()
-		close(outCh)
-		close(done)
-	}()
-
-	res := make([]*timodel.TableInfo, 0, len(rawTables)/2)
-	// reduce
-	for {
-		select {
-		case tbInfo := <-outCh:
-			if tbInfo != nil {
-				res = append(res, tbInfo)
-			}
-		case err := <-errorChan:
-			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
-		case <-done:
-			for tbInfo := range outCh {
-				if tbInfo != nil {
-					res = append(res, tbInfo)
-				}
-			}
-			wg2.Wait()
-			return res, nil
-		}
-	}
 }
 
 // NewEmptySnapshot creates an empty schema snapshot.
