@@ -2,7 +2,6 @@
 options:
   no_parent_owners: true
 filters:
-  # include *.go but ignore *_test.go files.
-  "^.*([^t]|[^s]t|[^e]st|[^t]est|[^_]test)[.]go$":
+  "^changefeed[.]toml$":
     approvers:
       - sig-critical-approvers-cdc
