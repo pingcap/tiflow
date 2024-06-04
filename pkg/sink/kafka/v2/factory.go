@@ -364,7 +364,7 @@ func (a *asyncWriter) Close() {
 // AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
 func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
-	partition int32, key []byte, value []byte,
+	partition int32, key []byte, value []byte, schema string, table string, commitTs uint64,
 	callback func(),
 ) error {
 	select {

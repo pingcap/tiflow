@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -76,7 +77,7 @@ type AsyncProducer interface {
 	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
 	AsyncSend(ctx context.Context, topic string,
-		partition int32, key []byte, value []byte,
+		partition int32, key []byte, value []byte, schema string, table string, commitTs uint64,
 		callback func()) error
 
 	// AsyncRunCallback process the messages that has sent to kafka,
@@ -258,10 +259,13 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 			}
+
 			log.Info("DML message response received",
 				zap.Int32("partition", ack.Partition),
-				zap.Int64("offset", ack.Offset))
-
+				zap.Int64("offset", ack.Offset),
+				zap.String("schema", string(ack.Headers[0].Value)),
+				zap.String("table", string(ack.Headers[1].Value)),
+				zap.String("commitTs", string(ack.Headers[2].Value)))
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info
@@ -282,7 +286,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	topic string,
 	partition int32,
 	key []byte,
-	value []byte,
+	value []byte, schema string, table string, commitTs uint64,
 	callback func(),
 ) error {
 	msg := &sarama.ProducerMessage{
@@ -292,6 +296,19 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 		Value:     sarama.ByteEncoder(value),
 		Metadata:  callback,
 	}
+	msg.Headers = append(msg.Headers, sarama.RecordHeader{
+		Key:   []byte("schema"),
+		Value: []byte(schema),
+	})
+	msg.Headers = append(msg.Headers, sarama.RecordHeader{
+		Key:   []byte("table"),
+		Value: []byte(table),
+	})
+	msg.Headers = append(msg.Headers, sarama.RecordHeader{
+		Key:   []byte("commitTs"),
+		Value: []byte(strconv.FormatUint(commitTs, 10)),
+	})
+
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())

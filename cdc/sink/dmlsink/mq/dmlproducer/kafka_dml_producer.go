@@ -120,7 +120,7 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, message.Callback)
+		message.Key, message.Value, *message.Schema, *message.Table, message.Ts, message.Callback)
 }
 
 func (k *kafkaDMLProducer) Close() {

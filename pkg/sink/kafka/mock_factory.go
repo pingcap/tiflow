@@ -167,7 +167,7 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 
 // AsyncSend implement the AsyncProducer interface.
 func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
-	partition int32, key []byte, value []byte,
+	partition int32, key []byte, value []byte, schema string, table string, commitTs uint64,
 	callback func(),
 ) error {
 	msg := &sarama.ProducerMessage{
