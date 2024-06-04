@@ -16,7 +16,7 @@ package txn
 import (
 	"encoding/binary"
 	"hash/fnv"
-	"sort"
+	"math"
 	"strings"
 	"time"
 
@@ -42,62 +42,32 @@ func (e *txnEvent) OnConflictResolved() {
 }
 
 // ConflictKeys implements causality.txnEvent interface.
-func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
-	hashes := genDedupedTxnKeys(e.TxnCallbackableEvent.Event)
-
-	// Sort hashes by `hash % numSlots` to avoid deadlock.
-	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
+func (e *txnEvent) ConflictKeys() []uint64 {
+	return genTxnKeys(e.TxnCallbackableEvent.Event)
 }
 
-func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
-	if len(hashes) == 0 {
-		return nil
-	}
-
-	// Sort hashes by `hash % numSlots` to avoid deadlock.
-	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
-
-	// Dedup hashes
-	last := hashes[0]
-	j := 1
-	for i, hash := range hashes {
-		if i == 0 {
-			// skip first one, start checking duplication from 2nd one
-			continue
-		}
-		if hash == last {
-			continue
-		}
-		last = hash
-		hashes[j] = hash
-		j++
-	}
-	hashes = hashes[:j]
-
-	return hashes
-}
-
-// genDedupedTxnKeys returns deduplicated hash keys of a transaction.
-func genDedupedTxnKeys(txn *model.SingleTableTxn) []uint64 {
+// genTxnKeys returns deduplicated hash keys of a transaction.
+func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
 
-	hashRes := make(map[uint64]struct{}, len(txn.Rows))
+	keys := make([]uint64, 0, 128)
 	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
+		if uint64(row.GetTableID()) > uint64(math.MaxUint32) {
+			log.Panic("TableID shouldn't be larger than math.MaxUint32")
+		}
+		prefix := uint64(row.GetTableID()) << 32
+
 		for _, key := range genRowKeys(row) {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
-            hashValue = uint64(row.GetTableID()) << 32 + uint64(hasher.Sum32())
-			hashRes[hashValue] = struct{}{}
+			key := prefix + uint64(hasher.Sum32())
+			keys = append(keys, key)
 			hasher.Reset()
 		}
-	}
-	keys := make([]uint64, 0, len(hashRes))
-	for key := range hashRes {
-		keys = append(keys, key)
 	}
 	return keys
 }
