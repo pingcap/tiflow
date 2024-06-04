@@ -31,7 +31,7 @@ function run() {
 	SINK_URI1="file://$WORK_DIR/storage_test/changefeed1?flush-interval=5s"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI1" --config=$CUR/conf/changefeed1.toml -c "changefeed1"
 	SINK_URI2="file://$WORK_DIR/storage_test/changefeed2?flush-interval=5s"
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI1" --config=$CUR/conf/changefeed2.toml -c "changefeed2"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI2" --config=$CUR/conf/changefeed2.toml -c "changefeed2"
 
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 6
@@ -41,7 +41,7 @@ function run() {
 	sleep 8
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 
-	run_storage_consumer $WORK_DIR $SINK_URI1 $CUR/conf/changefeed2.toml ""
+	run_storage_consumer $WORK_DIR $SINK_URI2 $CUR/conf/changefeed2.toml ""
 	sleep 8
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 }
