@@ -297,7 +297,7 @@ func (s *DMLSink) Dead() <-chan struct{} {
 	return s.dead
 }
 
-// Scheme returns the sink scheme.
+// SchemeOption returns the scheme and the option.
 func (s *DMLSink) SchemeOption() (string, bool) {
 	return s.scheme, s.outputRawChangeEvent
 }

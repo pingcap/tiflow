@@ -1,5 +1,4 @@
-# Case 1: default configuration where `csv.output-old-value=false` and `sink.cloud-storage-config.output-raw-change-event=false`
-# TiCDC split update pk/uk events into delete and insert events.
+# Case 4: Split and sort update pk/uk events in table sink. Split other update events in csv encoder.
 
 [filter]
 rules = ['test.*']
@@ -24,4 +23,4 @@ null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = true
 # Whether to output the value before the row data changes. The default value is false. 
-output-old-value = false
+output-old-value = true
