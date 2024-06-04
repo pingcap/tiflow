@@ -134,8 +134,6 @@ type SinkConfig struct {
 
 	// DispatchRules is only available when the downstream is MQ.
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
-	// CSVConfig is only available when the downstream is Storage.
-	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
 
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
 	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
@@ -194,9 +192,10 @@ type SinkConfig struct {
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 
+	// CSVConfig is only available when the downstream is Storage.
+	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
 	// OpenProtocol related configurations
 	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
-
 	// DebeziumConfig related configurations
 	Debezium *DebeziumConfig `toml:"debezium" json:"debezium,omitempty"`
 }
@@ -816,9 +815,8 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	}
 	// For testing purposes, any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		s.ValidateProtocol(sinkURI.Scheme)
+		return s.ValidateProtocol(sinkURI.Scheme)
 	}
-
 	return nil
 }
 
@@ -865,7 +863,10 @@ func (s *SinkConfig) ValidateProtocol(scheme string) error {
 	}
 
 	if outputRawChangeEvent && !outputOldValue {
-		return cerror.ErrIncompatibleSinkConfig.GenWithStack("output-raw-change-event is true, but output-old-value is false")
+		// TODO: return error if we do not need to keep backward compatibility.
+		log.Warn(fmt.Sprintf("TiCDC will not split the update pk/uk events if output-raw-change-event is true(scheme: %s).", scheme) +
+			fmt.Sprintf("It is not recommended to set output-old-value to false(protocol: %s) in this case.", protocol) +
+			"Otherwise, there may be data consistency issues in update pk/uk scenarios due to lack of old value information.")
 	}
 	return nil
 }
