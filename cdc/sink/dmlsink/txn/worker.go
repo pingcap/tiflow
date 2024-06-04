@@ -71,26 +71,8 @@ func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *w
 	}
 }
 
-<<<<<<< HEAD
 // Run a loop.
-func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) error {
-=======
-// Add adds a txnEvent to the worker.
-// The worker will call postTxnExecuted() after the txn executed.
-// The postTxnExecuted will remove the txn related Node in the conflict detector's
-// dependency graph and resolve related dependencies for these transacitons
-// which depend on this executed txn.
-func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) {
-	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
-}
-
-func (w *worker) close() {
-	w.txnCh.CloseAndDrain()
-}
-
-// Continuously get events from txnCh and call backend flush based on conditions.
-func (w *worker) run() error {
->>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466))
+func (w *worker) run(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -111,23 +93,18 @@ func (w *worker) run() error {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID))
 			return nil
-<<<<<<< HEAD
 		case txn := <-txnCh:
-			if txn.TxnEvent != nil {
-				needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
-=======
-		case txn := <-w.txnCh.Out():
 			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
 			// If no more data in txnCh.out, and also not reach the state that can be flushed,
 			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
-			if txn.txnEvent != nil {
-				needFlush := w.onEvent(txn)
+			if txn.TxnEvent != nil {
+				needFlush := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
 				if !needFlush {
 					delay := time.NewTimer(w.flushInterval)
 					for !needFlush {
 						select {
-						case txn := <-w.txnCh.Out():
-							needFlush = w.onEvent(txn)
+						case txn := <-txnCh:
+							needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
 						case <-delay.C:
 							needFlush = true
 						}
@@ -153,7 +130,6 @@ func (w *worker) run() error {
 				// flush time and total time
 				w.metricTxnWorkerTotalDuration.Observe(time.Since(start).Seconds())
 				start = time.Now()
->>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466))
 			}
 		}
 	}
@@ -181,12 +157,7 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 }
 
 // doFlush flushes the backend.
-<<<<<<< HEAD
-// It returns true only if it can no longer be flushed.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
-=======
 func (w *worker) doFlush() error {
->>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466))
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
