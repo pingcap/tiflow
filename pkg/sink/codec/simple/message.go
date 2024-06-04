@@ -353,7 +353,6 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		}
 	}
 
-<<<<<<< HEAD
 	nextMockID := int64(100)
 	for _, col := range m.Columns {
 		tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
@@ -361,20 +360,8 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
 	}
 	for _, idx := range m.Indexes {
-		index := newTiIndexInfo(idx)
+		index := newTiIndexInfo(idx, tidbTableInfo.Columns)
 		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
-=======
-		nextMockID := int64(100)
-		for _, col := range m.Columns {
-			tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
-			nextMockID += 100
-			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
-		}
-		for _, idx := range m.Indexes {
-			index := newTiIndexInfo(idx, tidbTableInfo.Columns)
-			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
-		}
->>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 	}
 	return model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
 }
