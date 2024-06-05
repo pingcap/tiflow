@@ -5,7 +5,7 @@
 "I","update_uk","test",450250823780794389,false,100,100,"example100"
 "I","update_uk","test",450250823780794390,false,1000,1000,"example1000"
 
-# split in csv encoder, TODO check lost
+# split in csv encoder, data is consistent since delete by pk
 "D","update_uk","test",450250823807270931,true,1,1,"example1"
 "I","update_uk","test",450250823807270931,true,1,2,"example1"
 "D","update_uk","test",450250823807270931,true,2,2,"example2"
