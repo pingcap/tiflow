@@ -634,11 +634,12 @@ LOOP2:
 		if cfInfo.Config.SyncPointStartTs != 0 {
 			// firstSyncPointStartTs = syncPointStartTs + k * syncPointInterval，
 			// which >= startTs, and choose the minimal k
-			if cfInfo.Config.SyncPointStartTs == c.resolvedTs { // 前置检查，syncPointStartTs 至少不能大于 resolvedTs
+			// we check SyncPointStartTs before create the changefeed to ensure it will not larger than the startTs
+			if cfInfo.Config.SyncPointStartTs == c.resolvedTs {
 				c.barriers.Update(syncPointBarrier, c.resolvedTs)
 			} else {
 				startSyncPointTime := oracle.GetTimeFromTS(cfInfo.Config.SyncPointStartTs)
-				syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval) // 前置检查这个不能为0
+				syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval)
 				k := oracle.GetTimeFromTS(c.resolvedTs).Sub(startSyncPointTime) / syncPointInterval
 				if oracle.GetTimeFromTS(c.resolvedTs).Sub(startSyncPointTime)%syncPointInterval != 0 {
 					k += 1
