@@ -16,7 +16,6 @@ package txn
 import (
 	"encoding/binary"
 	"hash/fnv"
-	"math"
 	"strings"
 	"time"
 
@@ -52,22 +51,20 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 		return nil
 	}
 
-	keys := make([]uint64, 0, len(txn.Rows))
+	hashRes := make(map[uint64]struct{}, len(txn.Rows))
 	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
-		if uint64(row.GetTableID()) > uint64(math.MaxUint32) {
-			log.Panic("TableID shouldn't be larger than math.MaxUint32")
-		}
-		prefix := uint64(row.GetTableID()) << 32
-
 		for _, key := range genRowKeys(row) {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
-			key := prefix + uint64(hasher.Sum32())
-			keys = append(keys, key)
+			hashRes[uint64(hasher.Sum32())] = struct{}{}
 			hasher.Reset()
 		}
+	}
+	keys := make([]uint64, 0, len(hashRes))
+	for key := range hashRes {
+		keys = append(keys, key)
 	}
 	return keys
 }

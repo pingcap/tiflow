@@ -35,8 +35,6 @@ type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
 	OnConflictResolved()
 	// ConflictKeys returns the keys that the event conflicts with.
-	//
-	// Keys are not necessary to be sorted or deduped.
 	ConflictKeys() []uint64
 }
 

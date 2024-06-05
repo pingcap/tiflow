@@ -46,8 +46,8 @@ var (
 // in conflict detection.
 type Node struct {
 	// Immutable fields.
-	id           int64
-	conflictKeys []uint64
+	id                  int64
+	sortedDedupKeysHash []uint64
 
 	// Called when all dependencies are resolved.
 	TrySendToTxnCache func(id cacheID) bool
