@@ -60,7 +60,6 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// or fail as soon as possible is preferred.
 	config.Producer.Retry.Max = 3
 	config.Producer.Retry.Backoff = 100 * time.Millisecond
-	config.Producer.Idempotent = true
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0
@@ -71,7 +70,6 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Net.DialTimeout = o.DialTimeout
 	config.Net.WriteTimeout = o.WriteTimeout
 	config.Net.ReadTimeout = o.ReadTimeout
-	config.Net.MaxOpenRequests = 1
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
