@@ -7,6 +7,17 @@
 #   2. After test, get fisrt syncpoints from tidb_cdc.syncpoint_v1
 #   3. check the first syncpoint ts value
 
+set -eu
+
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
+WORK_DIR=$OUT_DIR/$TEST_NAME
+CDC_BINARY=cdc.test
+SINK_TYPE=$1
+
+CDC_COUNT=3
+DB_COUNT=4
+
 function run() {
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		echo "kafka downstream isn't support syncpoint record"
@@ -37,17 +48,19 @@ function run() {
 	primary_ts=($(grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
     echo "primary_ts is " $primary_ts "start_ts is " $start_ts
 
-    ts_difference = $(($primary_ts - 450248343552000000))
-    shifted_ts_difference = $(($primary_ts >> 18))
-    if [ $(($shifted_ts_difference / 30000)) -eq 0 ]; then
-        pre_primary_ts = (((($primary_ts >> 18 - 30000))<<18))
-        if [ $pre_primary_ts < $start_ts ]; then 
+    ts_difference=$(($primary_ts - 450248343552000000))
+    shifted_ts_difference=$(($ts_difference >> 18))
+    if [ $(($shifted_ts_difference % 30000)) -eq 0 ]; then
+        pre_primary_ts=$(($primary_ts >> 18 - 30000))
+		pre_primary_ts=$(($pre_primary_ts << 18))
+        if [ $pre_primary_ts -lt $start_ts ]; then 
             echo "check successfully"
         else 
-            echo "primary ts is not correct"
+            echo "primary ts is not correct, there should be a smaller primary ts as the first sync point ts"
             exit 1
+		fi
     else
-        echo "primary ts is not correct"
+        echo "primary ts is not correct, the difference between it and the syncPointStartTs should be the integer multiples of the syncPointInterval "
         exit 1
     fi
 
