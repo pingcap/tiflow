@@ -16,7 +16,6 @@ package v2
 import (
 	"context"
 	"crypto/tls"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2mock "github.com/pingcap/tiflow/pkg/sink/kafka/v2/mock"
 	"github.com/pingcap/tiflow/pkg/util"

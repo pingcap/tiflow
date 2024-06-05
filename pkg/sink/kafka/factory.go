@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -23,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
