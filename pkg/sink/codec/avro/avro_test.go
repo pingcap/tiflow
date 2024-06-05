@@ -826,7 +826,7 @@ func TestAvroEncode(t *testing.T) {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
-	require.Equal(t, int32(127), res.(map[string]interface{})["tu1"])
+	require.Equal(t, int32(1), res.(map[string]interface{})["id"])
 
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)
