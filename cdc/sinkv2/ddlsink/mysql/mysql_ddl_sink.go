@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -219,7 +218,7 @@ func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model
 // Close closes the database connection.
 func (m *mysqlDDLSink) Close() error {
 	if err := m.db.Close(); err != nil {
-		return errors.Trace(err)
+		return cerrors.Trace(err)
 	}
 	if m.statistics != nil {
 		m.statistics.Close()
