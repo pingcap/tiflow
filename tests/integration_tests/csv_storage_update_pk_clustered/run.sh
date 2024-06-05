@@ -24,6 +24,7 @@ function run_changefeed() {
 		echo "expected split count $expected_split_count, real split count $real_split_count"
 		exit 1
 	fi
+	run_sql "drop database if exists test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 }
 
 function run() {
