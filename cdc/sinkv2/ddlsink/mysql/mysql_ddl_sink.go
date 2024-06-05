@@ -20,11 +20,7 @@ import (
 	"net/url"
 	"time"
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-	"github.com/pingcap/errors"
-=======
 	cerrors "github.com/pingcap/errors"
->>>>>>> cd065d3f56 (log(ticdc): Add more error query information to the returned error to facilitate users to know the cause of the failure (#10945)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -33,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
