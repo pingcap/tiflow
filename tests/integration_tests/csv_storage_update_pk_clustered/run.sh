@@ -20,7 +20,7 @@ function run_changefeed() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 
 	real_split_count=$(grep "split update event" $WORK_DIR/cdc.log | wc -l)
-	if [[ $real_split_count  -ne $expected_split_count ]]; then
+	if [[ $real_split_count -ne $expected_split_count ]]; then
 		echo "expected split count $expected_split_count, real split count $real_split_count"
 		exit 1
 	fi

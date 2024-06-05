@@ -20,15 +20,16 @@ function run_changefeed() {
 	sleep 8
 	if [[ $should_pass_check == true ]]; then
 		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
-	else 
+	else
 		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 30 && exit 1 || echo "check_sync_diff failed as expected for $changefeed_id"
 	fi
 
 	real_split_count=$(grep "split update event" $WORK_DIR/cdc.log | wc -l)
-	if [[ $real_split_count  -ne $expected_split_count ]]; then
+	if [[ $real_split_count -ne $expected_split_count ]]; then
 		echo "expected split count $expected_split_count, real split count $real_split_count"
 		exit 1
 	fi
+	run_sql "drop database if exists test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 }
 
 function run() {
