@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"crypto/tls"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -213,7 +214,9 @@ func TestSyncWriterSendMessage(t *testing.T) {
 			require.Equal(t, 3, msgs[0].Partition)
 			return errors.New("fake")
 		})
-	require.NotNil(t, w.SendMessage(context.Background(), "topic", 3, []byte{'1'}, []byte{}))
+
+	message := &common.Message{Key: []byte{'1'}, Value: []byte{}}
+	require.NotNil(t, w.SendMessage(context.Background(), "topic", 3, message))
 }
 
 func TestSyncWriterSendMessages(t *testing.T) {
@@ -224,7 +227,8 @@ func TestSyncWriterSendMessages(t *testing.T) {
 			require.Equal(t, 3, len(msgs))
 			return errors.New("fake")
 		})
-	require.NotNil(t, w.SendMessages(context.Background(), "topic", 3, []byte{'1'}))
+	message := &common.Message{Key: []byte{'1'}, Value: []byte{}}
+	require.NotNil(t, w.SendMessages(context.Background(), "topic", 3, message))
 }
 
 func TestSyncWriterClose(t *testing.T) {
@@ -244,9 +248,9 @@ func TestAsyncWriterAsyncSend(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	callback := func() {}
+	message := &common.Message{Key: []byte{'1'}, Value: []byte{}, Callback: func() {}}
 	mw.EXPECT().WriteMessages(gomock.Any(), gomock.Any()).Return(nil)
-	err := w.AsyncSend(ctx, "topic", 1, nil)
+	err := w.AsyncSend(ctx, "topic", 1, message)
 	require.NoError(t, err)
 
 	cancel()
