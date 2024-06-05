@@ -15,6 +15,7 @@ package dmlproducer
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"testing"
 
@@ -35,7 +36,7 @@ func newPulsarConfig(t *testing.T) (sinkURI *url.URL, replicaConfig *config.Repl
 	sinkURI, err = url.Parse(sinkURL)
 	require.NoError(t, err)
 	replicaConfig = config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
 	var c *config.PulsarConfig
 	c, err = pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)

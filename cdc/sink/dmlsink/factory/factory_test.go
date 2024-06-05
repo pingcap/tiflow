@@ -16,6 +16,7 @@ package factory
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
 	"testing"
@@ -77,7 +78,7 @@ func TestSinkFactory(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
 	errCh := make(chan error, 1)
 
 	sinkFactory, err := newForTest(ctx, uri, replicaConfig, errCh)

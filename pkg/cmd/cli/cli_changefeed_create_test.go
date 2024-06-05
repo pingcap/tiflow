@@ -154,7 +154,7 @@ func TestChangefeedCreateCli(t *testing.T) {
 	defer func() {
 		os.Stdin = stdin
 	}()
-	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
+	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Times(3).Return(&v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
 	}, nil)
 	f.changefeeds.EXPECT().VerifyTable(gomock.Any(), gomock.Any()).Return(&v2.Tables{

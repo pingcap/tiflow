@@ -156,7 +156,16 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 		return err
 	}
 
-	err = cfg.ValidateAndAdjust(uri)
+	startTs := o.startTs
+	if startTs == 0 {
+		tso, err := o.apiClient.Tso().Query(cmdcontext.GetDefaultContext(), o.getUpstreamConfig())
+		if err != nil {
+			return err
+		}
+		startTs = oracle.ComposeTS(tso.Timestamp, tso.LogicTime)
+	}
+
+	err = cfg.ValidateAndAdjust(uri, startTs)
 	if err != nil {
 		return err
 	}

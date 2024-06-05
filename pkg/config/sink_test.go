@@ -14,6 +14,7 @@
 package config
 
 import (
+	"math"
 	"net/url"
 	"testing"
 
@@ -424,16 +425,16 @@ func TestValidateAndAdjustStorageConfig(t *testing.T) {
 	sinkURI, err := url.Parse("s3://bucket?protocol=csv")
 	require.NoError(t, err)
 	s := GetDefaultReplicaConfig()
-	err = s.ValidateAndAdjust(sinkURI)
+	err = s.ValidateAndAdjust(sinkURI, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, DefaultFileIndexWidth, util.GetOrZero(s.Sink.FileIndexWidth))
 
-	err = s.ValidateAndAdjust(sinkURI)
+	err = s.ValidateAndAdjust(sinkURI, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, DefaultFileIndexWidth, util.GetOrZero(s.Sink.FileIndexWidth))
 
 	s.Sink.FileIndexWidth = util.AddressOf(16)
-	err = s.ValidateAndAdjust(sinkURI)
+	err = s.ValidateAndAdjust(sinkURI, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, 16, util.GetOrZero(s.Sink.FileIndexWidth))
 }

@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"testing"
 
@@ -42,7 +43,7 @@ func newPulsarConfig(t *testing.T) (*config.PulsarConfig, *url.URL) {
 	sinkURI, err := url.Parse(sinkURL)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
 	require.NoError(t, err)
 	c, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)

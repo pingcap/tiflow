@@ -35,6 +35,7 @@ var customReplicaConfig = &ReplicaConfig{
 	CheckGCSafePoint:      false,
 	BDRMode:               util.AddressOf(false),
 	EnableSyncPoint:       util.AddressOf(false),
+	SyncPointStartTs:      0,
 	SyncPointInterval:     util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
 	SyncPointRetention:    util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
 	Filter: &FilterConfig{

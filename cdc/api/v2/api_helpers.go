@@ -213,7 +213,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	err = replicaCfg.ValidateAndAdjust(sinkURIParsed)
+	err = replicaCfg.ValidateAndAdjust(sinkURIParsed, cfg.StartTs)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
-		err = newInfo.Config.ValidateAndAdjust(sinkURIParsed)
+		err = newInfo.Config.ValidateAndAdjust(sinkURIParsed, newInfo.StartTs)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}

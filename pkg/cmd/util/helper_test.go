@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -183,7 +184,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
 	require.NoError(t, err)
 
-	err = cfg.ValidateAndAdjust(sinkURL)
+	err = cfg.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: util.AddressOf(config.DefaultEncoderGroupConcurrency),
@@ -228,7 +229,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg.Sink.Protocol = util.AddressOf(config.ProtocolCanalJSON.String())
-	err = cfg.ValidateAndAdjust(sinkURL)
+	err = cfg.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		Protocol:                 util.AddressOf(config.ProtocolCanalJSON.String()),

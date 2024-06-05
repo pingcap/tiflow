@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/url"
 	"testing"
 	"time"
@@ -202,13 +203,13 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
-	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
+	require.NoError(t, conf.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
-	err = conf.ValidateAndAdjust(sinkURL)
+	err = conf.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*", err)
 
 	// Correct sink configuration.
@@ -218,7 +219,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err = conf.ValidateAndAdjust(sinkURL)
+	err = conf.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)
@@ -228,12 +229,12 @@ func TestReplicaConfigValidate(t *testing.T) {
 	// Test memory quota can be adjusted
 	conf = GetDefaultReplicaConfig()
 	conf.MemoryQuota = 0
-	err = conf.ValidateAndAdjust(sinkURL)
+	err = conf.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
 
 	conf.MemoryQuota = uint64(1024)
-	err = conf.ValidateAndAdjust(sinkURL)
+	err = conf.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 
@@ -241,7 +242,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		EnableTableAcrossNodes: true,
 		RegionThreshold:        -1,
 	}
-	err = conf.ValidateAndAdjust(sinkURL)
+	err = conf.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.Error(t, err)
 }
 
@@ -257,7 +258,7 @@ func TestValidateIntegrity(t *testing.T) {
 		},
 	}
 
-	err = cfg.ValidateAndAdjust(sinkURL)
+	err = cfg.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
@@ -268,42 +269,47 @@ func TestValidateAndAdjust(t *testing.T) {
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 
-	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
 	cfg.EnableSyncPoint = util.AddressOf(true)
-	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
 	cfg.SyncPointInterval = util.AddressOf(time.Second * 29)
-	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
+
+	cfg.SyncPointStartTs = 449958073497550850
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550850))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550855))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550845))
 
 	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
 	cfg.SyncPointRetention = util.AddressOf(time.Minute * 10)
-	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
 	cfg.Sink.EncoderConcurrency = util.AddressOf(-1)
-	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
 	cfg = GetDefaultReplicaConfig()
 	cfg.Scheduler = nil
-	require.Nil(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Nil(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 	require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
 
 	// enable the checksum verification, but use blackhole sink
 	cfg = GetDefaultReplicaConfig()
 	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
 
 	// changefeed error stuck duration is less than 30 minutes
 	cfg = GetDefaultReplicaConfig()
 	duration := minChangeFeedErrorStuckDuration - time.Second*1
 	cfg.ChangefeedErrorStuckDuration = &duration
-	err = cfg.ValidateAndAdjust(sinkURL)
+	err = cfg.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "The ChangefeedErrorStuckDuration")
 	duration = minChangeFeedErrorStuckDuration
 	cfg.ChangefeedErrorStuckDuration = &duration
-	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
@@ -376,7 +382,7 @@ func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
 	sinkURL, err := url.Parse(rawURL)
 	require.NoError(t, err)
 
-	err = cfg.ValidateAndAdjust(sinkURL)
+	err = cfg.ValidateAndAdjust(sinkURL, math.MaxUint64)
 	require.NoError(t, err)
 
 	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)

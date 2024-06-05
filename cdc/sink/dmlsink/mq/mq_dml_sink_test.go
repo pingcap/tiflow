@@ -16,6 +16,7 @@ package mq
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"testing"
 	"time"
@@ -44,7 +45,7 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeedID := model.DefaultChangeFeedID("test")
@@ -69,7 +70,7 @@ func TestWriteEvents(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
 	errCh := make(chan error, 1)
 
 	ctx = context.WithValue(ctx, "testing.T", t)
