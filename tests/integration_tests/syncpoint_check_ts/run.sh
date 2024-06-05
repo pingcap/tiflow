@@ -44,25 +44,25 @@ function run() {
 
 	run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 order by primary_ts limit 1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "____________________________________"
-    cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
+	cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
 	primary_ts=($(grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
-    echo "primary_ts is " $primary_ts "start_ts is " $start_ts
+	echo "primary_ts is " $primary_ts "start_ts is " $start_ts
 
-    ts_difference=$(($primary_ts - 450248343552000000))
-    shifted_ts_difference=$(($ts_difference >> 18))
-    if [ $(($shifted_ts_difference % 30000)) -eq 0 ]; then
-        pre_primary_ts=$(($primary_ts >> 18 - 30000))
+	ts_difference=$(($primary_ts - 450248343552000000))
+	shifted_ts_difference=$(($ts_difference >> 18))
+	if [ $(($shifted_ts_difference % 30000)) -eq 0 ]; then
+		pre_primary_ts=$(($primary_ts >> 18 - 30000))
 		pre_primary_ts=$(($pre_primary_ts << 18))
-        if [ $pre_primary_ts -lt $start_ts ]; then 
-            echo "check successfully"
-        else 
-            echo "primary ts is not correct, there should be a smaller primary ts as the first sync point ts"
-            exit 1
+		if [ $pre_primary_ts -lt $start_ts ]; then
+			echo "check successfully"
+		else
+			echo "primary ts is not correct, there should be a smaller primary ts as the first sync point ts"
+			exit 1
 		fi
-    else
-        echo "primary ts is not correct, the difference between it and the syncPointStartTs should be the integer multiples of the syncPointInterval "
-        exit 1
-    fi
+	else
+		echo "primary ts is not correct, the difference between it and the syncPointStartTs should be the integer multiples of the syncPointInterval "
+		exit 1
+	fi
 
 	cleanup_process $CDC_BINARY
 }

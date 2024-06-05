@@ -644,7 +644,7 @@ LOOP2:
 				if oracle.GetTimeFromTS(c.resolvedTs).Sub(startSyncPointTime)%syncPointInterval != 0 {
 					k += 1
 				}
-				firstSyncPointTs := oracle.GoTimeToTS(startSyncPointTime.Add(time.Duration(k) * syncPointInterval))
+				firstSyncPointTs := oracle.GoTimeToTS(startSyncPointTime.Add(k * syncPointInterval))
 				c.barriers.Update(syncPointBarrier, firstSyncPointTs)
 			}
 		} else {
