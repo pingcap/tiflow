@@ -276,13 +276,13 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	cfg.SyncPointInterval = util.AddressOf(time.Second * 29)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
 
 	cfg.SyncPointStartTs = 449958073497550850
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550850))
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550855))
-	require.NoError(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550845))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL, 449958073497550845))
 
-	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
 	cfg.SyncPointRetention = util.AddressOf(time.Minute * 10)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL, math.MaxUint64))
 
