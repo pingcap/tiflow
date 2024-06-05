@@ -18,10 +18,13 @@ function run_changefeed() {
 
 	run_storage_consumer $WORK_DIR $SINK_URI $CUR/conf/$changefeed_id.toml $changefeed_id
 	sleep 8
+
+	cp $CUR/conf/diff_config.toml $WORK_DIR/diff_config.toml
+	sed -i "s/<suffix>/$changefeed_id/" $WORK_DIR/diff_config.toml
 	if [[ $should_pass_check == true ]]; then
-		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
+		check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 100
 	else
-		check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 30 && exit 1 || echo "check_sync_diff failed as expected for $changefeed_id"
+		check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30 && exit 1 || echo "check_sync_diff failed as expected for $changefeed_id"
 	fi
 
 	real_split_count=$(grep "split update event" $WORK_DIR/cdc.log | wc -l)
