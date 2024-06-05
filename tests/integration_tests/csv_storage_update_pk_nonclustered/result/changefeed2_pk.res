@@ -21,6 +21,6 @@
 "D","update_pk","test",450250823807270927,true,100,"example100"
 "I","update_pk","test",450250823807270927,true,200,"example100"
 
-# normal update event also split in csv encoder
+# normal update event, also split in csv encoder
 "D","update_pk","test",450250823807270928,true,1000,"example1000"
 "I","update_pk","test",450250823807270928,true,1000,"example1001"
