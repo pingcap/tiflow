@@ -224,7 +224,7 @@ func TestSyncWriterSendMessages(t *testing.T) {
 			require.Equal(t, 3, len(msgs))
 			return errors.New("fake")
 		})
-	require.NotNil(t, w.SendMessages(context.Background(), "topic", 3, []byte{'1'}, []byte{}))
+	require.NotNil(t, w.SendMessages(context.Background(), "topic", 3, []byte{'1'}))
 }
 
 func TestSyncWriterClose(t *testing.T) {
@@ -246,12 +246,12 @@ func TestAsyncWriterAsyncSend(t *testing.T) {
 
 	callback := func() {}
 	mw.EXPECT().WriteMessages(gomock.Any(), gomock.Any()).Return(nil)
-	err := w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
+	err := w.AsyncSend(ctx, "topic", 1, nil)
 	require.NoError(t, err)
 
 	cancel()
 
-	err = w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
+	err = w.AsyncSend(ctx, "topic", 1, nil)
 	require.ErrorIs(t, err, context.Canceled)
 }
 

@@ -119,8 +119,7 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
-	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, message.Callback)
+	return k.asyncProducer.AsyncSend(ctx, topic, partition, message)
 }
 
 func (k *kafkaDMLProducer) Close() {
