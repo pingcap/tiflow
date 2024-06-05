@@ -235,8 +235,7 @@ func (ti *TableInfo) initColumnsFlag() {
 			flag := ti.ColumnsFlag[colInfo.ID]
 			if idxInfo.Primary {
 				flag.SetIsPrimaryKey()
-			}
-			if idxInfo.Unique {
+			} else if idxInfo.Unique {
 				flag.SetIsUniqueKey()
 			}
 			if len(idxInfo.Columns) > 1 {
