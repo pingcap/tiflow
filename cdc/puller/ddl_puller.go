@@ -390,6 +390,16 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
+	case timodel.ActionCreateTables:
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		skip = true
+		for _, table_info := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, table_info.Name.O) {
+				continue
+			}
+			skip = false
+		}
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
