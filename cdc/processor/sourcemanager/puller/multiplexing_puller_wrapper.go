@@ -37,10 +37,8 @@ func NewMultiplexingPullerWrapper(
 	client *kv.SharedClient,
 	eventSortEngine engine.SortEngine,
 	frontiers int,
-	shouldSplitKVEntry ShouldSplitKVEntry,
-	splitUpdateKVEntry SplitUpdateKVEntry,
 ) *MultiplexingWrapper {
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry, splitUpdateKVEntry model.SplitUpdateKVEntry) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",
 				zap.String("namespace", changefeed.Namespace),

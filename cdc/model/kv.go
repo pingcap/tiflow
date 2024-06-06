@@ -110,3 +110,9 @@ func (v *RawKVEntry) String() string {
 func (v *RawKVEntry) ApproximateDataSize() int64 {
 	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
 }
+
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+type SplitUpdateKVEntry func(raw *RawKVEntry) (*RawKVEntry, *RawKVEntry, error)

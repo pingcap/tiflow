@@ -40,12 +40,6 @@ type Wrapper interface {
 	Close()
 }
 
-// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
-type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
-
-// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
-type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error)
-
 // WrapperImpl is a wrapper of puller used by source manager.
 type WrapperImpl struct {
 	changefeed model.ChangeFeedID
@@ -55,8 +49,8 @@ type WrapperImpl struct {
 	startTs    model.Ts
 	bdrMode    bool
 
-	shouldSplitKVEntry ShouldSplitKVEntry
-	splitUpdateKVEntry SplitUpdateKVEntry
+	shouldSplitKVEntry model.ShouldSplitKVEntry
+	splitUpdateKVEntry model.SplitUpdateKVEntry
 
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
@@ -71,8 +65,8 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
-	shouldSplitKVEntry ShouldSplitKVEntry,
-	splitUpdateKVEntry SplitUpdateKVEntry,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+	splitUpdateKVEntry model.SplitUpdateKVEntry,
 ) Wrapper {
 	return &WrapperImpl{
 		changefeed:         changefeed,

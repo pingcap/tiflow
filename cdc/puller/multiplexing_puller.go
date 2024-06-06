@@ -75,7 +75,7 @@ type tableProgressWithSubID struct {
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
-	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry, model.SplitUpdateKVEntry) error
 	hasher     func(tablepb.Span, int) int
 	frontiers  int
 
@@ -106,7 +106,7 @@ type MultiplexingPuller struct {
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
-	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry, model.SplitUpdateKVEntry) error,
 	workers int,
 	hasher func(tablepb.Span, int) int,
 	frontiers int,
@@ -130,13 +130,25 @@ func NewMultiplexingPuller(
 }
 
 // Subscribe some spans. They will share one same resolved timestamp progress.
-func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
+func (p *MultiplexingPuller) Subscribe(
+	spans []tablepb.Span,
+	startTs model.Ts,
+	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+	splitUpdateKVEntry model.SplitUpdateKVEntry,
+) {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	p.subscribe(spans, startTs, tableName)
+	p.subscribe(spans, startTs, tableName, shouldSplitKVEntry, splitUpdateKVEntry)
 }
 
-func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
+func (p *MultiplexingPuller) subscribe(
+	spans []tablepb.Span,
+	startTs model.Ts,
+	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+	splitUpdateKVEntry model.SplitUpdateKVEntry,
+) []kv.SubscriptionID {
 	for _, span := range spans {
 		if _, exists := p.subscriptions.n.Get(span); exists {
 			log.Panic("redundant subscription",
@@ -164,7 +176,7 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		progress.consume.RLock()
 		defer progress.consume.RUnlock()
 		if !progress.consume.removed {
-			return p.consume(ctx, raw, spans)
+			return p.consume(ctx, raw, spans, shouldSplitKVEntry, splitUpdateKVEntry)
 		}
 		return nil
 	}
