@@ -613,7 +613,7 @@ func NewDDLJobPuller(
 			txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
 		)
 
-		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry, _ model.SplitUpdateKVEntry) error {
+		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -627,10 +627,7 @@ func NewDDLJobPuller(
 		shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 			return false
 		}
-		splitUpdateKVEntry := func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-			return nil, nil, nil
-		}
-		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName, shouldSplitKVEntry, splitUpdateKVEntry)
+		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName, shouldSplitKVEntry)
 	} else {
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,

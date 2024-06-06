@@ -75,7 +75,7 @@ type tableProgressWithSubID struct {
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
-	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry, model.SplitUpdateKVEntry) error
+	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error
 	hasher     func(tablepb.Span, int) int
 	frontiers  int
 
@@ -106,7 +106,7 @@ type MultiplexingPuller struct {
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
-	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry, model.SplitUpdateKVEntry) error,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error,
 	workers int,
 	hasher func(tablepb.Span, int) int,
 	frontiers int,
@@ -135,11 +135,10 @@ func (p *MultiplexingPuller) Subscribe(
 	startTs model.Ts,
 	tableName string,
 	shouldSplitKVEntry model.ShouldSplitKVEntry,
-	splitUpdateKVEntry model.SplitUpdateKVEntry,
 ) {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	p.subscribe(spans, startTs, tableName, shouldSplitKVEntry, splitUpdateKVEntry)
+	p.subscribe(spans, startTs, tableName, shouldSplitKVEntry)
 }
 
 func (p *MultiplexingPuller) subscribe(
@@ -147,7 +146,6 @@ func (p *MultiplexingPuller) subscribe(
 	startTs model.Ts,
 	tableName string,
 	shouldSplitKVEntry model.ShouldSplitKVEntry,
-	splitUpdateKVEntry model.SplitUpdateKVEntry,
 ) []kv.SubscriptionID {
 	for _, span := range spans {
 		if _, exists := p.subscriptions.n.Get(span); exists {
@@ -176,7 +174,7 @@ func (p *MultiplexingPuller) subscribe(
 		progress.consume.RLock()
 		defer progress.consume.RUnlock()
 		if !progress.consume.removed {
-			return p.consume(ctx, raw, spans, shouldSplitKVEntry, splitUpdateKVEntry)
+			return p.consume(ctx, raw, spans, shouldSplitKVEntry)
 		}
 		return nil
 	}

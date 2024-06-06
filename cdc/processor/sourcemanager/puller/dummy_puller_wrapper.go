@@ -35,7 +35,6 @@ func NewPullerWrapperForTest(
 	startTs model.Ts,
 	bdrMode bool,
 	shouldSplitKVEntry model.ShouldSplitKVEntry,
-	splitUpdateKVEntry model.SplitUpdateKVEntry,
 ) Wrapper {
 	return &dummyPullerWrapper{}
 }

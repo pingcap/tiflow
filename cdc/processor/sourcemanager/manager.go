@@ -49,7 +49,6 @@ type pullerWrapperCreator func(
 	startTs model.Ts,
 	bdrMode bool,
 	shouldSplitKVEntry model.ShouldSplitKVEntry,
-	splitUpdateKVEntry model.SplitUpdateKVEntry,
 ) pullerwrapper.Wrapper
 
 type tablePullers struct {
@@ -115,19 +114,6 @@ func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
 	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
 }
 
-func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-	if raw == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-	deleteKVEntry := *raw
-	deleteKVEntry.Value = nil
-
-	insertKVEntry := *raw
-	insertKVEntry.OldValue = nil
-
-	return &deleteKVEntry, &insertKVEntry, nil
-}
-
 func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
@@ -170,11 +156,11 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	}
 
 	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry, splitUpdateKVEntry)
+		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
 		return nil
 	}
 
-	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
+	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
 	m.tablePullers.Store(span, p)
 	return nil
