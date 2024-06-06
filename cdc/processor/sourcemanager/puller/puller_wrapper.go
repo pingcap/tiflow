@@ -41,7 +41,7 @@ type Wrapper interface {
 }
 
 // ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
-type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
+type ShouldSplitKVEntry func(span tablepb.Span) bool
 
 // SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
 type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error)
@@ -139,7 +139,7 @@ func (n *WrapperImpl) Start(
 				if rawKV == nil {
 					continue
 				}
-				if n.shouldSplitKVEntry(rawKV) {
+				if n.shouldSplitKVEntry(n.span) {
 					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
 					if err != nil {
 						return err

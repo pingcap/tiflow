@@ -61,6 +61,7 @@ type TableStats struct {
 	ResolvedTs   model.Ts
 	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
+	ReplicaTs    model.Ts
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -1066,6 +1067,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 		ResolvedTs:   resolvedTs,
 		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
+		ReplicaTs:    tableSink.replicateTs,
 	}
 }
 

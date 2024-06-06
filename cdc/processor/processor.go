@@ -220,6 +220,7 @@ func (p *processor) AddTableSpan(
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
+
 	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
 
 	return true, nil
@@ -361,6 +362,11 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 	if collectStat {
 		stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
 	}
+
+	if sinkStats.CheckpointTs > sinkStats.ReplicaTs {
+		p.sourceManager.r.StopSafemode(span)
+	}
+
 	return tablepb.TableStatus{
 		TableID: span.TableID,
 		Span:    span,
@@ -656,10 +662,10 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("processor puller safemode at start", zap.Stringer("changefeed", p.changefeedID))
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		pullerSafeModeAtStart)
+		sortEngine, util.GetOrZero(cfConfig.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
@@ -673,6 +679,8 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	// Bind them so that sourceManager can notify sinkManager.r.
 	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+	p.sourceManager.r.Safemode = pullerSafeModeAtStart
+
 	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
 	if err != nil {
 		return err

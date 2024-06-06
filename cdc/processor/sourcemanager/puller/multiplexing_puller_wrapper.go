@@ -47,7 +47,7 @@ func NewMultiplexingPullerWrapper(
 				zap.String("changefeed", changefeed.ID))
 		}
 		if raw != nil {
-			if shouldSplitKVEntry(raw) {
+			if shouldSplitKVEntry(spans[0]) {
 				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
 				if err != nil {
 					return err
