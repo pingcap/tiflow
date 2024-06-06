@@ -16,9 +16,7 @@ function run_with_fast_create_table() {
 	cd $WORK_DIR
 
 	run_sql "set global tidb_enable_fast_create_table=on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
-	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/prepare.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
@@ -39,7 +37,9 @@ function run_with_fast_create_table() {
 	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
 	esac
 
+	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists batch_add_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -56,9 +56,6 @@ function run_without_fast_create_table() {
 
 	run_sql "set global tidb_enable_fast_create_table=off" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/prepare.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	TOPIC_NAME="ticdc-batch-add-table-test-$RANDOM"
@@ -78,7 +75,9 @@ function run_without_fast_create_table() {
 	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
 	esac
 
+	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists batch_add_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml

@@ -474,9 +474,9 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		}
 	case timodel.ActionCreateTables:
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
-		for _, table_info := range multiTableInfos {
+		for _, tableInfo := range multiTableInfos {
 			err := s.inner.createTable(model.WrapTableInfo(job.SchemaID, job.SchemaName,
-				job.BinlogInfo.FinishedTS, table_info), job.BinlogInfo.FinishedTS)
+				job.BinlogInfo.FinishedTS, tableInfo), job.BinlogInfo.FinishedTS)
 			if err != nil {
 				return errors.Trace(err)
 			}

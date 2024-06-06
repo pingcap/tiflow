@@ -414,13 +414,13 @@ func (s *schemaStorage) BuildDDLEvents(
 			multiTableInfos := job.BinlogInfo.MultipleTableInfos
 			for index, tableInfo := range multiTableInfos {
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
-				job.Query = querys[index] // todo: add a test to ensure that
+				job.Query = querys[index]
 				event := new(model.DDLEvent)
 				event.FromJob(job, nil, newTableInfo)
 				ddlEvents = append(ddlEvents, event)
 			}
 		} else {
-			return nil, errors.Errorf("there is no multiple table infos in the create tables job", zap.Any("job", job))
+			return nil, errors.Errorf("there is no multiple table infos in the create tables job: %s", job)
 		}
 	default:
 		// parse preTableInfo
