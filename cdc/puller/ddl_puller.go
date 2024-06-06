@@ -393,9 +393,9 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	case timodel.ActionCreateTables:
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
 		skip = true
-		for _, table_info := range multiTableInfos {
+		for _, tableInfo := range multiTableInfos {
 			// judge each table whether need to be skip
-			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, table_info.Name.O) {
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O) {
 				continue
 			}
 			skip = false
