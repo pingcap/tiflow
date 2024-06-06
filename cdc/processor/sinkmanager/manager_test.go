@@ -355,7 +355,8 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 
-	source.AddTable(span, "test", 100)
+	err := source.AddTable(span, "test", 100)
+	require.Nil(t, err)
 	manager.AddTable(span, 100, math.MaxUint64)
 	manager.StartTable(span, 100)
 	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))

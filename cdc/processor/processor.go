@@ -220,7 +220,10 @@ func (p *processor) AddTableSpan(
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
+	err := p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
 
 	return true, nil
 }
