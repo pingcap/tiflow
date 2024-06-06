@@ -120,17 +120,23 @@ func (c *consumer) Consume(ctx context.Context) {
 			log.Panic("close kafka consumer failed", zap.Error(err))
 		}
 	}()
-
 	for {
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
-			log.Panic("read message failed", zap.Error(err))
+			errCode := err.(kafka.Error).Code()
+			if errCode == kafka.ErrUnknownPartition {
+				log.Panic("read unknow partition",
+					zap.Int32("partitionNum", c.writer.option.partitionNum),
+					zap.Int32("partition", msg.TopicPartition.Partition))
+			} else {
+				log.Panic("read message failed", zap.Error(err))
+			}
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
 		if !needCommit {
 			continue
 		}
-		// TODO: retry commit if fail
+		// TODO: retry commit
 		if _, err = c.client.CommitMessage(msg); err != nil {
 			log.Panic("commit message failed", zap.Error(err))
 		}
