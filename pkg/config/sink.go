@@ -236,7 +236,9 @@ func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
 	if s == nil {
 		return false
 	}
-	return s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
+	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
+	log.Info("fizz send all bootstrap at start", zap.Bool("should", should))
+	return should
 }
 
 // CSVConfig defines a series of configuration items for csv codec.

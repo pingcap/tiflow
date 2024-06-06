@@ -225,6 +225,14 @@ func (m *ddlManager) tick(
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
 
+	ok, err := m.checkAndSendBootstarpMsgs(ctx)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	if !ok {
+		return nil, nil, nil
+	}
+
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
