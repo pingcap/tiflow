@@ -223,7 +223,6 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
-			log.Info("generate event", zap.Any("event.query", event.Query))
 			tableName := event.TableInfo.TableName
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}
