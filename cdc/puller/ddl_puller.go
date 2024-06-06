@@ -624,10 +624,7 @@ func NewDDLJobPuller(
 		slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
 		mp.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume, slots, hasher, 1)
 
-		shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-			return false
-		}
-		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName, shouldSplitKVEntry)
+		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
 	} else {
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,
