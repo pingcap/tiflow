@@ -28,7 +28,7 @@ import (
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
 	client := kv.NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
-	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span) error {
+	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
