@@ -10,6 +10,8 @@ FROM alpine:3.15
 
 RUN apk update && apk add tzdata
 
+ENV TZ=Asia/Shanghai
+
 COPY --from=builder  /go/src/github.com/pingcap/tiflow/bin/cdc_kafka_consumer /cdc_kafka_consumer
 
 ENTRYPOINT ["tail", "-f", "/dev/null"]

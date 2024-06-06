@@ -153,7 +153,7 @@ func TestABBE2E(t *testing.T) {
 		require.EqualValues(t, expected.Value, obtained.Value)
 	}
 
-	dns := "root@tcp(127.0.0.1:3306)/?time_zone=UTC"
+	dns := "root@tcp(127.0.0.1:3306)/?parseTime=true&loc=Local"
 	db, err := openDB(ctx, dns)
 	require.NoError(t, err)
 	require.NotNil(t, db)
