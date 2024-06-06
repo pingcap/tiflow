@@ -160,7 +160,7 @@ func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
 			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
 		}()
 
-		if err := w.backend.Flush(w.ctx); err != nil {
+		if err := w.backend.Flush(w.ctx, w.ID); err != nil {
 			log.Warn("Transaction dmlSink backend flush fail",
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID),

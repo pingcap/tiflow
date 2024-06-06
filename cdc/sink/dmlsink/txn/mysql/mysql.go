@@ -211,7 +211,7 @@ func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlus
 }
 
 // Flush implements interface backend.
-func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
+func (s *mysqlBackend) Flush(ctx context.Context, id int) (err error) {
 	if s.rows == 0 {
 		return
 	}
@@ -228,8 +228,8 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
-		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	log.Info("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
+		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values), zap.Any("worker", id))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {

@@ -26,7 +26,7 @@ type backend interface {
 	OnTxnEvent(e *dmlsink.TxnCallbackableEvent) (needFlush bool)
 
 	// Flush pending events in the backend.
-	Flush(ctx context.Context) error
+	Flush(ctx context.Context, id int) error
 
 	// To reduce latency for low throughput cases.
 	MaxFlushInterval() time.Duration
