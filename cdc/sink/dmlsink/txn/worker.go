@@ -171,7 +171,7 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	w.metricConflictDetectDuration.Observe(conflictDetectTime)
 	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
 
-	// Log slow conflict detect tables every minute.
+     // Log tables which conflict detect time larger than 1 minute.
 	if conflictDetectTime > float64(60) {
 		now := time.Now()
         // Log slow conflict detect tables every minute.
