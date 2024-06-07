@@ -16,8 +16,6 @@ package sink
 import (
 	"net/url"
 	"strings"
-
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Type is the type of sink.
@@ -107,14 +105,4 @@ func IsBlackHoleScheme(scheme string) bool {
 // GetScheme returns the scheme of the url.
 func GetScheme(url *url.URL) string {
 	return strings.ToLower(url.Scheme)
-}
-
-// IsMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
-func IsMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := GetScheme(sinkURI)
-	return IsMySQLCompatibleScheme(scheme), nil
 }

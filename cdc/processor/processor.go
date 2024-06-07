@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -576,6 +577,16 @@ func (p *processor) tick(ctx cdcContext.Context) (error, error) {
 	return nil, warning
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if p.initialized.Load() {
@@ -639,7 +650,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	isMysqlBackend, err := sink.IsMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
