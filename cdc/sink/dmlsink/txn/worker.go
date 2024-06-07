@@ -171,10 +171,10 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	w.metricConflictDetectDuration.Observe(conflictDetectTime)
 	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
 
-     // Log tables which conflict detect time larger than 1 minute.
+	// Log tables which conflict detect time larger than 1 minute.
 	if conflictDetectTime > float64(60) {
 		now := time.Now()
-        // Log slow conflict detect tables every minute.
+		// Log slow conflict detect tables every minute.
 		if lastLog, ok := w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID]; !ok || now.Sub(lastLog) > time.Minute {
 			log.Warn("Transaction dmlSink finds a slow transaction in conflict detector",
 				zap.String("changefeedID", w.changefeed),
