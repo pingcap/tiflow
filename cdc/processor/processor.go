@@ -215,16 +215,16 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	p.sinkManager.r.AddTable(
+	table := p.sinkManager.r.AddTable(
 		span, startTs, p.latestInfo.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	err := p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
+
+	err := p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-
 	return true, nil
 }
 
@@ -669,7 +669,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, pullerSafeModeAtStart)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(prcCtx)

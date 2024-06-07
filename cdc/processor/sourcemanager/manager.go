@@ -110,8 +110,8 @@ func NewForTest(
 	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, false, pullerwrapper.NewPullerWrapperForTest)
 }
 
-func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 func newSourceManager(
@@ -142,17 +142,12 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) error {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) error {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
-	thresholdTs, err := getCurrentTs(context.Background(), m.up.PDClient)
-	if err != nil {
-		return err
-	}
-
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, thresholdTs)
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
 
 	if m.multiplexing {
