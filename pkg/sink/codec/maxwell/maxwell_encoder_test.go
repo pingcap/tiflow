@@ -30,7 +30,6 @@ func TestMaxwellBatchCodec(t *testing.T) {
 	ddlEvent := helper.DDL2Event("create table test.t(col1 int primary key)")
 	dmlEvent := helper.DML2Event("insert into test.t values (10)", "test", "t")
 
-	//tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeLong}}, nil)
 	rowCases := [][]*model.RowChangedEvent{{dmlEvent}, {}}
 	for _, cs := range rowCases {
 		encoder := newBatchEncoder(&common.Config{})
