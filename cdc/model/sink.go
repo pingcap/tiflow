@@ -294,6 +294,7 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 			Table:       r.TableInfo.GetTableName(),
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
+		TableID:      r.GetTableID(),
 		Columns:      r.GetColumns(),
 		PreColumns:   r.GetPreColumns(),
 		IndexColumns: r.TableInfo.IndexColumnsOffset,

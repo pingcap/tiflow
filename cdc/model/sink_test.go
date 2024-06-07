@@ -20,7 +20,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -616,17 +615,38 @@ func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 }
 
 func TestToRedoLog(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	_ = helper.DDL2Event("create table test.t(col1 varchar(255) primary key, col2 varchar(255))")
-	event := helper.DML2Event("insert into test.t values ('col1-value', 'col2-value-updated')", "test", "t")
-
+	cols := []*Column{
+		{
+			Name: "col1",
+			Flag: BinaryFlag,
+		},
+		{
+			Name: "col2",
+			Flag: HandleKeyFlag | UniqueKeyFlag,
+		},
+	}
+	tableInfo := BuildTableInfo("test", "t", cols, [][]int{{1}})
+	event := &RowChangedEvent{
+		StartTs:         100,
+		CommitTs:        1000,
+		PhysicalTableID: 1,
+		TableInfo:       tableInfo,
+		Columns: Columns2ColumnDatas([]*Column{
+			{
+				Name:  "col1",
+				Value: "col1-value",
+			},
+			{
+				Name:  "col2",
+				Value: "col2-value-updated",
+			},
+		}, tableInfo),
+	}
 	eventInRedoLog := event.ToRedoLog()
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
 	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)
 	require.Equal(t, event.GetTableID(), eventInRedoLog.RedoRow.Row.TableID)
 	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
 	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
-	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, event.TableInfo))
+	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, tableInfo))
 }
