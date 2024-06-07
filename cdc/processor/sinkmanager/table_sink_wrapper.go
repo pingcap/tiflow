@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -77,7 +78,7 @@ type tableSinkWrapper struct {
 	receivedSorterResolvedTs atomic.Uint64
 
 	// replicateTs is the ts that the table sink has started to replicate.
-	replicateTs    model.Ts
+	replicateTs    atomic.Uint64
 	genReplicateTs func(ctx context.Context) (model.Ts, error)
 
 	// lastCleanTime indicates the last time the table has been cleaned.
@@ -88,6 +89,11 @@ type tableSinkWrapper struct {
 	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
 	rangeEventCountsMu sync.Mutex
+}
+
+// GetReplicaTs returns the replicate ts of the table sink.
+func (t *tableSinkWrapper) GetReplicaTs() model.Ts {
+	return t.replicateTs.Load()
 }
 
 type rangeEventCount struct {
@@ -132,31 +138,34 @@ func newTableSinkWrapper(
 
 	res.receivedSorterResolvedTs.Store(startTs)
 	res.barrierTs.Store(startTs)
+	res.replicateTs.Store(math.MaxUint64)
 	return res
 }
 
 func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err error) {
-	if t.replicateTs != 0 {
+	if t.replicateTs.Load() != math.MaxUint64 {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
 			zap.Stringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
-			zap.Uint64("oldReplicateTs", t.replicateTs),
+			zap.Uint64("oldReplicateTs", t.replicateTs.Load()),
 		)
 	}
 
 	// FIXME(qupeng): it can be re-fetched later instead of fails.
-	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+	ts, err := t.genReplicateTs(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	t.replicateTs.Store(ts)
 
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Stringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
-		zap.Uint64("replicateTs", t.replicateTs),
+		zap.Uint64("replicateTs", ts),
 	)
 
 	// This start ts maybe greater than the initial start ts of the table sink.
@@ -379,14 +388,16 @@ func (t *tableSinkWrapper) checkTableSinkHealth() (err error) {
 // committed at downstream but we don't know. So we need to update `replicateTs`
 // of the table so that we can re-send those events later.
 func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
-	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+	ts, err := t.genReplicateTs(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	t.replicateTs.Store(ts)
 	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Uint64("replicateTs", t.replicateTs))
+		zap.Uint64("replicateTs", ts))
 	return nil
 }
 
