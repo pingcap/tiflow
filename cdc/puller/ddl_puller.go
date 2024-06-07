@@ -549,6 +549,7 @@ func NewDDLJobPuller(
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
 		filter:        filter,
+<<<<<<< HEAD
 		schemaStorage: schemaStorage,
 		puller: New(
 			ctx,
@@ -569,6 +570,44 @@ func NewDDLJobPuller(
 		metricDiscardedDDLCounter: discardedDDLCounter.
 			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
+=======
+		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
+	}
+	if jobPuller.multiplexing {
+		mp := &jobPuller.multiplexingPuller
+
+		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
+		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
+		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+
+		client := kv.NewSharedClient(
+			changefeed, cfg, ddlPullerFilterLoop,
+			pdCli, grpcPool, regionCache, pdClock,
+			txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
+		)
+
+		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case rawDDLCh <- raw:
+				return nil
+			}
+		}
+		slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
+		mp.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume, slots, hasher, 1)
+
+		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
+	} else {
+		jobPuller.puller.Puller = New(
+			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,
+			checkpointTs, spans, cfg, changefeed, -1, memorysorter.DDLPullerTableName,
+			ddlPullerFilterLoop,
+		)
+	}
+
+	return jobPuller, nil
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // DDLPuller is the interface for DDL Puller, used by owner only.

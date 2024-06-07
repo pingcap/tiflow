@@ -218,6 +218,7 @@ func (p *processor) AddTable(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
+<<<<<<< HEAD
 	if p.pullBasedSinking {
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoDMLMgr.Enabled() {
@@ -231,8 +232,15 @@ func (p *processor) AddTable(
 			return false, errors.Trace(err)
 		}
 		p.tables[tableID] = table
+=======
+	table := p.sinkManager.r.AddTable(
+		span, startTs, p.latestInfo.TargetTs)
+	if p.redo.r.Enabled() {
+		p.redo.r.AddTable(span, startTs)
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	}
 
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -570,18 +578,6 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
-// pullerSafeMode means to split all update kv entries whose commitTS
-// is older then the start time of this changefeed.
-func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := sink.GetScheme(sinkURI)
-	return sink.IsMySQLCompatibleScheme(scheme), nil
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
@@ -757,6 +753,16 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	return true
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
@@ -913,7 +919,32 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
+<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
+=======
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.sourceManager.r = sourcemanager.New(
+		p.changefeedID, p.upstream, p.mg.r,
+		sortEngine, util.GetOrZero(cfConfig.BDRMode),
+		isMysqlBackend)
+	p.sourceManager.name = "SourceManager"
+	p.sourceManager.changefeedID = p.changefeedID
+	p.sourceManager.spawn(prcCtx)
+
+	p.sinkManager.r = sinkmanager.New(
+		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
+	p.sinkManager.name = "SinkManager"
+	p.sinkManager.changefeedID = p.changefeedID
+	p.sinkManager.spawn(prcCtx)
+
+	// Bind them so that sourceManager can notify sinkManager.r.
+	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	if err != nil {
 		return err
 	}

@@ -32,6 +32,7 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
 // ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
 type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
 
@@ -40,6 +41,23 @@ type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.R
 
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper struct {
+=======
+// Wrapper is a wrapper of puller used by source manager.
+type Wrapper interface {
+	// Start the puller and send internal errors into `errChan`.
+	Start(
+		ctx context.Context,
+		up *upstream.Upstream,
+		eventSortEngine engine.SortEngine,
+		errChan chan<- error,
+	)
+	GetStats() puller.Stats
+	Close()
+}
+
+// WrapperImpl is a wrapper of puller used by source manager.
+type WrapperImpl struct {
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string // quoted schema and table, used in metircs only
@@ -51,8 +69,17 @@ type Wrapper struct {
 	wg      sync.WaitGroup
 	bdrMode bool
 
+<<<<<<< HEAD
 	shouldSplitKVEntry ShouldSplitKVEntry
 	splitUpdateKVEntry SplitUpdateKVEntry
+=======
+	shouldSplitKVEntry model.ShouldSplitKVEntry
+
+	// cancel is used to cancel the puller when remove or close the table.
+	cancel context.CancelFunc
+	// eg is used to wait the puller to exit.
+	eg *errgroup.Group
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -62,17 +89,22 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
+<<<<<<< HEAD
 	shouldSplitKVEntry ShouldSplitKVEntry,
 	splitUpdateKVEntry SplitUpdateKVEntry,
 ) *Wrapper {
 	return &Wrapper{
+=======
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+) Wrapper {
+	return &WrapperImpl{
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 		changefeed:         changefeed,
 		tableID:            tableID,
 		tableName:          tableName,
 		startTs:            startTs,
 		bdrMode:            bdrMode,
 		shouldSplitKVEntry: shouldSplitKVEntry,
-		splitUpdateKVEntry: splitUpdateKVEntry,
 	}
 }
 
@@ -146,7 +178,7 @@ func (n *Wrapper) Start(
 					continue
 				}
 				if n.shouldSplitKVEntry(rawKV) {
-					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
+					deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(rawKV)
 					if err != nil {
 						log.Panic("failed to split update kv entry", zap.Error(err))
 						return

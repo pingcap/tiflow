@@ -276,12 +276,19 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		var x []*model.RowChangedEvent
 		var size uint64
 		if e.Row != nil {
+<<<<<<< HEAD
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
 			x, size = handleRowChangedEvents(w.changefeedID, task.tableID, e)
 			usedMemSize += size
 			rows = append(rows, x...)
 			rowsSize += size
+=======
+			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
+			e.Row.ReplicatingTs = task.tableSink.replicateTs.Load()
+			x, size = handleRowChangedEvents(w.changefeedID, task.span, e)
+			advancer.appendEvents(x, size)
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 		}
 		if cache != nil {
 			cached, brokenSize := cache.pushBatch(x, size, pos)
