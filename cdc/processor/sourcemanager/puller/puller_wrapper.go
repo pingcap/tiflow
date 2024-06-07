@@ -55,8 +55,7 @@ type WrapperImpl struct {
 	startTs    model.Ts
 	bdrMode    bool
 
-	shouldSplitKVEntry ShouldSplitKVEntry
-	splitUpdateKVEntry SplitUpdateKVEntry
+	shouldSplitKVEntry model.ShouldSplitKVEntry
 
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
@@ -71,8 +70,7 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
-	shouldSplitKVEntry ShouldSplitKVEntry,
-	splitUpdateKVEntry SplitUpdateKVEntry,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
 ) Wrapper {
 	return &WrapperImpl{
 		changefeed:         changefeed,
@@ -81,7 +79,6 @@ func NewPullerWrapper(
 		startTs:            startTs,
 		bdrMode:            bdrMode,
 		shouldSplitKVEntry: shouldSplitKVEntry,
-		splitUpdateKVEntry: splitUpdateKVEntry,
 	}
 }
 
@@ -141,7 +138,7 @@ func (n *WrapperImpl) Start(
 					continue
 				}
 				if n.shouldSplitKVEntry(rawKV) {
-					deleteKVEntry, insertKVEntry, err := n.splitUpdateKVEntry(rawKV)
+					deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(rawKV)
 					if err != nil {
 						return err
 					}
