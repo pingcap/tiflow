@@ -143,7 +143,7 @@ func newTableSinkWrapper(
 }
 
 func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err error) {
-	if t.replicateTs.Load() != 0 {
+	if t.replicateTs.Load() != math.MaxUint64 {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
