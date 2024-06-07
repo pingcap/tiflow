@@ -14,9 +14,9 @@
 package maxwell
 
 import (
-	"github.com/pingcap/tiflow/cdc/entry"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/stretchr/testify/require"
 )
 
