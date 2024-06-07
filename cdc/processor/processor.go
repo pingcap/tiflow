@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -221,10 +220,7 @@ func (p *processor) AddTableSpan(
 		p.redo.r.AddTable(span, startTs)
 	}
 
-	err := p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -481,18 +477,6 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
-// pullerSafeMode means to split all update kv entries whose commitTS
-// is older then the start time of this changefeed.
-func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := sink.GetScheme(sinkURI)
-	return sink.IsMySQLCompatibleScheme(scheme), nil
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `info` parameter is sent by metadata store, the `info` must be the latest value snapshot.
 // the `status` parameter is sent by metadata store, the `status` must be the latest value snapshot.
@@ -655,21 +639,21 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
+	isMysqlBackend, err := sink.IsMysqlCompatibleBackend(p.latestInfo.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		pullerSafeModeAtStart)
+		isMysqlBackend)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, pullerSafeModeAtStart)
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(prcCtx)

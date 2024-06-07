@@ -142,7 +142,7 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) error {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
@@ -152,13 +152,12 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 
 	if m.multiplexing {
 		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
-		return nil
+		return
 	}
 
 	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
 	m.tablePullers.Store(span, p)
-	return nil
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
