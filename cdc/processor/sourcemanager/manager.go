@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -28,18 +27,43 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+=======
+	"github.com/pingcap/tiflow/pkg/spanz"
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 const defaultMaxBatchSize = 256
 
+<<<<<<< HEAD
+=======
+type pullerWrapperCreator func(
+	changefeed model.ChangeFeedID,
+	span tablepb.Span,
+	tableName string,
+	startTs model.Ts,
+	bdrMode bool,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+) pullerwrapper.Wrapper
+
+type tablePullers struct {
+	ctx     context.Context
+	errChan chan error
+	spanz.SyncMap
+	pullerWrapperCreator pullerWrapperCreator
+}
+
+type multiplexingPuller struct {
+	puller *pullerwrapper.MultiplexingWrapper
+}
+
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ready chan struct{}
@@ -55,7 +79,10 @@ type SourceManager struct {
 	engine sorter.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
+<<<<<<< HEAD
 	startTs model.Ts
+=======
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
@@ -92,21 +119,8 @@ func NewForTest(
 	}
 }
 
-func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
-}
-
-func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-	if raw == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-	deleteKVEntry := *raw
-	deleteKVEntry.Value = nil
-
-	insertKVEntry := *raw
-	insertKVEntry.OldValue = nil
-
-	return &deleteKVEntry, &insertKVEntry, nil
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 func newSourceManager(
@@ -175,14 +189,29 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
+<<<<<<< HEAD
 	// Only nil in unit tests.
 	if m.puller != nil {
 		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
 	}
+=======
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+	}
+
+	if m.multiplexing {
+		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
+		return
+	}
+
+	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
+	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
+	m.tablePullers.Store(span, p)
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
@@ -222,6 +251,7 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) sorter.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
+<<<<<<< HEAD
 	close(m.ready)
 	// Only nil in unit tests.
 	if m.puller == nil {
@@ -233,6 +263,34 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	}
 	m.startTs = startTs
 	return m.puller.Run(ctx)
+=======
+	if m.multiplexing {
+		serverConfig := config.GetGlobalServerConfig()
+		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+		client := kv.NewSharedClient(
+			m.changefeedID, serverConfig, m.bdrMode,
+			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
+			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
+		)
+
+		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
+			m.changefeedID, client, m.engine,
+			int(serverConfig.KVClient.FrontierConcurrent),
+		)
+
+		close(m.ready)
+		return m.multiplexingPuller.puller.Run(ctx)
+	}
+
+	m.tablePullers.ctx = ctx
+	close(m.ready)
+	select {
+	case err := <-m.tablePullers.errChan:
+		return err
+	case <-m.tablePullers.ctx.Done():
+		return m.tablePullers.ctx.Err()
+	}
+>>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // WaitForReady implements util.Runnable.
@@ -272,24 +330,4 @@ func (m *SourceManager) Close() {
 // Add adds events to the engine. It is used for testing.
 func (m *SourceManager) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	m.engine.Add(span, events...)
-}
-
-func getCurrentTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
-	backoffBaseDelayInMs := int64(100)
-	totalRetryDuration := 10 * time.Second
-	var replicateTs model.Ts
-	err := retry.Do(ctx, func() error {
-		phy, logic, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		replicateTs = oracle.ComposeTS(phy, logic)
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	if err != nil {
-		return model.Ts(0), errors.Trace(err)
-	}
-	return replicateTs, nil
 }

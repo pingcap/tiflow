@@ -16,6 +16,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -109,4 +110,21 @@ func (v *RawKVEntry) String() string {
 // representation of this event.
 func (v *RawKVEntry) ApproximateDataSize() int64 {
 	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
+}
+
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+func SplitUpdateKVEntry(raw *RawKVEntry) (*RawKVEntry, *RawKVEntry, error) {
+	if raw == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+	deleteKVEntry := *raw
+	deleteKVEntry.Value = nil
+
+	insertKVEntry := *raw
+	insertKVEntry.OldValue = nil
+
+	return &deleteKVEntry, &insertKVEntry, nil
 }
