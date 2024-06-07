@@ -124,6 +124,7 @@ func (c *consumer) Consume(ctx context.Context) {
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
 			log.Error("read message failed", zap.Error(err.(kafka.Error)))
+			continue
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
 		if !needCommit {
