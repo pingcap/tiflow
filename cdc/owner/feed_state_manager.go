@@ -447,6 +447,9 @@ func (m *feedStateManager) cleanUp() {
 		})
 	}
 	m.checkpointTs = 0
+	if !m.checkpointTsAdvanced.Equal(time.Time{}) {
+		log.Info("reset checkpointTsAdvanced", zap.Any("changefeed", m.state))
+	}
 	m.checkpointTsAdvanced = time.Time{}
 	m.resolvedTs = 0
 }
@@ -597,6 +600,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		if checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
+				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
