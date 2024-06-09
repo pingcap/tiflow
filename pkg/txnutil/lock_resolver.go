@@ -16,6 +16,7 @@ package txnutil
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -129,7 +130,24 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		lockCount += len(locksInfo)
 		if lockCount > 0 {
-			log.Info("scan lock finished", zap.Any("locks", locksInfo))
+			for _, lock := range locksInfo {
+				var secondaries []string
+				for _, s := range lock.Secondaries {
+					secondaries = append(secondaries, hex.EncodeToString(s))
+				}
+				log.Info("scan lock finished",
+					zap.String("PrimaryLock", hex.EncodeToString(lock.PrimaryLock)),
+					zap.String("Key", hex.EncodeToString(lock.Key)),
+					zap.Uint64("LockVersion", lock.LockVersion),
+					zap.Uint64("LockTtl", lock.LockTtl),
+					zap.Uint64("LockForUpdateTs", lock.LockForUpdateTs),
+					zap.Uint64("TxnSize", lock.TxnSize),
+					zap.Uint64("MinCommitTs", lock.MinCommitTs),
+					zap.Uint64("DurationToLastUpdateMs", lock.DurationToLastUpdateMs),
+					zap.Int32("LockType", int32(lock.LockType)),
+					zap.Bool("UseAsyncCommit", lock.UseAsyncCommit),
+					zap.Strings("secondaries", secondaries))
+			}
 		}
 		_, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
 		if err1 != nil {
