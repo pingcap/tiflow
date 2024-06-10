@@ -801,6 +801,7 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
 	require.Nil(t, err)
 }
+
 func TestCcheckIneligibleTableDDL(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
