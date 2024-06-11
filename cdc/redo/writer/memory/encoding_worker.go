@@ -103,7 +103,7 @@ type encodingWorkerGroup struct {
 	workerNum  int
 	nextWorker atomic.Uint64
 
-	closed chan struct{}
+	closed chan error
 }
 
 func newEncodingWorkerGroup(cfg *writer.LogWriterConfig) *encodingWorkerGroup {
@@ -120,19 +120,20 @@ func newEncodingWorkerGroup(cfg *writer.LogWriterConfig) *encodingWorkerGroup {
 		inputChs:   inputChs,
 		outputCh:   make(chan *polymorphicRedoEvent, redo.DefaultEncodingOutputChanSize),
 		workerNum:  workerNum,
-		closed:     make(chan struct{}),
+		closed:     make(chan error, 1),
 	}
 }
 
 func (e *encodingWorkerGroup) Run(ctx context.Context) (err error) {
 	defer func() {
-		close(e.closed)
+		log.Warn("redo encoding workers closed",
+			zap.String("namespace", e.changefeed.Namespace),
+			zap.String("changefeed", e.changefeed.ID),
+			zap.Error(err))
 		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Warn("redo fileWorkerGroup closed with error",
-				zap.String("namespace", e.changefeed.Namespace),
-				zap.String("changefeed", e.changefeed.ID),
-				zap.Error(err))
+			e.closed <- err
 		}
+		close(e.closed)
 	}()
 	eg, egCtx := errgroup.WithContext(ctx)
 	for i := 0; i < e.workerNum; i++ {
@@ -182,8 +183,8 @@ func (e *encodingWorkerGroup) input(
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+	case err := <-e.closed:
+		return errors.WrapError(errors.ErrRedoWriterStopped, err, "encoding worker is closed")
 	case e.inputChs[idx] <- event:
 		return nil
 	}
@@ -195,8 +196,8 @@ func (e *encodingWorkerGroup) output(
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+	case err := <-e.closed:
+		return errors.WrapError(errors.ErrRedoWriterStopped, err, "encoding worker is closed")
 	case e.outputCh <- event:
 		return nil
 	}
@@ -220,8 +221,8 @@ func (e *encodingWorkerGroup) FlushAll(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+	case err := <-e.closed:
+		return errors.WrapError(errors.ErrRedoWriterStopped, err, "encoding worker is closed")
 	case <-flushCh:
 	}
 	return nil
@@ -244,8 +245,8 @@ func (e *encodingWorkerGroup) broadcastAndWaitEncoding(ctx context.Context) erro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-e.closed:
-			return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+		case err := <-e.closed:
+			return errors.WrapError(errors.ErrRedoWriterStopped, err, "encoding worker is closed")
 		case <-ch:
 		}
 	}
