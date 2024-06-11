@@ -223,13 +223,13 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	p.sinkManager.r.AddTable(
+	table := p.sinkManager.r.AddTable(
 		span, startTs, p.latestInfo.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
 
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -488,18 +488,6 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
-// pullerSafeMode means to split all update kv entries whose commitTS
-// is older then the start time of this changefeed.
-func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := sink.GetScheme(sinkURI)
-	return sink.IsMySQLCompatibleScheme(scheme), nil
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `info` parameter is sent by metadata store, the `info` must be the latest value snapshot.
 // the `status` parameter is sent by metadata store, the `status` must be the latest value snapshot.
@@ -600,6 +588,16 @@ func (p *processor) tick(ctx context.Context) (error, error) {
 	return nil, warning
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if p.initialized.Load() {
@@ -659,7 +657,7 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.latestInfo.SinkURI)
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -667,14 +665,14 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, util.GetOrZero(cfConfig.BDRMode),
 		util.GetOrZero(cfConfig.EnableTableMonitor),
-		pullerSafeModeAtStart)
+		isMysqlBackend)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(prcCtx)
