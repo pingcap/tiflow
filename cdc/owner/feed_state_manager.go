@@ -596,7 +596,10 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		if checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
-				"it will be failed", zap.String("changefeed", m.state.ID.ID),
+				"it will be failed",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
