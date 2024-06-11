@@ -317,6 +317,42 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
+<<<<<<< HEAD
+=======
+		var pulsarConfig *config.PulsarConfig
+		if c.Sink.PulsarConfig != nil {
+			pulsarConfig = &config.PulsarConfig{
+				TLSKeyFilePath:          c.Sink.PulsarConfig.TLSKeyFilePath,
+				TLSCertificateFile:      c.Sink.PulsarConfig.TLSCertificateFile,
+				TLSTrustCertsFilePath:   c.Sink.PulsarConfig.TLSTrustCertsFilePath,
+				PulsarProducerCacheSize: c.Sink.PulsarConfig.PulsarProducerCacheSize,
+				PulsarVersion:           c.Sink.PulsarConfig.PulsarVersion,
+				CompressionType:         (*config.PulsarCompressionType)(c.Sink.PulsarConfig.CompressionType),
+				AuthenticationToken:     c.Sink.PulsarConfig.AuthenticationToken,
+				ConnectionTimeout:       (*config.TimeSec)(c.Sink.PulsarConfig.ConnectionTimeout),
+				OperationTimeout:        (*config.TimeSec)(c.Sink.PulsarConfig.OperationTimeout),
+				BatchingMaxMessages:     c.Sink.PulsarConfig.BatchingMaxMessages,
+				BatchingMaxPublishDelay: (*config.TimeMill)(c.Sink.PulsarConfig.BatchingMaxPublishDelay),
+				SendTimeout:             (*config.TimeSec)(c.Sink.PulsarConfig.SendTimeout),
+				TokenFromFile:           c.Sink.PulsarConfig.TokenFromFile,
+				BasicUserName:           c.Sink.PulsarConfig.BasicUserName,
+				BasicPassword:           c.Sink.PulsarConfig.BasicPassword,
+				AuthTLSCertificatePath:  c.Sink.PulsarConfig.AuthTLSCertificatePath,
+				AuthTLSPrivateKeyPath:   c.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+				OutputRawChangeEvent:    c.Sink.PulsarConfig.OutputRawChangeEvent,
+			}
+			if c.Sink.PulsarConfig.OAuth2 != nil {
+				pulsarConfig.OAuth2 = &config.OAuth2{
+					OAuth2IssuerURL:  c.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL,
+					OAuth2Audience:   c.Sink.PulsarConfig.OAuth2.OAuth2Audience,
+					OAuth2PrivateKey: c.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey,
+					OAuth2ClientID:   c.Sink.PulsarConfig.OAuth2.OAuth2ClientID,
+					OAuth2Scope:      c.Sink.PulsarConfig.OAuth2.OAuth2Scope,
+				}
+			}
+		}
+
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
 			var codeConfig *config.CodecConfig
@@ -375,6 +411,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+<<<<<<< HEAD
+=======
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
+				OutputRawChangeEvent:         c.Sink.KafkaConfig.OutputRawChangeEvent,
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -400,13 +441,14 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            c.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
-				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				WorkerCount:          c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:       c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:     c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputRawChangeEvent: c.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 
@@ -606,6 +648,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+<<<<<<< HEAD
+=======
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
+				OutputRawChangeEvent:         cloned.Sink.KafkaConfig.OutputRawChangeEvent,
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -628,16 +675,52 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				EnableCachePreparedStatement: cloned.Sink.MySQLConfig.EnableCachePreparedStatement,
 			}
 		}
+<<<<<<< HEAD
+=======
+		var pulsarConfig *PulsarConfig
+		if cloned.Sink.PulsarConfig != nil {
+			pulsarConfig = &PulsarConfig{
+				TLSKeyFilePath:          cloned.Sink.PulsarConfig.TLSKeyFilePath,
+				TLSCertificateFile:      cloned.Sink.PulsarConfig.TLSCertificateFile,
+				TLSTrustCertsFilePath:   cloned.Sink.PulsarConfig.TLSTrustCertsFilePath,
+				PulsarProducerCacheSize: cloned.Sink.PulsarConfig.PulsarProducerCacheSize,
+				PulsarVersion:           cloned.Sink.PulsarConfig.PulsarVersion,
+				CompressionType:         (*string)(cloned.Sink.PulsarConfig.CompressionType),
+				AuthenticationToken:     cloned.Sink.PulsarConfig.AuthenticationToken,
+				ConnectionTimeout:       (*int)(cloned.Sink.PulsarConfig.ConnectionTimeout),
+				OperationTimeout:        (*int)(cloned.Sink.PulsarConfig.OperationTimeout),
+				BatchingMaxMessages:     cloned.Sink.PulsarConfig.BatchingMaxMessages,
+				BatchingMaxPublishDelay: (*int)(cloned.Sink.PulsarConfig.BatchingMaxPublishDelay),
+				SendTimeout:             (*int)(cloned.Sink.PulsarConfig.SendTimeout),
+				TokenFromFile:           cloned.Sink.PulsarConfig.TokenFromFile,
+				BasicUserName:           cloned.Sink.PulsarConfig.BasicUserName,
+				BasicPassword:           cloned.Sink.PulsarConfig.BasicPassword,
+				AuthTLSCertificatePath:  cloned.Sink.PulsarConfig.AuthTLSCertificatePath,
+				AuthTLSPrivateKeyPath:   cloned.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+				OutputRawChangeEvent:    cloned.Sink.PulsarConfig.OutputRawChangeEvent,
+			}
+			if cloned.Sink.PulsarConfig.OAuth2 != nil {
+				pulsarConfig.OAuth2 = &PulsarOAuth2{
+					OAuth2IssuerURL:  cloned.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL,
+					OAuth2Audience:   cloned.Sink.PulsarConfig.OAuth2.OAuth2Audience,
+					OAuth2PrivateKey: cloned.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey,
+					OAuth2ClientID:   cloned.Sink.PulsarConfig.OAuth2.OAuth2ClientID,
+					OAuth2Scope:      cloned.Sink.PulsarConfig.OAuth2.OAuth2Scope,
+				}
+			}
+		}
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
-				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				WorkerCount:          cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:       cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:     cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputRawChangeEvent: cloned.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 
@@ -1042,10 +1125,47 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+<<<<<<< HEAD
+=======
+	EncodingFormat                 *string `json:"encoding_format,omitempty"`
+}
+
+// PulsarConfig represents a pulsar sink configuration
+type PulsarConfig struct {
+	TLSKeyFilePath          *string       `json:"tls-certificate-path,omitempty"`
+	TLSCertificateFile      *string       `json:"tls-private-key-path,omitempty"`
+	TLSTrustCertsFilePath   *string       `json:"tls-trust-certs-file-path,omitempty"`
+	PulsarProducerCacheSize *int32        `json:"pulsar-producer-cache-size,omitempty"`
+	PulsarVersion           *string       `json:"pulsar-version,omitempty"`
+	CompressionType         *string       `json:"compression-type,omitempty"`
+	AuthenticationToken     *string       `json:"authentication-token,omitempty"`
+	ConnectionTimeout       *int          `json:"connection-timeout,omitempty"`
+	OperationTimeout        *int          `json:"operation-timeout,omitempty"`
+	BatchingMaxMessages     *uint         `json:"batching-max-messages,omitempty"`
+	BatchingMaxPublishDelay *int          `json:"batching-max-publish-delay,omitempty"`
+	SendTimeout             *int          `json:"send-timeout,omitempty"`
+	TokenFromFile           *string       `json:"token-from-file,omitempty"`
+	BasicUserName           *string       `json:"basic-user-name,omitempty"`
+	BasicPassword           *string       `json:"basic-password,omitempty"`
+	AuthTLSCertificatePath  *string       `json:"auth-tls-certificate-path,omitempty"`
+	AuthTLSPrivateKeyPath   *string       `json:"auth-tls-private-key-path,omitempty"`
+	OAuth2                  *PulsarOAuth2 `json:"oauth2,omitempty"`
+	OutputRawChangeEvent    *bool         `json:"output-raw-change-event,omitempty"`
+}
+
+// PulsarOAuth2 is the configuration for OAuth2
+type PulsarOAuth2 struct {
+	OAuth2IssuerURL  string `json:"oauth2-issuer-url,omitempty"`
+	OAuth2Audience   string `json:"oauth2-audience,omitempty"`
+	OAuth2PrivateKey string `json:"oauth2-private-key,omitempty"`
+	OAuth2ClientID   string `json:"oauth2-client-id,omitempty"`
+	OAuth2Scope      string `json:"oauth2-scope,omitempty"`
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
+<<<<<<< HEAD
 	PartitionNum                 *int32       `json:"partition_num,omitempty"`
 	ReplicationFactor            *int16       `json:"replication_factor,omitempty"`
 	KafkaVersion                 *string      `json:"kafka_version,omitempty"`
@@ -1082,6 +1202,45 @@ type KafkaConfig struct {
 	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+=======
+	PartitionNum                 *int32                    `json:"partition_num,omitempty"`
+	ReplicationFactor            *int16                    `json:"replication_factor,omitempty"`
+	KafkaVersion                 *string                   `json:"kafka_version,omitempty"`
+	MaxMessageBytes              *int                      `json:"max_message_bytes,omitempty"`
+	Compression                  *string                   `json:"compression,omitempty"`
+	KafkaClientID                *string                   `json:"kafka_client_id,omitempty"`
+	AutoCreateTopic              *bool                     `json:"auto_create_topic,omitempty"`
+	DialTimeout                  *string                   `json:"dial_timeout,omitempty"`
+	WriteTimeout                 *string                   `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string                   `json:"read_timeout,omitempty"`
+	RequiredAcks                 *int                      `json:"required_acks,omitempty"`
+	SASLUser                     *string                   `json:"sasl_user,omitempty"`
+	SASLPassword                 *string                   `json:"sasl_password,omitempty"`
+	SASLMechanism                *string                   `json:"sasl_mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `json:"sasl_gssapi_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `json:"sasl_gssapi_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `json:"sasl_gssapi_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string                   `json:"sasl_gssapi_service_name,omitempty"`
+	SASLGssAPIUser               *string                   `json:"sasl_gssapi_user,omitempty"`
+	SASLGssAPIPassword           *string                   `json:"sasl_gssapi_password,omitempty"`
+	SASLGssAPIRealm              *string                   `json:"sasl_gssapi_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `json:"sasl_gssapi_disable_pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret        *string                   `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes              []string                  `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience            *string                   `json:"sasl_oauth_audience,omitempty"`
+	EnableTLS                    *bool                     `json:"enable_tls,omitempty"`
+	CA                           *string                   `json:"ca,omitempty"`
+	Cert                         *string                   `json:"cert,omitempty"`
+	Key                          *string                   `json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
+	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
+	OutputRawChangeEvent         *bool                     `json:"output_raw_change_event,omitempty"`
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -1105,13 +1264,14 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount         *int    `json:"worker_count,omitempty"`
-	FlushInterval       *string `json:"flush_interval,omitempty"`
-	FileSize            *int    `json:"file_size,omitempty"`
-	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
-	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
-	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
-	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	WorkerCount          *int    `json:"worker_count,omitempty"`
+	FlushInterval        *string `json:"flush_interval,omitempty"`
+	FileSize             *int    `json:"file_size,omitempty"`
+	OutputColumnID       *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays   *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec  *string `json:"file_cleanup_cron_spec,omitempty"`
+	FlushConcurrency     *int    `json:"flush_concurrency,omitempty"`
+	OutputRawChangeEvent *bool   `json:"output_raw_change_event,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

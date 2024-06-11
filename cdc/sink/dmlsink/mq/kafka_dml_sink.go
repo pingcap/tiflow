@@ -111,9 +111,19 @@ func NewKafkaDMLSink(
 	}
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
+<<<<<<< HEAD
 	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	s := newDMLSink(ctx, sinkURI, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
 		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
+=======
+	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
+	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, changefeedID)
+	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager, eventRouter, trans, encoderGroup,
+		protocol, scheme, replicaConfig.Sink.KafkaConfig.GetOutputRawChangeEvent(), errCh)
+	log.Info("DML sink producer created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeedID", changefeedID.ID))
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 
 	return s, nil
 }

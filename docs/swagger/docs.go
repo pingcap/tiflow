@@ -1334,6 +1334,16 @@ var doc = `{
                 "flush-interval": {
                     "type": "string"
                 },
+<<<<<<< HEAD
+=======
+                "output-column-id": {
+                    "type": "boolean"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
                 "worker-count": {
                     "type": "integer"
                 }
@@ -1439,6 +1449,10 @@ var doc = `{
                 },
                 "max-message-bytes": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "partition-num": {
                     "type": "integer"
@@ -1569,6 +1583,120 @@ var doc = `{
                 }
             }
         },
+<<<<<<< HEAD
+=======
+        "config.OAuth2": {
+            "type": "object",
+            "properties": {
+                "oauth2-audience": {
+                    "description": "OAuth2Audience  the URL of the resource server.",
+                    "type": "string"
+                },
+                "oauth2-client-id": {
+                    "description": "OAuth2ClientID  the client ID of the application.",
+                    "type": "string"
+                },
+                "oauth2-issuer-url": {
+                    "description": "OAuth2IssuerURL  the URL of the authorization server.",
+                    "type": "string"
+                },
+                "oauth2-private-key": {
+                    "description": "OAuth2PrivateKey the private key used to sign the server.",
+                    "type": "string"
+                },
+                "oauth2-scope": {
+                    "description": "OAuth2Scope scope",
+                    "type": "string"
+                }
+            }
+        },
+        "config.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output-old-value": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "config.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "auth-tls-certificate-path": {
+                    "description": "AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key",
+                    "type": "string"
+                },
+                "auth-tls-private-key-path": {
+                    "description": "AuthTLSPrivateKeyPath private key",
+                    "type": "string"
+                },
+                "authentication-token": {
+                    "description": "AuthenticationToken the token for the Pulsar server",
+                    "type": "string"
+                },
+                "basic-password": {
+                    "description": "BasicPassword with account",
+                    "type": "string"
+                },
+                "basic-user-name": {
+                    "description": "BasicUserName Account name for pulsar basic authentication (the second priority authentication method)",
+                    "type": "string"
+                },
+                "batching-max-messages": {
+                    "description": "BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)",
+                    "type": "integer"
+                },
+                "batching-max-publish-delay": {
+                    "description": "BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)\nif batch messages are enabled. If set to a non zero value, messages will be queued until this time\ninterval or until",
+                    "type": "integer"
+                },
+                "compression-type": {
+                    "description": "pulsar client compression",
+                    "type": "string"
+                },
+                "connection-timeout": {
+                    "description": "ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)",
+                    "type": "integer"
+                },
+                "oauth2": {
+                    "description": "Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id\nand 'type' always use 'client_credentials'",
+                    "$ref": "#/definitions/config.OAuth2"
+                },
+                "operation-timeout": {
+                    "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
+                    "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
+                "pulsar-producer-cache-size": {
+                    "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
+                    "type": "integer"
+                },
+                "pulsar-version": {
+                    "description": "PulsarVersion print the version of pulsar",
+                    "type": "string"
+                },
+                "send-timeout": {
+                    "description": "SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.\nSend and SendAsync returns an error after timeout.\ndefault: 30s",
+                    "type": "integer"
+                },
+                "tls-certificate-file": {
+                    "type": "string"
+                },
+                "tls-key-file-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                },
+                "token-from-file": {
+                    "description": "TokenFromFile Authentication from the file token,\nthe path name of the file (the third priority authentication method)",
+                    "type": "string"
+                }
+            }
+        },
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
         "config.SinkConfig": {
             "type": "object",
             "properties": {
@@ -2113,6 +2241,15 @@ var doc = `{
                 "flush_interval": {
                     "type": "string"
                 },
+<<<<<<< HEAD
+=======
+                "output_column_id": {
+                    "type": "boolean"
+                },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
                 "worker_count": {
                     "type": "integer"
                 }
@@ -2336,6 +2473,9 @@ var doc = `{
                 "max_message_bytes": {
                     "type": "integer"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "partition_num": {
                     "type": "integer"
                 },
@@ -2507,6 +2647,91 @@ var doc = `{
                 }
             }
         },
+<<<<<<< HEAD
+=======
+        "v2.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "auth-tls-certificate-path": {
+                    "type": "string"
+                },
+                "auth-tls-private-key-path": {
+                    "type": "string"
+                },
+                "authentication-token": {
+                    "type": "string"
+                },
+                "basic-password": {
+                    "type": "string"
+                },
+                "basic-user-name": {
+                    "type": "string"
+                },
+                "batching-max-messages": {
+                    "type": "integer"
+                },
+                "batching-max-publish-delay": {
+                    "type": "integer"
+                },
+                "compression-type": {
+                    "type": "string"
+                },
+                "connection-timeout": {
+                    "type": "integer"
+                },
+                "oauth2": {
+                    "$ref": "#/definitions/v2.PulsarOAuth2"
+                },
+                "operation-timeout": {
+                    "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "type": "boolean"
+                },
+                "pulsar-producer-cache-size": {
+                    "type": "integer"
+                },
+                "pulsar-version": {
+                    "type": "string"
+                },
+                "send-timeout": {
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                },
+                "token-from-file": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.PulsarOAuth2": {
+            "type": "object",
+            "properties": {
+                "oauth2-audience": {
+                    "type": "string"
+                },
+                "oauth2-client-id": {
+                    "type": "string"
+                },
+                "oauth2-issuer-url": {
+                    "type": "string"
+                },
+                "oauth2-private-key": {
+                    "type": "string"
+                },
+                "oauth2-scope": {
+                    "type": "string"
+                }
+            }
+        },
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
         "v2.ReplicaConfig": {
             "type": "object",
             "properties": {
