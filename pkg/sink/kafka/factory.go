@@ -50,15 +50,13 @@ type SyncProducer interface {
 	// of the produced message, or an error if the message failed to produce.
 	SendMessage(ctx context.Context,
 		topic string, partitionNum int32,
-		key []byte, value []byte) error
+		message *common.Message) error
 
 	// SendMessages produces a given set of messages, and returns only when all
 	// messages in the set have either succeeded or failed. Note that messages
 	// can succeed and fail individually; if some succeed and some fail,
 	// SendMessages will return an error.
-	SendMessages(ctx context.Context,
-		topic string, partitionNum int32,
-		message *common.Message) error
+	SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error
 
 	// Close shuts down the producer; you must call this function before a producer
 	// object passes out of scope, as it may otherwise leak memory.
@@ -77,9 +75,7 @@ type AsyncProducer interface {
 
 	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
-	AsyncSend(ctx context.Context, topic string,
-		partition int32, key []byte, value []byte, schema string, table string, commitTs uint64,
-		callback func()) error
+	AsyncSend(ctx context.Context, topic string, partition int32, message *common.Message) error
 
 	// AsyncRunCallback process the messages that has sent to kafka,
 	// and run tha attached callback. the caller should call this
@@ -94,22 +90,20 @@ type saramaSyncProducer struct {
 }
 
 func (p *saramaSyncProducer) SendMessage(
-	ctx context.Context,
+	_ context.Context,
 	topic string, partitionNum int32,
-	key []byte, value []byte,
+	message *common.Message,
 ) error {
 	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:     topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
 	return err
 }
 
-func (p *saramaSyncProducer) SendMessages(ctx context.Context,
-	topic string, partitionNum int32, message *common.Message,
-) error {
+func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
@@ -281,19 +275,13 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 
 // AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
-func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
-	topic string,
-	partition int32,
-	key []byte,
-	value []byte, schema string, table string, commitTs uint64,
-	callback func(),
-) error {
+func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
-		Key:       sarama.StringEncoder(key),
-		Value:     sarama.ByteEncoder(value),
-		Metadata:  callback,
+		Key:       sarama.StringEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
+		Metadata:  message.Callback,
 	}
 	msg.Headers = append(msg.Headers, sarama.RecordHeader{
 		Key:   []byte("schema"),

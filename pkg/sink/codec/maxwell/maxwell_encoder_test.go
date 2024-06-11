@@ -17,30 +17,22 @@ import (
 	"context"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMaxwellBatchCodec(t *testing.T) {
-	t.Parallel()
-	newEncoder := newBatchEncoder
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeLong}}, nil)
-	rowCases := [][]*model.RowChangedEvent{{{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{
-			{
-				Name:  "col1",
-				Value: 10,
-			},
-		}, tableInfo),
-	}}, {}}
+	ddlEvent := helper.DDL2Event("create table test.t(col1 int primary key)")
+	dmlEvent := helper.DML2Event("insert into test.t values (10)", "test", "t")
+
+	rowCases := [][]*model.RowChangedEvent{{dmlEvent}, {}}
 	for _, cs := range rowCases {
-		encoder := newEncoder(&common.Config{})
+		encoder := newBatchEncoder(&common.Config{})
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
@@ -54,19 +46,9 @@ func TestMaxwellBatchCodec(t *testing.T) {
 		require.Equal(t, len(cs), messages[0].GetRowsCount())
 	}
 
-	ddlCases := [][]*model.DDLEvent{{{
-		CommitTs: 1,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-			TableInfo: &timodel.TableInfo{},
-		},
-		Query: "create table a",
-		Type:  1,
-	}}}
+	ddlCases := [][]*model.DDLEvent{{ddlEvent}}
 	for _, cs := range ddlCases {
-		encoder := newEncoder(&common.Config{})
+		encoder := newBatchEncoder(&common.Config{})
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			require.Nil(t, err)
@@ -79,17 +61,12 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	encoder := newBatchEncoder(&common.Config{})
 	require.NotNil(t, encoder)
 
-	count := 0
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 
-	tableInfo := model.BuildTableInfo("a", "b", []*model.Column{{Name: "col1", Type: mysql.TypeVarchar}}, nil)
-	row := &model.RowChangedEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Columns: model.Columns2ColumnDatas([]*model.Column{{
-			Name:  "col1",
-			Value: []byte("aa"),
-		}}, tableInfo),
-	}
+	_ = helper.DDL2Event("create table test.t(col1 varchar(255) primary key)")
+	row := helper.DML2Event("insert into test.t values ('aa')", "test", "t")
+	count := 0
 
 	tests := []struct {
 		row      *model.RowChangedEvent
