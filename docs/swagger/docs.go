@@ -951,6 +951,57 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/changefeeds/{changefeed_id}/synced": {
+            "get": {
+                "description": "get the synced status of a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Get synced status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SyncedStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/health": {
             "get": {
                 "description": "Check the health status of a TiCDC cluster",
@@ -1209,6 +1260,36 @@ var doc = `{
                 }
             }
         },
+        "config.CloudStorageConfig": {
+            "type": "object",
+            "properties": {
+                "file-cleanup-cron-spec": {
+                    "type": "string"
+                },
+                "file-expiration-days": {
+                    "type": "integer"
+                },
+                "file-size": {
+                    "type": "integer"
+                },
+                "flush-concurrency": {
+                    "type": "integer"
+                },
+                "flush-interval": {
+                    "type": "string"
+                },
+                "output-column-id": {
+                    "type": "boolean"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
+                "worker-count": {
+                    "type": "integer"
+                }
+            }
+        },
         "config.ColumnSelector": {
             "type": "object",
             "properties": {
@@ -1254,6 +1335,10 @@ var doc = `{
                 "large-message-handle": {
                     "$ref": "#/definitions/config.LargeMessageHandleConfig"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "sasl-mechanism": {
                     "type": "string"
                 },
@@ -1295,6 +1380,9 @@ var doc = `{
                     "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
                     "type": "integer"
                 },
+                "cloud-storage-config": {
+                    "$ref": "#/definitions/config.CloudStorageConfig"
+                },
                 "column-selectors": {
                     "type": "array",
                     "items": {
@@ -1308,6 +1396,7 @@ var doc = `{
                     "type": "string"
                 },
                 "dispatchers": {
+                    "description": "DispatchRules is only available when the downstream is MQ.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
@@ -1735,6 +1824,35 @@ var doc = `{
                 }
             }
         },
+        "v2.CloudStorageConfig": {
+            "type": "object",
+            "properties": {
+                "file_cleanup_cron_spec": {
+                    "type": "string"
+                },
+                "file_expiration_days": {
+                    "type": "integer"
+                },
+                "file_size": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
+                    "type": "integer"
+                },
+                "flush_interval": {
+                    "type": "string"
+                },
+                "output_column_id": {
+                    "type": "boolean"
+                },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
+                "worker_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "v2.ColumnSelector": {
             "type": "object",
             "properties": {
@@ -1755,7 +1873,13 @@ var doc = `{
         "v2.ConsistentConfig": {
             "type": "object",
             "properties": {
+                "compression": {
+                    "type": "string"
+                },
                 "encoding_worker_num": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
                     "type": "integer"
                 },
                 "flush_interval": {
@@ -1770,6 +1894,9 @@ var doc = `{
                 "max_log_size": {
                     "type": "integer"
                 },
+                "memory_usage": {
+                    "$ref": "#/definitions/v2.ConsistentMemoryUsage"
+                },
                 "meta_flush_interval": {
                     "type": "integer"
                 },
@@ -1778,6 +1905,17 @@ var doc = `{
                 },
                 "use_file_backend": {
                     "type": "boolean"
+                }
+            }
+        },
+        "v2.ConsistentMemoryUsage": {
+            "type": "object",
+            "properties": {
+                "event_cache_percentage": {
+                    "type": "integer"
+                },
+                "memory_quota_percentage": {
+                    "type": "integer"
                 }
             }
         },
@@ -1895,6 +2033,9 @@ var doc = `{
                 "large_message_handle": {
                     "$ref": "#/definitions/v2.LargeMessageHandleConfig"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "sasl_mechanism": {
                     "type": "string"
                 },
@@ -1980,6 +2121,9 @@ var doc = `{
                 "case_sensitive": {
                     "type": "boolean"
                 },
+                "changefeed_error_stuck_duration": {
+                    "type": "string"
+                },
                 "check_gc_safe_point": {
                     "type": "boolean"
                 },
@@ -1990,6 +2134,9 @@ var doc = `{
                     "type": "boolean"
                 },
                 "enable_sync_point": {
+                    "type": "boolean"
+                },
+                "enable_table_monitor": {
                     "type": "boolean"
                 },
                 "filter": {
@@ -2010,11 +2157,17 @@ var doc = `{
                 "sink": {
                     "$ref": "#/definitions/v2.SinkConfig"
                 },
+                "sql_mode": {
+                    "type": "string"
+                },
                 "sync_point_interval": {
                     "type": "string"
                 },
                 "sync_point_retention": {
                     "type": "string"
+                },
+                "synced_status": {
+                    "$ref": "#/definitions/v2.SyncedStatusConfig"
                 }
             }
         },
@@ -2067,6 +2220,9 @@ var doc = `{
                 "advance_timeout": {
                     "type": "integer"
                 },
+                "cloud_storage_config": {
+                    "$ref": "#/definitions/v2.CloudStorageConfig"
+                },
                 "column_selectors": {
                     "type": "array",
                     "items": {
@@ -2108,6 +2264,42 @@ var doc = `{
                 },
                 "transaction_atomicity": {
                     "type": "string"
+                }
+            }
+        },
+        "v2.SyncedStatus": {
+            "type": "object",
+            "properties": {
+                "info": {
+                    "type": "string"
+                },
+                "last_synced_ts": {
+                    "type": "string"
+                },
+                "now_ts": {
+                    "type": "string"
+                },
+                "puller_resolved_ts": {
+                    "type": "string"
+                },
+                "sink_checkpoint_ts": {
+                    "type": "string"
+                },
+                "synced": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "v2.SyncedStatusConfig": {
+            "type": "object",
+            "properties": {
+                "checkpoint_interval": {
+                    "description": "The maximum interval between latest checkpoint ts and now or\nbetween latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state",
+                    "type": "integer"
+                },
+                "synced_check_interval": {
+                    "description": "The minimum interval between the latest synced ts and now required to reach synced state",
+                    "type": "integer"
                 }
             }
         },

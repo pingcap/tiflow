@@ -118,7 +118,7 @@ func NewKafkaDMLSink(
 	}
 
 	s, err := newSink(ctx, sinkURI, p, topicManager, eventRouter, encoderConfig,
-		replicaConfig.Sink.EncoderConcurrency, errCh)
+		replicaConfig.Sink.EncoderConcurrency, replicaConfig.Sink.KafkaConfig.GetOutputRawChangeEvent(), errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

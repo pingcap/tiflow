@@ -51,6 +51,10 @@ func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.Row
 	return nil
 }
 
+func (m *mockSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, false
+}
+
 func (m *mockSink) GetEvents() []*eventsink.CallbackableEvent[*model.RowChangedEvent] {
 	m.mu.Lock()
 	defer m.mu.Unlock()
