@@ -346,7 +346,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
 
-	ineligibleTables, eligibleTables, err := h.helpers.
+	ineligibleTables, eligibleTables, tableIDs, err := h.helpers.
 		getVerifiedTables(ctx, replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
@@ -358,6 +358,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 			apiModles = append(apiModles, TableName{
 				Schema:      tbl.Schema,
 				Table:       tbl.Table,
+				TableID:     tableIDs[tbl.String()],
 				IsPartition: tbl.IsPartition,
 			})
 		}
