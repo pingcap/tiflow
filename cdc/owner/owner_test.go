@@ -61,7 +61,7 @@ var _ gc.Manager = (*mockManager)(nil)
 
 // newOwner4Test creates a new Owner for test
 func newOwner4Test(
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -108,7 +108,7 @@ func createOwner4Test(globalVars *vars.GlobalVars, t *testing.T) (*ownerImpl, *o
 
 	owner := newOwner4Test(
 		// new ddl puller
-		func(ctx context.Context,
+		func(
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,

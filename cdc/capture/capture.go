@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
+	"github.com/pingcap/tiflow/cdc/schema"
 	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -92,6 +93,7 @@ type captureImpl struct {
 	ownerMu         sync.Mutex
 	owner           owner.Owner
 	upstreamManager *upstream.Manager
+	schemaManager   *schema.SchemaManager
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -148,6 +150,7 @@ func NewCapture(pdEndpoints []string,
 	return &captureImpl{
 		config:              config.GetGlobalServerConfig(),
 		liveness:            model.LivenessCaptureAlive,
+		schemaManager:       &schema.SchemaManager{},
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
@@ -280,6 +283,7 @@ func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 
 	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
 	c.ChangefeedThreadPool = workerpool.NewDefaultAsyncPool(changefeedAsyncInitWorkerCount)
+	c.schemaManager.Reset()
 	globalVars := &vars.GlobalVars{
 		CaptureInfo:          c.info,
 		EtcdClient:           c.EtcdClient,
@@ -287,6 +291,7 @@ func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 		MessageRouter:        c.MessageRouter,
 		SortEngineFactory:    c.sortEngineFactory,
 		ChangefeedThreadPool: c.ChangefeedThreadPool,
+		SchemaManager:        c.schemaManager,
 	}
 	c.processorManager = c.newProcessorManager(
 		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)

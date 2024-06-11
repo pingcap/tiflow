@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -53,15 +53,6 @@ const (
 	// be filtered before they are sent to the sink
 	ddlPullerFilterLoop = false
 )
-
-// DDLJobPuller is used to pull ddl job from TiKV.
-// It's used by processor and ddlPullerImpl.
-type DDLJobPuller interface {
-	util.Runnable
-
-	// Output the DDL job entry, it contains the DDL job and the error.
-	Output() <-chan *model.DDLJobEntry
-}
 
 // Note: All unexported methods of `ddlJobPullerImpl` should
 // be called in the same one goroutine.
@@ -81,17 +72,16 @@ type ddlJobPullerImpl struct {
 	outputCh chan *model.DDLJobEntry
 }
 
-// NewDDLJobPuller creates a new NewDDLJobPuller,
+// newDDLJobPuller creates a new newDDLJobPuller,
 // which fetches ddl events starting from checkpointTs.
-func NewDDLJobPuller(
-	ctx context.Context,
+func newDDLJobPuller(
 	up *upstream.Upstream,
 	checkpointTs uint64,
 	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-) DDLJobPuller {
+) *ddlJobPullerImpl {
 	pdCli := up.PDClient
 	regionCache := up.RegionCache
 	kvStorage := up.KVStorage
@@ -158,13 +148,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	return eg.Wait()
 }
 
-// WaitForReady implements util.Runnable.
-func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
-
-// Close implements util.Runnable.
-func (p *ddlJobPullerImpl) Close() {}
-
-// Output implements DDLJobPuller, it returns the output channel of DDL job.
+// Output implements*ddlJobPullerImpl, it returns the output channel of DDL job.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
 }
@@ -610,40 +594,41 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx context.Context) error
-	// PopFrontDDL returns and pops the first DDL job in the internal queue
-	PopFrontDDL() (uint64, *timodel.Job)
-	// ResolvedTs returns the resolved ts of the DDLPuller
-	ResolvedTs() uint64
+	// PopPendingDDLs return all pending DDL jobs which finishedTS is larger than ts.
+	PopPendingDDLs(ts uint64) (uint64, []*timodel.Job)
 	// Close closes the DDLPuller
 	Close()
+	// DoGC clenup the PendingDDLs which finishedTS is less than gcTs.
+	DoGC(gcTs uint64)
 }
 
 type ddlPullerImpl struct {
-	ddlJobPuller DDLJobPuller
+	ddlJobPuller *ddlJobPullerImpl
 
 	mu             sync.Mutex
+	gcTs           uint64
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
-	lastDDLJobID   int64
+	lastDDLJob     *timodel.Job
 	cancel         context.CancelFunc
 
 	changefeedID model.ChangeFeedID
 }
 
 // NewDDLPuller return a puller for DDL Event
-func NewDDLPuller(ctx context.Context,
+func NewDDLPuller(
 	up *upstream.Upstream,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
 ) DDLPuller {
-	var puller DDLJobPuller
+	var puller *ddlJobPullerImpl
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
 		changefeed.ID += "_owner_ddl_puller"
-		puller = NewDDLJobPuller(
-			ctx, up, startTs, config.GetGlobalServerConfig(),
+		puller = newDDLJobPuller(
+			up, startTs, config.GetGlobalServerConfig(),
 			changefeed, schemaStorage, filter)
 	}
 
@@ -655,27 +640,38 @@ func NewDDLPuller(ctx context.Context,
 	}
 }
 
-func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
+func (h *ddlPullerImpl) addToPending(job *timodel.Job) error {
 	if job == nil {
-		return
+		return nil
 	}
-	if job.ID == h.lastDDLJobID {
-		log.Warn("ignore duplicated DDL job",
-			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.Int64("jobID", job.ID))
-		return
+	if h.lastDDLJob != nil {
+		if job.ID == h.lastDDLJob.ID {
+			log.Warn("ignore duplicated DDL job",
+				zap.String("namespace", h.changefeedID.Namespace),
+				zap.String("changefeed", h.changefeedID.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
+				zap.Uint64("startTs", job.StartTS),
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Int64("jobID", job.ID))
+			return nil
+		}
+		// check that h.pendingDDLJobs is monotonically increasing.
+		if h.lastDDLJob.BinlogInfo.FinishedTS >= job.BinlogInfo.FinishedTS {
+			log.Error("ddl job is not monotonically increasing, please report a bug",
+				zap.String("namespace", h.changefeedID.Namespace),
+				zap.String("changefeed", h.changefeedID.ID),
+				zap.Any("lastJob", h.lastDDLJob),
+				zap.Any("newJob", job),
+			)
+			return errors.New("ddl job is not monotonically increasing")
+		}
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
-	h.lastDDLJobID = job.ID
+	h.lastDDLJob = job
 	log.Info("ddl puller receives new pending job",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
@@ -685,6 +681,11 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 		zap.Uint64("startTs", job.StartTS),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 		zap.Int64("jobID", job.ID))
+
+	if job.BinlogInfo.FinishedTS > atomic.LoadUint64(&h.resolvedTS) {
+		atomic.StoreUint64(&h.resolvedTS, job.BinlogInfo.FinishedTS)
+	}
+	return nil
 }
 
 // Run the ddl puller to receive DDL events
@@ -718,8 +719,8 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 					if e.CRTs > atomic.LoadUint64(&h.resolvedTS) {
 						atomic.StoreUint64(&h.resolvedTS, e.CRTs)
 						lastResolvedTsAdvancedTime = cc.Now()
-						continue
 					}
+					continue
 				}
 				h.addToPending(e.Job)
 			}
@@ -734,16 +735,39 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-// PopFrontDDL return the first pending DDL job and remove it from the pending list
-func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
+// DoGC clenup the PendingDDLs which finishedTS is less than gcTs.
+func (h *ddlPullerImpl) DoGC(gcTs uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	idx := sort.Search(len(h.pendingDDLJobs), func(i int) bool {
+		return h.pendingDDLJobs[i].BinlogInfo.FinishedTS > gcTs
+	})
+
+	newPendingDDLJobs := h.pendingDDLJobs[idx:]
+	if cap(h.pendingDDLJobs) > 4096 {
+		newPendingDDLJobs = make([]*timodel.Job, 0, len(newPendingDDLJobs)-idx)
+		copy(newPendingDDLJobs, h.pendingDDLJobs[idx:])
+	}
+	h.pendingDDLJobs = newPendingDDLJobs
+	h.gcTs = gcTs
+}
+
+// PopPendingDDLs return all pending DDL jobs which finishedTS is larger than ts.
+func (h *ddlPullerImpl) PopPendingDDLs(ts uint64) (uint64, []*timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil
+		return h.resolvedTs(), nil
 	}
-	job := h.pendingDDLJobs[0]
-	h.pendingDDLJobs = h.pendingDDLJobs[1:]
-	return job.BinlogInfo.FinishedTS, job
+
+	if h.lastDDLJob.BinlogInfo.FinishedTS <= ts {
+		return h.resolvedTs(), nil
+	}
+
+	idx := sort.Search(len(h.pendingDDLJobs), func(i int) bool {
+		return h.pendingDDLJobs[i].BinlogInfo.FinishedTS > ts
+	})
+	return h.resolvedTs(), h.pendingDDLJobs[idx:]
 }
 
 // Close the ddl puller, release all resources.
@@ -754,14 +778,8 @@ func (h *ddlPullerImpl) Close() {
 	h.cancel()
 }
 
-func (h *ddlPullerImpl) ResolvedTs() uint64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS)
-	}
-	job := h.pendingDDLJobs[0]
-	return job.BinlogInfo.FinishedTS
+func (h *ddlPullerImpl) resolvedTs() uint64 {
+	return atomic.LoadUint64(&h.resolvedTS)
 }
 
 // Below are some helper functions for ddl puller.

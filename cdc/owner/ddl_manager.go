@@ -197,15 +197,9 @@ func (m *ddlManager) tick(
 		return nil, nil, errors.Trace(err)
 	}
 
-	// drain all ddl jobs from ddlPuller
-	for {
-		_, job := m.ddlPuller.PopFrontDDL()
-		// no more ddl jobs
-		if job == nil {
-			break
-		}
-
-		if job.BinlogInfo == nil {
+	ddlRts, jobs := m.ddlPuller.PopPendingDDLs(m.ddlResolvedTs)
+	for _, job := range jobs {
+		if job == nil || job.BinlogInfo == nil {
 			continue
 		}
 
@@ -245,7 +239,6 @@ func (m *ddlManager) tick(
 	}
 
 	// advance resolvedTs
-	ddlRts := m.ddlPuller.ResolvedTs()
 	m.schema.AdvanceResolvedTs(ddlRts)
 	if m.redoDDLManager.Enabled() {
 		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
@@ -564,7 +557,7 @@ func (m *ddlManager) cleanCache(msg string) {
 	// Set it to nil first to accelerate GC.
 	m.pendingDDLs[tableName][0] = nil
 	m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-	m.schema.DoGC(m.executingDDL.CommitTs - 1)
+	// m.schema.DoGC(m.executingDDL.CommitTs - 1)
 	m.justSentDDL = m.executingDDL
 	m.executingDDL = nil
 
