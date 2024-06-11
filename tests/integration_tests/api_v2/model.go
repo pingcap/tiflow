@@ -170,7 +170,6 @@ type ReplicaConfig struct {
 	CheckGCSafePoint      bool          `json:"check_gc_safe_point"`
 	EnableSyncPoint       *bool         `json:"enable_sync_point,omitempty"`
 	BDRMode               *bool         `json:"bdr_mode,omitempty"`
-	SyncPointStartTs      uint64        `json:"sync_point_start_ts,omitempty"`
 	SyncPointInterval     *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention    *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 

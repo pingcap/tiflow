@@ -144,10 +144,6 @@ type replicaConfig struct {
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
 	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
-	// SyncPointStartTs is used to decide the first sync point ts, when the changefeed starts,
-	// the firstSyncPointTs = SyncPointStartTs + k * syncPointInterval(k is a uint64),
-	// firstSyncPointTs is greater than or equal to startTs and is the minimum value that satisfies the above formula
-	SyncPointStartTs uint64 `toml:"sync-point-start-ts" json:"sync-point-start-ts,omitempty"`
 	// SyncPointInterval is only available when the downstream is DB.
 	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
 	// SyncPointRetention is only available when the downstream is DB.
@@ -245,7 +241,7 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 }
 
 // ValidateAndAdjust verifies and adjusts the replica configuration.
-func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL, startTs uint64) error { // check sink uri
+func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sink uri
 	if c.Sink != nil {
 		err := c.Sink.validateAndAdjust(sinkURI)
 		if err != nil {
@@ -269,13 +265,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL, startTs uint64) erro
 					fmt.Sprintf("The SyncPointInterval:%s must be larger than %s",
 						c.SyncPointInterval.String(),
 						minSyncPointInterval.String()))
-		}
-		if c.SyncPointStartTs != 0 && c.SyncPointStartTs > startTs {
-			return cerror.ErrInvalidReplicaConfig.
-				FastGenByArgs(
-					fmt.Sprintf("The SyncPointStartTs:%d should not be larger than the startTs:%d",
-						c.SyncPointStartTs,
-						startTs))
 		}
 		if c.SyncPointRetention != nil &&
 			*c.SyncPointRetention < minSyncPointRetention {

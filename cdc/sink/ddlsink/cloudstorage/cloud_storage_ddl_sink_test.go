@@ -16,7 +16,6 @@ package cloudstorage
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"path"
@@ -41,7 +40,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err = replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64)
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.Nil(t, err)
 	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.Nil(t, err)
@@ -108,7 +107,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err = replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64)
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.Nil(t, err)
 	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.Nil(t, err)
@@ -157,7 +156,7 @@ func TestCleanupExpiredFiles(t *testing.T) {
 		FileExpirationDays:  util.AddressOf(1),
 		FileCleanupCronSpec: util.AddressOf("* * * * * *"),
 	}
-	err = replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64)
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.Nil(t, err)
 
 	cnt := atomic.Int64{}

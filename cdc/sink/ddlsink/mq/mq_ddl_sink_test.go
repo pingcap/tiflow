@@ -16,7 +16,6 @@ package mq
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/url"
 	"testing"
 
@@ -43,7 +42,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
@@ -69,7 +68,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
@@ -110,7 +109,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
@@ -155,7 +154,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
@@ -192,7 +191,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	replicaConfig.Sink.DispatchRules = []*config.DispatchRule{
 		{
 			Matcher:   []string{"*.*"},
@@ -260,7 +259,7 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
 	}
-	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),

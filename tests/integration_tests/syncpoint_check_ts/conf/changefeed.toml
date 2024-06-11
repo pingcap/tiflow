@@ -1,3 +1,2 @@
 enable-sync-point = true
 sync-point-interval = "30s"
-sync-point-start-ts = 450248343552000000

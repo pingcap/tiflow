@@ -15,7 +15,6 @@ package cloudstorage
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"testing"
 	"time"
@@ -39,7 +38,7 @@ func TestConfigApply(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err = replicaConfig.ValidateAndAdjust(sinkURI, math.MaxUint64)
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
 	cfg := NewConfig()
 	err = cfg.Apply(context.TODO(), sinkURI, replicaConfig)

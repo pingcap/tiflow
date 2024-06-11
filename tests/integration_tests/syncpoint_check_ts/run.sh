@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # [DISCRIPTION]:
-#   The test is used to check the first sync point ts value when we set different SyncPointStartTs, SyncPointInterval
+#   The test is used to check the first sync point ts value when we set different SyncPointInterval
 # [STEP]:
-#   1. Create changefeed with --sync-point --sync-interval=30s -- syncPointStartTs = t1
+#   1. Create changefeed with --sync-point --sync-interval=30s
 #   2. After test, get fisrt syncpoints from tidb_cdc.syncpoint_v1
 #   3. check the first syncpoint ts value
 
@@ -48,9 +48,8 @@ function run() {
 	primary_ts=($(grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
 	echo "primary_ts is " $primary_ts "start_ts is " $start_ts
 
-	ts_difference=$(($primary_ts - 450248343552000000))
-	shifted_ts_difference=$(($ts_difference >> 18))
-	if [ $(($shifted_ts_difference % 30000)) -eq 0 ]; then
+	shifted_primary_ts=$(($primary_ts >> 18))
+	if [ $(($shifted_primary_ts % 30000)) -eq 0 ]; then
 		pre_primary_ts=$(($primary_ts >> 18 - 30000))
 		pre_primary_ts=$(($pre_primary_ts << 18))
 		if [ $pre_primary_ts -lt $start_ts ]; then
@@ -60,7 +59,7 @@ function run() {
 			exit 1
 		fi
 	else
-		echo "primary ts is not correct, the difference between it and the syncPointStartTs should be the integer multiples of the syncPointInterval "
+		echo "primary ts is not correct, the difference between it and the time.Unix(0,0) should be the integer multiples of the syncPointInterval "
 		exit 1
 	fi
 

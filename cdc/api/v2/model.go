@@ -193,7 +193,6 @@ type ReplicaConfig struct {
 	EnableTableMonitor    *bool  `json:"enable_table_monitor,omitempty"`
 	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
-	SyncPointStartTs   uint64        `json:"sync_point_start_ts,omitempty"`
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
@@ -226,7 +225,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.EnableSyncPoint = c.EnableSyncPoint
 	res.EnableTableMonitor = c.EnableTableMonitor
 	res.IgnoreIneligibleTable = c.IgnoreIneligibleTable
-	res.SyncPointStartTs = c.SyncPointStartTs
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = &c.SyncPointInterval.duration
 	}
@@ -537,7 +535,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		ForceReplicate:        cloned.ForceReplicate,
 		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
-		SyncPointStartTs:      cloned.SyncPointStartTs,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
 		EnableTableMonitor:    cloned.EnableTableMonitor,
 		BDRMode:               cloned.BDRMode,

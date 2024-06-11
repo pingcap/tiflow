@@ -631,25 +631,15 @@ LOOP2:
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(cfInfo.Config.EnableSyncPoint) {
-		if cfInfo.Config.SyncPointStartTs != 0 {
-			// firstSyncPointStartTs = syncPointStartTs + k * syncPointInterval，
-			// which >= startTs, and choose the minimal k
-			// we check SyncPointStartTs before create the changefeed to ensure it will not larger than the startTs
-			if cfInfo.Config.SyncPointStartTs == c.resolvedTs {
-				c.barriers.Update(syncPointBarrier, c.resolvedTs)
-			} else {
-				startSyncPointTime := oracle.GetTimeFromTS(cfInfo.Config.SyncPointStartTs)
-				syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval)
-				k := oracle.GetTimeFromTS(c.resolvedTs).Sub(startSyncPointTime) / syncPointInterval
-				if oracle.GetTimeFromTS(c.resolvedTs).Sub(startSyncPointTime)%syncPointInterval != 0 {
-					k += 1
-				}
-				firstSyncPointTs := oracle.GoTimeToTS(startSyncPointTime.Add(k * syncPointInterval))
-				c.barriers.Update(syncPointBarrier, firstSyncPointTs)
-			}
-		} else {
-			c.barriers.Update(syncPointBarrier, c.resolvedTs)
+		// firstSyncPointStartTs = k * syncPointInterval，
+		// which >= startTs, and choose the minimal k
+		syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval)
+		k := oracle.GetTimeFromTS(c.resolvedTs).Sub(time.Unix(0, 0)) / syncPointInterval
+		if oracle.GetTimeFromTS(c.resolvedTs).Sub(time.Unix(0, 0))%syncPointInterval != 0 {
+			k += 1
 		}
+		firstSyncPointTs := oracle.GoTimeToTS(time.Unix(0, 0).Add(k * syncPointInterval))
+		c.barriers.Update(syncPointBarrier, firstSyncPointTs)
 	}
 	c.barriers.Update(finishBarrier, cfInfo.GetTargetTs())
 

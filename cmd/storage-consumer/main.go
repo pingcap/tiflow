@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -151,7 +150,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		}
 	}
 
-	err = replicaConfig.ValidateAndAdjust(upstreamURI, math.MaxUint64)
+	err = replicaConfig.ValidateAndAdjust(upstreamURI)
 	if err != nil {
 		log.Error("failed to validate replica config", zap.Error(err))
 		return nil, err

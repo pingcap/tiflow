@@ -114,7 +114,7 @@ func verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	err = replicaConfig.ValidateAndAdjust(sinkURIParsed, changefeedConfig.StartTS)
+	err = replicaConfig.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
 		return nil, err
 	}
