@@ -21,10 +21,10 @@ import (
 
 func newNodeForTest(hashes ...uint64) *Node {
 	return &Node{
-		id:                  genNextNodeID(),
-		sortedDedupKeysHash: sortAndDedupHashes(hashes, 8),
-		assignedTo:          unassigned,
-		RandCacheID:         func() cacheID { return 100 },
+		id:           genNextNodeID(),
+		conflictKeys: hashes,
+		assignedTo:   unassigned,
+		RandCacheID:  func() cacheID { return 100 },
 		OnNotified: func(callback func()) {
 			// run the callback immediately
 			callback()

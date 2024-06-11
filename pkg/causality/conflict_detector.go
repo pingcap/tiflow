@@ -72,8 +72,8 @@ func NewConflictDetector[Txn txnEvent](
 
 // Add pushes a transaction to the ConflictDetector.
 //
-// NOTE: if multiple threads access this concurrently,
-// Txn.ConflictKeys must be sorted by the slot index.
+// NOTE: if multiple threads access this concurrently, users need to ensure all concurrent Txns
+// won't have any same `ConflictKeys` results.
 func (d *ConflictDetector[Txn]) Add(txn Txn) {
 	hashes := txn.ConflictKeys()
 	node := d.slots.AllocNode(hashes)
