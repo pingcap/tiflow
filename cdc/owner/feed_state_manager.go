@@ -468,6 +468,7 @@ func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 				"it will be failed",
 				zap.String("namespace", m.state.GetID().Namespace),
 				zap.String("changefeed", m.state.GetID().ID),
+				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
 				zap.Uint64("checkpointTs", m.state.GetChangefeedStatus().CheckpointTs),
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)

@@ -811,6 +811,18 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.initialized.Store(false)
 	c.isReleased = true
 
+OUT:
+	for {
+		select {
+		case err := <-c.warningCh:
+			log.Warn("drain owner warnings",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Error(err))
+		default:
+			break OUT
+		}
+	}
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
