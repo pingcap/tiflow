@@ -172,7 +172,7 @@ func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
 	pdClock pdutil.Clock,
-	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error,
 	workerCount int,
 	inputChannelIndexer func(tablepb.Span, int) int,
 	resolvedTsAdvancerCount int,

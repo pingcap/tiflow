@@ -51,6 +51,8 @@ type SourceManager struct {
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
+	safeModeAtStart bool
+
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
 }
@@ -107,6 +109,7 @@ func newSourceManager(
 		engine:             engine,
 		bdrMode:            bdrMode,
 		enableTableMonitor: enableTableMonitor,
+		safeModeAtStart:    safeModeAtStart,
 	}
 
 	serverConfig := config.GetGlobalServerConfig()
@@ -119,15 +122,15 @@ func newSourceManager(
 
 	// consume add raw kv entry to the engine.
 	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",
 				zap.String("namespace", mgr.changefeedID.Namespace),
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			if safeModeAtStart && isOldUpdateKVEntry(raw, mgr.startTs) {
-				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
 				if err != nil {
 					return err
 				}
