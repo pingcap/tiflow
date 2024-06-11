@@ -192,13 +192,8 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-<<<<<<< HEAD
-	p.sinkManager.r.AddTable(
-		span, startTs, p.changefeed.Info.TargetTs)
-=======
 	table := p.sinkManager.r.AddTable(
-		span, startTs, p.latestInfo.TargetTs)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
+		span, startTs, p.changefeed.Info.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
@@ -701,34 +696,20 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.changefeed.Info.SinkURI)
-=======
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-<<<<<<< HEAD
 		sortEngine, p.changefeed.Info.Config.BDRMode,
-		pullerSafeModeAtStart)
-=======
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
 		isMysqlBackend)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 
 	p.sinkManager.r = sinkmanager.New(
-<<<<<<< HEAD
 		p.changefeedID, p.changefeed.Info, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
-=======
-		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.spawn(stdCtx)
 

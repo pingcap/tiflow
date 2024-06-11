@@ -25,48 +25,13 @@ import (
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
-<<<<<<< HEAD
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
-<<<<<<< HEAD
-	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
-=======
-	"github.com/tikv/client-go/v2/tikv"
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	"go.uber.org/zap"
 )
 
 const defaultMaxBatchSize = 256
 
-<<<<<<< HEAD
-=======
-type pullerWrapperCreator func(
-	changefeed model.ChangeFeedID,
-	span tablepb.Span,
-	tableName string,
-	startTs model.Ts,
-	bdrMode bool,
-	shouldSplitKVEntry model.ShouldSplitKVEntry,
-) pullerwrapper.Wrapper
-
-type tablePullers struct {
-	ctx     context.Context
-	errChan chan error
-	spanz.SyncMap
-	pullerWrapperCreator pullerWrapperCreator
-}
-
-type multiplexingPuller struct {
-	puller *pullerwrapper.MultiplexingWrapper
-}
-
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ctx   context.Context
@@ -89,7 +54,6 @@ type SourceManager struct {
 	bdrMode bool
 
 	safeModeAtStart bool
-	startTs         model.Ts
 
 	// pullerWrapperCreator is used to create a puller wrapper.
 	// Only used for testing.
@@ -98,8 +62,7 @@ type SourceManager struct {
 		tableName string,
 		startTs model.Ts,
 		bdrMode bool,
-		shouldSplitKVEntry pullerwrapper.ShouldSplitKVEntry,
-		splitUpdateKVEntry pullerwrapper.SplitUpdateKVEntry,
+		shouldSplitKVEntry model.ShouldSplitKVEntry,
 	) pullerwrapper.Wrapper
 }
 
@@ -153,28 +116,12 @@ func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) boo
 func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
-<<<<<<< HEAD
-	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
-	}
-	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
-	p.Start(m.ctx, m.up, m.engine, m.errChan)
-	m.pullers.Store(span, p)
-=======
-
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
-
-	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
-		return
-	}
-
-	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
-	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
-	m.tablePullers.Store(span, p)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
+	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
+	p.Start(m.ctx, m.up, m.engine, m.errChan)
+	m.pullers.Store(span, p)
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
@@ -224,34 +171,7 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-<<<<<<< HEAD
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.startTs = startTs
 	m.ctx = ctx
-=======
-	if m.multiplexing {
-		serverConfig := config.GetGlobalServerConfig()
-		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-		client := kv.NewSharedClient(
-			m.changefeedID, serverConfig, m.bdrMode,
-			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
-			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
-		)
-
-		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, client, m.engine,
-			int(serverConfig.KVClient.FrontierConcurrent),
-		)
-
-		close(m.ready)
-		return m.multiplexingPuller.puller.Run(ctx)
-	}
-
-	m.tablePullers.ctx = ctx
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	close(m.ready)
 	select {
 	case err := <-m.errChan:
