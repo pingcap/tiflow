@@ -70,7 +70,7 @@ func CreateManagerWithMemEngine(
 	go func() { handleError(sourceManager.Run(ctx)) }()
 	sourceManager.WaitForReady(ctx)
 
-	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager)
+	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager, false)
 	go func() { handleError(sinkManager.Run(ctx)) }()
 	sinkManager.WaitForReady(ctx)
 
@@ -90,6 +90,6 @@ func NewManagerWithMemEngine(
 	mg := &entry.MockMountGroup{}
 	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
 	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
-	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, redoMgr, sourceManager)
+	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, redoMgr, sourceManager, false)
 	return sinkManager, sourceManager, sortEngine
 }

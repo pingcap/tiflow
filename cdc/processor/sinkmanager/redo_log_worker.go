@@ -141,7 +141,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
-			e.Row.ReplicatingTs = task.tableSink.replicateTs
+			e.Row.ReplicatingTs = task.tableSink.replicateTs.Load()
 			x, size = handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
 		}

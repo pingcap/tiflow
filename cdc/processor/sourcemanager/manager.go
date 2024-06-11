@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -26,12 +25,8 @@ import (
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +54,6 @@ type SourceManager struct {
 	bdrMode bool
 
 	safeModeAtStart bool
-	startTs         model.Ts
 
 	// pullerWrapperCreator is used to create a puller wrapper.
 	// Only used for testing.
@@ -68,8 +62,7 @@ type SourceManager struct {
 		tableName string,
 		startTs model.Ts,
 		bdrMode bool,
-		shouldSplitKVEntry pullerwrapper.ShouldSplitKVEntry,
-		splitUpdateKVEntry pullerwrapper.SplitUpdateKVEntry,
+		shouldSplitKVEntry model.ShouldSplitKVEntry,
 	) pullerwrapper.Wrapper
 }
 
@@ -115,31 +108,18 @@ func NewForTest(
 	}
 }
 
-func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
-}
-
-func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-	if raw == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-	deleteKVEntry := *raw
-	deleteKVEntry.Value = nil
-
-	insertKVEntry := *raw
-	insertKVEntry.OldValue = nil
-
-	return &deleteKVEntry, &insertKVEntry, nil
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
-	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
+	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(m.ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
 }
@@ -191,11 +171,6 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.startTs = startTs
 	m.ctx = ctx
 	close(m.ready)
 	select {
@@ -244,24 +219,4 @@ func (m *SourceManager) Close() {
 // Add adds events to the engine. It is used for testing.
 func (m *SourceManager) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	m.engine.Add(span, events...)
-}
-
-func getCurrentTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
-	backoffBaseDelayInMs := int64(100)
-	totalRetryDuration := 10 * time.Second
-	var replicateTs model.Ts
-	err := retry.Do(ctx, func() error {
-		phy, logic, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		replicateTs = oracle.ComposeTS(phy, logic)
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	if err != nil {
-		return model.Ts(0), errors.Trace(err)
-	}
-	return replicateTs, nil
 }
