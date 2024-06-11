@@ -159,9 +159,9 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 	return nil
 }
 
-// Scheme returns the sink scheme.
-func (s *sink) Scheme() string {
-	return s.scheme
+// SchemeOption returns the sink scheme.
+func (s *sink) SchemeOption() (string, bool) {
+	return s.scheme, false
 }
 
 // Close closes the sink. It won't wait for all pending items backend handled.

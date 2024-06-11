@@ -47,8 +47,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 // It will send the events to the MQ system.
 type dmlSink struct {
 	// id indicates this sink belongs to which processor(changefeed).
-	id     model.ChangeFeedID
-	scheme string
+	id model.ChangeFeedID
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
@@ -69,6 +68,9 @@ type dmlSink struct {
 
 	wg   sync.WaitGroup
 	dead chan struct{}
+
+	scheme               string
+	outputRawChangeEvent bool
 }
 
 func newSink(ctx context.Context,
@@ -78,6 +80,7 @@ func newSink(ctx context.Context,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
 	encoderConcurrency int,
+	outputRawChangeEvent bool,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -94,12 +97,13 @@ func newSink(ctx context.Context,
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
 	s := &dmlSink{
-		id:       changefeedID,
-		scheme:   strings.ToLower(sinkURI.Scheme),
-		protocol: encoderConfig.Protocol,
-		ctx:      ctx,
-		cancel:   cancel,
-		dead:     make(chan struct{}),
+		id:                   changefeedID,
+		protocol:             encoderConfig.Protocol,
+		ctx:                  ctx,
+		cancel:               cancel,
+		dead:                 make(chan struct{}),
+		scheme:               strings.ToLower(sinkURI.Scheme),
+		outputRawChangeEvent: outputRawChangeEvent,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -199,8 +203,9 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 	return nil
 }
 
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+// SchemeOption returns the scheme of this sink.
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }
 
 // Close closes the sink.

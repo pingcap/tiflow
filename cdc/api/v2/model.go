@@ -354,18 +354,20 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				SASLOAuthGrantType:    c.Sink.KafkaConfig.SASLOAuthGrantType,
 				SASLOAuthAudience:     c.Sink.KafkaConfig.SASLOAuthAudience,
 				LargeMessageHandle:    largeMessageHandle,
+				OutputRawChangeEvent:  c.Sink.KafkaConfig.OutputRawChangeEvent,
 			}
 		}
 
 		if c.Sink.CloudStorageConfig != nil {
 			res.Sink.CloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            c.Sink.CloudStorageConfig.FileSize,
-				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
-				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				WorkerCount:          c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             c.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:     c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:       c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				OutputRawChangeEvent: c.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 	}
@@ -502,18 +504,20 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLOAuthGrantType:    cloned.Sink.KafkaConfig.SASLOAuthGrantType,
 				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
 				LargeMessageHandle:    largeMessageHandle,
+				OutputRawChangeEvent:  cloned.Sink.KafkaConfig.OutputRawChangeEvent,
 			}
 		}
 
 		if cloned.Sink.CloudStorageConfig != nil {
 			res.Sink.CloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
-				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
-				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				WorkerCount:          cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             cloned.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:     cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:       cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				OutputRawChangeEvent: cloned.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 	}
@@ -679,18 +683,20 @@ type KafkaConfig struct {
 	SASLOAuthGrantType    *string  `json:"sasl_oauth_grant_type,omitempty"`
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 
-	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	LargeMessageHandle   *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	OutputRawChangeEvent *bool                     `json:"output_raw_change_event,omitempty"`
 }
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount         *int    `json:"worker_count,omitempty"`
-	FlushInterval       *string `json:"flush_interval,omitempty"`
-	FileSize            *int    `json:"file_size,omitempty"`
-	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
-	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
-	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
-	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
+	WorkerCount          *int    `json:"worker_count,omitempty"`
+	FlushInterval        *string `json:"flush_interval,omitempty"`
+	FileSize             *int    `json:"file_size,omitempty"`
+	FlushConcurrency     *int    `json:"flush_concurrency,omitempty"`
+	OutputColumnID       *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays   *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec  *string `json:"file_cleanup_cron_spec,omitempty"`
+	OutputRawChangeEvent *bool   `json:"output_raw_change_event,omitempty"`
 }
 
 // CSVConfig denotes the csv config

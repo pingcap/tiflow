@@ -47,9 +47,9 @@ func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChange
 	return
 }
 
-// Scheme returns the sink scheme.
-func (s *Sink) Scheme() string {
-	return sink.BlackHoleScheme
+// SchemeOption returns the scheme and the option.
+func (s *Sink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, true
 }
 
 // Close do nothing.
