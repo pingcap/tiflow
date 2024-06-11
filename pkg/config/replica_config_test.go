@@ -275,8 +275,8 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	cfg.SyncPointInterval = util.AddressOf(time.Second * 29)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
-	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
 
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
 	cfg.SyncPointRetention = util.AddressOf(time.Minute * 10)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
