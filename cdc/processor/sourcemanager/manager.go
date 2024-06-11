@@ -27,12 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-<<<<<<< HEAD
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
-=======
-	"github.com/pingcap/tiflow/pkg/spanz"
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/tikv"
@@ -41,29 +35,6 @@ import (
 
 const defaultMaxBatchSize = 256
 
-<<<<<<< HEAD
-=======
-type pullerWrapperCreator func(
-	changefeed model.ChangeFeedID,
-	span tablepb.Span,
-	tableName string,
-	startTs model.Ts,
-	bdrMode bool,
-	shouldSplitKVEntry model.ShouldSplitKVEntry,
-) pullerwrapper.Wrapper
-
-type tablePullers struct {
-	ctx     context.Context
-	errChan chan error
-	spanz.SyncMap
-	pullerWrapperCreator pullerWrapperCreator
-}
-
-type multiplexingPuller struct {
-	puller *pullerwrapper.MultiplexingWrapper
-}
-
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ready chan struct{}
@@ -79,10 +50,6 @@ type SourceManager struct {
 	engine sorter.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-<<<<<<< HEAD
-	startTs model.Ts
-=======
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
@@ -193,25 +160,14 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
-<<<<<<< HEAD
-	// Only nil in unit tests.
-	if m.puller != nil {
-		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
-	}
-=======
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
 
-	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
-		return
+	// Only nil in unit tests.
+	if m.puller != nil {
+		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
 	}
-
-	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
-	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
-	m.tablePullers.Store(span, p)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
@@ -251,46 +207,12 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) sorter.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-<<<<<<< HEAD
 	close(m.ready)
 	// Only nil in unit tests.
 	if m.puller == nil {
 		return nil
 	}
-	startTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.startTs = startTs
 	return m.puller.Run(ctx)
-=======
-	if m.multiplexing {
-		serverConfig := config.GetGlobalServerConfig()
-		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-		client := kv.NewSharedClient(
-			m.changefeedID, serverConfig, m.bdrMode,
-			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
-			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
-		)
-
-		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, client, m.engine,
-			int(serverConfig.KVClient.FrontierConcurrent),
-		)
-
-		close(m.ready)
-		return m.multiplexingPuller.puller.Run(ctx)
-	}
-
-	m.tablePullers.ctx = ctx
-	close(m.ready)
-	select {
-	case err := <-m.tablePullers.errChan:
-		return err
-	case <-m.tablePullers.ctx.Done():
-		return m.tablePullers.ctx.Err()
-	}
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // WaitForReady implements util.Runnable.

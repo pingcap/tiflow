@@ -664,12 +664,8 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-<<<<<<< HEAD
 		util.GetOrZero(cfConfig.EnableTableMonitor),
-		pullerSafeModeAtStart)
-=======
 		isMysqlBackend)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
