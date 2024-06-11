@@ -811,6 +811,8 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.initialized.Store(false)
 	c.isReleased = true
 
+	// when closing a changefeed, we must clean the warningCh.
+	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
 OUT:
 	for {
 		select {
