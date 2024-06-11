@@ -72,8 +72,9 @@ type eventFragment struct {
 // messages to individual dmlWorkers.
 // The dmlWorkers will write the encoded messages to external storage in parallel between different tables.
 type DMLSink struct {
-	changefeedID model.ChangeFeedID
-	scheme       string
+	changefeedID         model.ChangeFeedID
+	scheme               string
+	outputRawChangeEvent bool
 	// last sequence number
 	lastSeqNum uint64
 	// encodingWorkers defines a group of workers for encoding events.
@@ -144,13 +145,14 @@ func NewDMLSink(ctx context.Context,
 
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &DMLSink{
-		changefeedID:    changefeedID,
-		scheme:          strings.ToLower(sinkURI.Scheme),
-		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
-		workers:         make([]*dmlWorker, cfg.WorkerCount),
-		statistics:      metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
-		cancel:          wgCancel,
-		dead:            make(chan struct{}),
+		changefeedID:         changefeedID,
+		scheme:               strings.ToLower(sinkURI.Scheme),
+		outputRawChangeEvent: replicaConfig.Sink.CloudStorageConfig.GetOutputRawChangeEvent(),
+		encodingWorkers:      make([]*encodingWorker, defaultEncodingConcurrency),
+		workers:              make([]*dmlWorker, cfg.WorkerCount),
+		statistics:           metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
+		cancel:               wgCancel,
+		dead:                 make(chan struct{}),
 	}
 	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
 
@@ -295,7 +297,7 @@ func (s *DMLSink) Dead() <-chan struct{} {
 	return s.dead
 }
 
-// Scheme returns the sink scheme.
-func (s *DMLSink) Scheme() string {
-	return s.scheme
+// SchemeOption returns the scheme and the option.
+func (s *DMLSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }

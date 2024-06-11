@@ -70,7 +70,8 @@ type dmlSink struct {
 	wg   sync.WaitGroup
 	dead chan struct{}
 
-	scheme string
+	scheme               string
+	outputRawChangeEvent bool
 }
 
 func newDMLSink(
@@ -84,6 +85,7 @@ func newDMLSink(
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	scheme string,
+	outputRawChangeEvent bool,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -91,13 +93,14 @@ func newDMLSink(
 	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
 
 	s := &dmlSink{
-		id:          changefeedID,
-		protocol:    protocol,
-		adminClient: adminClient,
-		ctx:         ctx,
-		cancel:      cancel,
-		dead:        make(chan struct{}),
-		scheme:      scheme,
+		id:                   changefeedID,
+		protocol:             protocol,
+		adminClient:          adminClient,
+		ctx:                  ctx,
+		cancel:               cancel,
+		dead:                 make(chan struct{}),
+		scheme:               scheme,
+		outputRawChangeEvent: outputRawChangeEvent,
 	}
 	s.alive.transformer = transformer
 	s.alive.eventRouter = eventRouter
@@ -236,6 +239,6 @@ func (s *dmlSink) Dead() <-chan struct{} {
 }
 
 // Scheme returns the scheme of this sink.
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }
