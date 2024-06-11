@@ -63,6 +63,7 @@ func createManagerWithMemEngine(
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
 		errChan, errChan,
+		false,
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	require.NoError(t, err)
@@ -166,7 +167,7 @@ func TestAddTable(t *testing.T) {
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
 	err := manager.StartTable(tableID, 1)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
+	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs.Load())
 
 	progress := manager.sinkProgressHeap.pop()
 	require.Equal(t, tableID, progress.tableID)

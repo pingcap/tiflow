@@ -128,6 +128,9 @@ type SinkManager struct {
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
 
+	// isMysqlBackend indicates whether the backend is MySQL compatible.
+	isMysqlBackend bool
+
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
 
@@ -145,6 +148,7 @@ func New(
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
 	warnChan chan error,
+	isMysqlBackend bool,
 	metricsTableSinkTotalRows prometheus.Counter,
 	metricsTableSinkFlushLagDuration prometheus.Observer,
 ) (*SinkManager, error) {
@@ -160,6 +164,7 @@ func New(
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 		sinkRetry:           retry.NewInfiniteErrorRetry(),
+		isMysqlBackend:      isMysqlBackend,
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 
@@ -310,6 +315,11 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 
 			// For duplicate entry error, we fast fail to restart changefeed.
 			if cerror.IsDupEntryError(err) {
+				return errors.Trace(err)
+			}
+
+			if m.isMysqlBackend {
+				// For MySQL backend, we should restart sink. Let owner to handle the error.
 				return errors.Trace(err)
 			}
 		}
@@ -848,7 +858,7 @@ func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
-func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) {
+func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) *tableSinkWrapper {
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		tableID,
@@ -876,7 +886,6 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return
 	}
 	m.sinkMemQuota.AddTable(tableID)
 	m.redoMemQuota.AddTable(tableID)
@@ -886,6 +895,7 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		zap.Int64("tableID", tableID),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("version", sinkWrapper.version))
+	return sinkWrapper
 }
 
 // StartTable sets the table(TableSink) state to replicating.
