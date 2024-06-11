@@ -122,8 +122,14 @@ func NewPulsarDMLSink(
 	}
 
 	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, changefeedID)
+<<<<<<< HEAD
 	s := newDMLSink(ctx, changefeedID, p, nil, topicManager,
 		eventRouter, trans, encoderGroup, protocol, scheme, errCh)
+=======
+
+	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, trans, encoderGroup,
+		protocol, scheme, pConfig.GetOutputRawChangeEvent(), errCh)
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 
 	return s, nil
 }

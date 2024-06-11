@@ -180,6 +180,6 @@ func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
 }
 
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, false
 }
