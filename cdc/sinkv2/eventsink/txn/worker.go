@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
@@ -173,13 +174,13 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	if conflictDetectTime > float64(60) {
 		now := time.Now()
 		// Log slow conflict detect tables every minute.
-		if lastLog, ok := w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID]; !ok || now.Sub(lastLog) > time.Minute {
+		if lastLog, ok := w.lastSlowConflictDetectLog[txn.Event.TableInfo.ID]; !ok || now.Sub(lastLog) > time.Minute {
 			log.Warn("Transaction dmlSink finds a slow transaction in conflict detector",
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID),
-				zap.Int64("TableID", txn.Event.PhysicalTableID),
+				zap.Int64("TableID", txn.Event.TableInfo.ID),
 				zap.Float64("seconds", conflictDetectTime))
-			w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID] = now
+			w.lastSlowConflictDetectLog[txn.Event.Table.TableID] = now
 		}
 	}
 
