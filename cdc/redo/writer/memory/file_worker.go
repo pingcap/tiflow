@@ -155,12 +155,10 @@ func (f *fileWorkerGroup) Run(
 ) (err error) {
 	defer func() {
 		f.close()
-		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Warn("redo file workers closed with error",
-				zap.String("namespace", f.cfg.ChangeFeedID.Namespace),
-				zap.String("changefeed", f.cfg.ChangeFeedID.ID),
-				zap.Error(err))
-		}
+		log.Warn("redo file workers closed",
+			zap.String("namespace", f.cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", f.cfg.ChangeFeedID.ID),
+			zap.Error(err))
 	}()
 
 	eg, egCtx := errgroup.WithContext(ctx)
