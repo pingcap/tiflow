@@ -14,7 +14,6 @@
 package sourcemanager
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -25,48 +24,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/puller"
-<<<<<<< HEAD
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/tikv"
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	"go.uber.org/zap"
 )
 
 const defaultMaxBatchSize = 256
 
-<<<<<<< HEAD
-=======
-type pullerWrapperCreator func(
-	changefeed model.ChangeFeedID,
-	span tablepb.Span,
-	tableName string,
-	startTs model.Ts,
-	bdrMode bool,
-	shouldSplitKVEntry model.ShouldSplitKVEntry,
-) pullerwrapper.Wrapper
-
-type tablePullers struct {
-	ctx     context.Context
-	errChan chan error
-	spanz.SyncMap
-	pullerWrapperCreator pullerWrapperCreator
-}
-
-type multiplexingPuller struct {
-	puller *pullerwrapper.MultiplexingWrapper
-}
-
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	// changefeedID is the changefeed ID.
@@ -86,7 +51,6 @@ type SourceManager struct {
 	bdrMode bool
 
 	safeModeAtStart bool
-	startTs         model.Ts
 }
 
 // New creates a new source manager.
@@ -99,13 +63,6 @@ func New(
 	bdrMode bool,
 	safeModeAtStart bool,
 ) *SourceManager {
-	startTs, err := getCurrentTs(context.Background(), up.PDClient)
-	if err != nil {
-		log.Panic("Cannot get current ts when creating source manager",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID))
-		return nil
-	}
 	return &SourceManager{
 		changefeedID:    changefeedID,
 		up:              up,
@@ -114,7 +71,6 @@ func New(
 		errChan:         errChan,
 		bdrMode:         bdrMode,
 		safeModeAtStart: safeModeAtStart,
-		startTs:         startTs,
 	}
 }
 
@@ -123,34 +79,15 @@ func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) boo
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-<<<<<<< HEAD
-func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(tableID)
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
-	}
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
-	p.Start(ctx, m.up, m.engine, m.errChan)
-	m.pullers.Store(tableID, p)
-=======
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
-	// Add table to the engine first, so that the engine can receive the events from the puller.
-	m.engine.AddTable(span, startTs)
-
-	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
-
-	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
-		return
-	}
-
-	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
-	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
-	m.tablePullers.Store(span, p)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
+	p.Start(ctx, m.up, m.engine, m.errChan)
+	m.pullers.Store(tableID, p)
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
@@ -194,51 +131,8 @@ func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats 
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
-<<<<<<< HEAD
 func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableStats {
 	return m.engine.GetStatsByTable(tableID)
-=======
-func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats {
-	return m.engine.GetStatsByTable(span)
-}
-
-// Run implements util.Runnable.
-func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-	if m.multiplexing {
-		serverConfig := config.GetGlobalServerConfig()
-		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-		client := kv.NewSharedClient(
-			m.changefeedID, serverConfig, m.bdrMode,
-			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
-			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
-		)
-
-		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, client, m.engine,
-			int(serverConfig.KVClient.FrontierConcurrent),
-		)
-
-		close(m.ready)
-		return m.multiplexingPuller.puller.Run(ctx)
-	}
-
-	m.tablePullers.ctx = ctx
-	close(m.ready)
-	select {
-	case err := <-m.tablePullers.errChan:
-		return err
-	case <-m.tablePullers.ctx.Done():
-		return m.tablePullers.ctx.Err()
-	}
-}
-
-// WaitForReady implements util.Runnable.
-func (m *SourceManager) WaitForReady(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-	case <-m.ready:
-	}
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 }
 
 // Close closes the source manager. Stop all pullers and close the engine.

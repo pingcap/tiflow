@@ -218,13 +218,12 @@ func (p *processor) AddTable(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-<<<<<<< HEAD
 	if p.pullBasedSinking {
-		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
+		table := p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoDMLMgr.Enabled() {
 			p.redoDMLMgr.AddTable(tableID, startTs)
 		}
-		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs, table.GetReplicaTs)
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
@@ -232,15 +231,7 @@ func (p *processor) AddTable(
 			return false, errors.Trace(err)
 		}
 		p.tables[tableID] = table
-=======
-	table := p.sinkManager.r.AddTable(
-		span, startTs, p.latestInfo.TargetTs)
-	if p.redo.r.Enabled() {
-		p.redo.r.AddTable(span, startTs)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	}
-
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -853,16 +844,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.changefeed.Info.SinkURI)
+		isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, pullerSafeModeAtStart)
+			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, isMysqlBackend)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.warnCh, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
+			p.errCh, p.warnCh, isMysqlBackend, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -919,32 +910,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
-=======
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	p.sourceManager.r = sourcemanager.New(
-		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		isMysqlBackend)
-	p.sourceManager.name = "SourceManager"
-	p.sourceManager.changefeedID = p.changefeedID
-	p.sourceManager.spawn(prcCtx)
-
-	p.sinkManager.r = sinkmanager.New(
-		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
-	p.sinkManager.name = "SinkManager"
-	p.sinkManager.changefeedID = p.changefeedID
-	p.sinkManager.spawn(prcCtx)
-
-	// Bind them so that sourceManager can notify sinkManager.r.
-	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	if err != nil {
 		return err
 	}

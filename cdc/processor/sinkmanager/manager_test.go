@@ -369,21 +369,11 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
 	}()
 
-<<<<<<< HEAD
 	source.AddTable(1)
 	manager.AddTable(1, 100, math.MaxUint64)
 	manager.StartTable(1, 100)
 	source.Add(1, model.NewResolvedPolymorphicEvent(0, 101))
 	manager.UpdateReceivedSorterResolvedTs(1, 101)
-=======
-	span := spanz.TableIDToComparableSpan(1)
-
-	source.AddTable(span, "test", 100, func() model.Ts { return 0 })
-	manager.AddTable(span, 100, math.MaxUint64)
-	manager.StartTable(span, 100)
-	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
-	manager.UpdateReceivedSorterResolvedTs(span, 101)
->>>>>>> 7c968ee228 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11269))
 	manager.UpdateBarrierTs(101, nil)
 
 	timer := time.NewTimer(5 * time.Second)
