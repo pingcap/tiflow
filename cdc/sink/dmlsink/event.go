@@ -23,8 +23,12 @@ type TableEvent interface {
 	// GetCommitTs returns the commit timestamp of the event.
 	GetCommitTs() uint64
 	// TrySplitAndSortUpdateEvent split the update to delete and insert if the unique key is updated
+<<<<<<< HEAD
 	// Note that sinkScheme is used to control the split behavior.
 	TrySplitAndSortUpdateEvent(scheme string) error
+=======
+	TrySplitAndSortUpdateEvent(scheme string, outputRawChangeEvent bool) error
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 // CallbackFunc is the callback function for callbackable event.

@@ -69,6 +69,12 @@ type dmlSink struct {
 
 	wg   sync.WaitGroup
 	dead chan struct{}
+<<<<<<< HEAD
+=======
+
+	scheme               string
+	outputRawChangeEvent bool
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 func newDMLSink(
@@ -82,6 +88,11 @@ func newDMLSink(
 	encoderBuilder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	protocol config.Protocol,
+<<<<<<< HEAD
+=======
+	scheme string,
+	outputRawChangeEvent bool,
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -90,6 +101,7 @@ func newDMLSink(
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
 	s := &dmlSink{
+<<<<<<< HEAD
 		id:          changefeedID,
 		scheme:      strings.ToLower(sinkURI.Scheme),
 		protocol:    protocol,
@@ -97,6 +109,16 @@ func newDMLSink(
 		ctx:         ctx,
 		cancel:      cancel,
 		dead:        make(chan struct{}),
+=======
+		id:                   changefeedID,
+		protocol:             protocol,
+		adminClient:          adminClient,
+		ctx:                  ctx,
+		cancel:               cancel,
+		dead:                 make(chan struct{}),
+		scheme:               scheme,
+		outputRawChangeEvent: outputRawChangeEvent,
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -216,3 +238,11 @@ func (s *dmlSink) Close() {
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
 }
+<<<<<<< HEAD
+=======
+
+// Scheme returns the scheme of this sink.
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
+}
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))

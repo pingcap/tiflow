@@ -181,3 +181,10 @@ func (s *dmlSink) Close() {
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
 }
+<<<<<<< HEAD
+=======
+
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, false
+}
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))

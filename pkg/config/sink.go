@@ -121,6 +121,7 @@ type SinkConfig struct {
 	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
 	Protocol     string         `toml:"protocol" json:"protocol"`
 
+<<<<<<< HEAD
 	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
 	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
 	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
@@ -130,6 +131,24 @@ type SinkConfig struct {
 	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
 	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
 	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
+=======
+	// DispatchRules is only available when the downstream is MQ.
+	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
+
+	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
+	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
+	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
+	// EncoderConcurrency is only available when the downstream is MQ.
+	EncoderConcurrency *int `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
+	// Terminator is NOT available when the downstream is DB.
+	Terminator *string `toml:"terminator" json:"terminator,omitempty"`
+	// DateSeparator is only available when the downstream is Storage.
+	DateSeparator *string `toml:"date-separator" json:"date-separator,omitempty"`
+	// EnablePartitionSeparator is only available when the downstream is Storage.
+	EnablePartitionSeparator *bool `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
+	// FileIndexWidth is only available when the downstream is Storage
+	FileIndexWidth *int `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
 	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
@@ -152,6 +171,31 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+<<<<<<< HEAD
+=======
+
+	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
+	// Note: When one of the following conditions is set to negative value,
+	// bootstrap sending function will be disabled.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
+
+	// CSVConfig is only available when the downstream is Storage.
+	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
+	// OpenProtocol related configurations
+	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
+	// DebeziumConfig related configurations
+	Debezium *DebeziumConfig `toml:"debezium" json:"debezium,omitempty"`
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -310,6 +354,7 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
+<<<<<<< HEAD
 	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
 	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
 	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
@@ -346,6 +391,55 @@ type KafkaConfig struct {
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+=======
+	PartitionNum                 *int32                    `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16                    `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string                   `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int                      `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string                   `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string                   `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool                     `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string                   `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string                   `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string                   `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int                      `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string                   `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string                   `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string                   `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string                   `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string                   `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string                   `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string                   `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret        *string                   `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes              []string                  `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string                   `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+	EnableTLS                    *bool                     `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string                   `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string                   `toml:"cert" json:"cert,omitempty"`
+	Key                          *string                   `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
+	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
+	if k == nil || k.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *k.OutputRawChangeEvent
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -359,6 +453,192 @@ func (k *KafkaConfig) MaskSensitiveData() {
 	}
 }
 
+<<<<<<< HEAD
+=======
+// PulsarCompressionType is the compression type for pulsar
+type PulsarCompressionType string
+
+// Value returns the pulsar compression type
+func (p *PulsarCompressionType) Value() pulsar.CompressionType {
+	if p == nil {
+		return 0
+	}
+	switch strings.ToLower(string(*p)) {
+	case "lz4":
+		return pulsar.LZ4
+	case "zlib":
+		return pulsar.ZLib
+	case "zstd":
+		return pulsar.ZSTD
+	default:
+		return 0 // default is no compression
+	}
+}
+
+// TimeMill is the time in milliseconds
+type TimeMill int
+
+// Duration returns the time in seconds as a duration
+func (t *TimeMill) Duration() time.Duration {
+	if t == nil {
+		return 0
+	}
+	return time.Duration(*t) * time.Millisecond
+}
+
+// NewTimeMill returns a new time in milliseconds
+func NewTimeMill(x int) *TimeMill {
+	t := TimeMill(x)
+	return &t
+}
+
+// TimeSec is the time in seconds
+type TimeSec int
+
+// Duration returns the time in seconds as a duration
+func (t *TimeSec) Duration() time.Duration {
+	if t == nil {
+		return 0
+	}
+	return time.Duration(*t) * time.Second
+}
+
+// NewTimeSec returns a new time in seconds
+func NewTimeSec(x int) *TimeSec {
+	t := TimeSec(x)
+	return &t
+}
+
+// OAuth2 is the configuration for OAuth2
+type OAuth2 struct {
+	// OAuth2IssuerURL  the URL of the authorization server.
+	OAuth2IssuerURL string `toml:"oauth2-issuer-url" json:"oauth2-issuer-url,omitempty"`
+	// OAuth2Audience  the URL of the resource server.
+	OAuth2Audience string `toml:"oauth2-audience" json:"oauth2-audience,omitempty"`
+	// OAuth2PrivateKey the private key used to sign the server.
+	OAuth2PrivateKey string `toml:"oauth2-private-key" json:"oauth2-private-key,omitempty"`
+	// OAuth2ClientID  the client ID of the application.
+	OAuth2ClientID string `toml:"oauth2-client-id" json:"oauth2-client-id,omitempty"`
+	// OAuth2Scope scope
+	OAuth2Scope string `toml:"oauth2-scope" json:"oauth2-scope,omitempty"`
+}
+
+func (o *OAuth2) validate() (err error) {
+	if o == nil {
+		return nil
+	}
+	if len(o.OAuth2IssuerURL) == 0 || len(o.OAuth2ClientID) == 0 || len(o.OAuth2PrivateKey) == 0 ||
+		len(o.OAuth2Audience) == 0 {
+		return fmt.Errorf("issuer-url and audience and private-key and client-id not be empty")
+	}
+	return nil
+}
+
+// PulsarConfig pulsar sink configuration
+type PulsarConfig struct {
+	TLSKeyFilePath        *string `toml:"tls-key-file-path" json:"tls-key-file-path,omitempty"`
+	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-certificate-file,omitempty"`
+	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
+
+	// PulsarProducerCacheSize is the size of the cache of pulsar producers
+	PulsarProducerCacheSize *int32 `toml:"pulsar-producer-cache-size" json:"pulsar-producer-cache-size,omitempty"`
+
+	// PulsarVersion print the version of pulsar
+	PulsarVersion *string `toml:"pulsar-version" json:"pulsar-version,omitempty"`
+
+	// pulsar client compression
+	CompressionType *PulsarCompressionType `toml:"compression-type" json:"compression-type,omitempty"`
+
+	// AuthenticationToken the token for the Pulsar server
+	AuthenticationToken *string `toml:"authentication-token" json:"authentication-token,omitempty"`
+
+	// ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)
+	ConnectionTimeout *TimeSec `toml:"connection-timeout" json:"connection-timeout,omitempty"`
+
+	// Set the operation timeout (default: 30 seconds)
+	// Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
+	// operation will be marked as failed
+	OperationTimeout *TimeSec `toml:"operation-timeout" json:"operation-timeout,omitempty"`
+
+	// BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)
+	BatchingMaxMessages *uint `toml:"batching-max-messages" json:"batching-max-messages,omitempty"`
+
+	// BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)
+	// if batch messages are enabled. If set to a non zero value, messages will be queued until this time
+	// interval or until
+	BatchingMaxPublishDelay *TimeMill `toml:"batching-max-publish-delay" json:"batching-max-publish-delay,omitempty"`
+
+	// SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.
+	// Send and SendAsync returns an error after timeout.
+	// default: 30s
+	SendTimeout *TimeSec `toml:"send-timeout" json:"send-timeout,omitempty"`
+
+	// TokenFromFile Authentication from the file token,
+	// the path name of the file (the third priority authentication method)
+	TokenFromFile *string `toml:"token-from-file" json:"token-from-file,omitempty"`
+
+	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
+	BasicUserName *string `toml:"basic-user-name" json:"basic-user-name,omitempty"`
+	// BasicPassword with account
+	BasicPassword *string `toml:"basic-password" json:"basic-password,omitempty"`
+
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath *string `toml:"auth-tls-certificate-path" json:"auth-tls-certificate-path,omitempty"`
+	// AuthTLSPrivateKeyPath private key
+	AuthTLSPrivateKeyPath *string `toml:"auth-tls-private-key-path" json:"auth-tls-private-key-path,omitempty"`
+
+	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
+	// and 'type' always use 'client_credentials'
+	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+
+	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
+	// This parameter is a part of the `sink-uri`. Internal use only.
+	BrokerURL string `toml:"-" json:"-"`
+	// SinkURI is the parsed sinkURI. Internal use only.
+	SinkURI *url.URL `toml:"-" json:"-"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
+}
+
+// MaskSensitiveData masks sensitive data in PulsarConfig
+func (c *PulsarConfig) MaskSensitiveData() {
+	if c.AuthenticationToken != nil {
+		c.AuthenticationToken = aws.String("******")
+	}
+	if c.BasicPassword != nil {
+		c.BasicPassword = aws.String("******")
+	}
+	if c.OAuth2 != nil {
+		c.OAuth2.OAuth2PrivateKey = "******"
+	}
+}
+
+// Check get broker url
+func (c *PulsarConfig) validate() (err error) {
+	if c.OAuth2 != nil {
+		if err = c.OAuth2.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetDefaultTopicName get default topic name
+func (c *PulsarConfig) GetDefaultTopicName() string {
+	topicName := c.SinkURI.Path
+	return topicName[1:]
+}
+
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 // MySQLConfig represents a MySQL sink configuration
 type MySQLConfig struct {
 	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`
@@ -388,6 +668,17 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *CloudStorageConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
@@ -492,6 +783,7 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
+<<<<<<< HEAD
 	// Validate that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
@@ -507,6 +799,66 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	log.Info("succeed to parse parameter from sink uri",
 		zap.String("protocol", s.Protocol),
 		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+=======
+	log.Info("succeed to parse parameter from sink uri",
+		zap.String("protocol", util.GetOrZero(s.Protocol)),
+		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
+
+	// Check that protocol config is compatible with the scheme.
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
+	}
+	// For testing purposes, any protocol should be legal for blackhole.
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
+		return s.ValidateProtocol(sinkURI.Scheme)
+	}
+	return nil
+}
+
+// ValidateProtocol validates the protocol configuration.
+func (s *SinkConfig) ValidateProtocol(scheme string) error {
+	protocol, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if err != nil {
+		return err
+	}
+	outputOldValue := false
+	switch protocol {
+	case ProtocolOpen:
+		if s.OpenProtocol != nil {
+			outputOldValue = s.OpenProtocol.OutputOldValue
+		}
+	case ProtocolDebezium:
+		if s.Debezium != nil {
+			outputOldValue = s.Debezium.OutputOldValue
+		}
+	case ProtocolCsv:
+		if s.CSVConfig != nil {
+			outputOldValue = s.CSVConfig.OutputOldValue
+		}
+	case ProtocolAvro:
+		outputOldValue = false
+	default:
+		return nil
+	}
+
+	outputRawChangeEvent := false
+	switch scheme {
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
+		outputRawChangeEvent = s.PulsarConfig.GetOutputRawChangeEvent()
+	default:
+		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
+	}
+
+	if outputRawChangeEvent && !outputOldValue {
+		// TODO: return error if we do not need to keep backward compatibility.
+		log.Warn(fmt.Sprintf("TiCDC will not split the update pk/uk events if output-raw-change-event is true(scheme: %s).", scheme) +
+			fmt.Sprintf("It is not recommended to set output-old-value to false(protocol: %s) in this case.", protocol) +
+			"Otherwise, there may be data consistency issues in update pk/uk scenarios due to lack of old value information.")
+	}
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 	return nil
 }
 

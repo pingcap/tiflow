@@ -54,6 +54,13 @@ func (m *mockEventSink) Dead() <-chan struct{} {
 	return m.dead
 }
 
+<<<<<<< HEAD
+=======
+func (m *mockEventSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, false
+}
+
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 // acknowledge the txn events by call the callback function.
 func (m *mockEventSink) acknowledge(commitTs uint64) []*dmlsink.TxnCallbackableEvent {
 	var droppedEvents []*dmlsink.TxnCallbackableEvent

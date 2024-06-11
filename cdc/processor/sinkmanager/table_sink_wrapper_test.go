@@ -52,6 +52,13 @@ func (m *mockSink) WriteEvents(events ...*dmlsink.CallbackableEvent[*model.RowCh
 	return nil
 }
 
+<<<<<<< HEAD
+=======
+func (m *mockSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, false
+}
+
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 func (m *mockSink) GetEvents() []*dmlsink.CallbackableEvent[*model.RowChangedEvent] {
 	m.mu.Lock()
 	defer m.mu.Unlock()

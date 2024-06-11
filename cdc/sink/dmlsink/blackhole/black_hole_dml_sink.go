@@ -47,6 +47,14 @@ func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChang
 	return
 }
 
+<<<<<<< HEAD
+=======
+// SchemeOption returns the scheme and the option.
+func (s *DMLSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, true
+}
+
+>>>>>>> 38878616ba (pkg/config, sink(ticdc): support output raw change event for mq and cloud storage sink (#11226))
 // Close do nothing.
 func (s *DMLSink) Close() {}
 
