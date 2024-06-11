@@ -63,6 +63,7 @@ func createManagerWithMemEngine(
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
 		errChan, errChan,
+		false,
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	require.NoError(t, err)
