@@ -596,8 +596,16 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		if checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
+<<<<<<< HEAD
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+=======
+				"it will be failed",
+				zap.String("namespace", m.state.GetID().Namespace),
+				zap.String("changefeed", m.state.GetID().ID),
+				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
+				zap.Uint64("checkpointTs", m.state.GetChangefeedStatus().CheckpointTs),
+>>>>>>> cded157283 (owner(cdc): drain warnings when closing changefeed (#11280))
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
