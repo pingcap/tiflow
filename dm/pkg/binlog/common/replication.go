@@ -22,7 +22,7 @@ import (
 var (
 	// MaxBinlogSyncerReconnect is the max reconnection times for binlog syncer in go-mysql.
 	MaxBinlogSyncerReconnect = 60
-	// SlaveReadTimeout is slave read binlog data timeout, ref: https://dev.mysql.com/doc/refman/8.0/en/replication-options-slave.html#sysvar_slave_net_timeout
+	// SlaveReadTimeout is slave read binlog data timeout, ref: https://dev.mysql.com/doc/refman/8.0/en/replication-options-replica.html#sysvar_slave_net_timeout
 	SlaveReadTimeout = 1 * time.Minute
 	// MasterHeartbeatPeriod is the master server send heartbeat period, ref: `MASTER_HEARTBEAT_PERIOD` in https://dev.mysql.com/doc/refman/8.0/en/change-master-to.html
 	MasterHeartbeatPeriod = 30 * time.Second
