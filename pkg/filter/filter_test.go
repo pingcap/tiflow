@@ -371,7 +371,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 }
 
 func TestIsAllowedDDL(t *testing.T) {
-	require.Len(t, ddlWhiteListMap, 36)
+	require.Len(t, ddlWhiteListMap, 37)
 	type testCase struct {
 		timodel.ActionType
 		allowed bool
