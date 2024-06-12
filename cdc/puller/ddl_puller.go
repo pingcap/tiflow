@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -391,15 +392,30 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
 	case timodel.ActionCreateTables:
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		querys := strings.Split(job.Query, ";")
+
 		skip = true
-		for _, tableInfo := range multiTableInfos {
+		for index, tableInfo := range multiTableInfos {
 			// judge each table whether need to be skip
 			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O) {
 				continue
 			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index])
 			skip = false
 		}
+		// if some ddls are discarded
+		if len(newQuerys) != len(querys) {
+			job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+			job.Query = strings.Join(newQuerys, ";")
+		}
+
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
