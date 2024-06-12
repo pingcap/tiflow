@@ -1447,6 +1447,10 @@ var doc = `{
                 "output-column-id": {
                     "type": "boolean"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "worker-count": {
                     "type": "integer"
                 }
@@ -1489,6 +1493,14 @@ var doc = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "config.DebeziumConfig": {
+            "type": "object",
+            "properties": {
+                "output-old-value": {
+                    "type": "boolean"
                 }
             }
         },
@@ -1593,6 +1605,10 @@ var doc = `{
                 },
                 "max-message-bytes": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "partition-num": {
                     "type": "integer"
@@ -1754,6 +1770,14 @@ var doc = `{
                 }
             }
         },
+        "config.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output-old-value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "config.PulsarConfig": {
             "type": "object",
             "properties": {
@@ -1800,6 +1824,10 @@ var doc = `{
                 "operation-timeout": {
                     "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "pulsar-producer-cache-size": {
                     "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
@@ -1856,6 +1884,10 @@ var doc = `{
                     "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
+                "debezium": {
+                    "description": "DebeziumConfig related configurations",
+                    "$ref": "#/definitions/config.DebeziumConfig"
+                },
                 "debezium-disable-schema": {
                     "description": "Debezium only. Whether schema should be excluded in the output.",
                     "type": "boolean"
@@ -1896,6 +1928,10 @@ var doc = `{
                 "only-output-updated-columns": {
                     "description": "OnlyOutputUpdatedColumns is only available when the downstream is MQ.",
                     "type": "boolean"
+                },
+                "open": {
+                    "description": "OpenProtocol related configurations",
+                    "$ref": "#/definitions/config.OpenProtocolConfig"
                 },
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
@@ -2428,6 +2464,9 @@ var doc = `{
                 "output_column_id": {
                     "type": "boolean"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "worker_count": {
                     "type": "integer"
                 }
@@ -2516,6 +2555,14 @@ var doc = `{
             "properties": {
                 "memory_quota_percentage": {
                     "type": "integer"
+                }
+            }
+        },
+        "v2.DebeziumConfig": {
+            "type": "object",
+            "properties": {
+                "output_old_value": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2691,6 +2738,9 @@ var doc = `{
                 "max_message_bytes": {
                     "type": "integer"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "partition_num": {
                     "type": "integer"
                 },
@@ -2842,6 +2892,14 @@ var doc = `{
                 }
             }
         },
+        "v2.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output_old_value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "v2.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
@@ -2903,6 +2961,9 @@ var doc = `{
                 },
                 "operation-timeout": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "type": "boolean"
                 },
                 "pulsar-producer-cache-size": {
                     "type": "integer"
@@ -3106,6 +3167,9 @@ var doc = `{
                 "date_separator": {
                     "type": "string"
                 },
+                "debezium": {
+                    "$ref": "#/definitions/v2.DebeziumConfig"
+                },
                 "debezium_disable_schema": {
                     "type": "boolean"
                 },
@@ -3138,6 +3202,9 @@ var doc = `{
                 },
                 "only_output_updated_columns": {
                     "type": "boolean"
+                },
+                "open": {
+                    "$ref": "#/definitions/v2.OpenProtocolConfig"
                 },
                 "protocol": {
                     "type": "string"

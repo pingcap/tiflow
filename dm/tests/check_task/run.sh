@@ -51,7 +51,7 @@ function test_privileges_can_migrate() {
 	run_sql_source1 "create table checktask1.test_privilege(id int primary key, b varchar(10))"
 	run_sql_source1 "insert into checktask1.test_privilege values (1, 'a'),(2, 'b');"
 	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
-	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index, config on *.* to 'test1'@'%';"
+	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index, config, create view on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/task-priv.yaml --remove-meta" \

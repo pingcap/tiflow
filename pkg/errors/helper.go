@@ -122,6 +122,25 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	return RFCCode(cause)
 }
 
+// IsDupEntryError checks if an error is a duplicate entry error.
+func IsDupEntryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ErrMySQLDuplicateEntry.Equal(err) {
+		return true
+	}
+	if code, ok := RFCCode(err); ok {
+		if code == ErrMySQLDuplicateEntry.RFCCode() {
+			return true
+		}
+	}
+	if strings.Contains(err.Error(), string(ErrMySQLDuplicateEntry.RFCCode())) {
+		return true
+	}
+	return false
+}
+
 // IsRetryableError check the error is safe or worth to retry
 func IsRetryableError(err error) bool {
 	if err == nil {
@@ -248,4 +267,16 @@ func GRPCStatusCode(err error) codes.Code {
 		return code
 	}
 	return codes.Internal
+}
+
+// OriginError return original err
+func OriginError(err error) error {
+	for {
+		e := errors.Cause(err)
+		if e == err {
+			break
+		}
+		err = e
+	}
+	return err
 }

@@ -31,9 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
-	capturev2 "github.com/pingcap/tiflow/cdcv2/capture"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -152,7 +150,8 @@ func (s *server) prepare(ctx context.Context) error {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		))
+		),
+		pd.WithForwardingOption(config.EnablePDForwarding))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -197,13 +196,9 @@ func (s *server) prepare(ctx context.Context) error {
 	s.createSortEngineFactory()
 	s.setMemoryLimit()
 
-	if conf.Debug.CDCV2.Enable {
-		s.capture = capturev2.NewCapture(s.pdEndpoints, cdcEtcdClient,
-			s.grpcService, s.sortEngineFactory, s.pdClient)
-	} else {
-		s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
-			s.grpcService, s.sortEngineFactory, s.pdClient)
-	}
+	s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
+		s.grpcService, s.sortEngineFactory, s.pdClient)
+
 	return nil
 }
 
@@ -345,10 +340,6 @@ func (s *server) run(ctx context.Context) (err error) {
 
 	eg.Go(func() error {
 		return s.upstreamPDHealthChecker(egCtx)
-	})
-
-	eg.Go(func() error {
-		return kv.RunWorkerPool(egCtx)
 	})
 
 	eg.Go(func() error {

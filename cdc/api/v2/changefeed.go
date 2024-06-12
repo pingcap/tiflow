@@ -86,17 +86,17 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
+	kvStorage, err := h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
-	ctrl, err := h.capture.GetController()
+	provider := h.capture.StatusProvider()
+	owner, err := h.capture.GetOwner()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
@@ -104,7 +104,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		ctx,
 		cfg,
 		pdClient,
-		ctrl,
+		provider,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
@@ -143,7 +143,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	cli, err := h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
+	cli, err := h.helpers.getEtcdClient(ctx, cfg.PDAddrs, tlsCfg)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -158,7 +158,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = ctrl.CreateChangefeed(ctx,
+	err = owner.CreateChangefeed(ctx,
 		upstreamInfo,
 		info)
 	if err != nil {
@@ -224,19 +224,15 @@ func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
 func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	ctx := c.Request.Context()
 	state := c.Query(api.APIOpVarChangefeedState)
-	controller, err := h.capture.GetController()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	checkpointTs, err := controller.GetAllChangeFeedCheckpointTs(ctx)
+	provider := h.capture.StatusProvider()
+	checkpointTs, err := provider.GetAllChangeFeedCheckpointTs(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	namespace := getNamespaceValueWithDefault(c)
 
-	infos, err := controller.GetAllChangeFeedInfo(ctx)
+	infos, err := provider.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -332,8 +328,8 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
 	credential := cfg.PDConfig.toCredential()
-
-	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
+	ctx := c.Request.Context()
+	kvStore, err := h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -351,7 +347,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
 
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
+		getVerifiedTables(ctx, replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -468,7 +464,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
 		pdAddrs := updateCfConfig.PDAddrs
 		credentials := updateCfConfig.PDConfig.toCredential()
-		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
+		storage, err = h.helpers.createTiStore(ctx, pdAddrs, credentials)
 		if err != nil {
 			_ = c.Error(errors.Trace(err))
 		}
@@ -591,12 +587,8 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	ctrl, err := h.capture.GetController()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	exist, err := ctrl.IsChangefeedExists(ctx, changefeedID)
+	provider := h.capture.StatusProvider()
+	exist, err := provider.IsChangefeedExists(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.JSON(http.StatusOK, &EmptyResponse{})
@@ -624,7 +616,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	// Owner needs at least two ticks to remove a changefeed,
 	// we need to wait for it.
 	err = retry.Do(ctx, func() error {
-		exist, err = ctrl.IsChangefeedExists(ctx, changefeedID)
+		exist, err = provider.IsChangefeedExists(ctx, changefeedID)
 		if err != nil {
 			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 				return nil

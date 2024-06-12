@@ -494,7 +494,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 	t.Parallel()
 
 	start, end := spanz.GetTableRange(8616)
-	rangelock := regionlock.NewRegionRangeLock(1, start, end, 100, "")
+	rangelock := regionlock.NewRangeLock(1, start, end, 100, "")
 	frontier := NewFrontier(100, tablepb.Span{StartKey: start, EndKey: end})
 	ctx := context.Background()
 
@@ -508,7 +508,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 	require.Equal(t, nextTs, frontier.Frontier())
 
 	for i := 0; i < 5000; i++ {
-		totalLockedRanges := rangelock.LockedRanges()
+		totalLockedRanges := rangelock.Len()
 		unchangedRegions := make([]lockedRegion, 0, totalLockedRanges)
 
 		mergeOrSplit := "split"
@@ -521,7 +521,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 			var r1, r2 lockedRegion
 			selected := rand.Intn(totalLockedRanges)
 			count := 0
-			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
+			rangelock.IterForTest(func(regionID, version uint64, state *regionlock.LockedRangeState, span tablepb.Span) {
 				ts := state.ResolvedTs.Load()
 				startKey := span.StartKey
 				endKey := span.EndKey
@@ -546,7 +546,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 			var r1, r2 lockedRegion
 			selected := rand.Intn(totalLockedRanges - 1)
 			count := 0
-			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
+			rangelock.IterForTest(func(regionID, version uint64, state *regionlock.LockedRangeState, span tablepb.Span) {
 				ts := state.ResolvedTs.Load()
 				startKey := span.StartKey
 				endKey := span.EndKey

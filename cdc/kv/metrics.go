@@ -158,6 +158,13 @@ var (
 			Name:      "region_worker_channel_size",
 			Help:      "size of each channel in region worker",
 		}, []string{"namespace", "changefeed", "table", "store", "type"})
+	slowInitializeRegion = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "slow_initialize_region_count",
+			Help:      "the number of slow initialize region",
+		}, []string{"namespace", "changefeed"})
 )
 
 // GetGlobalGrpcMetrics gets the global grpc metrics.
@@ -184,6 +191,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(regionWorkerQueueDuration)
 	registry.MustRegister(workerBusyRatio)
 	registry.MustRegister(workerChannelSize)
+	registry.MustRegister(slowInitializeRegion)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)

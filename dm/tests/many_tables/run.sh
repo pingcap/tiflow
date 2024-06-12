@@ -172,6 +172,8 @@ function run() {
 	killall pd-server 2>/dev/null || true
 
 	run_downstream_cluster $WORK_DIR
+	# wait TiKV init
+	sleep 5
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"

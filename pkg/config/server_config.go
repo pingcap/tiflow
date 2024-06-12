@@ -48,6 +48,11 @@ const (
 	// DisableMemoryLimit is the default max memory percentage for TiCDC server.
 	// 0 means no memory limit.
 	DisableMemoryLimit = 0
+
+	// EnablePDForwarding is the value of whether to enable PD client forwarding function.
+	// The PD client will forward the requests throughthe follower
+	// If there is a network partition problem between TiCDC and PD leader.
+	EnablePDForwarding = true
 )
 
 var (
@@ -129,7 +134,7 @@ var defaultServerConfig = &ServerConfig{
 			WriterBufferSize:    8388608,
 			Compression:         "snappy",
 			WriteL0PauseTrigger: math.MaxInt32,
-			CompactionL0Trigger: 160,
+			CompactionL0Trigger: 16, // Based on a performance test on 4K tables.
 		},
 		Messages: defaultMessageConfig.Clone(),
 
@@ -251,14 +256,14 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 
 	if c.Security != nil {
-		if c.Security.ClientUserRequired || len(c.Security.ClientAllowedUser) > 0 {
+		if c.Security.ClientUserRequired {
 			if len(c.Security.ClientAllowedUser) == 0 {
 				log.Error("client-allowed-user should not be empty when client-user-required is true")
 				return cerror.ErrInvalidServerOption.GenWithStack("client-allowed-user should not be empty when client-user-required is true")
 			}
 			if !c.Security.IsTLSEnabled() {
-				log.Error("client user required but TLS is not enabled")
-				return cerror.ErrInvalidServerOption.GenWithStack("TLS should be enabled when client-user-required is true")
+				log.Warn("client-allowed-user is true, but tls is not enabled." +
+					"It's highly recommended to enable TLS to secure the communication")
 			}
 		}
 		if c.Security.IsTLSEnabled() {

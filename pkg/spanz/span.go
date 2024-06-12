@@ -29,6 +29,8 @@ import (
 const (
 	// JobTableID is the id of `tidb_ddl_job`.
 	JobTableID = ddl.JobTableID
+	// JobHistoryID is the id of `tidb_ddl_history`
+	JobHistoryID = ddl.HistoryTableID
 )
 
 // UpperBoundKey represents the maximum value.
@@ -60,51 +62,20 @@ func GetTableRange(tableID int64) (startKey, endKey []byte) {
 	return start, end
 }
 
-// getDDLRange returns the span to watch for DDL related events
-// Note that returned keys are not in memcomparable format.
-func getDDLRange() (startKey, endKey []byte) {
-	return getMetaListKey("DDLJobList")
-}
-
-// getAddIndexDDLRange returns the span to watch for Add Index DDL related events
-// Note that returned keys are not in memcomparable format.
-func getAddIndexDDLRange() (startKey, endKey []byte) {
-	return getMetaListKey("DDLJobAddIdxList")
-}
-
 // GetAllDDLSpan return all cdc interested spans for DDL.
 func GetAllDDLSpan() []tablepb.Span {
-	spans := make([]tablepb.Span, 0, 3)
-	start, end := getDDLRange()
+	spans := make([]tablepb.Span, 0, 2)
+	start, end := GetTableRange(JobTableID)
 	spans = append(spans, tablepb.Span{
 		StartKey: ToComparableKey(start),
 		EndKey:   ToComparableKey(end),
 	})
-	start, end = getAddIndexDDLRange()
-	spans = append(spans, tablepb.Span{
-		StartKey: ToComparableKey(start),
-		EndKey:   ToComparableKey(end),
-	})
-	start, end = GetTableRange(JobTableID)
+	start, end = GetTableRange(JobHistoryID)
 	spans = append(spans, tablepb.Span{
 		StartKey: ToComparableKey(start),
 		EndKey:   ToComparableKey(end),
 	})
 	return spans
-}
-
-func getMetaListKey(key string) (startKey, endKey []byte) {
-	metaPrefix := []byte("m")
-	metaKey := []byte(key)
-	listData := 'l'
-	start := make([]byte, 0, len(metaPrefix)+len(metaKey)+8)
-	start = append(start, metaPrefix...)
-	start = codec.EncodeBytes(start, metaKey)
-	start = codec.EncodeUint(start, uint64(listData))
-	end := make([]byte, len(start))
-	copy(end, start)
-	end[len(end)-1]++
-	return start, end
 }
 
 // KeyInSpan check if k in the span range.

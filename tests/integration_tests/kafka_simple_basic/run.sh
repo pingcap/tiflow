@@ -25,7 +25,7 @@ function run() {
 	# upstream tidb cluster enable row level checksum
 	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	TOPIC_NAME="ticdc-simple-basic"
+	TOPIC_NAME="ticdc-simple-basic-$RANDOM"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 

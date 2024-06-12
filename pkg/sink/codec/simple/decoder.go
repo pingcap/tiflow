@@ -69,10 +69,6 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 	}
 
 	m, err := newMarshaller(config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return &Decoder{
 		config:     config,
 		marshaller: m,
@@ -82,21 +78,17 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 
 		memo:           newMemoryTableInfoProvider(),
 		cachedMessages: list.New(),
-	}, nil
+	}, errors.Trace(err)
 }
 
 // AddKeyValue add the received key and values to the Decoder,
-func (d *Decoder) AddKeyValue(_, value []byte) error {
+func (d *Decoder) AddKeyValue(_, value []byte) (err error) {
 	if d.value != nil {
-		return cerror.ErrDecodeFailed.GenWithStack(
+		return cerror.ErrCodecDecode.GenWithStack(
 			"Decoder value already exists, not consumed yet")
 	}
-	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return err
-	}
-	d.value = value
-	return nil
+	d.value, err = common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	return err
 }
 
 // HasNext returns whether there is any event need to be consumed
@@ -165,12 +157,10 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
-	if err != nil {
-		return nil, err
-	}
-
 	d.msg = nil
-	return event, nil
+
+	log.Debug("row changed event assembled", zap.Any("event", event))
+	return event, err
 }
 
 func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
@@ -201,71 +191,46 @@ func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
 	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"cannot found the table info, schema: %s, table: %s, version: %d",
-			m.Schema, m.Table, m.SchemaVersion)
+		log.Debug("table info not found for the event, "+
+			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+			zap.String("schema", d.msg.Schema),
+			zap.String("table", d.msg.Table),
+			zap.Uint64("version", d.msg.SchemaVersion))
+		d.cachedMessages.PushBack(d.msg)
+		d.msg = nil
+		return nil, nil
 	}
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		fieldTypeMap[col.Name.L] = &col.FieldType
+		fieldTypeMap[col.Name.O] = &col.FieldType
 	}
 
 	result := &message{
 		Version:       defaultVersion,
 		Schema:        m.Schema,
 		Table:         m.Table,
+		TableID:       m.TableID,
 		Type:          m.Type,
 		CommitTs:      m.CommitTs,
 		SchemaVersion: m.SchemaVersion,
 	}
 
 	ctx := context.Background()
-	timezone, err := common.QueryTimezone(ctx, d.upstreamTiDB)
-	if err != nil {
-		return nil, err
-	}
+	timezone := common.MustQueryTimezone(ctx, d.upstreamTiDB)
 	switch m.Type {
 	case DMLTypeInsert:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Data = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		result.Data = d.buildData(holder, fieldTypeMap, timezone)
 	case DMLTypeUpdate:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Data = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
+		result.Data = d.buildData(holder, fieldTypeMap, timezone)
 
-		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
-		if err != nil {
-			return nil, err
-		}
-		old, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Old = old
+		holder = common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		result.Old = d.buildData(holder, fieldTypeMap, timezone)
 	case DMLTypeDelete:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
-		if err != nil {
-			return nil, err
-		}
-		data, err := d.buildData(holder, fieldTypeMap, timezone)
-		if err != nil {
-			return nil, err
-		}
-		result.Old = data
+		holder := common.MustSnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
+		result.Old = d.buildData(holder, fieldTypeMap, timezone)
 	}
 
 	d.msg = result
@@ -274,7 +239,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 func (d *Decoder) buildData(
 	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
-) (map[string]interface{}, error) {
+) map[string]interface{} {
 	columnsCount := holder.Length()
 	result := make(map[string]interface{}, columnsCount)
 
@@ -282,15 +247,10 @@ func (d *Decoder) buildData(
 		col := holder.Types[i]
 		value := holder.Values[i]
 
-		fieldType, ok := fieldTypeMap[col.Name()]
-		if !ok {
-			return nil, cerror.ErrCodecDecode.GenWithStack(
-				"cannot found the field type, schema: %s, table: %s, column: %s",
-				d.msg.Schema, d.msg.Table, col.Name())
-		}
+		fieldType := fieldTypeMap[col.Name()]
 		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
-	return result, nil
+	return result
 }
 
 // NextDDLEvent returns the next DDL event if exists
@@ -299,10 +259,7 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"no message found when decode DDL event")
 	}
-	ddl, err := newDDLEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+	ddl := newDDLEvent(d.msg)
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
@@ -313,10 +270,6 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		event, err := d.NextRowChangedEvent()
 		if err != nil {
 			return nil, err
-		}
-		if event == nil {
-			ele = ele.Next()
-			continue
 		}
 		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
 
@@ -387,12 +340,7 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 		table:   table,
 		version: version,
 	}
-
-	entry, ok := m.memo[key]
-	if ok {
-		return entry
-	}
-	return nil
+	return m.memo[key]
 }
 
 type tableSchemaKey struct {

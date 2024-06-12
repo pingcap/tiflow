@@ -105,6 +105,9 @@ linters-settings:
       - G601
       - G108
       - G114
+      - G201
+      - G401
+      - G501
 
 issues:
   exclude-rules:

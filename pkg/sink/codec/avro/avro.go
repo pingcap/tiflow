@@ -214,13 +214,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
+		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
+		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 

@@ -272,7 +272,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 }
 
 // TrySplitAndSortUpdateEvent redo log do nothing
-func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -298,7 +298,7 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		Table: &TableName{
 			Schema:      r.TableInfo.GetSchemaName(),
 			Table:       r.TableInfo.GetTableName(),
-			TableID:     r.PhysicalTableID,
+			TableID:     r.GetTableID(),
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
 		Columns:      r.GetColumns(),
@@ -382,6 +382,30 @@ type RowChangedEventInRedoLog struct {
 	IndexColumns [][]int   `msg:"index-columns"`
 }
 
+// ToRowChangedEvent converts RowChangedEventInRedoLog to RowChangedEvent
+func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
+	cols := r.Columns
+	if cols == nil {
+		cols = r.PreColumns
+	}
+	tableInfo := BuildTableInfo(
+		r.Table.Schema,
+		r.Table.Table,
+		cols,
+		r.IndexColumns)
+	tableInfo.TableName.TableID = r.Table.TableID
+	tableInfo.TableName.IsPartition = r.Table.IsPartition
+	row := &RowChangedEvent{
+		StartTs:         r.StartTs,
+		CommitTs:        r.CommitTs,
+		PhysicalTableID: r.Table.TableID,
+		TableInfo:       tableInfo,
+		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
+		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
+	}
+	return row
+}
+
 // txnRows represents a set of events that belong to the same transaction.
 type txnRows []*RowChangedEvent
 
@@ -409,13 +433,18 @@ func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
+// GetTableID returns the table ID of the event.
+func (r *RowChangedEvent) GetTableID() int64 {
+	return r.PhysicalTableID
+}
+
 // GetCommitTs returns the commit timestamp of this event.
 func (r *RowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
 }
 
 // TrySplitAndSortUpdateEvent do nothing
-func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -448,7 +477,7 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Type:      colInfo.GetType(),
 		Charset:   colInfo.GetCharset(),
 		Collation: colInfo.GetCollate(),
-		Flag:      tableInfo.ColumnsFlag[colID],
+		Flag:      *tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
 		Default:   GetColumnDefaultValue(colInfo),
 	}
@@ -1061,6 +1090,10 @@ func (d *DDLEvent) FromJobWithArgs(
 		d.Query = fmt.Sprintf("ALTER TABLE `%s`.`%s` EXCHANGE PARTITION `%s` WITH TABLE `%s`.`%s`",
 			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
 			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
+
+		if strings.HasSuffix(upperQuery, "WITHOUT VALIDATION") {
+			d.Query += " WITHOUT VALIDATION"
+		}
 	default:
 		d.Query = job.Query
 	}
@@ -1107,32 +1140,25 @@ func (t *SingleTableTxn) GetPhysicalTableID() int64 {
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
-func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string) error {
-	if !t.shouldSplitUpdateEvent(scheme) {
+func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string, outputRawChangeEvent bool) error {
+	if sink.IsMySQLCompatibleScheme(scheme) || outputRawChangeEvent {
+		// For MySQL Sink, all update events will be split into insert and delete at the puller side
+		// according to whether the changefeed is in safemode. We don't split update event here(in sink)
+		// since there may be OOM issues. For more information, ref https://github.com/tikv/tikv/issues/17062.
+		//
+		// For the Kafka and Storage sink, the outputRawChangeEvent parameter is introduced to control
+		// split behavior. TiCDC only output original change event if outputRawChangeEvent is true.
 		return nil
 	}
+
+	// Try to split update events for the Kafka and Storage sink if outputRawChangeEvent is false.
+	// Note it is only for backward compatibility, and we should remove this logic in the future.
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.Rows = newRows
 	return nil
-}
-
-// Whether split a single update event into delete and insert events？
-//
-// For the MySQL Sink, there is no need to split a single unique key changed update event, this
-// is also to keep the backward compatibility, the same behavior as before.
-//
-// For the Kafka and Storage sink, always split a single unique key changed update event, since:
-// 1. Avro and CSV does not output the previous column values for the update event, so it would
-// cause consumer missing data if the unique key changed event is not split.
-// 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
-func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
-	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
-		return false
-	}
-	return true
 }
 
 // trySplitAndSortUpdateEvent try to split update events if unique key is updated
@@ -1144,8 +1170,7 @@ func trySplitAndSortUpdateEvent(
 	split := false
 	for _, e := range events {
 		if e == nil {
-			log.Warn("skip emit nil event",
-				zap.Any("event", e))
+			log.Warn("skip emit nil event", zap.Any("event", e))
 			continue
 		}
 
@@ -1155,15 +1180,14 @@ func trySplitAndSortUpdateEvent(
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
-			log.Warn("skip emit empty row event",
-				zap.Any("event", e))
+			log.Warn("skip emit empty row event", zap.Any("event", e))
 			continue
 		}
 
 		// This indicates that it is an update event. if the pk or uk is updated,
 		// we need to split it into two events (delete and insert).
-		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(e)
+		if e.IsUpdate() && ShouldSplitUpdateEvent(e) {
+			deleteEvent, insertEvent, err := SplitUpdateEvent(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -1188,10 +1212,10 @@ func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
 	return false
 }
 
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
-// If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
+// If is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
 		return false
@@ -1213,8 +1237,8 @@ func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	return false
 }
 
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(
+// SplitUpdateEvent splits an update event into a delete and an insert event.
+func SplitUpdateEvent(
 	updateEvent *RowChangedEvent,
 ) (*RowChangedEvent, *RowChangedEvent, error) {
 	if updateEvent == nil {
@@ -1233,12 +1257,19 @@ func splitUpdateEvent(
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.PreColumns = nil
 
+	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
+		zap.Uint64("commitTs", updateEvent.CommitTs),
+		zap.String("schema", updateEvent.TableInfo.TableName.Schema),
+		zap.String("table", updateEvent.TableInfo.GetTableName()),
+		zap.Any("preCols", updateEvent.PreColumns),
+		zap.Any("cols", updateEvent.Columns))
+
 	return &deleteEvent, &insertEvent, nil
 }
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.PhysicalTableID != t.GetPhysicalTableID() {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.GetTableID() != t.GetPhysicalTableID() {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),

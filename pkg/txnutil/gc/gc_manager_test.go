@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -35,7 +34,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := NewManager(etcd.GcServiceIDForTest(),
 		mockPDClient, pdClock).(*gcManager)
-	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx := context.Background()
 
 	startTs := oracle.GoTimeToTS(time.Now())
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {

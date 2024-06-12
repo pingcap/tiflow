@@ -1003,25 +1003,24 @@ func TestHandleKey(t *testing.T) {
 }
 
 func TestGetPrimaryKey(t *testing.T) {
-	t.Parallel()
-
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-
+	// PKISHandle is true, primary key is also the handle, since it's integer type.
 	sql := `create table test.t1(a int primary key, b int)`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	event := helper.DDL2Event(sql)
 
-	names := tableInfo.GetPrimaryKeyColumnNames()
-	require.Len(t, names, 1)
-	require.Containsf(t, names, "a", "names: %v", names)
+	names := event.TableInfo.GetPrimaryKeyColumnNames()
+	require.Equal(t, names, []string{"a"})
 
+	// IsCommonHandle is true, primary key is not the handle, since it contains multiple fields.
 	sql = `create table test.t2(a int, b int, c int, primary key(a, b))`
-	job = helper.DDL2Job(sql)
-	tableInfo = model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	event = helper.DDL2Event(sql)
+	names = event.TableInfo.GetPrimaryKeyColumnNames()
+	require.Equal(t, names, []string{"a", "b"})
 
-	names = tableInfo.GetPrimaryKeyColumnNames()
-	require.Len(t, names, 2)
-	require.Containsf(t, names, "a", "names: %v", names)
-	require.Containsf(t, names, "b", "names: %v", names)
+	// IsCommonHandle is true, primary key is not the handle, since it's not integer type.
+	sql = `create table test.t3(a varchar(10) primary key, b int)`
+	event = helper.DDL2Event(sql)
+	names = event.TableInfo.GetPrimaryKeyColumnNames()
+	require.Equal(t, names, []string{"a"})
 }
