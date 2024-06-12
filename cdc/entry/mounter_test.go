@@ -1105,6 +1105,9 @@ func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
 	key, value := helper.getLastKeyValue(tableInfo.ID)
 
+	// todo: make this unit test complete.
+}
+
 func TestTimezoneDefaultValue(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
