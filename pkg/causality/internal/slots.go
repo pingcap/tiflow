@@ -27,8 +27,6 @@ type slot[E SlotNode[E]] struct {
 type SlotNode[T any] interface {
 	// NodeID tells the node's ID.
 	NodeID() int64
-	// Hashs returns the sorted and deduped hashes of the node.
-	Hashes() []uint64
 	// Construct a dependency on `others`.
 	DependOn(dependencyNodes map[int64]T, noDependencyKeyCnt int)
 	// Remove the node itself and notify all dependers.
@@ -58,8 +56,7 @@ func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
 }
 
 // Add adds an elem to the slots and calls DependOn for elem.
-func (s *Slots[E]) Add(elem E) {
-	hashes := elem.Hashes()
+func (s *Slots[E]) Add(elem E, hashes []uint64) {
 	dependencyNodes := make(map[int64]E, len(hashes))
 	noDependecyCnt := 0
 
@@ -104,8 +101,7 @@ func (s *Slots[E]) Add(elem E) {
 }
 
 // Free removes an element from the Slots.
-func (s *Slots[E]) Free(elem E) {
-	hashes := elem.Hashes()
+func (s *Slots[E]) Free(elem E, hashes []uint64) {
 	for _, hash := range hashes {
 		slotIdx := getSlot(hash, s.numSlots)
 		s.slots[slotIdx].mu.Lock()
