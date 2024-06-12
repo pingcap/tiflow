@@ -219,11 +219,11 @@ func (p *processor) AddTable(
 	}
 
 	if p.pullBasedSinking {
-		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
+		table := p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoDMLMgr.Enabled() {
 			p.redoDMLMgr.AddTable(tableID, startTs)
 		}
-		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs, table.GetReplicaTs)
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
@@ -232,7 +232,6 @@ func (p *processor) AddTable(
 		}
 		p.tables[tableID] = table
 	}
-
 	return true, nil
 }
 
@@ -570,18 +569,6 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// needPullerSafeModeAtStart returns true if the scheme is mysql compatible.
-// pullerSafeMode means to split all update kv entries whose commitTS
-// is older then the start time of this changefeed.
-func needPullerSafeModeAtStart(sinkURIStr string) (bool, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := sink.GetScheme(sinkURI)
-	return sink.IsMySQLCompatibleScheme(scheme), nil
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
@@ -757,6 +744,16 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	return true
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
@@ -847,16 +844,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		pullerSafeModeAtStart, err := needPullerSafeModeAtStart(p.changefeed.Info.SinkURI)
+		isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, p.changefeed.Info.Config.EnableTableMonitor, pullerSafeModeAtStart)
+			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, isMysqlBackend)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.warnCh, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
+			p.errCh, p.warnCh, isMysqlBackend, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),

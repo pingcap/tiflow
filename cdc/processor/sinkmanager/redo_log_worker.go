@@ -276,8 +276,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		var x []*model.RowChangedEvent
 		var size uint64
 		if e.Row != nil {
-			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
-			e.Row.ReplicatingTs = task.tableSink.replicateTs
+			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
+			e.Row.ReplicatingTs = task.tableSink.replicateTs.Load()
 			x, size = handleRowChangedEvents(w.changefeedID, task.tableID, e)
 			usedMemSize += size
 			rows = append(rows, x...)

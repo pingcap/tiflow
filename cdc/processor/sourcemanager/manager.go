@@ -14,11 +14,9 @@
 package sourcemanager
 
 import (
-	"context"
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,10 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -56,9 +51,6 @@ type SourceManager struct {
 	bdrMode bool
 
 	safeModeAtStart bool
-	startTs         model.Ts
-
-	enableTableMonitor bool
 }
 
 // New creates a new source manager.
@@ -69,55 +61,32 @@ func New(
 	engine engine.SortEngine,
 	errChan chan error,
 	bdrMode bool,
-	enableTableMonitor bool,
 	safeModeAtStart bool,
 ) *SourceManager {
-	startTs, err := getCurrentTs(context.Background(), up.PDClient)
-	if err != nil {
-		log.Panic("Cannot get current ts when creating source manager",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID))
-		return nil
-	}
 	return &SourceManager{
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		errChan:            errChan,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
-		safeModeAtStart:    safeModeAtStart,
-		startTs:            startTs,
+		changefeedID:    changefeedID,
+		up:              up,
+		mg:              mg,
+		engine:          engine,
+		errChan:         errChan,
+		bdrMode:         bdrMode,
+		safeModeAtStart: safeModeAtStart,
 	}
 }
 
-func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
-}
-
-func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-	if raw == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-	deleteKVEntry := *raw
-	deleteKVEntry.Value = nil
-
-	insertKVEntry := *raw
-	insertKVEntry.OldValue = nil
-
-	return &deleteKVEntry, &insertKVEntry, nil
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(tableID)
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, m.startTs)
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
 	}
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry, splitUpdateKVEntry)
-	p.Start(ctx, m.up, m.engine, m.errChan, m.enableTableMonitor)
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
+	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 }
 
@@ -188,24 +157,4 @@ func (m *SourceManager) Close() error {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
 	return nil
-}
-
-func getCurrentTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
-	backoffBaseDelayInMs := int64(100)
-	totalRetryDuration := 10 * time.Second
-	var replicateTs model.Ts
-	err := retry.Do(ctx, func() error {
-		phy, logic, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		replicateTs = oracle.ComposeTS(phy, logic)
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	if err != nil {
-		return model.Ts(0), errors.Trace(err)
-	}
-	return replicateTs, nil
 }

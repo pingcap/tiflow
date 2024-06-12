@@ -65,8 +65,9 @@ type eventFragment struct {
 // dmlSink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type dmlSink struct {
-	changefeedID model.ChangeFeedID
-	scheme       string
+	changefeedID         model.ChangeFeedID
+	scheme               string
+	outputRawChangeEvent bool
 	// last sequence number
 	lastSeqNum uint64
 	// encodingWorkers defines a group of workers for encoding events.
@@ -133,13 +134,14 @@ func NewCloudStorageSink(
 
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &dmlSink{
-		changefeedID:    contextutil.ChangefeedIDFromCtx(wgCtx),
-		scheme:          strings.ToLower(sinkURI.Scheme),
-		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
-		workers:         make([]*dmlWorker, cfg.WorkerCount),
-		statistics:      metrics.NewStatistics(wgCtx, sink.TxnSink),
-		cancel:          wgCancel,
-		dead:            make(chan struct{}),
+		changefeedID:         contextutil.ChangefeedIDFromCtx(wgCtx),
+		scheme:               strings.ToLower(sinkURI.Scheme),
+		outputRawChangeEvent: replicaConfig.Sink.CloudStorageConfig.GetOutputRawChangeEvent(),
+		encodingWorkers:      make([]*encodingWorker, defaultEncodingConcurrency),
+		workers:              make([]*dmlWorker, cfg.WorkerCount),
+		statistics:           metrics.NewStatistics(wgCtx, sink.TxnSink),
+		cancel:               wgCancel,
+		dead:                 make(chan struct{}),
 	}
 	s.alive.msgCh = chann.NewDrainableChann[eventFragment]()
 
@@ -244,9 +246,9 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 	return nil
 }
 
-// Scheme returns the sink scheme.
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+// SchemeOption returns the scheme and the option.
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }
 
 // Close closes the cloud storage sink.

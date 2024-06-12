@@ -1071,6 +1071,11 @@ error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
 '''
 
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
+'''
+
 ["CDC:ErrSinkInvalidConfig"]
 error = '''
 sink config invalid

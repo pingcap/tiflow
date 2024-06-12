@@ -138,7 +138,7 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 
 	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
-		if err := ev.TrySplitAndSortUpdateEvent(e.backendSink.Scheme()); err != nil {
+		if err := ev.TrySplitAndSortUpdateEvent(e.backendSink.SchemeOption()); err != nil {
 			return SinkInternalError{err}
 		}
 		// We have to record the event ID for the callback.

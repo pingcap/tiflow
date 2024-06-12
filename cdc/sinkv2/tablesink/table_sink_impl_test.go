@@ -41,16 +41,16 @@ func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) err
 	return nil
 }
 
-func (m *mockEventSink) Scheme() string {
-	return sink.BlackHoleScheme
-}
-
 func (m *mockEventSink) Close() {
 	close(m.dead)
 }
 
 func (m *mockEventSink) Dead() <-chan struct{} {
 	return m.dead
+}
+
+func (m *mockEventSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, false
 }
 
 // acknowledge the txn events by call the callback function.

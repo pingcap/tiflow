@@ -113,7 +113,7 @@ func newSink(ctx context.Context, backends []backend,
 	for i, backend := range backends {
 		w := newWorker(ctx1, i, backend, len(backends))
 		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
-		g.Go(func() error { return w.runLoop(txnCh) })
+		g.Go(func() error { return w.run(txnCh) })
 		sink.workers = append(sink.workers, w)
 	}
 
@@ -159,9 +159,9 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 	return nil
 }
 
-// Scheme returns the sink scheme.
-func (s *sink) Scheme() string {
-	return s.scheme
+// SchemeOption returns the sink scheme.
+func (s *sink) SchemeOption() (string, bool) {
+	return s.scheme, false
 }
 
 // Close closes the sink. It won't wait for all pending items backend handled.

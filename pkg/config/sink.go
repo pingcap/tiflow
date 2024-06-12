@@ -121,6 +121,7 @@ type SinkConfig struct {
 	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
 	Protocol     string         `toml:"protocol" json:"protocol"`
 
+	// DispatchRules is only available when the downstream is MQ.
 	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
 	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
 	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
@@ -155,6 +156,16 @@ type KafkaConfig struct {
 	SASLOAuthAudience     *string  `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
+	if k == nil || k.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *k.OutputRawChangeEvent
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -403,21 +414,41 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Validate that protocol is compatible with the scheme. For testing purposes,
-	// any protocol should be legal for blackhole.
-	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(s.Protocol)
-		if err != nil {
-			return err
-		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
-	}
-
 	log.Info("succeed to parse parameter from sink uri",
 		zap.String("protocol", s.Protocol),
 		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+
+	// Check that protocol config is compatible with the scheme.
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+	}
+	// For testing purposes, any protocol should be legal for blackhole.
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
+		return s.ValidateProtocol(sinkURI.Scheme)
+	}
+	return nil
+}
+
+// ValidateProtocol validates the protocol configuration.
+func (s *SinkConfig) ValidateProtocol(scheme string) error {
+	protocol, err := ParseSinkProtocolFromString(s.Protocol)
+	if err != nil {
+		return err
+	}
+
+	outputRawChangeEvent := false
+	switch scheme {
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
+	default:
+		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
+	}
+
+	if outputRawChangeEvent {
+		// TODO: return error if we do not need to keep backward compatibility.
+		log.Warn(fmt.Sprintf("TiCDC will not split the update pk/uk events if output-raw-change-event is true(scheme: %s, protocol: %s).", scheme, protocol))
+	}
 	return nil
 }
 
@@ -570,4 +601,15 @@ type CloudStorageConfig struct {
 	OutputColumnID      *bool   `toml:"output-column-id" json:"output-column-id,omitempty"`
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *CloudStorageConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }

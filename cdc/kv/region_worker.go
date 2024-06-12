@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"reflect"
 	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,9 +74,6 @@ type regionWorkerMetrics struct {
 	metricSendEventResolvedCounter  prometheus.Counter
 	metricSendEventCommitCounter    prometheus.Counter
 	metricSendEventCommittedCounter prometheus.Counter
-
-	metricWorkerBusyRatio   prometheus.Gauge
-	metricWorkerChannelSize prometheus.Gauge
 }
 
 /*
@@ -117,7 +113,7 @@ type regionWorker struct {
 	inputPendingEvents int32
 }
 
-func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string) *regionWorkerMetrics {
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -140,11 +136,6 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, sto
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
-	metrics.metricWorkerBusyRatio = workerBusyRatio.WithLabelValues(
-		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "event-handler")
-	metrics.metricWorkerChannelSize = workerChannelSize.WithLabelValues(
-		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "input")
-
 	return metrics
 }
 
@@ -164,7 +155,7 @@ func newRegionWorker(
 		rtsManager:         newRegionTsManager(),
 		rtsUpdateCh:        make(chan *rtsUpdateEvent, 1024),
 		concurrency:        s.client.config.KVClient.WorkerConcurrent,
-		metrics:            newRegionWorkerMetrics(s.changefeed, strconv.FormatInt(s.tableID, 10), stream.addr),
+		metrics:            newRegionWorkerMetrics(s.changefeed),
 		inputPendingEvents: 0,
 	}
 }
@@ -458,7 +449,7 @@ func (w *regionWorker) onHandleExit(err error) {
 	}
 }
 
-func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool) error {
+func (w *regionWorker) eventHandler(ctx context.Context) error {
 	exitFn := func() error {
 		log.Info("region worker closed by error",
 			zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -468,11 +459,6 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 
-	metricsTicker := time.NewTicker(tableMonitorInterval)
-	defer metricsTicker.Stop()
-	var processTime time.Duration
-	startToWork := time.Now()
-
 	highWatermarkMet := false
 	for {
 		select {
@@ -480,17 +466,6 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 			return errors.Trace(ctx.Err())
 		case err := <-w.errorCh:
 			return errors.Trace(err)
-		case <-metricsTicker.C:
-			if enableTableMonitor {
-				w.metrics.metricWorkerChannelSize.Set(float64(len(w.inputCh)))
-
-				now := time.Now()
-				// busyRatio indicates the actual working time of the worker.
-				busyRatio := processTime.Seconds() / now.Sub(startToWork).Seconds() * 100
-				w.metrics.metricWorkerBusyRatio.Set(busyRatio)
-				startToWork = now
-				processTime = 0
-			}
 		case events, ok := <-w.inputCh:
 			if !ok {
 				return exitFn()
@@ -507,8 +482,6 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 			}
 
 			regionEventsBatchSize.Observe(float64(len(events)))
-
-			start := time.Now()
 			inputPending := atomic.LoadInt32(&w.inputPendingEvents)
 			if highWatermarkMet {
 				highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
@@ -569,7 +542,6 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 					w.session.resolvedTsPool.Put(ev)
 				}
 			}
-			processTime += time.Since(start)
 		}
 	}
 }
@@ -626,7 +598,7 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	time.Sleep(delay)
 }
 
-func (w *regionWorker) run(enableTableMonitor bool) error {
+func (w *regionWorker) run() error {
 	defer func() {
 		for _, h := range w.handles {
 			h.Unregister()
@@ -651,7 +623,7 @@ func (w *regionWorker) run(enableTableMonitor bool) error {
 		return handleError(w.checkErrorReconnect(w.resolveLock(ctx)))
 	})
 	wg.Go(func() error {
-		return handleError(w.eventHandler(ctx, enableTableMonitor))
+		return handleError(w.eventHandler(ctx))
 	})
 	_ = handleError(w.collectWorkpoolError(ctx))
 	_ = wg.Wait()
