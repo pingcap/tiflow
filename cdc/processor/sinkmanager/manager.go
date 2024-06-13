@@ -304,7 +304,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			}
 
 			if m.isMysqlBackend {
-				// For MySQL backend, we should restart sink. Let owner to handle the error.
+				// For MySQL backend, we should restart changefeed. Let owner to handle the error.
 				return errors.Trace(err)
 			}
 		}
