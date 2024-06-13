@@ -42,7 +42,7 @@ function run_with_fast_create_table() {
 	done
 
 	for ((i = 1; i <= 100; i++)); do
-		check_table_exists test.t_$i ${UP_TIDB_HOST} ${UP_TIDB_HOST}
+		check_table_exists test.t_$i ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
 
 	for ((i = 1; i <= 100; i++)); do
@@ -50,7 +50,7 @@ function run_with_fast_create_table() {
 	done
 
 	check_table_exists test.t_100 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	
+
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
