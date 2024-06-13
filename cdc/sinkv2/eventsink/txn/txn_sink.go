@@ -44,7 +44,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 type sink struct {
 	alive struct {
 		sync.RWMutex
-		conflictDetector *causality.ConflictDetector[*txnEvent]
+		conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
 		isDead           bool
 	}
 	scheme string
@@ -103,19 +103,14 @@ func newSink(ctx context.Context, backends []backend,
 		dead:    make(chan struct{}),
 	}
 
-	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.TxnCacheOption{
-		Count:         len(backends),
-		Size:          1024,
-		BlockStrategy: causality.BlockStrategyWaitEmpty,
-	})
-
 	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
 		w := newWorker(ctx1, i, backend, len(backends))
-		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
-		g.Go(func() error { return w.run(txnCh) })
+		g.Go(func() error { return w.run() })
 		sink.workers = append(sink.workers, w)
 	}
+
+	sink.alive.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
 
 	sink.wg.Add(1)
 	go func() {
@@ -171,6 +166,9 @@ func (s *sink) Close() {
 	}
 	s.wg.Wait()
 
+	for _, w := range s.workers {
+		w.close()
+	}
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
