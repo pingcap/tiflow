@@ -102,10 +102,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		TableInfo: info,
 		SchemaID:  schemaID,
 		TableName: TableName{
-			Schema:      schemaName,
-			Table:       info.Name.O,
-			TableID:     info.ID,
-			IsPartition: info.GetPartitionInfo() != nil,
+			Schema: schemaName,
+			Table:  info.Name.O,
 		},
 		hasUniqueColumn:  false,
 		Version:          version,
@@ -266,6 +264,7 @@ func (ti *TableInfo) initColumnsFlag() {
 	// Yet if an index has multiple columns, we would like to easily determine that all those columns are indexed,
 	// which is crucial for the completeness of the information we pass to the downstream.
 	// Therefore, instead of using the MySQL standard,
+
 	// we made our own decision to mark all columns in an index with the appropriate flag(s).
 	for _, idxInfo := range ti.Indices {
 		for _, idxCol := range idxInfo.Columns {
@@ -354,7 +353,7 @@ func (ti *TableInfo) GetTableNamePtr() *string {
 
 // IsPartitionTable returns whether the table is partition table
 func (ti *TableInfo) IsPartitionTable() bool {
-	return ti.TableName.IsPartition
+	return ti.GetPartitionInfo() != nil
 }
 
 func (ti *TableInfo) String() string {

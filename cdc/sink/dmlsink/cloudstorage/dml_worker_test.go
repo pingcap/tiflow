@@ -69,9 +69,8 @@ func TestDMLWorkerRun(t *testing.T) {
 	table1Dir := path.Join(parentDir, "test/table1/99")
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
-		Schema:  "test",
-		Table:   "table1",
-		TableID: 100,
+		Schema: "test",
+		Table:  "table1",
 	}
 	tidbTableInfo := &timodel.TableInfo{
 		ID:   100,
@@ -86,8 +85,9 @@ func TestDMLWorkerRun(t *testing.T) {
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: cloudstorage.VersionedTableName{
-				TableNameWithPhysicTableID: table1,
-				TableInfoVersion:           99,
+				TableName:        table1,
+				PhysicalTableID:  100,
+				TableInfoVersion: 99,
 			},
 			event: &dmlsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{

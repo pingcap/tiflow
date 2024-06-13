@@ -356,10 +356,8 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		var apiModles []TableName
 		for _, tbl := range tbls {
 			apiModles = append(apiModles, TableName{
-				Schema:      tbl.Schema,
-				Table:       tbl.Table,
-				TableID:     tbl.TableID,
-				IsPartition: tbl.IsPartition,
+				Schema: tbl.Schema,
+				Table:  tbl.Table,
 			})
 		}
 		return apiModles

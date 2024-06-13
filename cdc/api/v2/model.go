@@ -55,10 +55,8 @@ type Tables struct {
 
 // TableName contains table information
 type TableName struct {
-	Schema      string `json:"database_name"`
-	Table       string `json:"table_name"`
-	TableID     int64  `json:"table_id"`
-	IsPartition bool   `json:"is_partition"`
+	Schema string `json:"database_name"`
+	Table  string `json:"table_name"`
 }
 
 // VerifyTableConfig use to verify tables.

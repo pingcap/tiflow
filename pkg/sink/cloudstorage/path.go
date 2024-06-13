@@ -120,16 +120,20 @@ type indexWithDate struct {
 	currDate, prevDate string
 }
 
-// VersionedTableName is used to wrap TableNameWithPhysicTableID with a version.
+// VersionedTableName is used to wrap TableName with a version.
 type VersionedTableName struct {
 	// Because we need to generate different file paths for different
 	// tables, we need to use the physical table ID instead of the
 	// logical table ID.(Especially when the table is a partitioned table).
-	TableNameWithPhysicTableID model.TableName
+	TableName model.TableName
 	// TableInfoVersion is consistent with the version of TableInfo recorded in
 	// schema storage. It can either be finished ts of a DDL event,
 	// or be the checkpoint ts when processor is restarted.
 	TableInfoVersion uint64
+
+	PhysicalTableID int64
+
+	IsPartitioned bool
 }
 
 // FilePathGenerator is used to generate data file path and index file path.
@@ -312,12 +316,12 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
 	var elems []string
 
-	elems = append(elems, tbl.TableNameWithPhysicTableID.Schema)
-	elems = append(elems, tbl.TableNameWithPhysicTableID.Table)
+	elems = append(elems, tbl.TableName.Schema)
+	elems = append(elems, tbl.TableName.Table)
 	elems = append(elems, fmt.Sprintf("%d", f.versionMap[tbl]))
 
-	if f.config.EnablePartitionSeparator && tbl.TableNameWithPhysicTableID.IsPartition {
-		elems = append(elems, fmt.Sprintf("%d", tbl.TableNameWithPhysicTableID.TableID))
+	if f.config.EnablePartitionSeparator && tbl.IsPartitioned {
+		elems = append(elems, fmt.Sprintf("%d", tbl.PhysicalTableID))
 	}
 
 	if len(date) != 0 {

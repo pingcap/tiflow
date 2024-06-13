@@ -15,6 +15,7 @@ package craft
 
 import (
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -93,7 +94,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	partition := b.headers.GetPartition(b.index)
 	if partition >= 0 {
 		ev.PhysicalTableID = partition
-		ev.TableInfo.TableName.IsPartition = true
+		ev.TableInfo.Partition = &timodel.PartitionInfo{}
 	}
 	b.index++
 	return ev, nil

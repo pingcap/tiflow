@@ -192,7 +192,7 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	// TODO: we lost the tableID from kafka message
 	if key.Partition != nil {
 		e.PhysicalTableID = *key.Partition
-		e.TableInfo.TableName.IsPartition = true
+		e.TableInfo.Partition = &timodel.PartitionInfo{}
 	}
 
 	return e
