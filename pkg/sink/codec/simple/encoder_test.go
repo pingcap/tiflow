@@ -798,6 +798,62 @@ func TestEncodeDDLEvent(t *testing.T) {
 	}
 }
 
+func TestColumnFlags(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	createTableDDL := `create table test.t(
+		a bigint(20) unsigned not null,
+		b bigint(20) default null,
+		c varbinary(767) default null,
+		d int(11) unsigned not null,
+		e int(11) default null,
+		primary key (a),
+		key idx_c(c),
+		key idx_b(b),
+		unique key idx_de(d, e))`
+	createTableDDLEvent := helper.DDL2Event(createTableDDL)
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		b, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := b.Build()
+
+		m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+		require.NoError(t, err)
+
+		dec, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+
+		decodedDDLEvent, err := dec.NextDDLEvent()
+		require.NoError(t, err)
+
+		originFlags := createTableDDLEvent.TableInfo.ColumnsFlag
+		obtainedFlags := decodedDDLEvent.TableInfo.ColumnsFlag
+
+		for colID, expected := range originFlags {
+			name := createTableDDLEvent.TableInfo.ForceGetColumnName(colID)
+			actualID := decodedDDLEvent.TableInfo.ForceGetColumnIDByName(name)
+			actual := obtainedFlags[actualID]
+			require.Equal(t, expected, actual)
+		}
+	}
+}
+
 func TestEncodeIntegerTypes(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
