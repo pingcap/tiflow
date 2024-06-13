@@ -27,7 +27,12 @@ import (
 )
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
+<<<<<<< HEAD
 	client := kv.NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
+=======
+	cfg := &config.ServerConfig{Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}}}
+	client := kv.NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry) error {
 		select {
 		case <-ctx.Done():
@@ -84,7 +89,12 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 		return false
 	}
+<<<<<<< HEAD
 	subID := puller.subscribe(spans, 996, "test", shouldSplitKVEntry)[0]
+=======
+	puller.subscribe(spans, 996, "test", shouldSplitKVEntry)
+	subID := puller.subscriptions.n.GetV(spans[0]).subID
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	for _, event := range events {
 		puller.inputChs[0] <- kv.MultiplexingEvent{RegionFeedEvent: event, SubscriptionID: subID}
 	}

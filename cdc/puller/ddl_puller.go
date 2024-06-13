@@ -90,7 +90,56 @@ type ddlJobPullerImpl struct {
 	outputCh        chan *model.DDLJobEntry
 }
 
+<<<<<<< HEAD
 // Run starts the DDLJobPuller.
+=======
+// NewDDLJobPuller creates a new NewDDLJobPuller,
+// which fetches ddl events starting from checkpointTs.
+func NewDDLJobPuller(
+	ctx context.Context,
+	up *upstream.Upstream,
+	checkpointTs uint64,
+	cfg *config.ServerConfig,
+	changefeed model.ChangeFeedID,
+	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
+) DDLJobPuller {
+	pdCli := up.PDClient
+	regionCache := up.RegionCache
+	kvStorage := up.KVStorage
+	pdClock := up.PDClock
+
+	ddlSpans := spanz.GetAllDDLSpan()
+	for i := range ddlSpans {
+		// NOTE(qupeng): It's better to use different table id when use sharedKvClient.
+		ddlSpans[i].TableID = int64(-1) - int64(i)
+	}
+
+	ddlJobPuller := &ddlJobPullerImpl{
+		changefeedID:  changefeed,
+		schemaStorage: schemaStorage,
+		kvStorage:     kvStorage,
+		filter:        filter,
+		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
+	}
+	ddlJobPuller.sorter = memorysorter.NewEntrySorter(changefeed)
+
+	grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	client := kv.NewSharedClient(
+		changefeed, cfg, ddlPullerFilterLoop,
+		pdCli, grpcPool, regionCache, pdClock,
+		txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
+	)
+
+	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
+	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, up.PDClock, ddlJobPuller.Input, slots, hasher, 1)
+	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
+
+	return ddlJobPuller
+}
+
+// Run implements util.Runnable.
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	if p.multiplexing {
 		return p.runMultiplexing(ctx)
@@ -98,6 +147,32 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	return p.run(ctx)
 }
 
+<<<<<<< HEAD
+=======
+// WaitForReady implements util.Runnable.
+func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (p *ddlJobPullerImpl) Close() {}
+
+// Output implements DDLJobPuller, it returns the output channel of DDL job.
+func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
+	return p.outputCh
+}
+
+// Input receives the raw kv entry and put it into the input channel.
+func (p *ddlJobPullerImpl) Input(
+	ctx context.Context,
+	rawDDL *model.RawKVEntry,
+	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
+) error {
+	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
+	return nil
+}
+
+// handleRawKVEntry converts the raw kv entry to DDL job and sends it to the output channel.
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
 	if ddlRawKV == nil {
 		return nil

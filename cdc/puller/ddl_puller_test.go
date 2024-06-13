@@ -110,7 +110,31 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 		OpType:  model.OpTypeResolved,
 		CRTs:    ts,
 		StartTs: ts,
+<<<<<<< HEAD
 	})
+=======
+	}
+}
+
+func inputDDL(t *testing.T, puller *ddlJobPullerImpl, job *timodel.Job) {
+	rawJob := jonToRawKVEntry(t, job)
+	puller.Input(context.Background(), rawJob, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
+}
+
+func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
+	rawTs := tsToRawKVEntry(t, ts)
+	puller.Input(context.Background(), rawTs, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
+}
+
+func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
+	err := retry.Do(context.Background(), func() error {
+		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
+			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
+	require.Nil(t, err)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 }
 
 func newMockDDLJobPuller(

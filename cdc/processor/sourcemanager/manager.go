@@ -28,7 +28,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/spanz"
+=======
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/tikv"
@@ -72,6 +75,11 @@ type SourceManager struct {
 	engine engine.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
+<<<<<<< HEAD
+=======
+
+	safeModeAtStart bool
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
@@ -120,6 +128,7 @@ func newSourceManager(
 	pullerWrapperCreator pullerWrapperCreator,
 ) *SourceManager {
 	mgr := &SourceManager{
+<<<<<<< HEAD
 		ready:           make(chan struct{}),
 		changefeedID:    changefeedID,
 		up:              up,
@@ -132,6 +141,49 @@ func newSourceManager(
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
 		mgr.tablePullers.pullerWrapperCreator = pullerWrapperCreator
+=======
+		ready:              make(chan struct{}),
+		changefeedID:       changefeedID,
+		up:                 up,
+		mg:                 mg,
+		engine:             engine,
+		bdrMode:            bdrMode,
+		enableTableMonitor: enableTableMonitor,
+		safeModeAtStart:    safeModeAtStart,
+	}
+
+	serverConfig := config.GetGlobalServerConfig()
+	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	client := kv.NewSharedClient(
+		mgr.changefeedID, serverConfig, mgr.bdrMode,
+		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
+		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
+	)
+
+	// consume add raw kv entry to the engine.
+	// It will be called by the puller when new raw kv entry is received.
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
+		if len(spans) > 1 {
+			log.Panic("DML puller subscribes multiple spans",
+				zap.String("namespace", mgr.changefeedID.Namespace),
+				zap.String("changefeed", mgr.changefeedID.ID))
+		}
+		if raw != nil {
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				mgr.engine.Add(spans[0], pEvent)
+			}
+		}
+		return nil
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	}
 	return mgr
 }
@@ -143,6 +195,14 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
 		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+<<<<<<< HEAD
+=======
+	}
+
+	// Only nil in unit tests.
+	if m.puller != nil {
+		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	}
 
 	if m.multiplexing {
@@ -231,12 +291,20 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 
 	m.tablePullers.ctx = ctx
 	close(m.ready)
+<<<<<<< HEAD
 	select {
 	case err := <-m.tablePullers.errChan:
 		return err
 	case <-m.tablePullers.ctx.Done():
 		return m.tablePullers.ctx.Err()
 	}
+=======
+	// Only nil in unit tests.
+	if m.puller == nil {
+		return nil
+	}
+	return m.puller.Run(ctx)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 }
 
 // WaitForReady implements util.Runnable.
