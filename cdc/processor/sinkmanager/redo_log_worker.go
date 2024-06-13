@@ -278,6 +278,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs.Load()
+<<<<<<< HEAD
 			x, size = handleRowChangedEvents(w.changefeedID, task.tableID, e)
 			usedMemSize += size
 			rows = append(rows, x...)
@@ -290,6 +291,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			} else {
 				cachedSize -= brokenSize
 			}
+=======
+			x, size = handleRowChangedEvents(w.changefeedID, task.span, e)
+			advancer.appendEvents(x, size)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 		}
 
 		if err := maybeEmitBatchEvents(false, pos.Valid()); err != nil {

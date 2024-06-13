@@ -364,11 +364,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.GetReplicaTs()
+<<<<<<< HEAD
 			x, size := handleRowChangedEvents(w.changefeedID, task.tableID, e)
 			events = append(events, x...)
 			allEventSize += size
 			usedMem += size
 			pendingTxnSize += size
+=======
+			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)
+			advancer.appendEvents(x, size)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 		}
 
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {

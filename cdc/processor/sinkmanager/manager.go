@@ -146,12 +146,17 @@ func New(
 	schemaStorage entry.SchemaStorage,
 	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
+<<<<<<< HEAD
 	errChan chan error,
 	warnChan chan error,
 	isMysqlBackend bool,
 	metricsTableSinkTotalRows prometheus.Counter,
 	metricsTableSinkFlushLagDuration prometheus.Observer,
 ) (*SinkManager, error) {
+=======
+	isMysqlBackend bool,
+) *SinkManager {
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	m := &SinkManager{
 		changefeedID:   changefeedID,
 		changefeedInfo: changefeedInfo,
@@ -165,8 +170,13 @@ func New(
 		sinkWorkerAvailable: make(chan struct{}, 1),
 		sinkRetry:           retry.NewInfiniteErrorRetry(),
 		isMysqlBackend:      isMysqlBackend,
+<<<<<<< HEAD
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+=======
+		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 
 		metricsTableSinkFlushLagDuration: metricsTableSinkFlushLagDuration,
 	}
@@ -319,7 +329,11 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 			}
 
 			if m.isMysqlBackend {
+<<<<<<< HEAD
 				// For MySQL backend, we should restart sink. Let owner to handle the error.
+=======
+				// For MySQL backend, we should restart changefeed. Let owner to handle the error.
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 				return errors.Trace(err)
 			}
 		}
@@ -858,7 +872,11 @@ func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
+<<<<<<< HEAD
 func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) *tableSinkWrapper {
+=======
+func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs model.Ts) *tableSinkWrapper {
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		tableID,
@@ -885,7 +903,11 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		log.Panic("Add an exists table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+<<<<<<< HEAD
 			zap.Int64("tableID", tableID))
+=======
+			zap.Stringer("span", &span))
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	}
 	m.sinkMemQuota.AddTable(tableID)
 	m.redoMemQuota.AddTable(tableID)

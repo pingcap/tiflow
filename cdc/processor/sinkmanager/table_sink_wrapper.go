@@ -395,7 +395,11 @@ func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
 	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
+<<<<<<< HEAD
 		zap.Int64("tableID", t.tableID),
+=======
+		zap.Stringer("span", &t.span),
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 		zap.Uint64("replicateTs", ts))
 	return nil
 }
