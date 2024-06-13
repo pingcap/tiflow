@@ -37,6 +37,7 @@ var ddlWhiteListMap = map[timodel.ActionType]bf.EventType{
 
 	// table related DDLs
 	timodel.ActionCreateTable:                  bf.CreateTable,
+	timodel.ActionCreateTables:                 bf.CreateTable,
 	timodel.ActionDropTable:                    bf.DropTable,
 	timodel.ActionTruncateTable:                bf.TruncateTable,
 	timodel.ActionRenameTable:                  bf.RenameTable,

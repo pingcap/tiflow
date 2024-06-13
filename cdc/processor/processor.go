@@ -224,13 +224,13 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	p.sinkManager.r.AddTable(
+	table := p.sinkManager.r.AddTable(
 		span, startTs, p.latestInfo.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
 
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -489,35 +489,6 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
-// getPullerSplitUpdateMode returns how to split update kv entries at puller.
-//
-// If the sinkURI is not mysql compatible, it returns PullerSplitUpdateMode_None
-// which means don't split any update kv entries at puller;
-// If the sinkURI is mysql compatible, it has the following two cases:
-//  1. if the user config safe mode in sink module, it returns PullerSplitUpdateMode_Always,
-//     which means split all update kv entries at puller;
-//  2. if the user does not config safe mode in sink module, it returns PullerSplitUpdateMode_AtStart,
-//     which means split update kv entries whose commitTS is older than the start time of this changefeed.
-func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	scheme := sink.GetScheme(sinkURI)
-	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return sourcemanager.PullerSplitUpdateModeNone, nil
-	}
-	// must be mysql sink
-	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
-	if err != nil {
-		return sourcemanager.PullerSplitUpdateModeNone, err
-	}
-	if isSinkInSafeMode {
-		return sourcemanager.PullerSplitUpdateModeAlways, nil
-	}
-	return sourcemanager.PullerSplitUpdateModeAtStart, nil
-}
-
 // Tick implements the `orchestrator.State` interface
 // the `info` parameter is sent by metadata store, the `info` must be the latest value snapshot.
 // the `status` parameter is sent by metadata store, the `status` must be the latest value snapshot.
@@ -618,6 +589,45 @@ func (p *processor) tick(ctx context.Context) (error, error) {
 	return nil, warning
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
+// getPullerSplitUpdateMode returns how to split update kv entries at puller.
+//
+// If the sinkURI is not mysql compatible, it returns PullerSplitUpdateModeNone
+// which means don't split any update kv entries at puller;
+// If the sinkURI is mysql compatible, it has the following two cases:
+//  1. if the user config safe mode in sink module, it returns PullerSplitUpdateModeAlways,
+//     which means split all update kv entries at puller;
+//  2. if the user does not config safe mode in sink module, it returns PullerSplitUpdateModeAtStart,
+//     which means split update kv entries whose commitTS is older than the replicate ts of sink.
+func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return sourcemanager.PullerSplitUpdateModeNone, nil
+	}
+	// must be mysql sink
+	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, err
+	}
+	if isSinkInSafeMode {
+		return sourcemanager.PullerSplitUpdateModeAlways, nil
+	}
+	return sourcemanager.PullerSplitUpdateModeAtStart, nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	if p.initialized.Load() {
@@ -690,9 +700,13 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
 
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(prcCtx)

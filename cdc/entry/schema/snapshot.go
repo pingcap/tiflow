@@ -43,7 +43,7 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	switch job.Type {
 	case timodel.ActionCreateSchema, timodel.ActionModifySchemaCharsetAndCollate, timodel.ActionDropSchema:
 		return nil, nil
-	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
+	case timodel.ActionCreateTable, timodel.ActionCreateTables, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		// no pre table info
 		return nil, nil
 	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable, timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
@@ -471,6 +471,15 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		err := s.inner.renameTables(job, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
+		}
+	case timodel.ActionCreateTables:
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		for _, tableInfo := range multiTableInfos {
+			err := s.inner.createTable(model.WrapTableInfo(job.SchemaID, job.SchemaName,
+				job.BinlogInfo.FinishedTS, tableInfo), job.BinlogInfo.FinishedTS)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)

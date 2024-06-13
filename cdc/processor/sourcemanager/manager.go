@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -28,13 +27,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -65,8 +60,8 @@ type SourceManager struct {
 	engine sorter.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-	// The timestamp fetched from pd when changefeed starts.
-	thresholdTs model.Ts
+
+	splitUpdateMode PullerSplitUpdateMode
 
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
@@ -103,38 +98,8 @@ func NewForTest(
 	}
 }
 
-func isOldUpdateKVEntry(raw *model.RawKVEntry, thresholdTs model.Ts) bool {
-	return raw != nil && raw.IsUpdate() && raw.CRTs < thresholdTs
-}
-
-func shouldSplitUpdateKVEntry(
-	splitUpdateMode PullerSplitUpdateMode,
-	raw *model.RawKVEntry,
-	thresholdTs model.Ts,
-) bool {
-	if !raw.IsUpdate() {
-		log.Panic("Should only check update entry")
-	}
-	if splitUpdateMode == PullerSplitUpdateModeNone {
-		return false
-	} else if splitUpdateMode == PullerSplitUpdateModeAtStart {
-		return isOldUpdateKVEntry(raw, thresholdTs)
-	} else {
-		return true
-	}
-}
-
-func splitUpdateKVEntry(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error) {
-	if raw == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-	deleteKVEntry := *raw
-	deleteKVEntry.Value = nil
-
-	insertKVEntry := *raw
-	insertKVEntry.OldValue = nil
-
-	return &deleteKVEntry, &insertKVEntry, nil
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 func newSourceManager(
@@ -152,6 +117,7 @@ func newSourceManager(
 		up:                 up,
 		mg:                 mg,
 		engine:             engine,
+		splitUpdateMode:    splitUpdateMode,
 		bdrMode:            bdrMode,
 		enableTableMonitor: enableTableMonitor,
 	}
@@ -166,15 +132,15 @@ func newSourceManager(
 
 	// consume add raw kv entry to the engine.
 	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",
 				zap.String("namespace", mgr.changefeedID.Namespace),
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			if raw.IsUpdate() && shouldSplitUpdateKVEntry(splitUpdateMode, raw, mgr.thresholdTs) {
-				deleteKVEntry, insertKVEntry, err := splitUpdateKVEntry(raw)
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
 				if err != nil {
 					return err
 				}
@@ -203,13 +169,31 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		if raw == nil || !raw.IsUpdate() {
+			return false
+		}
+		switch m.splitUpdateMode {
+		case PullerSplitUpdateModeNone:
+			return false
+		case PullerSplitUpdateModeAlways:
+			return true
+		case PullerSplitUpdateModeAtStart:
+			return isOldUpdateKVEntry(raw, getReplicaTs)
+		default:
+			log.Panic("Unknown split update mode", zap.Int32("mode", int32(m.splitUpdateMode)))
+		}
+		log.Panic("Shouldn't reach here")
+		return false
+	}
+
 	// Only nil in unit tests.
 	if m.puller != nil {
-		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
 	}
 }
 
@@ -255,11 +239,6 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.puller == nil {
 		return nil
 	}
-	thresholdTs, err := getCurrentTs(ctx, m.up.PDClient)
-	if err != nil {
-		return err
-	}
-	m.thresholdTs = thresholdTs
 	return m.puller.Run(ctx)
 }
 
@@ -300,24 +279,4 @@ func (m *SourceManager) Close() {
 // Add adds events to the engine. It is used for testing.
 func (m *SourceManager) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	m.engine.Add(span, events...)
-}
-
-func getCurrentTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
-	backoffBaseDelayInMs := int64(100)
-	totalRetryDuration := 10 * time.Second
-	var replicateTs model.Ts
-	err := retry.Do(ctx, func() error {
-		phy, logic, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		replicateTs = oracle.ComposeTS(phy, logic)
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	if err != nil {
-		return model.Ts(0), errors.Trace(err)
-	}
-	return replicateTs, nil
 }
