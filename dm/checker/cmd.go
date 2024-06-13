@@ -121,6 +121,6 @@ func RunCheckOnConfigs(
 		return result, err
 	}
 
-	filterResults(result, warnLimit, errLimit)
+	filterResults(result, warnLimit, errLimit, true)
 	return result, nil
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -121,7 +122,7 @@ func NewDDLJobPuller(
 
 	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
 	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, up.PDClock, ddlJobPuller.Input, slots, hasher, 1)
-	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName)
+	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
 
 	return ddlJobPuller
 }
@@ -174,6 +175,7 @@ func (p *ddlJobPullerImpl) Input(
 	ctx context.Context,
 	rawDDL *model.RawKVEntry,
 	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
 ) error {
 	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
 	return nil
@@ -390,6 +392,28 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
+	case timodel.ActionCreateTables:
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		querys := strings.Split(job.Query, ";")
+
+		for index, tableInfo := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O) {
+				continue
+			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index])
+		}
+
+		skip = len(newMultiTableInfos) == 0
+
+		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+		job.Query = strings.Join(newQuerys, ";")
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {

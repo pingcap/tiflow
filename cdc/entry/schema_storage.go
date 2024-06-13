@@ -16,6 +16,7 @@ package entry
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -406,6 +407,20 @@ func (s *schemaStorage) BuildDDLEvents(
 		ddlEvents, err = s.buildRenameEvents(ctx, job)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+	case timodel.ActionCreateTables:
+		if job.BinlogInfo != nil && job.BinlogInfo.MultipleTableInfos != nil {
+			querys := strings.Split(job.Query, ";")
+			multiTableInfos := job.BinlogInfo.MultipleTableInfos
+			for index, tableInfo := range multiTableInfos {
+				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
+				job.Query = querys[index]
+				event := new(model.DDLEvent)
+				event.FromJob(job, nil, newTableInfo)
+				ddlEvents = append(ddlEvents, event)
+			}
+		} else {
+			return nil, errors.Errorf("there is no multiple table infos in the create tables job: %s", job)
 		}
 	default:
 		// parse preTableInfo

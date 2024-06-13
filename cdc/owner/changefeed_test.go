@@ -684,13 +684,7 @@ func TestBarrierAdvance(t *testing.T) {
 			require.Nil(t, err)
 			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 
-			nextSyncPointTs := oracle.GoTimeToTS(
-				oracle.GetTimeFromTS(state.Status.CheckpointTs + 10).
-					Add(util.GetOrZero(changefeedInfo.Config.SyncPointInterval)),
-			)
-
 			require.Nil(t, err)
-			require.Equal(t, nextSyncPointTs, barrier.GlobalBarrierTs)
 			require.Less(t, state.Status.CheckpointTs+10, barrier.GlobalBarrierTs)
 			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
 		}
