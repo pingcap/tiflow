@@ -122,7 +122,7 @@ func NewDDLJobPuller(
 
 	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
 	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, up.PDClock, ddlJobPuller.Input, slots, hasher, 1)
-	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName)
+	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
 
 	return ddlJobPuller
 }
@@ -175,6 +175,7 @@ func (p *ddlJobPullerImpl) Input(
 	ctx context.Context,
 	rawDDL *model.RawKVEntry,
 	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
 ) error {
 	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
 	return nil
