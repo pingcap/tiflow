@@ -15,32 +15,7 @@ package utils
 
 import (
 	"strings"
-
-	"github.com/pingcap/tidb/pkg/parser/charset"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tiflow/cdc/model"
 )
-
-// SetBinChsClnFlag set the binary charset flag.
-func SetBinChsClnFlag(ft *types.FieldType) *types.FieldType {
-	ft.SetCharset(charset.CharsetBin)
-	ft.SetCollate(charset.CollationBin)
-	ft.AddFlag(mysql.BinaryFlag)
-	return ft
-}
-
-// SetUnsigned set the unsigned flag.
-func SetUnsigned(ft *types.FieldType) *types.FieldType {
-	ft.SetFlag(uint(model.UnsignedFlag))
-	return ft
-}
-
-// SetElems set the elems to the ft
-func SetElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.SetElems(elems)
-	return ft
-}
 
 // when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
 // it should have the form `t unsigned`, such as `int unsigned`

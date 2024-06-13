@@ -72,6 +72,7 @@ type tableProgress struct {
 	}
 
 	scheduled atomic.Bool
+	start     time.Time
 }
 
 func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.ResolvedSpans) (err error) {
@@ -95,7 +96,10 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
 			zap.String("tableName", p.tableName),
-			zap.Uint64("resolvedTs", resolvedTs))
+			zap.Any("tableID", p.spans),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Duration("duration", time.Since(p.start)),
+		)
 	}
 	if resolvedTs > p.resolvedTs.Load() {
 		p.resolvedTs.Store(resolvedTs)
@@ -134,7 +138,7 @@ type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
 	pdClock    pdutil.Clock
-	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error
 	// inputChannelIndexer is used to determine which input channel to use for a given span.
 	inputChannelIndexer func(span tablepb.Span, workerCount int) int
 
@@ -172,7 +176,7 @@ func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
 	pdClock pdutil.Clock,
-	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error,
 	workerCount int,
 	inputChannelIndexer func(tablepb.Span, int) int,
 	resolvedTsAdvancerCount int,
@@ -197,16 +201,22 @@ func NewMultiplexingPuller(
 }
 
 // Subscribe some spans. They will share one same resolved timestamp progress.
-func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
+func (p *MultiplexingPuller) Subscribe(
+	spans []tablepb.Span,
+	startTs model.Ts,
+	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+) {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	p.subscribe(spans, startTs, tableName)
+	p.subscribe(spans, startTs, tableName, shouldSplitKVEntry)
 }
 
 func (p *MultiplexingPuller) subscribe(
 	spans []tablepb.Span,
 	startTs model.Ts,
 	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
 ) {
 	for _, span := range spans {
 		// Base on the current design, a MultiplexingPuller is only used for one changefeed.
@@ -230,6 +240,7 @@ func (p *MultiplexingPuller) subscribe(
 
 		resolvedEventsCache: make(chan kv.MultiplexingEvent, tableResolvedTsBufferSize),
 		tsTracker:           frontier.NewFrontier(0, spans...),
+		start:               time.Now(),
 	}
 
 	progress.consume.f = func(
@@ -240,7 +251,7 @@ func (p *MultiplexingPuller) subscribe(
 		progress.consume.RLock()
 		defer progress.consume.RUnlock()
 		if !progress.consume.removed {
-			return p.consume(ctx, raw, spans)
+			return p.consume(ctx, raw, spans, shouldSplitKVEntry)
 		}
 		return nil
 	}

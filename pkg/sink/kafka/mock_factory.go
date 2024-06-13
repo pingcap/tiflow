@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -91,30 +92,27 @@ type MockSaramaSyncProducer struct {
 
 // SendMessage implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) SendMessage(
-	ctx context.Context,
+	_ context.Context,
 	topic string, partitionNum int32,
-	key []byte, value []byte,
+	message *common.Message,
 ) error {
 	_, _, err := m.Producer.SendMessage(&sarama.ProducerMessage{
 		Topic:     topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
 	return err
 }
 
 // SendMessages implement the SyncProducer interface.
-func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
-	topic string, partitionNum int32,
-	key []byte, value []byte,
-) error {
+func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}
@@ -166,16 +164,13 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 }
 
 // AsyncSend implement the AsyncProducer interface.
-func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
-	partition int32, key []byte, value []byte,
-	callback func(),
-) error {
+func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
-		Key:       sarama.StringEncoder(key),
-		Value:     sarama.ByteEncoder(value),
-		Metadata:  callback,
+		Key:       sarama.StringEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
+		Metadata:  message.Callback,
 	}
 	select {
 	case <-ctx.Done():
