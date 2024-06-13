@@ -194,7 +194,7 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 
 func ignoreableError(err error) bool {
 	knownErrorList := []string{
-		"Error 1146:", // table doesn't exist
+		"Error 1146",  // table doesn't exist
 		"Error 1049",  // database doesn't exist
 		"schema:1146", // table or database doesn't exist
 	}
