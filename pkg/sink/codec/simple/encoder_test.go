@@ -122,10 +122,24 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
 
-			_, err = dec.NextDDLEvent()
+			decodedDDL, err := dec.NextDDLEvent()
 			require.NoError(t, err)
 
+<<<<<<< HEAD
 			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+=======
+			originFlags := createTableDDL.TableInfo.ColumnsFlag
+			obtainedFlags := decodedDDL.TableInfo.ColumnsFlag
+
+			for colID, expected := range originFlags {
+				name := createTableDDL.TableInfo.ForceGetColumnName(colID)
+				actualID := decodedDDL.TableInfo.ForceGetColumnIDByName(name)
+				actual := obtainedFlags[actualID]
+				require.Equal(t, expected, actual)
+			}
+
+			err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
+>>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 			require.NoError(t, err)
 
 			messages := enc.Build()
@@ -1481,10 +1495,10 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				mock.ExpectExec(query).WillReturnResult(driver.ResultNoRows)
 
 				names, values := utils.LargeColumnKeyValues()
-				mock.ExpectQuery("select * from test.t where t = 127").
+				mock.ExpectQuery("select * from test.t where tu1 = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
-				mock.ExpectQuery("select * from test.t where t = 127").
+				mock.ExpectQuery("select * from test.t where tu1 = 127").
 					WillReturnRows(mock.NewRows(names).AddRow(values...))
 
 				decodedRow, err := dec.NextRowChangedEvent()

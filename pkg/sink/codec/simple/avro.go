@@ -97,6 +97,12 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			mysqlType["decimal"] = map[string]interface{}{
 				"int": col.GetDecimal(),
 			}
+			mysqlType["unsigned"] = map[string]interface{}{
+				"boolean": mysql.HasUnsignedFlag(col.GetFlag()),
+			}
+			mysqlType["zerofill"] = map[string]interface{}{
+				"boolean": mysql.HasZerofillFlag(col.GetFlag()),
+			}
 		default:
 		}
 

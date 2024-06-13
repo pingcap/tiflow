@@ -242,12 +242,19 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 }
 
 // newTiIndexInfo convert IndexSchema to a tidb index info.
-func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
+func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
+		var offset int
+		for idx, column := range columns {
+			if column.Name.O == col {
+				offset = idx
+				break
+			}
+		}
 		indexColumns[i] = &timodel.IndexColumn{
 			Name:   timodel.NewCIStr(col),
-			Offset: i,
+			Offset: offset,
 		}
 	}
 
@@ -328,6 +335,24 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 		table = m.Table
 		tableID = m.TableID
 		schemaVersion = m.Version
+<<<<<<< HEAD
+=======
+
+		tidbTableInfo.ID = m.TableID
+		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
+		tidbTableInfo.UpdateTS = m.Version
+
+		nextMockID := int64(100)
+		for _, col := range m.Columns {
+			tiCol := newTiColumnInfo(col, nextMockID, m.Indexes)
+			nextMockID += 100
+			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
+		}
+		for _, idx := range m.Indexes {
+			index := newTiIndexInfo(idx, tidbTableInfo.Columns)
+			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+		}
+>>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 	}
 	tidbTableInfo := &timodel.TableInfo{
 		ID:       tableID,
