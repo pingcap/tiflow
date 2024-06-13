@@ -16,8 +16,8 @@ package spanz
 import (
 	"encoding/binary"
 
-	"blainsmith.com/go/seahash"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/util/seahash"
 )
 
 // HashMap is a specialized hash map that map a Span to a value.
