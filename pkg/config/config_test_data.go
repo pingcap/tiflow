@@ -93,6 +93,7 @@ const (
     }
   },
   "scheduler": {
+    "max-table-count": 30000,
     "enable-table-across-nodes": false,
     "region-threshold": 100000
   },
@@ -181,7 +182,7 @@ const (
       "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50
+      "add-table-batch-size": 0
     },
     "cdc-v2": {
       "enable": false,
@@ -360,6 +361,8 @@ const (
     }
   },
   "scheduler": {
+    "add-table-batch-size": 0,
+    "max-table-count": 30000,
     "enable-table-across-nodes": true,
     "region-per-span": 0,
     "region-threshold": 100001,
@@ -534,6 +537,7 @@ const (
     }
   },
   "scheduler": {
+    "max-table-count": 30000,
     "enable-table-across-nodes": true,
     "region-threshold": 100001,
     "write-key-threshold": 100001

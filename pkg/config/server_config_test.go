@@ -131,7 +131,7 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	require.Error(t, conf.ValidateAndAdjust())
 
 	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
-	conf.AddTableBatchSize = 0
+	conf.AddTableBatchSize = -1
 	require.Error(t, conf.ValidateAndAdjust())
 }
 
