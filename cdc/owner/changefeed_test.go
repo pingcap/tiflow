@@ -155,6 +155,10 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockDDLSink) emitBootstarp(ctx context.Context, bootstrap *model.DDLEvent) error {
+	return nil
+}
+
 type mockScheduler struct {
 	currentTables []model.TableID
 }
