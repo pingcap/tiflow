@@ -62,6 +62,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
+		SendAllBootstrapAtStart:          util.AddressOf(false),
 		DebeziumDisableSchema:            util.AddressOf(false),
 		OpenProtocolConfig:               &OpenProtocolConfig{OutputOldValue: true},
 		DebeziumConfig:                   &DebeziumConfig{OutputOldValue: true},
