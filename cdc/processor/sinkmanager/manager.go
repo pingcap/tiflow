@@ -308,7 +308,11 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			}
 
 			if m.isMysqlBackend {
+<<<<<<< HEAD
 				// For MySQL backend, we should restart sink. Let owner to handle the error.
+=======
+				// For MySQL backend, we should restart changefeed. Let owner to handle the error.
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 				return errors.Trace(err)
 			}
 		}

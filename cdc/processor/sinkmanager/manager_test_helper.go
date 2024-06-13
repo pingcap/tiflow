@@ -70,7 +70,12 @@ func CreateManagerWithMemEngine(
 	go func() { handleError(sourceManager.Run(ctx)) }()
 	sourceManager.WaitForReady(ctx)
 
+<<<<<<< HEAD
 	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager, false)
+=======
+	sinkManager := New(changefeedID, changefeedInfo.SinkURI,
+		changefeedInfo.Config, up, schemaStorage, nil, sourceManager, false)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	go func() { handleError(sinkManager.Run(ctx)) }()
 	sinkManager.WaitForReady(ctx)
 
@@ -90,6 +95,11 @@ func NewManagerWithMemEngine(
 	mg := &entry.MockMountGroup{}
 	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
 	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
+<<<<<<< HEAD
 	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, redoMgr, sourceManager, false)
+=======
+	sinkManager := New(changefeedID, changefeedInfo.SinkURI,
+		changefeedInfo.Config, up, schemaStorage, redoMgr, sourceManager, false)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	return sinkManager, sourceManager, sortEngine
 }

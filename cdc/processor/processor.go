@@ -193,7 +193,11 @@ func (p *processor) AddTableSpan(
 	}
 
 	table := p.sinkManager.r.AddTable(
+<<<<<<< HEAD
 		span, startTs, p.changefeed.Info.TargetTs)
+=======
+		span, startTs, p.latestInfo.TargetTs)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
@@ -640,6 +644,16 @@ func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
 	return sink.IsMySQLCompatibleScheme(scheme), nil
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if p.initialized {
@@ -696,19 +710,32 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
+=======
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
+<<<<<<< HEAD
 		sortEngine, p.changefeed.Info.Config.BDRMode,
+=======
+		sortEngine, util.GetOrZero(cfConfig.BDRMode),
+		util.GetOrZero(cfConfig.EnableTableMonitor),
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 		isMysqlBackend)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 
 	p.sinkManager.r = sinkmanager.New(
+<<<<<<< HEAD
 		p.changefeedID, p.changefeed.Info, p.upstream,
+=======
+		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
+>>>>>>> e3412d9675 (puller(ticdc): fix wrong update splitting behavior after table scheduling (#11296))
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.spawn(stdCtx)
