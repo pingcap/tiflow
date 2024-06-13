@@ -34,8 +34,6 @@ import (
 
 const (
 	mTablePrefix = "Table"
-	// workerNumber is the woker number
-	workerNumber = 8
 )
 
 // Snapshot stores the source TiDB all schema information.
