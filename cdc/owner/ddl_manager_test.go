@@ -503,5 +503,4 @@ func TestCheckAndSendBootstarpMsgs(t *testing.T) {
 	require.True(t, mockDDLSink.ddlHistory[1].IsBootstrap)
 	require.Equal(t, ddl1.TableInfo.TableName, mockDDLSink.ddlHistory[0].TableInfo.TableName)
 	require.Equal(t, ddl2.TableInfo.TableName, mockDDLSink.ddlHistory[1].TableInfo.TableName)
-
 }
