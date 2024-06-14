@@ -127,8 +127,8 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 	return version, nil
 }
 
-// NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSnapshotFromMeta(
+// NewSnapshotFromMeta creates a schema snapshot from meta.
+func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
@@ -141,17 +141,7 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
-}
 
-// NewSnapshotFromMeta creates a schema snapshot from meta.
-func NewSnapshotFromMeta(
-	id model.ChangeFeedID,
-	meta *timeta.Meta,
-	currentTs uint64,
-	forceReplicate bool,
-	filter filter.Filter,
-) (*Snapshot, error) {
 	start := time.Now()
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
@@ -163,7 +153,7 @@ func NewSnapshotFromMeta(
 	tag := negative(currentTs)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
-			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
+			log.Debug("ignore database", zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
 			continue
 		}
 		vid := newVersionedID(dbinfo.ID, tag)
@@ -185,15 +175,15 @@ func NewSnapshotFromMeta(
 				continue
 			}
 
-			tbName := &timodel.CIStr{}
+			tbName := &timodel.TableNameInfo{}
 			err := json.Unmarshal(r.Value, tbName)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 
-			if filter.ShouldIgnoreTable(dbinfo.Name.O, tbName.O) {
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, tbName.Name.O) {
 				log.Debug("ignore table", zap.String("db", dbinfo.Name.O),
-					zap.String("table", tbName.O))
+					zap.String("table", tbName.Name.O))
 				continue
 			}
 
@@ -220,8 +210,8 @@ func NewSnapshotFromMeta(
 				target: tableInfo.ID,
 			})
 
-			ineligible := !tableInfo.IsEligible(forceReplicate)
-			if ineligible {
+			eligible := tableInfo.IsEligible(forceReplicate)
+			if !eligible {
 				snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -229,7 +219,7 @@ func NewSnapshotFromMeta(
 					vid := newVersionedID(partition.ID, tag)
 					vid.target = tableInfo
 					snap.inner.partitions.ReplaceOrInsert(vid)
-					if ineligible {
+					if !eligible {
 						snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
 				}
