@@ -248,9 +248,9 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	}
 	require.Len(t, mockDDLSink.ddlHistory, 2)
 	require.Equal(t, "RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`",
-		mockDDLSink.ddlHistory[0])
+		mockDDLSink.ddlHistory[0].Query)
 	require.Equal(t, "RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`",
-		mockDDLSink.ddlHistory[1])
+		mockDDLSink.ddlHistory[1].Query)
 
 	// mock all rename table statements have been done
 	mockDDLSink.resetDDLDone = false
@@ -460,4 +460,48 @@ func TestIsGlobalDDL(t *testing.T) {
 	for _, c := range cases {
 		require.Equal(t, c.ret, isGlobalDDL(c.ddl))
 	}
+}
+
+func TestCheckAndSendBootstarpMsgs(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ddl1 := helper.DDL2Event("create table test.tb1(id int primary key)")
+	ddl2 := helper.DDL2Event("create table test.tb2(id int primary key)")
+
+	ctx := context.Background()
+	dm := createDDLManagerForTest(t)
+	dm.schema = helper.SchemaStorage()
+	sendBootstrapIntervalInSec := int64(1)
+	sendBootstrapInMsgCount := int32(2)
+	protocol := "simple"
+	dm.sinkConfig.SendBootstrapIntervalInSec = &sendBootstrapIntervalInSec
+	dm.sinkConfig.SendBootstrapInMsgCount = &sendBootstrapInMsgCount
+	dm.sinkConfig.Protocol = &protocol
+	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
+
+	mockDDLSink := dm.ddlSink.(*mockDDLSink)
+	mockDDLSink.recordDDLHistory = true
+
+	// do not send all bootstrap messages
+	sendAllBootstrapAtStart := false
+	dm.sinkConfig.SendAllBootstrapAtStart = &sendAllBootstrapAtStart
+	send, err := dm.checkAndSendBootstarpMsgs(ctx)
+	require.Nil(t, err)
+	require.True(t, send)
+	require.False(t, dm.bootstraped)
+	require.Equal(t, 0, len(mockDDLSink.ddlHistory))
+
+	// send all bootstrap messages -> tb1 and tb2
+	sendAllBootstrapAtStart = true
+	dm.sinkConfig.SendAllBootstrapAtStart = &sendAllBootstrapAtStart
+	send, err = dm.checkAndSendBootstarpMsgs(ctx)
+	require.Nil(t, err)
+	require.True(t, send)
+	require.True(t, dm.bootstraped)
+	require.Equal(t, 2, len(mockDDLSink.ddlHistory))
+	require.True(t, mockDDLSink.ddlHistory[0].IsBootstrap)
+	require.True(t, mockDDLSink.ddlHistory[1].IsBootstrap)
+	require.Equal(t, ddl1.TableInfo.TableName, mockDDLSink.ddlHistory[0].TableInfo.TableName)
+	require.Equal(t, ddl2.TableInfo.TableName, mockDDLSink.ddlHistory[1].TableInfo.TableName)
+
 }
