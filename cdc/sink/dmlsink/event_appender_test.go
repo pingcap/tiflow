@@ -27,7 +27,6 @@ func TestRowChangeEventAppender(t *testing.T) {
 		TableName: model.TableName{
 			Schema:      "test",
 			Table:       "t1",
-			TableID:     1,
 			IsPartition: false,
 		},
 		Version: 1,
@@ -65,7 +64,6 @@ func TestTxnEventAppenderWithoutIgnoreStartTs(t *testing.T) {
 		TableName: model.TableName{
 			Schema:      "test",
 			Table:       "t1",
-			TableID:     1,
 			IsPartition: false,
 		},
 	}
@@ -208,7 +206,6 @@ func TestTxnEventAppenderWithIgnoreStartTs(t *testing.T) {
 		TableName: model.TableName{
 			Schema:      "test",
 			Table:       "t1",
-			TableID:     1,
 			IsPartition: false,
 		},
 	}

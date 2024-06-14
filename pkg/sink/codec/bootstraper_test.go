@@ -33,9 +33,8 @@ func getMockTableStatus(tableName string,
 	schema := "test"
 	tableInfo := &model.TableInfo{
 		TableName: model.TableName{
-			Schema:  schema,
-			Table:   tableName,
-			TableID: tableID,
+			Schema: schema,
+			Table:  tableName,
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:       tableID,

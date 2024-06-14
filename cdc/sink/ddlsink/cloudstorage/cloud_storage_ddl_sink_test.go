@@ -52,9 +52,8 @@ func TestWriteDDLEvent(t *testing.T) {
 		TableInfo: &model.TableInfo{
 			Version: 100,
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 20,
+				Schema: "test",
+				Table:  "table1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -115,9 +114,8 @@ func TestWriteCheckpointTs(t *testing.T) {
 		{
 			Version: 100,
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 20,
+				Schema: "test",
+				Table:  "table1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{

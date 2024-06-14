@@ -273,7 +273,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -298,7 +297,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -340,7 +338,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -374,7 +371,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								Columns: []*model.Column{
@@ -407,7 +403,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -441,7 +436,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -474,7 +468,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -508,7 +501,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -550,7 +542,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -575,7 +566,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								Columns: []*model.Column{
@@ -608,7 +598,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 							},
@@ -624,7 +613,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 							},
@@ -649,7 +637,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 							},
@@ -666,7 +653,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 							},
@@ -690,7 +676,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{
@@ -724,7 +709,6 @@ func TestLogHeapLess(t *testing.T) {
 								Table: &model.TableName{
 									Schema:      "test",
 									Table:       "table",
-									TableID:     1,
 									IsPartition: false,
 								},
 								PreColumns: []*model.Column{

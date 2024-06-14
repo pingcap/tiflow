@@ -125,7 +125,7 @@ type APIV2Helpers interface {
 		storage tidbkv.Storage, startTs uint64,
 		scheme string, topic string, protocol config.Protocol,
 	) (ineligibleTables,
-		eligibleTables []model.TableName, err error,
+		eligibleTables []model.TableName, tableIDs map[string]int64, err error,
 	)
 }
 
@@ -545,42 +545,47 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64,
 	scheme string, topic string, protocol config.Protocol,
-) ([]model.TableName, []model.TableName, error) {
+) ([]model.TableName, []model.TableName, map[string]int64, error) {
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tableInfos, ineligibleTables, eligibleTables, err := entry.
 		VerifyTables(f, storage, startTs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if !sink.IsMQScheme(scheme) {
-		return ineligibleTables, eligibleTables, nil
+		return ineligibleTables, eligibleTables, nil, nil
 	}
 
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = eventRouter.VerifyTables(tableInfos)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	selectors, err := columnselector.New(replicaConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = selectors.VerifyTables(tableInfos, eventRouter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if ctx.Err() != nil {
-		return nil, nil, errors.Trace(ctx.Err())
+		return nil, nil, nil, errors.Trace(ctx.Err())
 	}
 
-	return ineligibleTables, eligibleTables, nil
+	tableIDs := make(map[string]int64, len(tableInfos))
+	for _, table := range tableInfos {
+		tableIDs[table.TableName.String()] = table.ID
+	}
+
+	return ineligibleTables, eligibleTables, tableIDs, nil
 }

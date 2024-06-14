@@ -110,9 +110,8 @@ func TestAllTables(t *testing.T) {
 	require.Len(t, tableInfos, 1)
 	tableName := tableInfos[0].TableName
 	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 104,
+		Schema: "test",
+		Table:  "t1",
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
@@ -122,9 +121,8 @@ func TestAllTables(t *testing.T) {
 	require.Len(t, tableInfos, 1)
 	tableName = tableInfos[0].TableName
 	require.Equal(t, model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 104,
+		Schema: "test",
+		Table:  "t1",
 	}, tableName)
 }
 
@@ -210,9 +208,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		Type:     timodel.ActionCreateTable,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t1",
-				TableID: job.TableID,
+				Schema: "test",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -235,9 +232,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		Type:     timodel.ActionAddColumn,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t1",
-				TableID: job.TableID,
+				Schema: "test",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -248,9 +244,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		},
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t1",
-				TableID: job.TableID,
+				Schema: "test",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -334,9 +329,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		Type:     timodel.ActionRenameTable,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test1",
-				Table:   "t10",
-				TableID: t1TableID,
+				Schema: "test1",
+				Table:  "t10",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -346,9 +340,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		},
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test1",
-				Table:   "t1",
-				TableID: t1TableID,
+				Schema: "test1",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -364,9 +357,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		Type:     timodel.ActionRenameTable,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test1",
-				Table:   "t20",
-				TableID: t2TableID,
+				Schema: "test1",
+				Table:  "t20",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -376,9 +368,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		},
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test1",
-				Table:   "t2",
-				TableID: t2TableID,
+				Schema: "test1",
+				Table:  "t2",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -432,9 +423,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		Type:     timodel.ActionDropTable,
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t1",
-				TableID: t1DropJob.TableID,
+				Schema: "test",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -444,9 +434,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t1",
-				TableID: t1DropJob.TableID,
+				Schema: "test",
+				Table:  "t1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -467,9 +456,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		Type:     timodel.ActionDropTable,
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t2",
-				TableID: t2DropJob.TableID,
+				Schema: "test",
+				Table:  "t2",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -479,9 +467,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "t2",
-				TableID: t2DropJob.TableID,
+				Schema: "test",
+				Table:  "t2",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -553,9 +540,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		Type:     timodel.ActionDropView,
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "view1",
-				TableID: view1DropJob.TableID,
+				Schema: "test",
+				Table:  "view1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -565,9 +551,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "view1",
-				TableID: view1DropJob.TableID,
+				Schema: "test",
+				Table:  "view1",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -588,9 +573,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		Type:     timodel.ActionDropView,
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "view2",
-				TableID: view2DropJob.TableID,
+				Schema: "test",
+				Table:  "view2",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
@@ -600,9 +584,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "view2",
-				TableID: view2DropJob.TableID,
+				Schema: "test",
+				Table:  "view2",
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
