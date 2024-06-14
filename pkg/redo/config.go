@@ -202,12 +202,12 @@ func initExternalStorageForTest(ctx context.Context, uri url.URL) (storage.Exter
 	if ConsistentStorage(uri.Scheme) == consistentStorageS3 && len(uri.Host) == 0 {
 		// TODO: this branch is compatible with previous s3 logic and will be removed
 		// in the future.
-		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize,
+		return nil, errors.WrapError(errors.ErrStorageInitialize,
 			errors.Errorf("please specify the bucket for %+v", uri))
 	}
 	s, err := util.GetExternalStorageFromURI(ctx, uri.String())
 	if err != nil {
-		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
+		return nil, errors.WrapError(errors.ErrStorageInitialize, err)
 	}
 	return s, nil
 }
