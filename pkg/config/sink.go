@@ -231,6 +231,7 @@ func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
 		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
 }
 
+// ShouldSendAllBootstrapAtStart returns whether the should send all bootstrap message at changefeed start.
 func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
 	if s == nil {
 		return false
