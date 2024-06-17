@@ -175,13 +175,12 @@ func (w *writer) appendDDL(ddl *model.DDLEvent) {
 	// So to tell if a DDL is redundant or not, we must check the equivalence of
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == w.ddlWithMaxCommitTs {
-		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
+		log.Warn("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	w.ddlList = append(w.ddlList, ddl)
-	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	w.ddlWithMaxCommitTs = ddl
 }
 
@@ -372,13 +371,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				)
 			}
 
-			log.Info("DML event received",
-				zap.Int32("partition", partition),
-				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("commitTs", row.CommitTs),
-				zap.String("schema", row.TableInfo.GetSchemaName()),
-				zap.String("table", row.TableInfo.GetTableName()))
-
 			watermark := atomic.LoadUint64(&progress.watermark)
 			if row.CommitTs <= watermark {
 				log.Panic("RowChangedEvent fallback row, ignore it",
@@ -403,13 +395,14 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				eventGroup[tableID] = group
 			}
 			group.Append(row)
-			log.Debug("append row to event group",
-				zap.String("schema", row.TableInfo.GetSchemaName()),
-				zap.String("table", row.TableInfo.GetTableName()),
+			log.Debug("DML event received",
+				zap.Int32("partition", partition),
+				zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("commitTs", row.CommitTs),
 				zap.Int64("physicalTableID", row.PhysicalTableID),
 				zap.Int64("tableID", tableID),
-				zap.Uint64("commitTs", row.CommitTs),
-				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+				zap.String("schema", row.TableInfo.GetSchemaName()),
+				zap.String("table", row.TableInfo.GetTableName()))
 
 			if group.ShouldFlushEvents() {
 				g := group.Resolve(row.CommitTs)
@@ -439,7 +432,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Error(err))
 			}
 
-			log.Info("watermark event received",
+			log.Debug("watermark event received",
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", ts))

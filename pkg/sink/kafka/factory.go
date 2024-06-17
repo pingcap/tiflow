@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -283,19 +282,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
 	}
-	msg.Headers = append(msg.Headers, sarama.RecordHeader{
-		Key:   []byte("schema"),
-		Value: []byte(schema),
-	})
-	msg.Headers = append(msg.Headers, sarama.RecordHeader{
-		Key:   []byte("table"),
-		Value: []byte(table),
-	})
-	msg.Headers = append(msg.Headers, sarama.RecordHeader{
-		Key:   []byte("commitTs"),
-		Value: []byte(strconv.FormatUint(commitTs, 10)),
-	})
-
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
