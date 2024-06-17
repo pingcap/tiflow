@@ -203,6 +203,7 @@ func TestGenKeys(t *testing.T) {
 		require.Equal(t, tc.expected, keys)
 	}
 }
+<<<<<<< HEAD
 
 func TestSortAndDedupHash(t *testing.T) {
 	// If a transaction contains multiple rows, those rows may generate the same hash
@@ -230,3 +231,5 @@ func TestSortAndDedupHash(t *testing.T) {
 		require.Equal(t, tc.expected, sortAndDedupHashes(tc.hashes, 8))
 	}
 }
+=======
+>>>>>>> aed7768f70 (pkg/causality(cdc): refactor and simplify conflict detector (#10954))
