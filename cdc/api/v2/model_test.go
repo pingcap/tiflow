@@ -80,6 +80,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
+		AddTableBatchSize: config.DefaultAddTableBatchSize,
+		MaxTableCount:     config.DefaultMaxTableCount,
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
 			Scheduler.EnableTableAcrossNodes,
 		RegionThreshold: config.GetDefaultReplicaConfig().

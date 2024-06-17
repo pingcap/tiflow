@@ -502,6 +502,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
+			AddTableBatchSize:      c.Scheduler.AddTableBatchSize,
+			MaxTableCount:          c.Scheduler.MaxTableCount,
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
 			RegionThreshold:        c.Scheduler.RegionThreshold,
 			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
@@ -817,6 +819,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
+			AddTableBatchSize:      cloned.Scheduler.AddTableBatchSize,
+			MaxTableCount:          cloned.Scheduler.MaxTableCount,
 			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
 			RegionThreshold:        cloned.Scheduler.RegionThreshold,
 			WriteKeyThreshold:      cloned.Scheduler.WriteKeyThreshold,
@@ -1018,6 +1022,10 @@ type ConsistentMemoryUsage struct {
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
+	// AddTableBatchSize is the batch size of adding tables on each tick.
+	AddTableBatchSize int `json:"add_table_batch_size"`
+	// MaxTableCount is the maximum number of tables that a capture can be scheduled.
+	MaxTableCount int `json:"max_table_count"`
 	// EnableTableAcrossNodes set true to split one table to multiple spans and
 	// distribute to multiple TiCDC nodes.
 	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
