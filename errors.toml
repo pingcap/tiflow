@@ -906,6 +906,11 @@ error = '''
 cdc server is not ready
 '''
 
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
+'''
+
 ["CDC:ErrSinkInvalidConfig"]
 error = '''
 sink config invalid

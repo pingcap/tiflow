@@ -31,6 +31,10 @@ definitions:
         type: string
       output-column-id:
         type: boolean
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
+        type: boolean
       worker-count:
         type: integer
     type: object
@@ -133,6 +137,10 @@ definitions:
         $ref: '#/definitions/config.LargeMessageHandleConfig'
       max-message-bytes:
         type: integer
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
+        type: boolean
       partition-num:
         type: integer
       read-timeout:
@@ -292,6 +300,10 @@ definitions:
           Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
           operation will be marked as failed
         type: integer
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
+        type: boolean
       pulsar-producer-cache-size:
         description: PulsarProducerCacheSize is the size of the cache of pulsar producers
         type: integer
@@ -737,6 +749,8 @@ definitions:
         type: string
       output_column_id:
         type: boolean
+      output_raw_change_event:
+        type: boolean
       worker_count:
         type: integer
     type: object
@@ -933,6 +947,8 @@ definitions:
         $ref: '#/definitions/v2.LargeMessageHandleConfig'
       max_message_bytes:
         type: integer
+      output_raw_change_event:
+        type: boolean
       partition_num:
         type: integer
       read_timeout:
@@ -1078,6 +1094,8 @@ definitions:
         $ref: '#/definitions/v2.PulsarOAuth2'
       operation-timeout:
         type: integer
+      output-raw-change-event:
+        type: boolean
       pulsar-producer-cache-size:
         type: integer
       pulsar-version:
