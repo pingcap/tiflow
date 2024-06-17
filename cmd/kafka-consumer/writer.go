@@ -410,6 +410,26 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int64("tableID", tableID),
 				zap.Uint64("commitTs", row.CommitTs),
 				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+
+			if group.ShouldFlushEvents() {
+				g := group.Resolve(row.CommitTs)
+				tableSink, ok := progress.tableSinkMap.Load(tableID)
+				if !ok {
+					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
+						model.DefaultChangeFeedID("kafka-consumer"),
+						spanz.TableIDToComparableSpan(tableID),
+						g.events[0].CommitTs,
+					)
+					progress.tableSinkMap.Store(tableID, tableSink)
+				}
+				tableSink.(tablesink.TableSink).AppendRowChangedEvents(g.events...)
+				log.Warn("too much events buffered, should flush them to reduce memory usage",
+					zap.Uint64("resolvedTs", row.CommitTs), zap.Int64("tableID", tableID),
+					zap.Int("count", len(g.events)), zap.Int("bytes", g.bytes),
+					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+				atomic.StoreUint64(&progress.watermark, row.CommitTs)
+				needFlush = true
+			}
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -433,7 +453,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 
 			for tableID, group := range eventGroup {
-				events := group.Resolve(ts)
+				g := group.Resolve(ts)
+				events := g.events
 				if len(events) == 0 {
 					continue
 				}
@@ -448,7 +469,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
 				log.Debug("append row changed events to table sink",
-					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
+					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID),
+					zap.Int("count", len(events)), zap.Int("bytes", g.bytes),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
