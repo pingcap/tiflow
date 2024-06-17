@@ -198,7 +198,7 @@ func TestParseCfg(t *testing.T) {
 				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
-				AddTableBatchSize:    50,
+				AddTableBatchSize:    0,
 			},
 			CDCV2: &config.CDCV2{
 				Enable:          false,
@@ -345,7 +345,7 @@ check-balance-interval = "10s"
 				CollectStatsTick:     201,
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
-				AddTableBatchSize:    50,
+				AddTableBatchSize:    0,
 			},
 			CDCV2: &config.CDCV2{
 				Enable:          false,
@@ -484,7 +484,7 @@ cert-allowed-cn = ["dd","ee"]
 				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
-				AddTableBatchSize:    50,
+				AddTableBatchSize:    0,
 			},
 			CDCV2: &config.CDCV2{
 				Enable:          false,
@@ -549,7 +549,7 @@ unknown3 = 3
 			CollectStatsTick:     200,
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
-			AddTableBatchSize:    50,
+			AddTableBatchSize:    0,
 		},
 		CDCV2: &config.CDCV2{
 			Enable:          false,
