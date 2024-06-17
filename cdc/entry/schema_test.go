@@ -89,42 +89,68 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Equal(t, tableIDs, expectedTableIDs)
 }
 
+func TestNewSchemaStorage(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"test.t1"}
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+
+	// add table before create schema storage
+	job1 := helper.DDL2Job("create table test.t1 (id int primary key)")
+	helper.DDL2Job("create table test.t2 (id int primary key)")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
+	require.Nil(t, err)
+	require.NotNil(t, schema)
+	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	require.Equal(t, job1.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
+}
+
 func TestAllTables(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	// add table before create schema storage
+	job := helper.DDL2Job("create table test.dongment (id int primary key)")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 0)
+	require.Len(t, tableInfos, 1)
+	require.Equal(t, job.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
 	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	job = helper.DDL2Job("create table test.t1(id int primary key)")
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 1)
-	tableName := tableInfos[0].TableName
+	require.Len(t, tableInfos, 2)
+	tableName := tableInfos[1].TableName
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 104,
+		TableID: 106,
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 1)
-	tableName = tableInfos[0].TableName
+	require.Len(t, tableInfos, 2)
+	tableName = tableInfos[1].TableName
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 104,
+		TableID: 106,
 	}, tableName)
 }
 
