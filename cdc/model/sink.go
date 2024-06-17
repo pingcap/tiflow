@@ -290,6 +290,21 @@ type RedoRowChangedEvent struct {
 	Columns    []*RedoColumn    `msg:"columns"`
 }
 
+// IsDelete returns true if the row is a delete event
+func (r *RedoRowChangedEvent) IsDelete() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) == 0
+}
+
+// IsInsert returns true if the row is an insert event
+func (r *RedoRowChangedEvent) IsInsert() bool {
+	return len(r.PreColumns) == 0 && len(r.Columns) != 0
+}
+
+// IsUpdate returns true if the row is an update event
+func (r *RedoRowChangedEvent) IsUpdate() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) != 0
+}
+
 // RedoDDLEvent represents DDL event used in redo log persistent
 type RedoDDLEvent struct {
 	DDL       *DDLEvent `msg:"ddl"`

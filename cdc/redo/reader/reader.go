@@ -382,11 +382,12 @@ func (h logHeap) Less(i, j int) bool {
 			return h[i].data.RedoRow.Row.StartTs < h[j].data.RedoRow.Row.StartTs
 		}
 		// in the same txn, we need to sort by delete/update/insert order
-		if h[i].data.RedoRow.Row.IsDelete() {
+		if h[i].data.RedoRow.IsDelete() {
 			return true
-		} else if h[i].data.RedoRow.Row.IsUpdate() {
-			return !h[j].data.RedoRow.Row.IsDelete()
+		} else if h[i].data.RedoRow.IsUpdate() {
+			return !h[j].data.RedoRow.IsDelete()
 		}
+
 		return false
 	}
 

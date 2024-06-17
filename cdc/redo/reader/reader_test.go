@@ -267,11 +267,16 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
@@ -292,20 +297,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
@@ -334,20 +349,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
@@ -401,20 +426,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
@@ -435,11 +470,16 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 1,
 									},
@@ -468,20 +508,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
@@ -544,11 +594,16 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 1,
 									},
@@ -684,20 +739,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 2,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
@@ -718,20 +783,30 @@ func TestLogHeapLess(t *testing.T) {
 									TableID:     1,
 									IsPartition: false,
 								},
-								PreColumns: []*model.Column{
-									{
+							},
+							PreColumns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 1,
 									},
 								},
-								Columns: []*model.Column{
-									{
+							},
+							Columns: []*model.RedoColumn{
+								{
+									Column: &model.Column{
 										Name:  "col-1",
 										Value: 1,
-									}, {
+									},
+								},
+								{
+									Column: &model.Column{
 										Name:  "col-2",
 										Value: 3,
 									},
