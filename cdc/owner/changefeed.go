@@ -811,6 +811,20 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.initialized.Store(false)
 	c.isReleased = true
 
+	// when closing a changefeed, we must clean the warningCh.
+	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
+OUT:
+	for {
+		select {
+		case err := <-c.warningCh:
+			log.Warn("drain owner warnings",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Error(err))
+		default:
+			break OUT
+		}
+	}
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
