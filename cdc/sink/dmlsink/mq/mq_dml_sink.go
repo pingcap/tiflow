@@ -72,6 +72,7 @@ type dmlSink struct {
 
 	scheme               string
 	outputRawChangeEvent bool
+	splitByPartitionKey  bool
 }
 
 func newDMLSink(
@@ -86,6 +87,7 @@ func newDMLSink(
 	protocol config.Protocol,
 	scheme string,
 	outputRawChangeEvent bool,
+	splitByPartitionKey bool,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -101,6 +103,7 @@ func newDMLSink(
 		dead:                 make(chan struct{}),
 		scheme:               scheme,
 		outputRawChangeEvent: outputRawChangeEvent,
+		splitByPartitionKey:  splitByPartitionKey,
 	}
 	s.alive.transformer = transformer
 	s.alive.eventRouter = eventRouter
@@ -179,23 +182,26 @@ func (s *dmlSink) writeEvent(txn *dmlsink.CallbackableEvent[*model.SingleTableTx
 	tableInfo := txn.Event.Rows[0].TableInfo
 	partitionDispatcher := s.alive.eventRouter.GetPartitionDispatcher(tableInfo.TableName.Schema, tableInfo.TableName.Table)
 
-	// Split the update event to delete and insert event if the partition key is updated.
-	rows := make([]*model.RowChangedEvent, 0, len(txn.Event.Rows))
-	for _, row := range txn.Event.Rows {
-		changed, err := partitionDispatcher.IsPartitionKeyUpdated(row)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !changed {
-			rows = append(rows, row)
-			continue
-		}
+	rows := txn.Event.Rows
+	if s.splitByPartitionKey {
+		// Split the update event to delete and insert event if the partition key is updated.
+		rows = make([]*model.RowChangedEvent, 0, len(txn.Event.Rows))
+		for _, row := range txn.Event.Rows {
+			changed, err := partitionDispatcher.IsPartitionKeyUpdated(row)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !changed {
+				rows = append(rows, row)
+				continue
+			}
 
-		deleteEvent, insertEvent, err := model.SplitUpdateEvent(row)
-		if err != nil {
-			return errors.Trace(err)
+			deleteEvent, insertEvent, err := model.SplitUpdateEvent(row)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			rows = append(rows, deleteEvent, insertEvent)
 		}
-		rows = append(rows, deleteEvent, insertEvent)
 	}
 
 	rowCallback := toRowCallback(txn.Callback, uint64(len(rows)))

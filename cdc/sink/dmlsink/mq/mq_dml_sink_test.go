@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,4 +112,128 @@ func TestWriteEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, errCh, 0)
 	require.Len(t, s.alive.worker.producer.(*dmlproducer.MockDMLProducer).GetAllEvents(), 3000)
+}
+
+func TestWriteEventsSplitByPartitionKey(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
+		"&max-message-bytes=1048576&partition-num=1" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
+
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		SplitByPartitionKey: util.AddressOf(true),
+	}
+
+	cases := []struct {
+		rule *config.DispatchRule
+		res  int
+	}{
+		{
+			rule: &config.DispatchRule{
+				Matcher:       []string{"test.t"},
+				PartitionRule: "default",
+			},
+			res: 3002,
+		}, {
+			rule: &config.DispatchRule{
+				Matcher:       []string{"test.t"},
+				PartitionRule: "columns",
+				Columns:       []string{"a"},
+			},
+			res: 3003,
+		}, {
+			rule: &config.DispatchRule{
+				Matcher:       []string{"test.t"},
+				PartitionRule: "index-value",
+			},
+			res: 3003,
+		}, {
+			rule: &config.DispatchRule{
+				Matcher:       []string{"test.t"},
+				PartitionRule: "ts",
+			},
+			res: 3002,
+		}, {
+			rule: &config.DispatchRule{
+				Matcher:       []string{"test.t"},
+				PartitionRule: "table",
+			},
+			res: 3002,
+		},
+	}
+
+	for _, testCase := range cases {
+		testName := testCase.rule.PartitionRule
+		replicaConfig.Sink.DispatchRules = []*config.DispatchRule{testCase.rule}
+		require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+		errCh := make(chan error, 1)
+
+		ctx = context.WithValue(ctx, "testing.T", t)
+		changefeedID := model.DefaultChangeFeedID("test")
+		s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
+			kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
+		require.NoError(t, err)
+		require.NotNil(t, s)
+		defer s.Close()
+
+		helper := entry.NewSchemaTestHelper(t)
+		defer helper.Close()
+
+		sql := `create table test.t(a varchar(255) primary key)`
+		job := helper.DDL2Job(sql)
+		tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+		tableStatus := state.TableSinkSinking
+		row := &model.RowChangedEvent{
+			CommitTs:  1,
+			TableInfo: tableInfo,
+			Columns:   model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "aa"}}, tableInfo),
+		}
+
+		// Insert
+		events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)
+		for i := 0; i < 3000; i++ {
+			events = append(events, &dmlsink.TxnCallbackableEvent{
+				Event: &model.SingleTableTxn{
+					Rows: []*model.RowChangedEvent{row},
+				},
+				Callback:  func() {},
+				SinkState: &tableStatus,
+			})
+		}
+		// Update
+		events = append(events, &dmlsink.TxnCallbackableEvent{
+			Event: &model.SingleTableTxn{
+				Rows: []*model.RowChangedEvent{
+					{ // case 1: partition key not updated
+						CommitTs:   1,
+						TableInfo:  tableInfo,
+						Columns:    model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "aa"}}, tableInfo),
+						PreColumns: model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "aa"}}, tableInfo),
+					},
+					{ // case 2: partition key updated
+						CommitTs:   1,
+						TableInfo:  tableInfo,
+						Columns:    model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "bb"}}, tableInfo),
+						PreColumns: model.Columns2ColumnDatas([]*model.Column{{Name: "a", Value: "aa"}}, tableInfo),
+					},
+				},
+			},
+			Callback:  func() {},
+			SinkState: &tableStatus,
+		})
+
+		err = s.WriteEvents(events...)
+		// Wait for the events to be received by the worker.
+		time.Sleep(time.Second)
+		require.NoError(t, err)
+		require.Len(t, errCh, 0)
+		require.Equal(t, testCase.res, len(s.alive.worker.producer.(*dmlproducer.MockDMLProducer).GetAllEvents()), testName)
+	}
 }

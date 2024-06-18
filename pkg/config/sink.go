@@ -450,6 +450,7 @@ type KafkaConfig struct {
 
 	// OutputRawChangeEvent controls whether to split the update pk/uk events.
 	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+	SplitByPartitionKey  *bool `toml:"split-by-partition-key" json:"split-by-partition-key,omitempty"`
 }
 
 // GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
@@ -458,6 +459,14 @@ func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 		return false
 	}
 	return *k.OutputRawChangeEvent
+}
+
+// GetSplitByPartitionKey returns the value of SplitByPartitionKey
+func (k *KafkaConfig) GetSplitByPartitionKey() bool {
+	if k == nil || k.SplitByPartitionKey == nil {
+		return false
+	}
+	return *k.SplitByPartitionKey
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -614,6 +623,8 @@ type PulsarConfig struct {
 
 	// OutputRawChangeEvent controls whether to split the update pk/uk events.
 	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+	// SplitByPartitionKey controls whether to split the events by partition key.
+	SplitByPartitionKey *bool `toml:"split-by-partition-key" json:"split-by-partition-key,omitempty"`
 
 	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
 	// This parameter is a part of the `sink-uri`. Internal use only.
@@ -628,6 +639,14 @@ func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
 		return false
 	}
 	return *c.OutputRawChangeEvent
+}
+
+// GetSplitByPartitionKey returns the value of SplitByPartitionKey
+func (c *PulsarConfig) GetSplitByPartitionKey() bool {
+	if c == nil || c.SplitByPartitionKey == nil {
+		return false
+	}
+	return *c.SplitByPartitionKey
 }
 
 // MaskSensitiveData masks sensitive data in PulsarConfig
