@@ -112,21 +112,7 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, par
 			Partition: int32(i),
 		}
 	}
-
-	err := p.producer.SendMessages(msgs)
-	if err != nil {
-		log.Error("write checkpoint failed", zap.Uint64("checkpoint", message.Ts))
-		return err
-	}
-
-	fields := make([]zap.Field, 0, partitionNum*2+1)
-	fields = append(fields, zap.Uint64("checkpoint", message.Ts))
-	for _, msg := range msgs {
-		fields = append(fields, zap.Int32("partition", msg.Partition))
-		fields = append(fields, zap.Int64("offset", msg.Offset))
-	}
-	log.Info("write checkpoint success", fields...)
-	return nil
+	return p.producer.SendMessages(msgs)
 }
 
 func (p *saramaSyncProducer) Close() {
@@ -251,13 +237,6 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 			}
-
-			log.Info("DML message response received",
-				zap.Int32("partition", ack.Partition),
-				zap.Int64("offset", ack.Offset),
-				zap.String("schema", string(ack.Headers[0].Value)),
-				zap.String("table", string(ack.Headers[1].Value)),
-				zap.String("commitTs", string(ack.Headers[2].Value)))
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info

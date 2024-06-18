@@ -227,7 +227,6 @@ func TestSyncWriterSendMessages(t *testing.T) {
 			require.Equal(t, 3, len(msgs))
 			return errors.New("fake")
 		})
-
 	message := &common.Message{Key: []byte{'1'}, Value: []byte{}}
 	require.NotNil(t, w.SendMessages(context.Background(), "topic", 3, message))
 }

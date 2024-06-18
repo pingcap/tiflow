@@ -15,12 +15,8 @@ package simple
 
 import (
 	"context"
-	"database/sql"
 	"database/sql/driver"
 	"fmt"
-	cerror "github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -85,109 +81,6 @@ func TestEncodeCheckpoint(t *testing.T) {
 			require.Equal(t, uint64(checkpoint), ts)
 		}
 	}
-}
-
-func TestABBE2E(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	query := "create table test.t1(pk varchar(32) not null, sk varchar(32) not null, ts timestamp(6) not null, primary key(pk, sk, ts))"
-	createTableDDLEvent := helper.DDL2Event(query)
-
-	query = "insert into test.t1 values('7413410', 't8_15', '2024-06-06 04:18:31.856192')"
-	insertEvent := helper.DML2Event(query, "test", "t1")
-
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.EncodingFormat = common.EncodingFormatAvro
-
-	b, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := b.Build()
-
-	dec, err := NewDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	m, err := enc.EncodeDDLEvent(createTableDDLEvent)
-	require.NoError(t, err)
-
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
-
-	decodedDDL, err := dec.NextDDLEvent()
-	require.NoError(t, err)
-
-	originFlags := createTableDDLEvent.TableInfo.ColumnsFlag
-	obtainedFlags := decodedDDL.TableInfo.ColumnsFlag
-
-	for colID, expected := range originFlags {
-		name := createTableDDLEvent.TableInfo.ForceGetColumnName(colID)
-		actualID := decodedDDL.TableInfo.ForceGetColumnIDByName(name)
-		actual := obtainedFlags[actualID]
-		require.Equal(t, expected, actual)
-	}
-
-	err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
-
-	messages := enc.Build()
-	require.Len(t, messages, 1)
-
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
-
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
-	for i, expected := range insertEvent.Columns {
-		obtained := decodedRow.Columns[i]
-		require.EqualValues(t, expected.Value, obtained.Value)
-	}
-
-	dns := "root@tcp(127.0.0.1:3306)/?parseTime=true&loc=Local"
-	db, err := openDB(ctx, dns)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-
-	conn, err := db.Conn(ctx)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	_, err = conn.ExecContext(ctx, decodedDDL.Query)
-	require.NoError(t, err)
-
-	_, err = conn.ExecContext(ctx, "insert into test.t1 values ('7413410', 't8_15', '2024-06-06 04:18:31.856192')")
-	require.NoError(t, err)
-}
-
-func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Error("open db failed", zap.Error(err))
-		return nil, cerror.Trace(err)
-	}
-
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(10 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
-		return nil, cerror.Trace(err)
-	}
-	log.Info("open db success", zap.String("dsn", dsn))
-	return db, nil
 }
 
 func TestEncodeDMLEnableChecksum(t *testing.T) {
