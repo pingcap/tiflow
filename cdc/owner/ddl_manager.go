@@ -172,7 +172,7 @@ func newDDLManager(
 	}
 }
 
-func (m *ddlManager) checkAndSendBootstarpMsgs(ctx context.Context) (bool, error) {
+func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error) {
 	if !m.shouldSendAllBootstrapAtStart || m.bootstraped {
 		return true, nil
 	}
@@ -224,7 +224,7 @@ func (m *ddlManager) tick(
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
 
-	ok, err := m.checkAndSendBootstarpMsgs(ctx)
+	ok, err := m.checkAndSendBootstrapMsgs(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
