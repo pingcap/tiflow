@@ -138,16 +138,15 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 // GetAddTableBatchSize is used to keep backward compatibility. And c.ChangefeedSettings.AddTableBatchSize
 // is take procedure over c.AddTableBatchSize, since the latter is deprecated.
 func (c *SchedulerConfig) GetAddTableBatchSize() int {
-	batch := c.ChangefeedSettings.AddTableBatchSize
-	if batch == 0 {
-		batch = c.AddTableBatchSize
+	if c.ChangefeedSettings == nil || c.ChangefeedSettings.AddTableBatchSize == 0 {
+		return c.AddTableBatchSize
 	}
-	return batch
+	return c.ChangefeedSettings.AddTableBatchSize
 }
 
 // GetMaxTableCount is used to keep backward compatibility.
 func (c *SchedulerConfig) GetMaxTableCount() int {
-	if c.ChangefeedSettings.MaxTableCount <= 0 {
+	if c.ChangefeedSettings == nil || c.ChangefeedSettings.MaxTableCount <= 0 {
 		return DefaultMaxTableCount
 	}
 	return c.ChangefeedSettings.MaxTableCount
