@@ -318,6 +318,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				AuthTLSCertificatePath:  c.Sink.PulsarConfig.AuthTLSCertificatePath,
 				AuthTLSPrivateKeyPath:   c.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
 				OutputRawChangeEvent:    c.Sink.PulsarConfig.OutputRawChangeEvent,
+				SplitByPartitionKey:     c.Sink.PulsarConfig.SplitByPartitionKey,
 			}
 			if c.Sink.PulsarConfig.OAuth2 != nil {
 				pulsarConfig.OAuth2 = &config.OAuth2{
@@ -404,6 +405,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				LargeMessageHandle:           largeMessageHandle,
 				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 				OutputRawChangeEvent:         c.Sink.KafkaConfig.OutputRawChangeEvent,
+				SplitByPartitionKey:          c.Sink.KafkaConfig.SplitByPartitionKey,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -674,6 +676,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				LargeMessageHandle:           largeMessageHandle,
 				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 				OutputRawChangeEvent:         cloned.Sink.KafkaConfig.OutputRawChangeEvent,
+				SplitByPartitionKey:          cloned.Sink.KafkaConfig.SplitByPartitionKey,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -717,6 +720,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				AuthTLSCertificatePath:  cloned.Sink.PulsarConfig.AuthTLSCertificatePath,
 				AuthTLSPrivateKeyPath:   cloned.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
 				OutputRawChangeEvent:    cloned.Sink.PulsarConfig.OutputRawChangeEvent,
+				SplitByPartitionKey:     cloned.Sink.PulsarConfig.SplitByPartitionKey,
 			}
 			if cloned.Sink.PulsarConfig.OAuth2 != nil {
 				pulsarConfig.OAuth2 = &PulsarOAuth2{
@@ -1210,6 +1214,7 @@ type PulsarConfig struct {
 	AuthTLSPrivateKeyPath   *string       `json:"auth-tls-private-key-path,omitempty"`
 	OAuth2                  *PulsarOAuth2 `json:"oauth2,omitempty"`
 	OutputRawChangeEvent    *bool         `json:"output-raw-change-event,omitempty"`
+	SplitByPartitionKey     *bool         `json:"split-by-partition-key,omitempty"`
 }
 
 // PulsarOAuth2 is the configuration for OAuth2
@@ -1260,6 +1265,7 @@ type KafkaConfig struct {
 	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
 	OutputRawChangeEvent         *bool                     `json:"output_raw_change_event,omitempty"`
+	SplitByPartitionKey          *bool                     `json:"split_by_partition_key,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
