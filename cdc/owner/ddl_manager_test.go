@@ -462,7 +462,7 @@ func TestIsGlobalDDL(t *testing.T) {
 	}
 }
 
-func TestCheckAndSendBootstarpMsgs(t *testing.T) {
+func TestCheckAndSendBootstrapMsgs(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ddl1 := helper.DDL2Event("create table test.tb1(id int primary key)")
@@ -471,30 +471,21 @@ func TestCheckAndSendBootstarpMsgs(t *testing.T) {
 	ctx := context.Background()
 	dm := createDDLManagerForTest(t)
 	dm.schema = helper.SchemaStorage()
-	sendBootstrapIntervalInSec := int64(1)
-	sendBootstrapInMsgCount := int32(2)
-	protocol := "simple"
-	dm.sinkConfig.SendBootstrapIntervalInSec = &sendBootstrapIntervalInSec
-	dm.sinkConfig.SendBootstrapInMsgCount = &sendBootstrapInMsgCount
-	dm.sinkConfig.Protocol = &protocol
 	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
 
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 	mockDDLSink.recordDDLHistory = true
 
 	// do not send all bootstrap messages
-	sendAllBootstrapAtStart := false
-	dm.sinkConfig.SendAllBootstrapAtStart = &sendAllBootstrapAtStart
-	send, err := dm.checkAndSendBootstarpMsgs(ctx)
+	send, err := dm.checkAndSendBootstrapMsgs(ctx)
 	require.Nil(t, err)
 	require.True(t, send)
 	require.False(t, dm.bootstraped)
 	require.Equal(t, 0, len(mockDDLSink.ddlHistory))
 
 	// send all bootstrap messages -> tb1 and tb2
-	sendAllBootstrapAtStart = true
-	dm.sinkConfig.SendAllBootstrapAtStart = &sendAllBootstrapAtStart
-	send, err = dm.checkAndSendBootstarpMsgs(ctx)
+	dm.shouldSendAllBootstrapAtStart = true
+	send, err = dm.checkAndSendBootstrapMsgs(ctx)
 	require.Nil(t, err)
 	require.True(t, send)
 	require.True(t, dm.bootstraped)
