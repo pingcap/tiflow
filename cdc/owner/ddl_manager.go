@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
@@ -132,8 +131,8 @@ type ddlManager struct {
 	BDRMode       bool
 	ddlResolvedTs model.Ts
 
-	sinkConfig  *config.SinkConfig
-	bootstraped bool
+	shouldSendAllBootstrapAtStart bool
+	bootstraped                   bool
 }
 
 func newDDLManager(
@@ -147,7 +146,7 @@ func newDDLManager(
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	bdrMode bool,
-	sinkConfig *config.SinkConfig,
+	shouldSendAllBootstrapAtStart bool,
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
@@ -157,24 +156,24 @@ func newDDLManager(
 		zap.Bool("bdrMode", bdrMode))
 
 	return &ddlManager{
-		changfeedID:     changefeedID,
-		ddlSink:         ddlSink,
-		filter:          filter,
-		ddlPuller:       ddlPuller,
-		schema:          schema,
-		redoDDLManager:  redoManager,
-		redoMetaManager: redoMetaManager,
-		startTs:         startTs,
-		checkpointTs:    checkpointTs,
-		ddlResolvedTs:   startTs,
-		BDRMode:         bdrMode,
-		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
-		sinkConfig:      sinkConfig,
+		changfeedID:                   changefeedID,
+		ddlSink:                       ddlSink,
+		filter:                        filter,
+		ddlPuller:                     ddlPuller,
+		schema:                        schema,
+		redoDDLManager:                redoManager,
+		redoMetaManager:               redoMetaManager,
+		startTs:                       startTs,
+		checkpointTs:                  checkpointTs,
+		ddlResolvedTs:                 startTs,
+		BDRMode:                       bdrMode,
+		pendingDDLs:                   make(map[model.TableName][]*model.DDLEvent),
+		shouldSendAllBootstrapAtStart: shouldSendAllBootstrapAtStart,
 	}
 }
 
 func (m *ddlManager) checkAndSendBootstarpMsgs(ctx context.Context) (bool, error) {
-	if !m.sinkConfig.ShouldSendAllBootstrapAtStart() || m.bootstraped {
+	if !m.shouldSendAllBootstrapAtStart || m.bootstraped {
 		return true, nil
 	}
 	start := time.Now()
@@ -200,7 +199,7 @@ func (m *ddlManager) checkAndSendBootstarpMsgs(ctx context.Context) (bool, error
 			TableInfo:   table,
 			IsBootstrap: true,
 		}
-		err := m.ddlSink.emitBootstarp(ctx, ddlEvent)
+		err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
 		if err != nil {
 			return false, errors.Trace(err)
 		}

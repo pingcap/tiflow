@@ -155,7 +155,7 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockDDLSink) emitBootstarp(ctx context.Context, bootstrap *model.DDLEvent) error {
+func (m *mockDDLSink) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
 	if m.recordDDLHistory {
 		m.ddlHistory = append(m.ddlHistory, bootstrap)
 	}
