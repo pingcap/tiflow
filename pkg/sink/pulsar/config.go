@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -64,9 +65,15 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 	if err != nil {
 		return nil, err
 	}
+	brokerScheme := sinkURI.Scheme
+	switch brokerScheme {
+	case sink.PulsarHttpScheme:
+		brokerScheme = "http"
+	case sink.PulsarHttpsScheme:
+		brokerScheme = "https"
+	}
 
-	c.SinkURI = sinkURI
-	c.BrokerURL = sinkURI.Scheme + "://" + sinkURI.Host
+	c.BrokerURL = brokerScheme + "://" + sinkURI.Host
 
 	if pulsarConfig == nil {
 		log.L().Debug("new pulsar config", zap.Any("config", c))
