@@ -709,7 +709,7 @@ LOOP2:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		util.GetOrZero(cfInfo.Config.BDRMode),
-		cfInfo.Config.Sink,
+		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
 	)
 
 	// create scheduler

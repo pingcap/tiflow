@@ -54,7 +54,7 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
-	emitBootstarp(ctx context.Context, bootstrap *model.DDLEvent) error
+	emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
 }
@@ -470,7 +470,7 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 	return result, nil
 }
 
-func (s *ddlSinkImpl) emitBootstarp(ctx context.Context, bootstrap *model.DDLEvent) error {
+func (s *ddlSinkImpl) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
 	if err := s.makeSinkReady(ctx); err != nil {
 		return errors.Trace(err)
 	}

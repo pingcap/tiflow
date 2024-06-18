@@ -51,7 +51,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
 		false,
-		cfg.Sink,
+		false,
 	)
 	return res
 }
