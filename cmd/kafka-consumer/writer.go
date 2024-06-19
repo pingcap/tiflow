@@ -355,11 +355,21 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if w.option.protocol == config.ProtocolSimple && row == nil {
 				continue
 			}
+
+			tableID := row.PhysicalTableID
+			// simple protocol decoder should have set the table id already.
+			if w.option.protocol != config.ProtocolSimple {
+				tableID = w.fakeTableIDGenerator.
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.PhysicalTableID)
+				row.TableInfo.TableName.TableID = tableID
+			}
+
 			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
 			if err != nil {
 				log.Panic("cannot calculate partition for the row changed event",
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Int32("partitionNum", w.option.partitionNum), zap.Error(err), zap.Any("event", row))
+					zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", tableID),
+					zap.Error(err), zap.Any("event", row))
 			}
 			if partition != target {
 				log.Panic("RowChangedEvent dispatched to wrong partition",
@@ -367,6 +377,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Int32("expected", target),
 					zap.Int32("partitionNum", w.option.partitionNum),
 					zap.Any("offset", message.TopicPartition.Offset),
+					zap.Int64("tableID", tableID),
 					zap.Any("row", row),
 				)
 			}
@@ -377,18 +388,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("watermark", watermark),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
+					zap.Int64("tableID", tableID),
 					zap.String("schema", row.TableInfo.GetSchemaName()),
 					zap.String("table", row.TableInfo.GetTableName()))
 			}
-
-			tableID := row.PhysicalTableID
-			// simple protocol decoder should have set the table id already.
-			if w.option.protocol != config.ProtocolSimple {
-				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.PhysicalTableID)
-				row.TableInfo.TableName.TableID = tableID
-			}
-
 			group, ok := eventGroup[tableID]
 			if !ok {
 				group = NewEventsGroup()
