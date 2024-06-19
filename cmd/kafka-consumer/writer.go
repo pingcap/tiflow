@@ -222,8 +222,13 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 }
 
 // Write will synchronously write data downstream
-func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
-	watermark := w.getMinWatermark()
+func (w *writer) Write(ctx context.Context, messageType model.MessageType, commitTs uint64) bool {
+	var watermark uint64
+	if messageType == model.MessageTypeRow {
+		watermark = commitTs
+	} else {
+		watermark = w.getMinWatermark()
+	}
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
@@ -283,6 +288,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		counter     int
 		needFlush   bool
 		messageType model.MessageType
+		commitTs    uint64
 	)
 	for {
 		ty, hasNext, err := decoder.HasNext()
@@ -423,8 +429,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Uint64("resolvedTs", row.CommitTs), zap.Int64("tableID", tableID),
 					zap.Int("count", len(g.events)), zap.Int("bytes", g.bytes),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
-				atomic.StoreUint64(&progress.watermark, row.CommitTs)
 				needFlush = true
+				commitTs = row.CommitTs
 			}
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
@@ -487,7 +493,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		return false
 	}
 	// flush when received DDL event or resolvedTs
-	return w.Write(ctx, messageType)
+	return w.Write(ctx, messageType, commitTs)
 }
 
 type fakeTableIDGenerator struct {
