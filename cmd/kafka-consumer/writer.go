@@ -372,7 +372,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 
 			watermark := atomic.LoadUint64(&progress.watermark)
-			if row.CommitTs <= watermark {
+			if row.CommitTs < watermark {
 				log.Panic("RowChangedEvent fallback row, ignore it",
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("watermark", watermark),
