@@ -336,8 +336,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 
 	// get status
 	{
-		params := openapi.DMAPIGetTaskStatusParams{}
-		statusList, err := server.getTaskStatus(ctx, s.testTask.Name, params)
+		statusList, err := server.getTaskStatus(ctx, s.testTask.Name)
 		s.NoError(err)
 		s.Len(statusList, 1)
 		s.NotNil(statusList[0].ErrorMsg) // no worker, will get an error msg
@@ -524,8 +523,7 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 
 		// get status
 		{
-			params := openapi.DMAPIGetTaskStatusParams{}
-			statusList, err := server.getTaskStatus(ctx, task.Name, params)
+			statusList, err := server.getTaskStatus(ctx, task.Name)
 			s.NoError(err)
 			s.Len(statusList, 1)
 			s.NotNil(statusList[0].ErrorMsg)
