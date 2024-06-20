@@ -213,7 +213,10 @@ func (s *dmlSink) writeEvent(txn *dmlsink.CallbackableEvent[*model.SingleTableTx
 
 		// Note: Calculate the partition index after the transformer is applied.
 		// Because the transformer may change the row of the event.
-		index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+		index, key, err := partitionDispatcher.DispatchRowChangedEvent(row, partitionNum)
+		log.Debug("get partition for row", zap.String("topic", topic),
+			zap.Int32("partition", index), zap.String("key", key),
+			zap.Any("row", row))
 		if err != nil {
 			return errors.Trace(err)
 		}
