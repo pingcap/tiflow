@@ -47,33 +47,33 @@ func TestConnAndClientPool(t *testing.T) {
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	pool := newConnAndClientPool(&security.Credential{}, nil, 2)
+	pool := newGRPCPool(&security.Credential{}, nil, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc1)
-	require.Equal(t, 1, len(cc1.array.conns))
-	require.Equal(t, 1, cc1.conn.streams)
-	require.False(t, cc1.Multiplexing())
+	require.Equal(t, 1, len(cc1.storeConns.conns))
+	require.Equal(t, 1, cc1.conn.streamCount)
+	require.False(t, cc1.IsMultiplexing())
 
 	cc2, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc2)
-	require.Equal(t, 1, len(cc2.array.conns))
-	require.Equal(t, 2, cc2.conn.streams)
-	require.False(t, cc2.Multiplexing())
+	require.Equal(t, 1, len(cc2.storeConns.conns))
+	require.Equal(t, 2, cc2.conn.streamCount)
+	require.False(t, cc2.IsMultiplexing())
 
 	cc3, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc3)
-	require.Equal(t, 2, len(cc3.array.conns))
-	require.Equal(t, 1, cc3.conn.streams)
-	require.False(t, cc3.Multiplexing())
+	require.Equal(t, 2, len(cc3.storeConns.conns))
+	require.Equal(t, 1, cc3.conn.streamCount)
+	require.False(t, cc3.IsMultiplexing())
 
 	cc1.Release()
 	cc1.Release()
 	cc2.Release()
-	require.Equal(t, 1, len(cc3.array.conns))
-	require.Equal(t, 1, cc3.conn.streams)
+	require.Equal(t, 1, len(cc3.storeConns.conns))
+	require.Equal(t, 1, cc3.conn.streamCount)
 
 	cc3.Release()
 	require.Equal(t, 0, len(pool.stores))
@@ -95,18 +95,18 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	pool := newConnAndClientPool(&security.Credential{}, nil, 2)
+	pool := newGRPCPool(&security.Credential{}, nil, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
 	require.Nil(t, err)
 	require.NotNil(t, cc1)
-	require.True(t, cc1.Multiplexing())
+	require.True(t, cc1.IsMultiplexing())
 
 	cc1.Release()
 	require.Equal(t, 0, len(pool.stores))
 }
 
 func TestConnectToUnavailable(t *testing.T) {
-	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
+	pool := newGRPCPool(&security.Credential{}, nil, 1)
 
 	targets := []string{"127.0.0.1:9999", "2.2.2.2:9999"}
 	for _, target := range targets {
@@ -170,7 +170,7 @@ func TestCancelStream(t *testing.T) {
 	connCtx, connCancel := context.WithCancel(context.Background())
 	defer connCancel()
 
-	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
+	pool := newGRPCPool(&security.Credential{}, nil, 1)
 	conn, err := pool.connect(connCtx, addr)
 	require.NotNil(t, conn)
 	require.Nil(t, err)

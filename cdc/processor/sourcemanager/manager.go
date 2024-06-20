@@ -113,7 +113,7 @@ func newSourceManager(
 	}
 
 	serverConfig := config.GetGlobalServerConfig()
-	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	grpcPool := sharedconn.NewGRPCPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 	client := kv.NewSharedClient(
 		mgr.changefeedID, serverConfig, mgr.bdrMode,
 		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,

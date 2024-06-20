@@ -153,7 +153,7 @@ type SharedClient struct {
 	filterLoop bool
 
 	pd           pd.Client
-	grpcPool     *sharedconn.ConnAndClientPool
+	grpcPool     *sharedconn.GRPCPool
 	regionCache  *tikv.RegionCache
 	pdClock      pdutil.Clock
 	lockResolver txnutil.LockResolver
@@ -242,7 +242,7 @@ func NewSharedClient(
 	cfg *config.ServerConfig,
 	filterLoop bool,
 	pd pd.Client,
-	grpcPool *sharedconn.ConnAndClientPool,
+	grpcPool *sharedconn.GRPCPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
 	lockResolver txnutil.LockResolver,

@@ -113,7 +113,7 @@ func NewDDLJobPuller(
 	}
 	ddlJobPuller.sorter = memorysorter.NewEntrySorter(changefeed)
 
-	grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
+	grpcPool := sharedconn.NewGRPCPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 	client := kv.NewSharedClient(
 		changefeed, cfg, ddlPullerFilterLoop,
 		pdCli, grpcPool, regionCache, pdClock,
