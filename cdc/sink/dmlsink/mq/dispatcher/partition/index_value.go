@@ -130,5 +130,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	}
 
 	sum32 := r.hasher.Sum32()
+	log.Debug("dispatch row changed event", zap.String("table", row.TableInfo.GetTableName()),
+		zap.Int32("partitionNum", partitionNum), zap.Uint32("sum32", sum32))
 	return int32(sum32 % uint32(partitionNum)), strconv.FormatInt(int64(sum32), 10), nil
 }
