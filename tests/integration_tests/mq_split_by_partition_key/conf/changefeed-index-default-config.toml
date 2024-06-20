@@ -1,0 +1,11 @@
+[filter]
+rules = ['test.*']
+
+[sink]
+dispatchers = [
+    {matcher = ['test.*'], partition = "index-value"},
+]
+
+[sink.kafka-config]
+output-raw-change-event = false
+split-by-partition-key = false
