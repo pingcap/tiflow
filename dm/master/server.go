@@ -494,26 +494,25 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 
 	resp := &pb.StartTaskResponse{}
-	respWithErr := func(err error) (*pb.StartTaskResponse, error) {
+	respWithErr := func(err error) *pb.StartTaskResponse {
 		resp.Msg += err.Error()
-		// nolint:nilerr
-		return resp, nil
+		return resp
 	}
 
 	cliArgs := config.TaskCliArgs{
 		StartTime: req.StartTime,
 	}
 	if err := cliArgs.Verify(); err != nil {
-		return respWithErr(err)
+		return respWithErr(err), nil
 	}
 
 	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
 	if err != nil {
-		return respWithErr(err)
+		return respWithErr(err), nil
 	}
 	stCfgsForCheck, err := s.generateSubTasksForCheck(stCfgs)
 	if err != nil {
-		return respWithErr(err)
+		return respWithErr(err), nil
 	}
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
@@ -562,35 +561,35 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			// use same latch for remove-meta and start-task
 			release, err3 = s.scheduler.AcquireSubtaskLatch(cfg.Name)
 			if err3 != nil {
-				return respWithErr(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name))
+				return respWithErr(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name)), nil
 			}
 			defer release()
 			latched = true
 
 			if scm := s.scheduler.GetSubTaskCfgsByTask(cfg.Name); len(scm) > 0 {
 				return respWithErr(terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
-					"while remove-meta is true"))
+					"while remove-meta is true")), nil
 			}
 			err = s.removeMetaData(ctx, cfg.Name, cfg.MetaSchema, cfg.TargetDB)
 			if err != nil {
-				return respWithErr(terror.Annotate(err, "while removing metadata"))
+				return respWithErr(terror.Annotate(err, "while removing metadata")), nil
 			}
 		}
 
 		if req.StartTime == "" {
 			err = ha.DeleteAllTaskCliArgs(s.etcdClient, cfg.Name)
 			if err != nil {
-				return respWithErr(terror.Annotate(err, "while removing task command line arguments"))
+				return respWithErr(terror.Annotate(err, "while removing task command line arguments")), nil
 			}
 		} else {
 			err = ha.PutTaskCliArgs(s.etcdClient, cfg.Name, sources, cliArgs)
 			if err != nil {
-				return respWithErr(terror.Annotate(err, "while putting task command line arguments"))
+				return respWithErr(terror.Annotate(err, "while putting task command line arguments")), nil
 			}
 		}
 		err = s.scheduler.AddSubTasks(latched, pb.Stage_Running, subtaskCfgPointersToInstances(stCfgs...)...)
 		if err != nil {
-			return respWithErr(err)
+			return respWithErr(err), nil
 		}
 
 		if release != nil {
