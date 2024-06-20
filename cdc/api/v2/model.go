@@ -505,6 +505,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
 		}
 
+<<<<<<< HEAD
+=======
+		if c.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*c.Sink.SendAllBootstrapAtStart)
+		}
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -812,6 +818,17 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.SendBootstrapToAllPartition != nil {
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
 		}
+<<<<<<< HEAD
+=======
+
+		if cloned.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*cloned.Sink.SendAllBootstrapAtStart)
+		}
+
+		if cloned.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
+		}
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -988,6 +1005,12 @@ type SinkConfig struct {
 	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+<<<<<<< HEAD
+=======
+	SendAllBootstrapAtStart          *bool               `json:"send-all-bootstrap-at-start,omitempty"`
+	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
+	DebeziumConfig                   *DebeziumConfig     `json:"debezium,omitempty"`
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
 }
 

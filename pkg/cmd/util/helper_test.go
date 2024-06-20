@@ -217,6 +217,11 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
+<<<<<<< HEAD
+=======
+		SendAllBootstrapAtStart:          util.AddressOf(false),
+		DebeziumDisableSchema:            util.AddressOf(false),
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
@@ -254,6 +259,11 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
+<<<<<<< HEAD
+=======
+		SendAllBootstrapAtStart:          util.AddressOf(false),
+		DebeziumDisableSchema:            util.AddressOf(false),
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }

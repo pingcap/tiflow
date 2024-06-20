@@ -89,7 +89,7 @@ type mockDDLSink struct {
 	// whether to record the DDL history, only for rename table
 	recordDDLHistory bool
 	// a slice of DDL history, only for rename table
-	ddlHistory []string
+	ddlHistory []*model.DDLEvent
 	mu         struct {
 		sync.Mutex
 		checkpointTs  model.Ts
@@ -117,7 +117,7 @@ func (m *mockDDLSink) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		}
 	}()
 	if m.recordDDLHistory {
-		m.ddlHistory = append(m.ddlHistory, ddl.Query)
+		m.ddlHistory = append(m.ddlHistory, ddl)
 	} else {
 		m.ddlHistory = nil
 	}
@@ -152,6 +152,13 @@ func (m *mockDDLSink) close(ctx context.Context) error {
 }
 
 func (m *mockDDLSink) Barrier(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockDDLSink) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
+	if m.recordDDLHistory {
+		m.ddlHistory = append(m.ddlHistory, bootstrap)
+	}
 	return nil
 }
 

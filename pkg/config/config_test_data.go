@@ -68,6 +68,11 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+<<<<<<< HEAD
+=======
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
     "open": {
       "output-old-value": true
     }
@@ -316,6 +321,11 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+<<<<<<< HEAD
+=======
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
     "open": {
       "output-old-value": true
     }
@@ -482,6 +492,11 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+<<<<<<< HEAD
+=======
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+>>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
     "open": {
       "output-old-value": true
     }
