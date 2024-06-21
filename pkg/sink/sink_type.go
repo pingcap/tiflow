@@ -98,7 +98,7 @@ func IsStorageScheme(scheme string) bool {
 
 // IsPulsarScheme returns true if the scheme belong to pulsar scheme.
 func IsPulsarScheme(scheme string) bool {
-	return scheme == PulsarScheme || scheme == PulsarSSLScheme || scheme == PulsarHttpsScheme || scheme == PulsarHttpsScheme
+	return scheme == PulsarScheme || scheme == PulsarSSLScheme || scheme == PulsarHttpsScheme || scheme == PulsarHttpScheme
 }
 
 // IsBlackHoleScheme returns true if the scheme belong to blackhole scheme.

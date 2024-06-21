@@ -73,13 +73,13 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		brokerScheme = "https"
 	}
 
+	c.SinkURI = sinkURI
 	c.BrokerURL = brokerScheme + "://" + sinkURI.Host
 
 	if pulsarConfig == nil {
 		log.L().Debug("new pulsar config", zap.Any("config", c))
 		return c, nil
 	}
-
 	pulsarConfig.SinkURI = c.SinkURI
 
 	if len(sinkURI.Scheme) == 0 || len(sinkURI.Host) == 0 {
