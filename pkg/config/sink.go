@@ -89,6 +89,9 @@ const (
 	// DefaultSendBootstrapToAllPartition is the default value of
 	// whether to send bootstrap message to all partitions.
 	DefaultSendBootstrapToAllPartition = true
+	// DefaultSendAllBootstrapAtStart is the default value of whether
+	// to send all tables bootstrap message at changefeed start.
+	DefaultSendAllBootstrapAtStart = false
 
 	// DefaultMaxReconnectToPulsarBroker is the default max reconnect times to pulsar broker.
 	// The pulsar client uses an exponential backoff with jitter to reconnect to the broker.
@@ -188,7 +191,8 @@ type SinkConfig struct {
 	// If set to false, bootstrap message will only be sent to the first partition of each topic.
 	// Default value is true.
 	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
-
+	// SendAllBootstrapAtStart determines whether to send all tables bootstrap message at changefeed start.
+	SendAllBootstrapAtStart *bool `toml:"send-all-bootstrap-at-start" json:"send-all-bootstrap-at-start,omitempty"`
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 
@@ -225,6 +229,16 @@ func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
 	return protocol == ProtocolSimple.String() &&
 		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
 		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
+}
+
+// ShouldSendAllBootstrapAtStart returns whether the should send all bootstrap message at changefeed start.
+func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
+	if s == nil {
+		return false
+	}
+	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
+	log.Info("should send all bootstrap at start", zap.Bool("should", should))
+	return should
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
