@@ -356,7 +356,12 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 
 // GetTableSpanStatus implements TableExecutor interface
 func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
+	start := time.Now()
 	state, exist := p.sinkManager.r.GetTableState(span)
+	duration := time.Since(start).Seconds()
+	if duration > 2 {
+		log.Info("fizz processor get table state finished", zap.Any("duration", duration), zap.Stringer("id", p.changefeedID))
+	}
 	if !exist {
 		return tablepb.TableStatus{
 			TableID: span.TableID,
@@ -364,7 +369,13 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 			State:   tablepb.TableStateAbsent,
 		}
 	}
+	start = time.Now()
 	sinkStats := p.sinkManager.r.GetTableStats(span)
+	duration = time.Since(start).Seconds()
+	if duration > 2 {
+		log.Info("fizz processor get table stats finished", zap.Any("duration", duration), zap.Stringer("id", p.changefeedID))
+	}
+
 	stats := tablepb.Stats{}
 	if collectStat {
 		stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
@@ -570,18 +581,33 @@ func (p *processor) handleWarnings() error {
 }
 
 func (p *processor) tick(ctx context.Context) (error, error) {
+	start := time.Now()
 	warning := p.handleWarnings()
+	duration := time.Since(start).Seconds()
+	if duration > 2 {
+		log.Info("fizz processor handle warning finished", zap.Any("duration", duration), zap.Stringer("id", p.changefeedID))
+	}
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err), warning
 	}
 
+	start = time.Now()
 	barrier, err := p.agent.Tick(ctx)
+	duration = time.Since(start).Seconds()
+	if duration > 2 {
+		log.Info("fizz processor tick agent finished", zap.Any("duration", duration), zap.Stringer("id", p.changefeedID))
+	}
 	if err != nil {
 		return errors.Trace(err), warning
 	}
 
 	if barrier != nil && barrier.GlobalBarrierTs != 0 {
+		start = time.Now()
 		p.updateBarrierTs(barrier)
+		duration = time.Since(start).Seconds()
+		if duration > 2 {
+			log.Info("fizz processor update barrierTs finished", zap.Any("duration", duration), zap.Stringer("id", p.changefeedID))
+		}
 	}
 	p.doGCSchemaStorage()
 

@@ -1030,7 +1030,13 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
 
 	if m.needsStuckCheck() {
+		start := time.Now()
 		isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
+		duration := time.Since(start).Seconds()
+		if duration > 2 {
+			log.Info("fizz Table sink stuck check takes too long", zap.Any("duration", duration),
+				zap.Stringer("id", m.changefeedID), zap.Stringer("span", &span))
+		}
 		if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
 			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 				zap.String("namespace", m.changefeedID.Namespace),
