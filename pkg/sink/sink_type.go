@@ -72,6 +72,10 @@ const (
 	PulsarScheme = "pulsar"
 	// PulsarSSLScheme indicates the scheme is pulsar+ssl
 	PulsarSSLScheme = "pulsar+ssl"
+	//PulsarHttpScheme indicates the schema is pulsar with http protocol
+	PulsarHttpScheme = "pulsar+http"
+	//PulsarHttpsScheme indicates the schema is pulsar with https protocol
+	PulsarHttpsScheme = "pulsar+https"
 )
 
 // IsMQScheme returns true if the scheme belong to mq scheme.
@@ -94,7 +98,7 @@ func IsStorageScheme(scheme string) bool {
 
 // IsPulsarScheme returns true if the scheme belong to pulsar scheme.
 func IsPulsarScheme(scheme string) bool {
-	return scheme == PulsarScheme || scheme == PulsarSSLScheme
+	return scheme == PulsarScheme || scheme == PulsarSSLScheme || scheme == PulsarHttpsScheme || scheme == PulsarHttpScheme
 }
 
 // IsBlackHoleScheme returns true if the scheme belong to blackhole scheme.
