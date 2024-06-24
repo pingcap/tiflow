@@ -130,6 +130,9 @@ type ddlManager struct {
 
 	BDRMode       bool
 	ddlResolvedTs model.Ts
+
+	shouldSendAllBootstrapAtStart bool
+	bootstraped                   bool
 }
 
 func newDDLManager(
@@ -143,6 +146,7 @@ func newDDLManager(
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	bdrMode bool,
+	shouldSendAllBootstrapAtStart bool,
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
@@ -152,19 +156,56 @@ func newDDLManager(
 		zap.Bool("bdrMode", bdrMode))
 
 	return &ddlManager{
-		changfeedID:     changefeedID,
-		ddlSink:         ddlSink,
-		filter:          filter,
-		ddlPuller:       ddlPuller,
-		schema:          schema,
-		redoDDLManager:  redoManager,
-		redoMetaManager: redoMetaManager,
-		startTs:         startTs,
-		checkpointTs:    checkpointTs,
-		ddlResolvedTs:   startTs,
-		BDRMode:         bdrMode,
-		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		changfeedID:                   changefeedID,
+		ddlSink:                       ddlSink,
+		filter:                        filter,
+		ddlPuller:                     ddlPuller,
+		schema:                        schema,
+		redoDDLManager:                redoManager,
+		redoMetaManager:               redoMetaManager,
+		startTs:                       startTs,
+		checkpointTs:                  checkpointTs,
+		ddlResolvedTs:                 startTs,
+		BDRMode:                       bdrMode,
+		pendingDDLs:                   make(map[model.TableName][]*model.DDLEvent),
+		shouldSendAllBootstrapAtStart: shouldSendAllBootstrapAtStart,
 	}
+}
+
+func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error) {
+	if !m.shouldSendAllBootstrapAtStart || m.bootstraped {
+		return true, nil
+	}
+	start := time.Now()
+	defer func() {
+		log.Info("send bootstrap messages finished",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Duration("cost", time.Since(start)))
+	}()
+	// Send bootstrap messages to downstream.
+	tableInfo, err := m.allTables(ctx)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	log.Info("start to send bootstrap messages",
+		zap.Stringer("changefeed", m.changfeedID),
+		zap.Int("tables", len(tableInfo)))
+
+	for _, table := range tableInfo {
+		if table.TableInfo.IsView() {
+			continue
+		}
+		ddlEvent := &model.DDLEvent{
+			TableInfo:   table,
+			IsBootstrap: true,
+		}
+		err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+	}
+	m.bootstraped = true
+	return true, nil
 }
 
 // tick the ddlHandler, it does the following things:
@@ -182,6 +223,14 @@ func (m *ddlManager) tick(
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
+
+	ok, err := m.checkAndSendBootstrapMsgs(ctx)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	if !ok {
+		return nil, nil, nil
+	}
 
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
@@ -483,8 +532,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	return barrier
 }
 
-// allTables returns all tables in the schema that
-// less or equal than the checkpointTs.
+// allTables returns all tables in the schema in current checkpointTs.
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
 	if m.tableInfoCache == nil {
 		ts := m.getSnapshotTs()

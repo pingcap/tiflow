@@ -461,3 +461,35 @@ func TestOutputOldValueFalse(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, decoded.PreColumns)
 }
+
+func TestNoHandleKeys(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.ForceReplicate = true
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	// insert
+	_ = helper.DDL2Event(`create table test.t(a varchar(10), b varchar(10))`)
+	event := helper.DML2Event(`insert into test.t values ("aa", "bb")`, "test", "t")
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
+	key, value, err := rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
+
+	// update
+	event.PreColumns = event.Columns
+	key, value, err = rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
+
+	// delete
+	event.PreColumns = event.Columns
+	event.Columns = nil
+	key, value, err = rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
+}

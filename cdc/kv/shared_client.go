@@ -49,19 +49,8 @@ import (
 )
 
 const (
-	dialTimeout = 10 * time.Second
 	// Maximum total sleep time(in ms), 20 seconds.
 	tikvRequestMaxBackoff = 20000
-
-	// TiCDC may open numerous gRPC streams,
-	// with 65535 bytes window size, 10K streams takes about 27GB memory.
-	//
-	// 65535 bytes, the initial window size in http2 spec.
-	grpcInitialWindowSize = (1 << 16) - 1
-	// 8 MB The value for initial window size on a connection
-	grpcInitialConnWindowSize = 1 << 23
-	// 256 MB The maximum message size the client can receive
-	grpcMaxCallRecvMsgSize = 1 << 28
 
 	// TiCDC always interacts with region leader, every time something goes wrong,
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
