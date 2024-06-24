@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -93,8 +94,9 @@ type SinkManager struct {
 		// When every time we want to create a new factory, version will be increased and
 		// errors will be replaced by a new channel. version is used to distinct different
 		// sink factories in table sinks.
-		version uint64
-		errors  chan error
+		version     uint64
+		errors      chan error
+		initialized atomic.Bool
 	}
 
 	// tableSinks is a map from tableID to tableSink.
@@ -331,9 +333,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 }
 
 func (m *SinkManager) needsStuckCheck() bool {
-	m.sinkFactory.Lock()
-	defer m.sinkFactory.Unlock()
-	return m.sinkFactory.f != nil && m.sinkFactory.f.Category() == factory.CategoryMQ
+	return m.sinkFactory.initialized.Load() && m.sinkFactory.f.Category() == factory.CategoryMQ
 }
 
 func (m *SinkManager) initSinkFactory() (chan error, uint64) {
@@ -372,6 +372,7 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 		emitError(err)
 		return m.sinkFactory.errors, m.sinkFactory.version
 	}
+	m.sinkFactory.initialized.Store(true)
 
 	log.Info("Sink manager inits sink factory success",
 		zap.String("namespace", m.changefeedID.Namespace),
@@ -390,6 +391,7 @@ func (m *SinkManager) clearSinkFactory() {
 			zap.Uint64("factoryVersion", m.sinkFactory.version))
 		m.sinkFactory.f.Close()
 		m.sinkFactory.f = nil
+		m.sinkFactory.initialized.Store(false)
 		log.Info("Sink manager has closed sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),

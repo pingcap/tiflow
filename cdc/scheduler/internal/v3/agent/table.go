@@ -64,7 +64,6 @@ func (t *tableSpan) getAndUpdateTableSpanState() (tablepb.TableState, bool) {
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.Any("tableSpan", t.span),
 			zap.Any("duration", duration))
-
 	}
 	t.state = meta.State
 
