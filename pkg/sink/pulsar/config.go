@@ -65,6 +65,10 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 	if err != nil {
 		return nil, err
 	}
+	//Adding an extra check to ensure that the scheme is a valid pulsar scheme
+	if !sink.IsPulsarScheme(sinkURI.Scheme) {
+		return nil, fmt.Errorf("invalid pulsar scheme %s", sinkURI.Scheme)
+	}
 
 	brokerScheme := sinkURI.Scheme
 	switch brokerScheme {
