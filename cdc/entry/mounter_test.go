@@ -1105,23 +1105,6 @@ func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
 	key, value := helper.getLastKeyValue(tableInfo.ID)
 
-	// todo: make this unit test complete.
-}
-
-func TestTimezoneDefaultValue(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	_ = helper.DDL2Event(`create table test.t(a int primary key)`)
-	insertEvent := helper.DML2Event(`insert into test.t values (1)`, "test", "t")
-	require.NotNil(t, insertEvent)
-
-	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
-
-	_ = helper.DDL2Event(`alter table test.t add column b timestamp default '2023-02-09 13:00:00'`)
 	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
 	rawKV := &model.RawKVEntry{
 		OpType:   model.OpTypePut,
@@ -1135,6 +1118,44 @@ func TestTimezoneDefaultValue(t *testing.T) {
 	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
 	require.NoError(t, err)
 	require.NotNil(t, polymorphicEvent.Row)
+}
+
+func TestTimezoneDefaultValue(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event(`create table test.t(a int primary key)`)
+	insertEvent := helper.DML2Event(`insert into test.t values (1)`, "test", "t")
+	require.NotNil(t, insertEvent)
+
+	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+
+	// calculate the checksum by using the new schema.
+	key, value := helper.getLastKeyValue(tableInfo.ID)
+	_ = helper.DDL2Event(`alter table test.t add column b timestamp default '2023-02-09 13:00:00'`)
+	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+
+	event := polymorphicEvent.Row
+	require.NotNil(t, event)
+	require.Equal(t, "2023-02-09 13:00:00", event.PreColumns[1].Value.(string))
 }
 
 func TestChecksumAfterAddColumns(t *testing.T) {
@@ -1230,10 +1251,6 @@ func TestVerifyChecksumNonIntegerPrimaryKey(t *testing.T) {
 	_ = helper.DDL2Event(`CREATE table t (a varchar(10) primary key, b int)`)
 	event := helper.DML2Event(`INSERT INTO t VALUES ("abc", 3)`, "test", "t")
 	require.NotNil(t, event)
-
-	event := polymorphicEvent.Row
-	require.NotNil(t, event)
-	require.Equal(t, "2023-02-09 13:00:00", event.PreColumns[1].Value.(string))
 }
 
 func TestVerifyChecksumTime(t *testing.T) {
