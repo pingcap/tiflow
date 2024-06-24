@@ -419,4 +419,4 @@ replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appda
 
 replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240624085650-6fa4481f7f0c
 
-replace github.com/pingcap/tidb/pkg/parser => github.com/3AceShowHand/tidb/pkg/parser v1.1.0-beta.0.20240624085650-6fa4481f7f0c
+replace github.com/pingcap/tidb/pkg/parser => github.com/3AceShowHand/tidb/pkg/parser v0.0.0-20240624085650-6fa4481f7f0c
