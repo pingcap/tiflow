@@ -15,7 +15,6 @@ package agent
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -55,16 +54,7 @@ func newTableSpan(
 func (t *tableSpan) getAndUpdateTableSpanState() (tablepb.TableState, bool) {
 	oldState := t.state
 
-	start := time.Now()
 	meta := t.executor.GetTableSpanStatus(t.span, false)
-	duration := time.Since(start).Seconds()
-	if duration > 2 {
-		log.Warn("schedulerv3: fizz get table span status too slow",
-			zap.String("namespace", t.changefeedID.Namespace),
-			zap.String("changefeed", t.changefeedID.ID),
-			zap.Any("tableSpan", t.span),
-			zap.Any("duration", duration))
-	}
 	t.state = meta.State
 
 	if oldState != t.state {
