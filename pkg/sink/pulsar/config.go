@@ -68,9 +68,9 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 
 	brokerScheme := sinkURI.Scheme
 	switch brokerScheme {
-	case sink.PulsarHttpScheme:
+	case sink.PulsarHTTPScheme:
 		brokerScheme = "http"
-	case sink.PulsarHttpsScheme:
+	case sink.PulsarHTTPSScheme:
 		brokerScheme = "https"
 	}
 	c.SinkURI = sinkURI
