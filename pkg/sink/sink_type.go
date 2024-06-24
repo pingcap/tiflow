@@ -72,9 +72,9 @@ const (
 	PulsarScheme = "pulsar"
 	// PulsarSSLScheme indicates the scheme is pulsar+ssl
 	PulsarSSLScheme = "pulsar+ssl"
-	//PulsarHttpScheme indicates the schema is pulsar with http protocol
+	// PulsarHttpScheme indicates the schema is pulsar with http protocol
 	PulsarHttpScheme = "pulsar+http"
-	//PulsarHttpsScheme indicates the schema is pulsar with https protocol
+	// PulsarHttpsScheme indicates the schema is pulsar with https protocol
 	PulsarHttpsScheme = "pulsar+https"
 )
 
