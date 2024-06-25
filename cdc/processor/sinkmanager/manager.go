@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
-	"github.com/pingcap/tiflow/pkg/config"
 	pconfig "github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -1005,11 +1004,6 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
-
-	advanceTimeoutInSec := util.GetOrZero(m.config.Sink.AdvanceTimeoutInSec)
-	if advanceTimeoutInSec <= 0 {
-		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
-	}
 
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
