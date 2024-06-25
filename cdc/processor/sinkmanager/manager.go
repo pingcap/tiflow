@@ -89,6 +89,7 @@ type SinkManager struct {
 
 	// sinkFactory used to create table sink.
 	sinkFactory struct {
+		// This lock is only used to protect the f field.
 		sync.Mutex
 		f *factory.SinkFactory
 		// When every time we want to create a new factory, version will be increased and
