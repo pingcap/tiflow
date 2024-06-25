@@ -207,17 +207,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 
 	outboundMessages, barrier := a.handleMessage(inboundMessages)
 
-	start := time.Now()
 	responses, err := a.tableM.poll(ctx)
-	duration := time.Since(start).Seconds()
-	if duration > 2 {
-		log.Warn("schedulerv3: fizz table manager poll takes too long",
-			zap.Duration("duration", time.Since(start)),
-			zap.String("capture", a.CaptureID),
-			zap.String("namespace", a.ChangeFeedID.Namespace),
-			zap.String("changefeed", a.ChangeFeedID.ID))
-
-	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
