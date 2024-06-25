@@ -94,9 +94,8 @@ type SinkManager struct {
 		// When every time we want to create a new factory, version will be increased and
 		// errors will be replaced by a new channel. version is used to distinct different
 		// sink factories in table sinks.
-		version     atomic.Uint64
-		errors      chan error
-		initialized atomic.Bool
+		version atomic.Uint64
+		errors  chan error
 	}
 
 	// tableSinks is a map from tableID to tableSink.
@@ -332,10 +331,6 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}
 }
 
-func (m *SinkManager) needsStuckCheck() bool {
-	return m.sinkFactory.initialized.Load() && m.sinkFactory.f.Category() == factory.CategoryMQ
-}
-
 func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
@@ -372,7 +367,6 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 		emitError(err)
 		return m.sinkFactory.errors, m.sinkFactory.version.Load()
 	}
-	m.sinkFactory.initialized.Store(true)
 
 	log.Info("Sink manager inits sink factory success",
 		zap.String("namespace", m.changefeedID.Namespace),
@@ -391,7 +385,6 @@ func (m *SinkManager) clearSinkFactory() {
 			zap.Uint64("factoryVersion", m.sinkFactory.version.Load()))
 		m.sinkFactory.f.Close()
 		m.sinkFactory.f = nil
-		m.sinkFactory.initialized.Store(false)
 		log.Info("Sink manager has closed sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -403,17 +396,6 @@ func (m *SinkManager) clearSinkFactory() {
 		}
 		m.sinkFactory.errors = nil
 	}
-}
-
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bool) {
-	if version == m.sinkFactory.version.Load() {
-		select {
-		case m.sinkFactory.errors <- err:
-		default:
-		}
-		return true
-	}
-	return false
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
@@ -1026,20 +1008,6 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	advanceTimeoutInSec := util.GetOrZero(m.config.Sink.AdvanceTimeoutInSec)
 	if advanceTimeoutInSec <= 0 {
 		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
-	}
-	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
-
-	if m.needsStuckCheck() {
-		isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
-		if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
-			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Any("checkpointTs", checkpointTs),
-				zap.Float64("stuckCheck", stuckCheck.Seconds()),
-				zap.Uint64("factoryVersion", sinkVersion))
-		}
 	}
 
 	var resolvedTs model.Ts
