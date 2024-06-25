@@ -888,7 +888,7 @@ func (s *SinkConfig) ValidateProtocol(scheme string) error {
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
-	case sink.PulsarScheme, sink.PulsarSSLScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme, sink.PulsarHTTPScheme, sink.PulsarHTTPSScheme:
 		outputRawChangeEvent = s.PulsarConfig.GetOutputRawChangeEvent()
 	default:
 		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
