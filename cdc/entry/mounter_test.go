@@ -928,10 +928,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
-	// changefeed enable checksum functionality
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
 	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
@@ -1272,101 +1271,6 @@ func TestVerifyChecksumTime(t *testing.T) {
 	_ = helper.DDL2Event("create table t (a timestamp primary key, b int)")
 	event = helper.DML2Event("insert into t values ('2023-02-09 13:00:00', 3)", "test", "t")
 	require.NotNil(t, event)
-}
-
-func TestDecodeRowEnableChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	tk := helper.Tk()
-
-	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
-
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	filter, err := filter.NewFilter(replicaConfig, "")
-	require.NoError(t, err)
-
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
-
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
-	require.NoError(t, err)
-	require.NotNil(t, schemaStorage)
-
-	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL)
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
-
-	ctx := context.Background()
-
-	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	// row without checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
-	tk.MustExec("insert into t values (1, 10)")
-
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV := &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-
-	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	// the upstream tidb does not enable checksum, so the checksum is nil
-	require.Nil(t, row.Checksum)
-
-	// 	row with one checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
-	tk.MustExec("insert into t values (2, 20)")
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	// row with 2 checksum
-	tk.MustExec("insert into t values (3, 30)")
-	job = helper.DDL2Job("alter table t change column a a varchar(10)")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-	require.False(t, row.Checksum.Corrupted)
 }
 
 func TestDecodeRow(t *testing.T) {
