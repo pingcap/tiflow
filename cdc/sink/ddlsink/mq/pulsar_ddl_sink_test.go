@@ -100,7 +100,6 @@ func TestNewPulsarDDLSink(t *testing.T) {
 		events := ddlSink.producer.(*ddlproducer.PulsarMockProducers).GetAllEvents()
 		require.Len(t, events, 1, "All topics and partitions should be broadcast")
 	}
-
 }
 
 // TestPulsarDDLSinkNewSuccess tests the NewPulsarDDLSink write a event to pulsar
@@ -123,7 +122,6 @@ func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, s)
 	}
-
 }
 
 func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
