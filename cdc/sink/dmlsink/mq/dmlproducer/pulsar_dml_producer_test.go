@@ -49,6 +49,9 @@ func newPulsarConfig(t *testing.T, schema string) (sinkURI *url.URL, replicaConf
 
 func TestNewPulsarDMLProducer(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, schema := range pulsarSchemaList {
 		sinkURI, rc := newPulsarConfig(t, schema)
 		replicaConfig := config.GetDefaultReplicaConfig()
@@ -56,9 +59,6 @@ func TestNewPulsarDMLProducer(t *testing.T) {
 			Protocol: aws.String("canal-json"),
 		}
 		t.Logf(sinkURI.String())
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		errCh := make(chan error, 1)
 
@@ -77,15 +77,15 @@ func TestNewPulsarDMLProducer(t *testing.T) {
 
 func Test_pulsarDMLProducer_AsyncSendMessage(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, schema := range pulsarSchemaList {
 		_, rc := newPulsarConfig(t, schema)
 		replicaConfig := config.GetDefaultReplicaConfig()
 		replicaConfig.Sink = &config.SinkConfig{
 			Protocol: aws.String("canal-json"),
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		errCh := make(chan error, 1)
 

@@ -54,6 +54,8 @@ func newPulsarConfig(t *testing.T, schema string) (*config.PulsarConfig, *url.UR
 // TestNewPulsarDDLSink tests the NewPulsarDDLSink
 func TestNewPulsarDDLSink(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)
 		changefeedID := model.DefaultChangeFeedID("test")
@@ -61,9 +63,6 @@ func TestNewPulsarDDLSink(t *testing.T) {
 		replicaConfig.Sink = &config.SinkConfig{
 			Protocol: aws.String("canal-json"),
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		ctx = context.WithValue(ctx, "testing.T", t)
 		ddlSink, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
@@ -105,6 +104,9 @@ func TestNewPulsarDDLSink(t *testing.T) {
 // TestPulsarDDLSinkNewSuccess tests the NewPulsarDDLSink write a event to pulsar
 func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)
 		changefeedID := model.DefaultChangeFeedID("test")
@@ -112,9 +114,6 @@ func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 		replicaConfig.Sink = &config.SinkConfig{
 			Protocol: aws.String("canal-json"),
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		ctx = context.WithValue(ctx, "testing.T", t)
 		s, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig, manager.NewMockPulsarTopicManager,
@@ -126,6 +125,9 @@ func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 
 func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
 	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)
 		changefeedID := model.DefaultChangeFeedID("test")
@@ -133,9 +135,6 @@ func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
 		replicaConfig.Sink = &config.SinkConfig{
 			Protocol: aws.String("canal-json"),
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		ctx = context.WithValue(ctx, "testing.T", t)
 		ddlSink, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
