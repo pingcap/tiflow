@@ -458,23 +458,6 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 	}
 }
 
-func getLastKeyValueInStore(t *testing.T, store tidbkv.Storage, tableID int64) (key, value []byte) {
-	txn, err := store.Begin()
-	require.NoError(t, err)
-	defer txn.Rollback() //nolint:errcheck
-	startKey, endKey := spanz.GetTableRange(tableID)
-	kvIter, err := txn.Iter(startKey, endKey)
-	require.NoError(t, err)
-	defer kvIter.Close()
-	for kvIter.Valid() {
-		key = kvIter.Key()
-		value = kvIter.Value()
-		err = kvIter.Next()
-		require.NoError(t, err)
-	}
-	return key, value
-}
-
 // We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
 // https://github.com/pingcap/tiflow/issues/4048
 // Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
@@ -1098,7 +1081,7 @@ func TestChecksumAfterAlterSetDefaultValue(t *testing.T) {
 
 	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
 	require.True(t, ok)
-	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+	_, oldValue := helper.getLastKeyValue(tableInfo.ID)
 
 	_ = helper.DDL2Event("alter table t modify column b int default 2")
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
@@ -1176,7 +1159,7 @@ func TestChecksumAfterAddColumns(t *testing.T) {
 
 	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
 	require.True(t, ok)
-	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+	_, oldValue := helper.getLastKeyValue(tableInfo.ID)
 
 	helper.Tk().MustExec("update t set b = 10 where a = 1")
 	key, value := helper.getLastKeyValue(tableInfo.ID)
@@ -1213,7 +1196,7 @@ func TestChecksumAfterDropColumns(t *testing.T) {
 
 	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
 	require.True(t, ok)
-	key, oldValue := helper.getLastKeyValue(tableInfo.ID)
+	_, oldValue := helper.getLastKeyValue(tableInfo.ID)
 
 	_ = helper.DDL2Event("alter table t drop column b")
 
