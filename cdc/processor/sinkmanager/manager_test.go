@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -391,6 +392,13 @@ func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 	}()
 
 	require.False(t, manager.needsStuckCheck())
+
+	// make sure needsStuckCheck would not be blocked when sinkFactory.Lock() is held
+	manager.sinkFactory.Lock()
+	require.False(t, manager.needsStuckCheck())
+	// make sure putSinkFactoryError would not be blocked when sinkFactory.Lock() is held
+	manager.putSinkFactoryError(errors.New("test"), 0)
+	manager.sinkFactory.Unlock()
 }
 
 func TestSinkManagerRestartTableSinks(t *testing.T) {
