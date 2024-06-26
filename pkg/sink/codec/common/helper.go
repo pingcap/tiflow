@@ -76,6 +76,72 @@ func MustQueryTimezone(ctx context.Context, db *sql.DB) string {
 	return timezone
 }
 
+func MustQueryRowChecksum(ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{}) *ColumnsHolder {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Panic("establish connection to the upstream tidb failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+	}
+	defer conn.Close()
+
+	// 1. set snapshot read
+	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
+	_, err = conn.ExecContext(ctx, query)
+	if err != nil {
+		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+		if ok {
+			// Error 8055 (HY000): snapshot is older than GC safe point
+			if mysqlErr.Number == 8055 {
+				log.Error("set snapshot read failed, since snapshot is older than GC safe point")
+			}
+		}
+
+		log.Panic("set snapshot read failed",
+			zap.String("query", query),
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+	}
+
+	query = fmt.Sprintf("select tidb_row_checksum() from %s.%s where ", schema, table)
+	// todo: adjust the where clause conditions
+	var whereClause string
+	for name, value := range conditions {
+		if whereClause != "" {
+			whereClause += " and "
+		}
+		whereClause += fmt.Sprintf("%s = %v", name, value)
+	}
+	query += whereClause
+
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		log.Panic("query row failed",
+			zap.String("query", query),
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+	}
+	defer rows.Close()
+
+	holder, err := newColumnHolder(rows)
+	if err != nil {
+		log.Panic("obtain the columns holder failed",
+			zap.String("query", query),
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+	}
+	for rows.Next() {
+		err = rows.Scan(holder.ValuePointers...)
+		if err != nil {
+			log.Panic("scan row failed",
+				zap.String("query", query),
+				zap.String("schema", schema), zap.String("table", table),
+				zap.Uint64("commitTs", commitTs), zap.Error(err))
+		}
+	}
+	return holder
+}
+
 // MustSnapshotQuery query the db by the snapshot read with the given commitTs
 func MustSnapshotQuery(
 	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
