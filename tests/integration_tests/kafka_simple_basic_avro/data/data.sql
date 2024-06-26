@@ -121,6 +121,16 @@ values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
 
 update tp_unsigned_real set c_unsigned_double = 2020.0404 where c_unsigned_double = 2020.0303;
 
+alter table tp_unsigned_real alter column c_unsigned_float set default 2020.0202;
+
+insert into tp_unsigned_real(c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
+values (2020.2345, 2020.2345, 2020.2345);
+
+update tp_unsigned_real set c_unsigned_double = 2020.2345 where id = 2;
+
+alter table tp_unsigned_real alter column c_unsigned_double drop default;
+update tp_unsigned_real set c_unsigned_float = 2020.0202 where id = 3;
+
 -- time
 create table tp_time
 (
