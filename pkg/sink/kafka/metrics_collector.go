@@ -127,20 +127,7 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
-<<<<<<< HEAD
 			WithLabelValues(namespace, changefeedID).
-=======
-			WithLabelValues(namespace, changefeedID, "avg").
-			Set(histogram.Snapshot().Mean())
-		compressionRatioGauge.WithLabelValues(namespace, changefeedID, p99).
-			Set(histogram.Snapshot().Percentile(0.99))
-	}
-
-	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
-	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
-		recordsPerRequestGauge.
-			WithLabelValues(namespace, changefeedID, "avg").
->>>>>>> dba5af5eb1 (metrics(ticdc): Fix kafka compress ratio issue (#11313))
 			Set(histogram.Snapshot().Mean())
 	}
 }
