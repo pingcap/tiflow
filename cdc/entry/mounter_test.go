@@ -1113,31 +1113,10 @@ func TestTimezoneDefaultValue(t *testing.T) {
 	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
 	helper.Tk().MustExec("use test")
 
-	_ = helper.DDL2Event(`create table test.t(a int primary key)`)
-	insertEvent := helper.DML2Event(`insert into test.t values (1)`, "test", "t")
+	_ = helper.DDL2Event(`create table test.t(a int primary key, b timestamp default '2023-02-09 13:00:00')`)
+	insertEvent := helper.DML2Event(`insert into test.t(a) values (1)`, "test", "t")
 	require.NotNil(t, insertEvent)
-
-	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	// calculate the checksum by using the new schema.
-	key, value := helper.getLastKeyValue(tableInfo.ID)
-	_ = helper.DDL2Event(`alter table test.t add column b timestamp default '2023-02-09 13:00:00'`)
-	ts := helper.schemaStorage.GetLastSnapshot().CurrentTs()
-	rawKV := &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
-	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
-	require.NoError(t, err)
-
-	event := polymorphicEvent.Row
-	require.NotNil(t, event)
-	require.Equal(t, "2023-02-09 13:00:00", event.PreColumns[1].Value.(string))
+	require.Equal(t, "2023-02-09 13:00:00", insertEvent.Columns[1].Value.(string))
 }
 
 func TestChecksumAfterAddColumns(t *testing.T) {
