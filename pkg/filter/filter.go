@@ -25,7 +25,8 @@ const (
 	// SyncPointTable is the tale name use to write ts-map when sync-point is enable.
 	SyncPointTable = "syncpoint_v1"
 	// TiCDCSystemSchema is the schema only use by TiCDC.
-	TiCDCSystemSchema = "tidb_cdc"
+	TiCDCSystemSchema       = "tidb_cdc"
+	LightningTaskInfoSchema = "LIGHTNING_TASK_INFO"
 )
 
 // ddlWhiteListMap is a map of all DDL types that can be applied to cdc's schema storage.
