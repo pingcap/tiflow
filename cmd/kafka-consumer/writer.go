@@ -342,12 +342,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl)
 				needFlush = true
+				log.Info("DDL message received",
+					zap.Int32("partition", partition),
+					zap.Any("offset", message.TopicPartition.Offset),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("DDL", ddl.Query))
 			}
-			log.Info("DDL message received",
-				zap.Int32("partition", partition),
-				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("DDL", ddl.Query))
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
