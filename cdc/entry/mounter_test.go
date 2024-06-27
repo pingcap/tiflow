@@ -1604,7 +1604,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
+		colDatas, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
 		require.NoError(t, err)
 		e := model.RowChangedEvent{
 			TableInfo: cdcTableInfo,
