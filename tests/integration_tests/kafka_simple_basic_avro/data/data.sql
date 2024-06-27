@@ -97,7 +97,7 @@ values (-2.7182818284, -3.1415926, -8000, -179394.233);
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
 
 alter table tp_real drop column c_double;
-update tp_real set c_float 2.71828 where id = 3;
+update tp_real set c_float = 2.71828 where id = 3;
 
 alter table tp_real add column c_double double default 3.1415926;
 update tp_real set c_double = 2.3456 where id = 3;
