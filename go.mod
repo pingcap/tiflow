@@ -67,11 +67,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
-	github.com/pingcap/kvproto v0.0.0-20240513094934-d9297553c900
+	github.com/pingcap/kvproto v0.0.0-20240620063548-118a4cab53e4
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240613051929-f124165c9be4
+	github.com/pingcap/tidb v1.1.0-beta.0.20240627074325-184b010f800a
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240613051929-f124165c9be4
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240627074325-184b010f800a
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -89,9 +89,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240621090319-d4f0f4cf12a9
+	github.com/tikv/client-go/v2 v2.0.8-0.20240626064248-4a72526f6c30
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20240603082825-a929a546a790
+	github.com/tikv/pd/client v0.0.0-20240620115049-049de1761e56
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -416,7 +416,3 @@ replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20240624085650-6fa4481f7f0c
-
-replace github.com/pingcap/tidb/pkg/parser => github.com/3AceShowHand/tidb/pkg/parser v0.0.0-20240624085650-6fa4481f7f0c
