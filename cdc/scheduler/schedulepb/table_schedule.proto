@@ -44,10 +44,20 @@ message RemoveTableRequest {
     processor.tablepb.Span span = 2 [(gogoproto.nullable) = false];
 }
 
+message AddTableRequests {
+  repeated AddTableRequest requests = 1;
+}
+
+message RemoveTableRequests {
+  repeated RemoveTableRequest requests =2;
+}
+
 message DispatchTableRequest {
     oneof request {
         AddTableRequest add_table = 1;
         RemoveTableRequest remove_table = 2;
+        AddTableRequests batch_add = 3;
+        RemoveTableRequests batch_remove=4;
     }
 }
 

@@ -439,7 +439,49 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 		m.From = c.captureID
 	}
 	c.compat.BeforeTransportSend(msgs)
-	return c.trans.Send(ctx, msgs)
+	var compatedMsgs []*schedulepb.Message
+	addTableMsgs := make(map[model.CaptureID][]*schedulepb.AddTableRequest)
+	removeTableMsgs := make(map[model.CaptureID][]*schedulepb.RemoveTableRequest)
+	for _, msg := range msgs {
+		switch msg.MsgType {
+		case schedulepb.MsgDispatchTableRequest:
+			switch req := msg.DispatchTableRequest.Request.(type) {
+			case *schedulepb.DispatchTableRequest_AddTable:
+				addTableReq := req.AddTable
+				list, ok := addTableMsgs[msg.To]
+				if !ok {
+					list = make([]*schedulepb.AddTableRequest, 0)
+					addTableMsgs[msg.To] = list
+					msg.DispatchTableRequest.Request = &schedulepb.DispatchTableRequest_BatchAdd{
+						BatchAdd: &schedulepb.AddTableRequests{
+							Requests: list,
+						},
+					}
+					compatedMsgs = append(compatedMsgs, msg)
+				}
+				req.AddTable = nil
+				list = append(list, addTableReq)
+			case *schedulepb.DispatchTableRequest_RemoveTable:
+				removeTableReq := req.RemoveTable
+				list, ok := removeTableMsgs[msg.To]
+				if !ok {
+					list = make([]*schedulepb.RemoveTableRequest, 0)
+					removeTableMsgs[msg.To] = list
+					msg.DispatchTableRequest.Request = &schedulepb.DispatchTableRequest_BatchRemove{
+						BatchRemove: &schedulepb.RemoveTableRequests{
+							Requests: list,
+						},
+					}
+					compatedMsgs = append(compatedMsgs, msg)
+				}
+				req.RemoveTable = nil
+				list = append(list, removeTableReq)
+			}
+		default:
+			compatedMsgs = append(compatedMsgs, msg)
+		}
+	}
+	return c.trans.Send(ctx, compatedMsgs)
 }
 
 func (c *coordinator) maybeCollectMetrics() {
