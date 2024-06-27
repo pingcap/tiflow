@@ -139,7 +139,6 @@ var defaultServerConfig = &ServerConfig{
 		Messages: defaultMessageConfig.Clone(),
 
 		Scheduler: NewDefaultSchedulerConfig(),
-		CDCV2:     &CDCV2{Enable: false},
 		Puller: &PullerConfig{
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
