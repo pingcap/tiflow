@@ -384,6 +384,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				status:     dispatchTableTaskReceived,
 			}
 			table = a.tableM.addTableSpan(span)
+			table.injectDispatchTableTask(task)
 		}
 	}
 }

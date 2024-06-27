@@ -440,42 +440,44 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 	}
 	c.compat.BeforeTransportSend(msgs)
 	var compatedMsgs []*schedulepb.Message
-	addTableMsgs := make(map[model.CaptureID][]*schedulepb.AddTableRequest)
-	removeTableMsgs := make(map[model.CaptureID][]*schedulepb.RemoveTableRequest)
+	addTableMsgs := make(map[model.CaptureID]*schedulepb.Message)
+	removeTableMsgs := make(map[model.CaptureID]*schedulepb.Message)
 	for _, msg := range msgs {
 		switch msg.MsgType {
 		case schedulepb.MsgDispatchTableRequest:
 			switch req := msg.DispatchTableRequest.Request.(type) {
 			case *schedulepb.DispatchTableRequest_AddTable:
 				addTableReq := req.AddTable
-				list, ok := addTableMsgs[msg.To]
+				oldMsg, ok := addTableMsgs[msg.To]
 				if !ok {
-					list = make([]*schedulepb.AddTableRequest, 0)
-					addTableMsgs[msg.To] = list
+					oldMsg = msg
+					addTableMsgs[msg.To] = msg
 					msg.DispatchTableRequest.Request = &schedulepb.DispatchTableRequest_BatchAdd{
 						BatchAdd: &schedulepb.AddTableRequests{
-							Requests: list,
+							Requests: make([]*schedulepb.AddTableRequest, 0),
 						},
 					}
 					compatedMsgs = append(compatedMsgs, msg)
 				}
 				req.AddTable = nil
-				list = append(list, addTableReq)
+				oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests =
+					append(oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests, addTableReq)
 			case *schedulepb.DispatchTableRequest_RemoveTable:
 				removeTableReq := req.RemoveTable
-				list, ok := removeTableMsgs[msg.To]
+				oldMsg, ok := removeTableMsgs[msg.To]
 				if !ok {
-					list = make([]*schedulepb.RemoveTableRequest, 0)
-					removeTableMsgs[msg.To] = list
+					oldMsg = msg
+					removeTableMsgs[msg.To] = msg
 					msg.DispatchTableRequest.Request = &schedulepb.DispatchTableRequest_BatchRemove{
 						BatchRemove: &schedulepb.RemoveTableRequests{
-							Requests: list,
+							Requests: make([]*schedulepb.RemoveTableRequest, 0),
 						},
 					}
 					compatedMsgs = append(compatedMsgs, msg)
 				}
 				req.RemoveTable = nil
-				list = append(list, removeTableReq)
+				oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests =
+					append(oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests, removeTableReq)
 			}
 		default:
 			compatedMsgs = append(compatedMsgs, msg)
