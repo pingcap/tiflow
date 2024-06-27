@@ -3,7 +3,7 @@
 set -eu
 
 export TEST_DIR=/tmp/dm_test
-export TEST_NAME="upstream_switch"
+export TEST_NAME="upstream_switch_mariadb"
 export DM_MASTER_EXTRA_ARG=""
 
 WORK_DIR=$TEST_DIR/$TEST_NAME
@@ -68,7 +68,7 @@ function change_master_to_pos() {
 
 function change_master_to_gtid() {
 	exec_sql $1 "stop slave;"
-	exec_sql $1 "change master to master_host='$2',master_user='root',master_password='123456',master_auto_position=1;"
+	exec_sql $1 "change master to master_host='$2',master_user='root',master_password='123456',master_use_gtid=slave_pos;"
 	exec_sql $1 "start slave;"
 }
 
