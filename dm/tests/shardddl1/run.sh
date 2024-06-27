@@ -27,6 +27,9 @@ function DM_002_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
 }
 
 function DM_002() {
