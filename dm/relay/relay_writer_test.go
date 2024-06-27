@@ -185,6 +185,8 @@ func TestFormatDescriptionEvent(t *testing.T) {
 }
 
 func verifyFilenameOffset(t *testing.T, w Writer, filename string, offset int64) {
+	t.Helper()
+
 	wf, ok := w.(*FileWriter)
 	require.True(t, ok)
 	require.Equal(t, filename, wf.filename.Load())
