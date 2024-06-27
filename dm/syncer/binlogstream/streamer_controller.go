@@ -419,7 +419,7 @@ LOOP:
 		}
 
 		// fake rotate. binlog recorder should handle it
-		if c.lastEventFromUpstream.Header.LogPos == 0 {
+		if utils.IsFakeRotateEvent(c.lastEventFromUpstream.Header) {
 			event = c.lastEventFromUpstream
 			c.lastEventFromUpstream = nil
 			return
