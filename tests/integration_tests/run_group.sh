@@ -36,7 +36,7 @@ groups=(
 	# G01
 	"$mysql_only_http $kafka_only_protocol $storage_only_canal_json multi_tables_ddl"
 	# G02
-	"$mysql_only_consistent_replicate $kafka_only_v2 mq_split_by_partition_key $storage_only_csv"
+	"$mysql_only_consistent_replicate $kafka_only_v2 mq_split_by_partition_key_uk mq_split_by_partition_key_normal $storage_only_csv"
 	# G03
 	'row_format drop_many_tables processor_stop_delay partition_table'
 	# G04

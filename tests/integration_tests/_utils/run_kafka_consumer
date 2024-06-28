@@ -25,15 +25,15 @@ downstream_uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=fal
 if [ "$consumer_replica_config" != "" ] && [ "$schema_registry_uri" != "" ]; then
 	echo "consumer replica config found: $consumer_replica_config"
 	echo "schema registry uri found: $schema_registry_uri"
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --config $consumer_replica_config --schema-registry-uri $schema_registry_uri >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --config $consumer_replica_config --schema-registry-uri $schema_registry_uri >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 elif [ "$schema_registry_uri" != "" ]; then
 	echo "schema registry uri found: $schema_registry_uri"
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --schema-registry-uri $schema_registry_uri >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --schema-registry-uri $schema_registry_uri >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 elif [ "$consumer_replica_config" != "" ]; then
 	echo "consumer replica config found: $consumer_replica_config"
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri ${downstream_uri} --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 else
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${downstream_uri} >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri ${downstream_uri} >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 fi
 
 cd $pwd
