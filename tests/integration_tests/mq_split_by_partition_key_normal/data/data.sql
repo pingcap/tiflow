@@ -2,7 +2,7 @@ drop database if exists test;
 create database test;
 use test;
 
-CREATE TABLE t (a INT PRIMARY KEY NONCLUSTERED, b INT);
+CREATE TABLE t (a INT PRIMARY KEY NONCLUSTERED, b INT NOT NULL);
 
 INSERT INTO t VALUES (1, 2);
 UPDATE t SET a = 2 WHERE a = 1;
@@ -34,7 +34,6 @@ UPDATE t SET a=6 WHERE a=1;
 INSERT INTO t VALUES (1, 66);
 UPDATE t SET a=66 WHERE a=1;
 
--- b = 333333, partition = 1
 INSERT INTO t VALUES (1, 666);
 UPDATE t SET a=666 WHERE a=1;
 
@@ -46,7 +45,6 @@ UPDATE t SET a=7 WHERE a=1;
 INSERT INTO t VALUES (1, 77);
 UPDATE t SET a=77 WHERE a=1;
 
--- b = 333333, partition = 1
 INSERT INTO t VALUES (1, 777);
 UPDATE t SET a=777 WHERE a=1;
 
@@ -58,7 +56,6 @@ UPDATE t SET a=8 WHERE a=1;
 INSERT INTO t VALUES (1, 88);
 UPDATE t SET a=88 WHERE a=1;
 
--- b = 333333, partition = 1
 INSERT INTO t VALUES (1, 888);
 UPDATE t SET a=888 WHERE a=1;
 
@@ -70,8 +67,31 @@ UPDATE t SET a=9 WHERE a=1;
 INSERT INTO t VALUES (1, 99);
 UPDATE t SET a=99 WHERE a=1;
 
--- b = 333333, partition = 1
 INSERT INTO t VALUES (1, 999);
 UPDATE t SET a=999 WHERE a=1;
+
+UPDATE t SET b = 12 WHERE b = 2;
+UPDATE t SET b = 2 WHERE b = 22;
+UPDATE t SET b = 22 WHERE b = 222;
+
+UPDATE t SET b = 13 WHERE a = 3;
+UPDATE t SET b = 3 WHERE a = 33;
+UPDATE t SET b = 33 WHERE a = 333;
+
+UPDATE t SET b = 16 WHERE a = 6;
+UPDATE t SET b = 6 WHERE a = 66;
+UPDATE t SET b = 66 WHERE a = 666;
+
+-- UPDATE t SET b = 17 WHERE a = 7;
+-- UPDATE t SET b = 7 WHERE a = 77;
+-- UPDATE t SET b = 77 WHERE a = 777;
+
+-- UPDATE t SET b = 18 WHERE a = 8;
+-- UPDATE t SET b = 8 WHERE a = 88;
+-- UPDATE t SET b = 88 WHERE a = 888;
+
+-- UPDATE t SET b = 19 WHERE a = 9;
+-- UPDATE t SET b = 9 WHERE a = 99;
+-- UPDATE t SET b = 99 WHERE a = 999;
 
 CREATE TABLE test.finish_mark (a int primary key);

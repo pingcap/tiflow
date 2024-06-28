@@ -13,7 +13,7 @@ function run_changefeed() {
 	local start_ts=$2
 	local should_pass_check=$3
 
-	TOPIC_NAME="ticdc-mq-split-by-partition-key-$changefeed_id"
+	TOPIC_NAME="ticdc-mq-split-by-partition-key-uk-$changefeed_id-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&partition-num=3" ;;
 	pulsar)
