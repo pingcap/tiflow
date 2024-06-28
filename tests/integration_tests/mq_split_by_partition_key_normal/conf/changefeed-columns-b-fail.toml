@@ -8,8 +8,8 @@ dispatchers = [
 
 [sink.kafka-config]
 output-raw-change-event = true
-split-by-partition-key = false
+split-by-partition-key = true
 
 [sink.pulsar-config]
 output-raw-change-event = true
-split-by-partition-key = false
+split-by-partition-key = true

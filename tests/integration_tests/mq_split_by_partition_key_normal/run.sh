@@ -13,7 +13,7 @@ function run_changefeed() {
 	local start_ts=$2
 	local should_pass_check=$3
 
-	TOPIC_NAME="ticdc-mq-split-by-partition-key-$changefeed_id-53"
+	TOPIC_NAME="ticdc-mq-split-by-partition-key-normal-$changefeed_id-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&partition-num=6" ;;
 	pulsar)
@@ -63,8 +63,12 @@ function run() {
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	run_changefeed "changefeed-columns-b-default-config" $start_ts true
+	# fail since partition key is not split
+	run_changefeed "changefeed-columns-b-default-config" $start_ts false
+	# fail since the parimary key is not split
 	run_changefeed "changefeed-columns-b-fail" $start_ts false
+	# where cluase of delete statement should contain partition key
+	run_changefeed "changefeed-columns-b-succ" $start_ts false
 
 	cleanup_process $CDC_BINARY
 }
