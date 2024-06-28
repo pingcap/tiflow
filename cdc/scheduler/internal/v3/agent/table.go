@@ -327,7 +327,7 @@ func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, er
 		if message == nil {
 			return true
 		}
-		//result = append(result, message)
+		// result = append(result, message)
 		return true
 	})
 	for _, span := range toBeDropped {

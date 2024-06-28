@@ -460,8 +460,7 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 					compatedMsgs = append(compatedMsgs, msg)
 				}
 				req.AddTable = nil
-				oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests =
-					append(oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests, addTableReq)
+				oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests = append(oldMsg.GetDispatchTableRequest().GetBatchAdd().Requests, addTableReq)
 			case *schedulepb.DispatchTableRequest_RemoveTable:
 				removeTableReq := req.RemoveTable
 				oldMsg, ok := removeTableMsgs[msg.To]
@@ -476,8 +475,7 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 					compatedMsgs = append(compatedMsgs, msg)
 				}
 				req.RemoveTable = nil
-				oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests =
-					append(oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests, removeTableReq)
+				oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests = append(oldMsg.GetDispatchTableRequest().GetBatchRemove().Requests, removeTableReq)
 			}
 		default:
 			compatedMsgs = append(compatedMsgs, msg)
