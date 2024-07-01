@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -308,6 +309,7 @@ func (m *mounter) decodeRow(
 		log.Info("need restore data",
 			zap.Int64("columnId", id),
 			zap.Bool("needRestoredData", types.NeedRestoredData(ft)),
+			zap.Bool("collate", collate.NewCollationEnabled()),
 			zap.Any("ft", ft))
 	}
 	datums, err = tablecodec.DecodeHandleToDatumMap(
