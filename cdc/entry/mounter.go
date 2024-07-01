@@ -604,6 +604,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
+		log.Debug("decode columns", zap.Any("cols", cols), zap.Any("columnInfos", columnInfos))
 
 		currentChecksum, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
