@@ -304,6 +304,12 @@ func (m *mounter) decodeRow(
 		zap.Any("handleColIDs", handleColIDs),
 		zap.Any("reqCols", reqCols),
 		zap.Any("handleColFt", handleColFt))
+	for id, ft := range handleColFt {
+		log.Info("need restore data",
+			zap.Int64("columnId", id),
+			zap.Bool("needRestoredData", types.NeedRestoredData(ft)),
+			zap.Any("ft", ft))
+	}
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
