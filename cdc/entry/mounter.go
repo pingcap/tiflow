@@ -283,6 +283,7 @@ func (m *mounter) decodeRow(
 	)
 
 	if rowcodec.IsNewFormat(rawValue) {
+		log.Debug("decode row with new format", zap.String("table", tableInfo.Name.O))
 		decoder := rowcodec.NewDatumMapDecoder(reqCols, m.tz)
 		if isPreColumns {
 			m.preDecoder = decoder
@@ -291,13 +292,16 @@ func (m *mounter) decodeRow(
 		}
 		datums, err = decodeRowV2(decoder, rawValue)
 	} else {
+		log.Debug("decode row with old format", zap.String("table", tableInfo.Name.O))
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
 	}
 
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
-
+	log.Debug("decode row", zap.Any("datums", datums),
+		zap.Any("handle", recordID),
+		zap.Any("handleColIDs", handleColIDs))
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
