@@ -112,7 +112,7 @@ func New(
 		bs := blackhole.NewDMLSink()
 		s.rowSink = bs
 		s.category = CategoryBlackhole
-	case sink.PulsarScheme, sink.PulsarSSLScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme, sink.PulsarHTTPScheme, sink.PulsarHTTPSScheme:
 		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			manager.NewPulsarTopicManager,
 			pulsarConfig.NewCreatorFactory, dmlproducer.NewPulsarDMLProducer)
