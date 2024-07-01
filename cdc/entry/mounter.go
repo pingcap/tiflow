@@ -307,6 +307,9 @@ func (m *mounter) decodeRow(
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
+	log.Info("decode row after decode handle", zap.Any("datums", datums),
+		zap.Any("handle", recordID),
+		zap.Any("handleColIDs", handleColIDs))
 
 	return datums, true, nil
 }
