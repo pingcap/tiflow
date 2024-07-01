@@ -222,13 +222,8 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 }
 
 // Write will synchronously write data downstream
-func (w *writer) Write(ctx context.Context, messageType model.MessageType, commitTs uint64) bool {
-	var watermark uint64
-	if messageType == model.MessageTypeRow {
-		watermark = commitTs
-	} else {
-		watermark = w.getMinWatermark()
-	}
+func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
+	watermark := w.getMinWatermark()
 	var todoDDL *model.DDLEvent
 	for {
 		todoDDL = w.getFrontDDL()
@@ -288,7 +283,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		counter     int
 		needFlush   bool
 		messageType model.MessageType
-		commitTs    uint64
 	)
 	for {
 		ty, hasNext, err := decoder.HasNext()
@@ -412,26 +406,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int64("tableID", tableID),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()))
-
-			if group.ShouldFlushEvents() {
-				g := group.Resolve(row.CommitTs)
-				tableSink, ok := progress.tableSinkMap.Load(tableID)
-				if !ok {
-					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
-						model.DefaultChangeFeedID("kafka-consumer"),
-						spanz.TableIDToComparableSpan(tableID),
-						g.events[0].CommitTs,
-					)
-					progress.tableSinkMap.Store(tableID, tableSink)
-				}
-				tableSink.(tablesink.TableSink).AppendRowChangedEvents(g.events...)
-				log.Warn("too much events buffered, should flush them to reduce memory usage",
-					zap.Uint64("resolvedTs", row.CommitTs), zap.Int64("tableID", tableID),
-					zap.Int("count", len(g.events)), zap.Int("bytes", g.bytes),
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
-				needFlush = true
-				commitTs = row.CommitTs
-			}
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -455,8 +429,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 
 			for tableID, group := range eventGroup {
-				g := group.Resolve(ts)
-				events := g.events
+				events := group.Resolve(ts)
 				if len(events) == 0 {
 					continue
 				}
@@ -471,8 +444,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
 				log.Debug("append row changed events to table sink",
-					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID),
-					zap.Int("count", len(events)), zap.Int("bytes", g.bytes),
+					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
@@ -493,7 +465,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		return false
 	}
 	// flush when received DDL event or resolvedTs
-	return w.Write(ctx, messageType, commitTs)
+	return w.Write(ctx, messageType)
 }
 
 type fakeTableIDGenerator struct {
