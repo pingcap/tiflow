@@ -301,7 +301,9 @@ func (m *mounter) decodeRow(
 	}
 	log.Info("decode row", zap.Any("datums", datums),
 		zap.Any("handle", recordID),
-		zap.Any("handleColIDs", handleColIDs))
+		zap.Any("handleColIDs", handleColIDs),
+		zap.Any("reqCols", reqCols),
+		zap.Any("handleColFt", handleColFt))
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
