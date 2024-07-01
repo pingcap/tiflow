@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -283,6 +284,7 @@ func (m *mounter) decodeRow(
 	)
 
 	if rowcodec.IsNewFormat(rawValue) {
+		log.Info("decode row with new format", zap.String("table", tableInfo.Name.O))
 		decoder := rowcodec.NewDatumMapDecoder(reqCols, m.tz)
 		if isPreColumns {
 			m.preDecoder = decoder
@@ -291,18 +293,33 @@ func (m *mounter) decodeRow(
 		}
 		datums, err = decodeRowV2(decoder, rawValue)
 	} else {
+		log.Info("decode row with old format", zap.String("table", tableInfo.Name.O))
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
 	}
 
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
-
+	log.Info("decode row", zap.Any("datums", datums),
+		zap.Any("handle", recordID),
+		zap.Any("handleColIDs", handleColIDs),
+		zap.Any("reqCols", reqCols),
+		zap.Any("handleColFt", handleColFt))
+	for id, ft := range handleColFt {
+		log.Info("need restore data",
+			zap.Int64("columnId", id),
+			zap.Bool("needRestoredData", types.NeedRestoredData(ft)),
+			zap.Bool("collate", collate.NewCollationEnabled()),
+			zap.Any("ft", ft))
+	}
 	datums, err = tablecodec.DecodeHandleToDatumMap(
 		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
+	log.Info("decode row after decode handle", zap.Any("datums", datums),
+		zap.Any("handle", recordID),
+		zap.Any("handleColIDs", handleColIDs))
 
 	return datums, true, nil
 }
@@ -604,6 +621,11 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
+		log.Info("decode columns",
+			zap.Any("cols", cols),
+			zap.Any("rawCols", rawCols),
+			zap.Any("columnInfos", columnInfos),
+			zap.Any("datums", row.Row))
 
 		currentChecksum, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
