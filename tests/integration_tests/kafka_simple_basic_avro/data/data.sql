@@ -31,6 +31,9 @@ values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
 delete from tp_int where c_int = 0;
 
+rename table tp_int to tp_int2;
+update tp_int2 set c_int = 5 where id = 2;
+
 -- unsigned int
 create table tp_unsigned_int (
     id          int auto_increment,
@@ -67,6 +70,9 @@ values (128, 32768, 8388608, 2147483648, 9223372036854775808);
 update tp_unsigned_int set c_unsigned_int = 0, c_unsigned_tinyint = 0 where c_unsigned_smallint = 65535;
 delete from tp_unsigned_int where c_unsigned_int = 0;
 
+alter table tp_unsigned_int add column (a int not null default 3);
+update tp_unsigned_int set c_unsigned_tinyint = 23 where id = 2;
+
 -- real
 create table tp_real
 (
@@ -90,6 +96,12 @@ values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
 
+alter table tp_real drop column c_double;
+update tp_real set c_float = 2.71828 where id = 3;
+
+alter table tp_real add column c_double double default 3.1415926;
+update tp_real set c_double = 2.3456 where id = 3;
+
 -- unsigned real
 create table tp_unsigned_real (
     id                   int auto_increment,
@@ -108,6 +120,16 @@ insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_dec
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
 
 update tp_unsigned_real set c_unsigned_double = 2020.0404 where c_unsigned_double = 2020.0303;
+
+alter table tp_unsigned_real alter column c_unsigned_float set default 2020.0202;
+
+insert into tp_unsigned_real(c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
+values (2020.2345, 2020.2345, 2020.2345);
+
+update tp_unsigned_real set c_unsigned_double = 2020.2345 where id = 2;
+
+alter table tp_unsigned_real alter column c_unsigned_double drop default;
+update tp_unsigned_real set c_unsigned_float = 2020.0202 where id = 3;
 
 -- time
 create table tp_time
