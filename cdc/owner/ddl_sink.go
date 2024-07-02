@@ -130,7 +130,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
 	if util.GetOrZero(s.info.Config.EnableSyncPoint) && s.syncPointStore == nil {
 		syncPointStore, err := syncpointstore.NewSyncPointStore(
-			ctx, s.changefeedID, s.info.SinkURI, util.GetOrZero(s.info.Config.SyncPointRetention))
+			ctx, s.changefeedID, s.info.SinkURI, s.info.Config)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -17,9 +17,9 @@ import (
 	"context"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -40,7 +40,7 @@ func NewSyncPointStore(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURIStr string,
-	syncPointRetention time.Duration,
+	replicaConfig *config.ReplicaConfig,
 ) (SyncPointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
@@ -49,7 +49,7 @@ func NewSyncPointStore(
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSyncPointStore(ctx, changefeedID, sinkURI, syncPointRetention)
+		return newMySQLSyncPointStore(ctx, changefeedID, sinkURI, replicaConfig)
 	default:
 		return nil, cerror.ErrSinkURIInvalid.
 			GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
