@@ -72,7 +72,8 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 }
 
 type partitionProgress struct {
-	watermark uint64
+	watermark       uint64
+	watermarkOffset kafka.Offset
 	// tableSinkMap -> [tableID]tableSink
 	tableSinkMap sync.Map
 
@@ -373,12 +374,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			if partition != target {
 				log.Panic("RowChangedEvent dispatched to wrong partition",
-					zap.Int32("partition", partition),
-					zap.Int32("expected", target),
+					zap.Int32("partition", partition), zap.Int32("expected", target),
 					zap.Int32("partitionNum", w.option.partitionNum),
 					zap.Any("offset", message.TopicPartition.Offset),
-					zap.Int64("tableID", tableID),
-					zap.Any("row", row),
+					zap.Int64("tableID", tableID), zap.Any("row", row),
 				)
 			}
 
@@ -387,10 +386,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
 			if row.CommitTs < watermark {
 				log.Panic("RowChangedEvent fallback row, ignore it",
-					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("watermark", watermark),
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Int64("tableID", tableID),
+					zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
+					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+					zap.Int32("partition", partition), zap.Int64("tableID", tableID),
 					zap.String("schema", row.TableInfo.GetSchemaName()),
 					zap.String("table", row.TableInfo.GetTableName()))
 			}
@@ -425,9 +423,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			watermark := atomic.LoadUint64(&progress.watermark)
 			if ts < watermark {
 				log.Panic("partition resolved ts fallback, skip it",
-					zap.Uint64("ts", ts),
-					zap.Uint64("watermark", watermark),
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+					zap.Int32("partition", partition))
 			}
 
 			for tableID, group := range eventGroup {
@@ -450,6 +448,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
+			progress.watermarkOffset = message.TopicPartition.Offset
 			needFlush = true
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
