@@ -45,10 +45,10 @@ function run() {
 	esac
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "CREATE TABLE new_ci_collation_test.finish_mark_1 (a int primary key);"
-	
+	run_sql "CREATE TABLE ci_collation_compatibility.finish_mark_1 (a int primary key);"
+
 	sleep 30
-	check_table_exists "new_ci_collation_test.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "ci_collation_compatibility.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "ci_collation_compatibility.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
