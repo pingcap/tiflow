@@ -97,6 +97,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
+		AddTableBatchSize:      DefaultAddTableBatchSize,
+		MaxTableCount:          DefaultMaxTableCount,
 		EnableTableAcrossNodes: false,
 		RegionThreshold:        100_000,
 		WriteKeyThreshold:      0,

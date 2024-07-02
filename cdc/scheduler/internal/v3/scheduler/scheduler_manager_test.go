@@ -28,8 +28,12 @@ import (
 func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
-	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
-		config.NewDefaultSchedulerConfig())
+	cfg := config.NewDefaultSchedulerConfig()
+	cfg.ChangefeedSettings = &config.ChangefeedSchedulerConfig{
+		AddTableBatchSize: config.DefaultAddTableBatchSize,
+		MaxTableCount:     config.DefaultMaxTableCount,
+	}
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerPriorityBasic])
 	require.NotNil(t, m.schedulers[schedulerPriorityBalance])
@@ -42,6 +46,10 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewDefaultSchedulerConfig()
+	cfg.ChangefeedSettings = &config.ChangefeedSchedulerConfig{
+		AddTableBatchSize: config.DefaultAddTableBatchSize,
+		MaxTableCount:     config.DefaultMaxTableCount,
+	}
 	cfg.MaxTaskConcurrency = 1
 	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 
