@@ -7,7 +7,7 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-output-dir = "/tmp/tidb_cdc_test/big_txn/sync_diff/output"
+output-dir = "/tmp/tidb_cdc_test/bdr_mode/sync_diff/output"
 
 source-instances = ["tidb"]
 

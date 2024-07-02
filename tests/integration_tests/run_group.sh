@@ -62,7 +62,7 @@ groups=(
 	# G14
 	'changefeed_finish force_replicate_table'
 	# G15
-	'new_ci_collation batch_add_table multi_rocks'
+	'new_ci_collation batch_add_table multi_rocks ci_collation_compatibility'
 	# G16, currently G16 is not running in kafka pipeline
 	'owner_resign processor_etcd_worker_delay sink_hang'
 	# G17
