@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["ci_collation_compatibility.usertable"]
+    target-check-tables = ["ci_collation_compatibility.?*"]
 
 [data-sources]
 [data-sources.mysql1]
