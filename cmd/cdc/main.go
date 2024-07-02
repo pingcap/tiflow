@@ -15,9 +15,12 @@ package main
 
 import (
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tiflow/pkg/cmd"
 )
 
 func main() {
+	// NOTE: the line is removed from TiDB repo in https://github.com/pingcap/tidb/pull/52191#issuecomment-2024836481.
+	collate.SetNewCollationEnabledForTest(false)
 	cmd.Run()
 }
