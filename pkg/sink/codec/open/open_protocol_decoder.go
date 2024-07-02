@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -57,7 +58,7 @@ func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (co
 	)
 	if config.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := config.LargeMessageHandle.ClaimCheckStorageURI
-		externalStorage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		externalStorage, err = util.GetExternalStorage(ctx, storageURI, nil, util.NewS3Retryer(10, 10*time.Second, 10*time.Second))
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
