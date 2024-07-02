@@ -1,6 +1,6 @@
 drop database if exists `ci_collation_compatibility`;
 create database `ci_collation_compatibility`;
-use `new_ci_collation_test`;
+use `ci_collation_compatibility`;
 
 CREATE TABLE t1 (
     a varchar(20) not null,
