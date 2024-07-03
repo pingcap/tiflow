@@ -14,8 +14,7 @@ create table tp_int
         primary key (id)
 );
 
-insert into tp_int()
-values ();
+insert into tp_int() values ();
 
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
@@ -51,8 +50,7 @@ create table tp_unsigned_int (
         primary key (id)
 );
 
-insert into tp_unsigned_int()
-values ();
+insert into tp_unsigned_int() values ();
 
 insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
                             c_unsigned_int, c_unsigned_bigint)
@@ -90,8 +88,7 @@ create table tp_real
         primary key (id)
 );
 
-insert into tp_real()
-values ();
+insert into tp_real() values ();
 
 insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
@@ -118,8 +115,7 @@ create table tp_unsigned_real (
         primary key (id)
 );
 
-insert into tp_unsigned_real()
-values ();
+insert into tp_unsigned_real() values ();
 
 insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
@@ -211,8 +207,7 @@ create table tp_blob
         primary key (id)
 );
 
-insert into tp_blob()
-values ();
+insert into tp_blob() values ();
 
 insert into tp_blob(c_tinyblob, c_blob, c_mediumblob, c_longblob)
 values (x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A');
@@ -234,8 +229,7 @@ create table tp_char_binary
         primary key (id)
 );
 
-insert into tp_char_binary()
-values ();
+insert into tp_char_binary() values ();
 
 insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A');
@@ -251,14 +245,13 @@ create table tp_other
     id     int auto_increment,
     c_enum enum ('a','b','c') null,
     c_set  set ('a','b','c')  null,
-    c_bit  bit(64)            null,
+    c_bit  bit(10)            null,
     c_json json               null,
     constraint pk
         primary key (id)
 );
 
-insert into tp_other()
-values ();
+insert into tp_other() values ();
 
 insert into tp_other(c_enum, c_set, c_bit, c_json)
 values ('a', 'a,b', b'1000001', '{
@@ -274,6 +267,29 @@ values ('b', 'b,c', b'1000001', '{
 }');
 
 update tp_other set c_enum = 'c' where c_set = 'b,c';
+
+alter table tp_other modify column c_enum enum ('a', 'b', 'c','d') null;
+insert into tp_other(c_enum, c_set, c_bit, c_json)
+values ('d', 'b,c', b'1000001', '{
+  "key1": "value1",
+  "key2": "value2",
+  "key3": "123"
+}');
+
+alter table tp_other modify column c_enum enum ('d', 'c', 'b', 'a') null;
+update tp_other set c_enum = 'a' where c_enum = 'd';
+
+alter table tp_other modify column c_set set ('a', 'b', 'c', 'd') null;
+
+update tp_other set c_set = 'b,c' where c_set = 'a,b';
+
+alter table tp_other modify column c_bit bit(20) null;
+
+update tp_other set c_bit = b'1' where c_bit = b'1000001';
+
+alter table tp_other modify column c_bit bit(1) null;
+
+update tp_other set c_bit = b'0' where c_bit = b'1';
 
 -- gbk dmls
 CREATE TABLE cs_gbk (
