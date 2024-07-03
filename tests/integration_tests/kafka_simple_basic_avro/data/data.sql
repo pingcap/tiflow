@@ -28,11 +28,16 @@ values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 
+-- not key changed update
 update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
+
 delete from tp_int where c_int = 0;
 
 rename table tp_int to tp_int2;
 update tp_int2 set c_int = 5 where id = 2;
+
+-- key changed update
+update tp_int2 set id = 5 where id = 3;
 
 -- unsigned int
 create table tp_unsigned_int (
@@ -144,8 +149,7 @@ create table tp_time
         primary key (id)
 );
 
-insert into tp_time()
-values ();
+insert into tp_time() values ();
 
 insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
 values ('2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020');
@@ -155,6 +159,23 @@ values ('2022-02-22', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', 
 
 update tp_time set c_year = '2022' where c_year = '2020';
 update tp_time set c_date = '2022-02-22' where c_datetime = '2020-02-20 02:20:20';
+
+alter table tp_time add column c_timestamp2 timestamp default current_timestamp;
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
+alter table tp_time drop column c_timestamp2;
+
+alter table tp_time add column c_timestamp2 timestamp default now();
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
+alter table tp_time alter column c_timestamp2 drop default;
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year, c_timestamp2)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021', "2024-03-09 18:00:00");
 
 -- text
 create table tp_text
@@ -168,8 +189,7 @@ create table tp_text
         primary key (id)
 );
 
-insert into tp_text()
-values ();
+insert into tp_text() values ();
 
 insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A');
