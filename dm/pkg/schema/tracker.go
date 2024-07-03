@@ -339,7 +339,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
+	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, nil, ddl.OnExistIgnore)
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
