@@ -388,7 +388,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				// if commit message failed, the consumer may read previous message,
 				// just ignore this message should be fine, otherwise panic.
 				if message.TopicPartition.Offset > progress.watermarkOffset {
-					log.Panic("RowChangedEvent fallback row, ignore it",
+					log.Panic("RowChangedEvent fallback row",
 						zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
 						zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 						zap.Int32("partition", partition), zap.Int64("tableID", tableID),
