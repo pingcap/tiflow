@@ -232,10 +232,18 @@ insert into tp_char_binary() values ();
 insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A');
 
+update tp_char_binary set c_char = "123", c_varchar = "abc", c_binary = "asd", c_varbinary = "123asd";
+
 insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values ('89504E470D0A1A0B', '89504E470D0A1A0B', x'89504E470D0A1A0B', x'89504E470D0A1A0B');
 
-update tp_char_binary set c_varchar = '89504E470D0A1A0B' where c_binary = x'89504E470D0A1A0A';
+alter table tp_char_binary modify column c_binary binary(24);
+
+update tp_char_binary set c_varchar = '89504E470D0A1A0A' where id = 3;
+
+delete from tp_char_binary where id = 2;
+
+update tp_char_binary set id = 2 where id = 3;
 
 -- other
 create table tp_other
