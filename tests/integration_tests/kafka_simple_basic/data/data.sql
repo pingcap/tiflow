@@ -75,6 +75,18 @@ values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
 
+update update tp_real set c_float = 2.34, c_double = 3.1415926, c_decimal = 2024, c_decimal_2 = 2024.714 where id = 1;
+
+alter table tp_real modify column c_decimal float;
+
+delete from tp_real where id = 2;
+
+alter table tp_real drop column c_double;
+update tp_real set c_float = 2.71828 where id = 3;
+
+alter table tp_real add column c_double double default 3.1415926;
+update tp_real set c_double = 2.3456 where id = 3;
+
 insert into tp_unsigned_real() values ();
 
 insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
@@ -124,7 +136,12 @@ insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
 values ('2022-02-22', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
 
 update tp_time set c_year = '2022' where c_year = '2020';
+
+alter table tp_time modify column c_datetime timestamp;
+
 update tp_time set c_date = '2022-02-22' where c_datetime = '2020-02-20 02:20:20';
+
+update tp_time set c_datetime = "2024-07-04 15:31";
 
 alter table tp_time add column c_timestamp2 timestamp default current_timestamp;
 
