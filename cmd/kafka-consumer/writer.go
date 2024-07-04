@@ -385,6 +385,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			// if the kafka cluster is normal, this should not hit.
 			// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
 			if row.CommitTs < watermark {
+				// if commit message failed, the consumer may read previous message,
+				// just ignore this message should be fine, otherwise panic.
 				if message.TopicPartition.Offset > progress.watermarkOffset {
 					log.Panic("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
