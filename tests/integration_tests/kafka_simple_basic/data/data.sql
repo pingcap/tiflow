@@ -5,6 +5,11 @@ insert into tp_int() values ();
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
+-- Meta-Only Change
+alter table tp_int modify c_tinyint int;
+
+update tp_int set c_tinyint = 15, c_smallint = 19, c_mediumint = 23, c_int = 67, c_bigint = 97 where id = 1;
+
 -- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807);
@@ -16,13 +21,26 @@ values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 -- not key changed update
 update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
 
-delete from tp_int where c_int = 0;
+update tp_int set c_tinyint = 127, c_smallint = 32767, c_mediumint = 8388607, c_int = 2147483647, c_bigint = 9223372036854775807 where id = 4;
+
+delete from tp_int where c_int = 3;
 
 rename table tp_int to tp_int2;
 update tp_int2 set c_int = 5 where id = 2;
 
 -- key changed update
 update tp_int2 set id = 5 where id = 3;
+
+alter table tp_int2 modify column c_smallint smallint unsigned default 2345;
+
+insert into tp_int2 (c_tinyint, c_mediumint, c_int, c_bigint) values (23, 31, 59, 91);
+
+-- Reorg-Data Change
+alter table tp_int2 modify c_tinyint varchar(5);
+
+insert into tp_int2 (c_tinyint, c_mediumint, c_int, c_bigint) values (23, 31, 59, 91);
+
+update tp_int2 set c_tinyint = "abc" where id in (2, 5, 7);
 
 insert into tp_unsigned_int() values ();
 
