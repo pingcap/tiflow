@@ -452,6 +452,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	return shouldClean
 }
 
+<<<<<<< HEAD
 func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint64) {
 	t.getCheckpointTs()
 
@@ -473,6 +474,8 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 
 // handleRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
+=======
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))
 func handleRowChangedEvents(
 	changefeed model.ChangeFeedID, tableID model.TableID, events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64) {

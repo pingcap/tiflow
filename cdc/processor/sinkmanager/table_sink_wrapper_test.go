@@ -18,7 +18,6 @@ import (
 	"math"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -28,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
 type mockSink struct {
@@ -384,6 +382,7 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 }
+<<<<<<< HEAD
 
 func TestTableSinkWrapperSinkInner(t *testing.T) {
 	t.Parallel()
@@ -444,3 +443,5 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
 	require.True(t, isStuck)
 }
+=======
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))

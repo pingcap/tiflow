@@ -30,9 +30,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	pconfig "github.com/pingcap/tiflow/pkg/config"
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -345,12 +352,6 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 	}
 }
 
-func (m *SinkManager) needsStuckCheck() bool {
-	m.sinkFactory.Lock()
-	defer m.sinkFactory.Unlock()
-	return m.sinkFactory.f != nil && m.sinkFactory.f.Category() == factory.CategoryMQ
-}
-
 func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
@@ -416,19 +417,6 @@ func (m *SinkManager) clearSinkFactory() {
 		}
 		m.sinkFactory.errors = nil
 	}
-}
-
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bool) {
-	m.sinkFactory.Lock()
-	defer m.sinkFactory.Unlock()
-	if version == m.sinkFactory.version {
-		select {
-		case m.sinkFactory.errors <- err:
-		default:
-		}
-		return true
-	}
-	return false
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
@@ -1042,6 +1030,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
 
+<<<<<<< HEAD
 	advanceTimeoutInSec := m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec
 	if advanceTimeoutInSec <= 0 {
 		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
@@ -1061,6 +1050,8 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		}
 	}
 
+=======
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoDMLMgr != nil {

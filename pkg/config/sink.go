@@ -142,8 +142,13 @@ type SinkConfig struct {
 
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
+<<<<<<< HEAD
 	AdvanceTimeoutInSec uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
+=======
+	// Deprecated since v8.1.1
+	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
