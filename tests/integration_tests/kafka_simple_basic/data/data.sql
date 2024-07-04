@@ -1,5 +1,22 @@
 use test;
 
+create table t (
+   a varchar(5),
+   b int,
+   c text,
+
+   primary key (a, b)
+);
+
+insert into t values ("a", 1, "a1");
+insert into t values ("b", 2, "b2");
+
+update t set a = 'b' where b = 1;
+
+update t set b = 0 where c = 'b2';
+
+update t set a = 'a', b = 2 where a = 'b' and b = 0;
+
 insert into tp_int() values ();
 
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
