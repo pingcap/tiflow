@@ -520,7 +520,6 @@ func verifyColumnChecksum(
 	return checksum, false, nil
 }
 
-// todo: do we really need this? how about the datum.ConvertTo ?
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	if value == nil {
 		return types.NewDatum(nil), nil
@@ -534,7 +533,6 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 			return types.NewIntDatum(v), nil
 		}
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		// todo: DefaultStmtNoWarningContext timezone is set to UTC, is it correct?
 		t, err := types.ParseTime(types.DefaultStmtNoWarningContext, value.(string), ft.GetType(), ft.GetDecimal())
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
