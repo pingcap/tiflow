@@ -389,6 +389,7 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 	t.Parallel()
 
@@ -404,6 +405,8 @@ func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 	require.False(t, manager.needsStuckCheck())
 }
 
+=======
+>>>>>>> 695f93240c (processor: fix a bug that will cause processor Tick get stuck when downstream is Kafka (#11339))
 func TestSinkManagerRestartTableSinks(t *testing.T) {
 	failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause", "return")
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause")
