@@ -92,7 +92,7 @@ values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
 
-update update tp_real set c_float = 2.34, c_double = 3.1415926, c_decimal = 2024, c_decimal_2 = 2024.714 where id = 1;
+update tp_real set c_float = 2.34, c_double = 3.1415926, c_decimal = 2024, c_decimal_2 = 2024.714 where id = 1;
 
 alter table tp_real modify column c_decimal float;
 
