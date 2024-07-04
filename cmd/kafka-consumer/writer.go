@@ -384,13 +384,22 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			watermark := atomic.LoadUint64(&progress.watermark)
 			// if the kafka cluster is normal, this should not hit.
 			// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
-			if row.CommitTs < watermark {
-				log.Panic("RowChangedEvent fallback row, ignore it",
+			if row.CommitTs < watermark && message.TopicPartition.Offset > progress.watermarkOffset {
+				if message.TopicPartition.Offset > progress.watermarkOffset {
+					log.Panic("RowChangedEvent fallback row, ignore it",
+						zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
+						zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+						zap.Int32("partition", partition), zap.Int64("tableID", tableID),
+						zap.String("schema", row.TableInfo.GetSchemaName()),
+						zap.String("table", row.TableInfo.GetTableName()))
+				}
+				log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
 					zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
 					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 					zap.Int32("partition", partition), zap.Int64("tableID", tableID),
 					zap.String("schema", row.TableInfo.GetSchemaName()),
 					zap.String("table", row.TableInfo.GetTableName()))
+				continue
 			}
 			group, ok := eventGroup[tableID]
 			if !ok {
