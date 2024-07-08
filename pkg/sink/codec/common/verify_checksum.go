@@ -59,6 +59,9 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		}
 	}
 
+	if db == nil {
+		return nil
+	}
 	// also query the upstream TiDB to get the columns-level checksum
 	return queryRowChecksum(context.Background(), db, event)
 }
