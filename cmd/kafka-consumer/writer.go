@@ -59,7 +59,7 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		if err != nil {
 			return decoder, cerror.Trace(err)
 		}
-		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic)
+		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
 	default:
@@ -115,13 +115,15 @@ func newWriter(ctx context.Context, o *option) *writer {
 		zap.Any("topic", o.topic), zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules))
 
 	var db *sql.DB
-	if o.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+
+	if o.upstreamTiDBDSN != "" {
 		db, err = openDB(ctx, o.upstreamTiDBDSN)
 		if err != nil {
 			log.Panic("cannot open the upstream TiDB, handle key only enabled",
 				zap.String("dsn", o.upstreamTiDBDSN))
 		}
 	}
+
 	for i := 0; i < int(o.partitionNum); i++ {
 		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {

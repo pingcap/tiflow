@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -76,7 +77,22 @@ func MustQueryTimezone(ctx context.Context, db *sql.DB) string {
 	return timezone
 }
 
-func MustQueryRowChecksum(ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{}) *ColumnsHolder {
+func queryRowChecksum(
+	ctx context.Context, db *sql.DB, event *model.RowChangedEvent,
+) error {
+	var (
+		schema   = event.TableInfo.GetSchemaName()
+		table    = event.TableInfo.GetTableName()
+		commitTs = event.GetCommitTs()
+	)
+
+	pkNames := event.TableInfo.GetPrimaryKeyColumnNames()
+	if len(pkNames) == 0 {
+		log.Warn("cannot query row checksum without primary key",
+			zap.String("schema", schema), zap.String("table", table))
+		return nil
+	}
+
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Panic("establish connection to the upstream tidb failed",
@@ -85,9 +101,52 @@ func MustQueryRowChecksum(ctx context.Context, db *sql.DB, commitTs uint64, sche
 	}
 	defer conn.Close()
 
+	if event.Checksum.Current != 0 {
+		conditions := make(map[string]interface{})
+		for _, name := range pkNames {
+			for _, col := range event.Columns {
+				if event.TableInfo.ForceGetColumnName(col.ColumnID) == name {
+					conditions[name] = col.Value
+				}
+			}
+		}
+		result := queryRowChecksumAux(ctx, conn, commitTs, schema, table, conditions)
+		if result != 0 && result != event.Checksum.Current {
+			log.Error("verify upstream TiDB columns-level checksum, current checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Current),
+				zap.Uint32("actual", result))
+			return errors.New("checksum mismatch")
+		}
+	}
+
+	if event.Checksum.Previous != 0 {
+		conditions := make(map[string]interface{})
+		for _, name := range pkNames {
+			for _, col := range event.PreColumns {
+				if event.TableInfo.ForceGetColumnName(col.ColumnID) == name {
+					conditions[name] = col.Value
+				}
+			}
+		}
+		result := queryRowChecksumAux(ctx, conn, commitTs-1, schema, table, conditions)
+		if result != 0 && result != event.Checksum.Previous {
+			log.Error("verify upstream TiDB columns-level checksum, previous checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Previous),
+				zap.Uint32("actual", result))
+			return errors.New("checksum mismatch")
+		}
+	}
+
+	return nil
+}
+
+func queryRowChecksumAux(
+	ctx context.Context, conn *sql.Conn, commitTs uint64, schema string, table string, conditions map[string]interface{},
+) uint32 {
+	var result uint32
 	// 1. set snapshot read
 	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
-	_, err = conn.ExecContext(ctx, query)
+	_, err := conn.ExecContext(ctx, query)
 	if err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 		if ok {
@@ -97,14 +156,14 @@ func MustQueryRowChecksum(ctx context.Context, db *sql.DB, commitTs uint64, sche
 			}
 		}
 
-		log.Panic("set snapshot read failed",
+		log.Error("set snapshot read failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
+		return result
 	}
 
 	query = fmt.Sprintf("select tidb_row_checksum() from %s.%s where ", schema, table)
-	// todo: adjust the where clause conditions
 	var whereClause string
 	for name, value := range conditions {
 		if whereClause != "" {
@@ -114,32 +173,14 @@ func MustQueryRowChecksum(ctx context.Context, db *sql.DB, commitTs uint64, sche
 	}
 	query += whereClause
 
-	rows, err := conn.QueryContext(ctx, query)
+	err = conn.QueryRowContext(ctx, query).Scan(&result)
 	if err != nil {
-		log.Panic("query row failed",
+		log.Panic("scan row failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 	}
-	defer rows.Close()
-
-	holder, err := newColumnHolder(rows)
-	if err != nil {
-		log.Panic("obtain the columns holder failed",
-			zap.String("query", query),
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-	}
-	for rows.Next() {
-		err = rows.Scan(holder.ValuePointers...)
-		if err != nil {
-			log.Panic("scan row failed",
-				zap.String("query", query),
-				zap.String("schema", schema), zap.String("table", table),
-				zap.Uint64("commitTs", commitTs), zap.Error(err))
-		}
-	}
-	return holder
+	return result
 }
 
 // MustSnapshotQuery query the db by the snapshot read with the given commitTs

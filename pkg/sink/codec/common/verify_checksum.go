@@ -14,6 +14,8 @@
 package common
 
 import (
+	"context"
+	"database/sql"
 	"encoding/binary"
 	"hash/crc32"
 	"math"
@@ -29,24 +31,36 @@ import (
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo, expected uint32) error {
+func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
 	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
-	if expected == 0 {
-		return nil
+	if event.Checksum.Current != 0 {
+		checksum, err := calculateChecksum(event.Columns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Current {
+			log.Error("current checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Current),
+				zap.Uint32("actual", checksum))
+			return errors.New("checksum mismatch")
+		}
 	}
-	checksum, err := calculateChecksum(columns, columnInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if checksum != expected {
-		log.Error("checksum mismatch",
-			zap.Uint32("expected", expected),
-			zap.Uint32("actual", checksum))
-		return errors.New("checksum mismatch")
+	if event.Checksum.Previous != 0 {
+		checksum, err := calculateChecksum(event.PreColumns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Previous {
+			log.Error("previous checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Previous),
+				zap.Uint32("actual", checksum))
+			return errors.New("checksum mismatch")
+		}
 	}
 
-	return nil
+	// also query the upstream TiDB to get the columns-level checksum
+	return queryRowChecksum(context.Background(), db, event)
 }
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.

@@ -14,6 +14,7 @@
 package simple
 
 import (
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"sort"
@@ -380,7 +381,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
 func buildRowChangedEvent(
-	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
+	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool, db *sql.DB,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs:        msg.CommitTs,
@@ -392,21 +393,6 @@ func buildRowChangedEvent(
 	result.PreColumns = decodeColumns(msg.Old, tableInfo)
 
 	if enableRowChecksum && msg.Checksum != nil {
-		var (
-			previousCorrupted bool
-			currentCorrupted  bool
-		)
-		err := common.VerifyChecksum(result.PreColumns, tableInfo.Columns, msg.Checksum.Previous)
-		if err != nil {
-			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
-			previousCorrupted = true
-		}
-		err = common.VerifyChecksum(result.Columns, tableInfo.Columns, msg.Checksum.Current)
-		if err != nil {
-			log.Info("checksum corrupted on the current columns", zap.Any("message", msg))
-			currentCorrupted = true
-		}
-
 		result.Checksum = &integrity.Checksum{
 			Previous:  msg.Checksum.Previous,
 			Current:   msg.Checksum.Current,
@@ -414,8 +400,8 @@ func buildRowChangedEvent(
 			Version:   msg.Checksum.Version,
 		}
 
-		corrupted := msg.Checksum.Corrupted || previousCorrupted || currentCorrupted
-		if corrupted {
+		err := common.VerifyChecksum(result, db)
+		if err != nil || msg.Checksum.Corrupted {
 			log.Warn("consumer detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
@@ -440,6 +426,7 @@ func buildRowChangedEvent(
 					zap.Any("default", colInfo.GetDefaultValue()))
 			}
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
+
 		}
 	}
 

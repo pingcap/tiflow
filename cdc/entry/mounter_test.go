@@ -1087,7 +1087,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	// decoder enable checksum functionality.
-	decoder := avro.NewDecoder(codecConfig, schemaM, topic)
+	decoder := avro.NewDecoder(codecConfig, schemaM, topic, nil)
 	err = decoder.AddKeyValue(msg[0].Key, msg[0].Value)
 	require.NoError(t, err)
 
