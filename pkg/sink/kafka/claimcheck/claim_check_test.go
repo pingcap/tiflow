@@ -27,6 +27,7 @@ func TestClaimCheckFileName(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test")
 	largeHandleConfig := config.NewDefaultLargeMessageHandleConfig()
+	largeHandleConfig.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	largeHandleConfig.ClaimCheckStorageURI = "file:///tmp/abc/"
 	claimCheck, err := New(ctx, largeHandleConfig, changefeedID)
 	require.NoError(t, err)
