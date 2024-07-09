@@ -22,6 +22,9 @@ function run() {
 
 	cd $WORK_DIR
 
+	# upstream TiDB disable the cluster index
+	run_sql "set global tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	# upstream tidb cluster enable row level checksum
 	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
