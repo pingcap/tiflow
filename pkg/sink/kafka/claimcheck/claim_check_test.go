@@ -18,15 +18,17 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClaimCheckFileName(t *testing.T) {
 	ctx := context.Background()
-	storageURI := "file:///tmp/abc/"
-	changefeedID := model.DefaultChangeFeedID("test")
 
-	claimCheck, err := New(ctx, storageURI, changefeedID)
+	changefeedID := model.DefaultChangeFeedID("test")
+	largeHandleConfig := config.NewDefaultLargeMessageHandleConfig()
+	largeHandleConfig.ClaimCheckStorageURI = "file:///tmp/abc/"
+	claimCheck, err := New(ctx, largeHandleConfig, changefeedID)
 	require.NoError(t, err)
 
 	fileName := claimCheck.FileNameWithPrefix("file.json")
