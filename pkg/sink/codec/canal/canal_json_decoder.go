@@ -143,12 +143,16 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 	if err != nil {
 		return nil, err
 	}
-	claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
-	if err != nil {
-		return nil, err
+
+	if !b.config.LargeMessageHandle.ClaimCheckRawValue {
+		claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+		if err != nil {
+			return nil, err
+		}
+		data = claimCheckM.Value
 	}
 
-	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, data)
 	if err != nil {
 		return nil, err
 	}
