@@ -394,8 +394,8 @@ func buildRowChangedEvent(
 
 	if enableRowChecksum && msg.Checksum != nil {
 		result.Checksum = &integrity.Checksum{
-			Previous:  msg.Checksum.Previous,
 			Current:   msg.Checksum.Current,
+			Previous:  msg.Checksum.Previous,
 			Corrupted: msg.Checksum.Corrupted,
 			Version:   msg.Checksum.Version,
 		}
@@ -403,28 +403,7 @@ func buildRowChangedEvent(
 		err := common.VerifyChecksum(result, db)
 		if err != nil || msg.Checksum.Corrupted {
 			log.Warn("consumer detect checksum corrupted",
-				zap.String("schema", msg.Schema),
-				zap.String("table", msg.Table))
-			for _, col := range result.PreColumns {
-				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-				log.Info("data corrupted, print each previous column for debugging",
-					zap.String("name", colInfo.Name.O),
-					zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()),
-					zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value),
-					zap.Any("default", colInfo.GetDefaultValue()))
-			}
-			for _, col := range result.Columns {
-				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-				log.Info("data corrupted, print each column for debugging",
-					zap.String("name", colInfo.Name.O),
-					zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()),
-					zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value),
-					zap.Any("default", colInfo.GetDefaultValue()))
-			}
+				zap.String("schema", msg.Schema), zap.String("table", msg.Table))
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 
 		}

@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"math"
 	"strconv"
@@ -41,9 +42,15 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		}
 		if checksum != event.Checksum.Current {
 			log.Error("current checksum mismatch",
-				zap.Uint32("expected", event.Checksum.Current),
-				zap.Uint32("actual", checksum))
-			return errors.New("checksum mismatch")
+				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum))
+			for _, col := range event.Columns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("current checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Current)
 		}
 	}
 	if event.Checksum.Previous != 0 {
@@ -55,7 +62,14 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 			log.Error("previous checksum mismatch",
 				zap.Uint32("expected", event.Checksum.Previous),
 				zap.Uint32("actual", checksum))
-			return errors.New("checksum mismatch")
+			for _, col := range event.PreColumns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("previous checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Previous)
 		}
 	}
 
