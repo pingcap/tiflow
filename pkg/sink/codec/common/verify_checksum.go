@@ -42,7 +42,7 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		}
 		if checksum != event.Checksum.Current {
 			log.Error("current checksum mismatch",
-				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum))
+				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum), zap.Any("event", event))
 			for _, col := range event.Columns {
 				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each column for debugging",
@@ -61,7 +61,7 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		if checksum != event.Checksum.Previous {
 			log.Error("previous checksum mismatch",
 				zap.Uint32("expected", event.Checksum.Previous),
-				zap.Uint32("actual", checksum))
+				zap.Uint32("actual", checksum), zap.Any("event", event))
 			for _, col := range event.PreColumns {
 				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each column for debugging",

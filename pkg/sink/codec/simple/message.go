@@ -387,10 +387,9 @@ func buildRowChangedEvent(
 		CommitTs:        msg.CommitTs,
 		PhysicalTableID: msg.TableID,
 		TableInfo:       tableInfo,
+		Columns:         decodeColumns(msg.Data, tableInfo),
+		PreColumns:      decodeColumns(msg.Old, tableInfo),
 	}
-
-	result.Columns = decodeColumns(msg.Data, tableInfo)
-	result.PreColumns = decodeColumns(msg.Old, tableInfo)
 
 	if enableRowChecksum && msg.Checksum != nil {
 		result.Checksum = &integrity.Checksum{
