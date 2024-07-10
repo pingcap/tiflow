@@ -169,7 +169,12 @@ func queryRowChecksumAux(
 		if whereClause != "" {
 			whereClause += " and "
 		}
-		whereClause += fmt.Sprintf("%s = %v", name, value)
+		switch value.(type) {
+		case []byte:
+			whereClause += fmt.Sprintf("%s = '%x'", name, value)
+		default:
+			whereClause += fmt.Sprintf("%s = %v", name, value)
+		}
 	}
 	query += whereClause
 
