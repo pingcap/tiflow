@@ -31,6 +31,8 @@ func isSysSchema(db string) bool {
 	// Tables in TiCDCSystemSchema should not be replicated by cdc.
 	case TiCDCSystemSchema:
 		return true
+	case LightningTaskInfoSchema:
+		return true
 	default:
 		return tifilter.IsSystemSchema(db)
 	}
