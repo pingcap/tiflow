@@ -21,25 +21,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/types"
 )
 
-// WithUnsigned4MySQLType add `unsigned` keyword.
-// it should have the form `t unsigned`, such as `int unsigned`
-func WithUnsigned4MySQLType(mysqlType string, unsigned bool) string {
-	if unsigned && mysqlType != "bit" && mysqlType != "year" {
-		return mysqlType + " unsigned"
-	}
-	return mysqlType
-}
-
-// WithZerofill4MySQLType add `zerofill` keyword.
-func WithZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if zerofill &&
-		!strings.HasPrefix(mysqlType, "bit") &&
-		!strings.HasPrefix(mysqlType, "year") {
-		return mysqlType + " zerofill"
-	}
-	return mysqlType
-}
-
 // GetMySQLType get the mysql type from column info
 func GetMySQLType(columnInfo *timodel.ColumnInfo, fullType bool) string {
 	if !fullType {

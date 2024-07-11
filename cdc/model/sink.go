@@ -1252,10 +1252,16 @@ func SplitUpdateEvent(
 	// so it won't have an impact and no more full deep copy wastes memory.
 	deleteEvent := *updateEvent
 	deleteEvent.Columns = nil
+	if deleteEvent.Checksum != nil {
+		deleteEvent.Checksum.Current = 0
+	}
 
 	insertEvent := *updateEvent
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.PreColumns = nil
+	if insertEvent.Checksum != nil {
+		insertEvent.Checksum.Previous = 0
+	}
 
 	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
 		zap.Uint64("commitTs", updateEvent.CommitTs),

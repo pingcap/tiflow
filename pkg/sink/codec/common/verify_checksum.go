@@ -14,7 +14,10 @@
 package common
 
 import (
+	"context"
+	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"math"
 	"strconv"
@@ -29,24 +32,52 @@ import (
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo, expected uint32) error {
+func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
 	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
-	if expected == 0 {
-		return nil
+	if event.Checksum.Current != 0 {
+		checksum, err := calculateChecksum(event.Columns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Current {
+			log.Error("current checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum), zap.Any("event", event))
+			for _, col := range event.Columns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("current checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Current)
+		}
 	}
-	checksum, err := calculateChecksum(columns, columnInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if checksum != expected {
-		log.Error("checksum mismatch",
-			zap.Uint32("expected", expected),
-			zap.Uint32("actual", checksum))
-		return errors.New("checksum mismatch")
+	if event.Checksum.Previous != 0 {
+		checksum, err := calculateChecksum(event.PreColumns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Previous {
+			log.Error("previous checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Previous),
+				zap.Uint32("actual", checksum), zap.Any("event", event))
+			for _, col := range event.PreColumns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("previous checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Previous)
+		}
 	}
 
-	return nil
+	if db == nil {
+		return nil
+	}
+	// also query the upstream TiDB to get the columns-level checksum
+	return queryRowChecksum(context.Background(), db, event)
 }
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.

@@ -14,6 +14,7 @@
 package simple
 
 import (
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"sort"
@@ -380,66 +381,30 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
 func buildRowChangedEvent(
-	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
+	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool, db *sql.DB,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs:        msg.CommitTs,
 		PhysicalTableID: msg.TableID,
 		TableInfo:       tableInfo,
+		Columns:         decodeColumns(msg.Data, tableInfo),
+		PreColumns:      decodeColumns(msg.Old, tableInfo),
 	}
 
-	result.Columns = decodeColumns(msg.Data, tableInfo)
-	result.PreColumns = decodeColumns(msg.Old, tableInfo)
-
 	if enableRowChecksum && msg.Checksum != nil {
-		var (
-			previousCorrupted bool
-			currentCorrupted  bool
-		)
-		err := common.VerifyChecksum(result.PreColumns, tableInfo.Columns, msg.Checksum.Previous)
-		if err != nil {
-			log.Info("checksum corrupted on the previous columns", zap.Any("message", msg))
-			previousCorrupted = true
-		}
-		err = common.VerifyChecksum(result.Columns, tableInfo.Columns, msg.Checksum.Current)
-		if err != nil {
-			log.Info("checksum corrupted on the current columns", zap.Any("message", msg))
-			currentCorrupted = true
-		}
-
 		result.Checksum = &integrity.Checksum{
-			Previous:  msg.Checksum.Previous,
 			Current:   msg.Checksum.Current,
+			Previous:  msg.Checksum.Previous,
 			Corrupted: msg.Checksum.Corrupted,
 			Version:   msg.Checksum.Version,
 		}
 
-		corrupted := msg.Checksum.Corrupted || previousCorrupted || currentCorrupted
-		if corrupted {
+		err := common.VerifyChecksum(result, db)
+		if err != nil || msg.Checksum.Corrupted {
 			log.Warn("consumer detect checksum corrupted",
-				zap.String("schema", msg.Schema),
-				zap.String("table", msg.Table))
-			for _, col := range result.PreColumns {
-				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-				log.Info("data corrupted, print each previous column for debugging",
-					zap.String("name", colInfo.Name.O),
-					zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()),
-					zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value),
-					zap.Any("default", colInfo.GetDefaultValue()))
-			}
-			for _, col := range result.Columns {
-				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-				log.Info("data corrupted, print each column for debugging",
-					zap.String("name", colInfo.Name.O),
-					zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()),
-					zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value),
-					zap.Any("default", colInfo.GetDefaultValue()))
-			}
+				zap.String("schema", msg.Schema), zap.String("table", msg.Table))
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
+
 		}
 	}
 
