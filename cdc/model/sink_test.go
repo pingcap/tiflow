@@ -20,6 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -479,13 +480,21 @@ func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 			CommitTs:   1,
 			Columns:    columns,
 			PreColumns: preColumns,
+			Checksum: &integrity.Checksum{
+				Current:   1,
+				Previous:  2,
+				Corrupted: false,
+				Version:   0,
+			},
 		},
 	}
 	result, err := trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
 	require.True(t, result[0].IsDelete())
+	require.Zero(t, result[0].Checksum.Current)
 	require.True(t, result[1].IsInsert())
+	require.Zero(t, result[1].Checksum.Previous)
 
 	// Update unique key.
 	columns = []*Column{
