@@ -869,8 +869,7 @@ func SplitUpdateEvent(
 
 	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
 		zap.Uint64("commitTs", updateEvent.CommitTs),
-		zap.String("schema", updateEvent.TableInfo.TableName.Schema),
-		zap.String("table", updateEvent.TableInfo.TableName.Table),
+		zap.Any("table", updateEvent.TableInfo),
 		zap.Any("preCols", updateEvent.PreColumns),
 		zap.Any("cols", updateEvent.Columns))
 
