@@ -22,5 +22,3 @@ quote = '"'
 null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = true
-# Whether to output the value before the row data changes. The default value is false. 
-output-old-value = true

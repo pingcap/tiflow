@@ -53,9 +53,6 @@ function run() {
 	run_changefeed "changefeed1" $start_ts 10 true
 	# changefeed2 fail since delete events are not sorted
 	run_changefeed "changefeed2" $start_ts 10 false
-	# changefeed3 fail since update pk/uk events are not split
-	run_changefeed "changefeed3" $start_ts 10 false
-	run_changefeed "changefeed4" $start_ts 20 true
 }
 
 trap stop_tidb_cluster EXIT

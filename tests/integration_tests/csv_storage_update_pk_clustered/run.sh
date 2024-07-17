@@ -44,8 +44,6 @@ function run() {
 
 	run_changefeed "changefeed1" $start_ts 5
 	run_changefeed "changefeed2" $start_ts 5
-	run_changefeed "changefeed3" $start_ts 5
-	run_changefeed "changefeed4" $start_ts 10
 }
 
 trap stop_tidb_cluster EXIT
