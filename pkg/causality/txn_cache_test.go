@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ type mockTxnEvent struct{}
 func (m mockTxnEvent) OnConflictResolved() {
 }
 
-func (m mockTxnEvent) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
+func (m mockTxnEvent) ConflictKeys() []uint64 {
 	return nil
 }
 

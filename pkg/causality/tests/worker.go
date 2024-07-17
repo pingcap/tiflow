@@ -28,7 +28,7 @@ type txnForTest struct {
 
 func (t *txnForTest) OnConflictResolved() {}
 
-func (t *txnForTest) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
+func (t *txnForTest) ConflictKeys() []uint64 {
 	return t.keys
 }
 
