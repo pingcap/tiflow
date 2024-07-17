@@ -55,7 +55,7 @@ func (s *DMLSink) Dead() <-chan struct{} {
 	return make(chan struct{})
 }
 
-// Scheme returns the sink scheme.
-func (s *DMLSink) Scheme() string {
-	return sink.BlackHoleScheme
+// SchemeOption returns the scheme and the option.
+func (s *DMLSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, true
 }

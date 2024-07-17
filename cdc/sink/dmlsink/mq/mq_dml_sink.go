@@ -44,8 +44,7 @@ var _ dmlsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 // It will send the events to the MQ system.
 type dmlSink struct {
 	// id indicates this sink belongs to which processor(changefeed).
-	id     model.ChangeFeedID
-	scheme string
+	id model.ChangeFeedID
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
@@ -69,6 +68,9 @@ type dmlSink struct {
 
 	wg   sync.WaitGroup
 	dead chan struct{}
+
+	scheme               string
+	outputRawChangeEvent bool
 }
 
 func newDMLSink(
@@ -82,6 +84,7 @@ func newDMLSink(
 	encoderBuilder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	protocol config.Protocol,
+	outputRawChangeEvent bool,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -90,13 +93,14 @@ func newDMLSink(
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
 	s := &dmlSink{
-		id:          changefeedID,
-		scheme:      strings.ToLower(sinkURI.Scheme),
-		protocol:    protocol,
-		adminClient: adminClient,
-		ctx:         ctx,
-		cancel:      cancel,
-		dead:        make(chan struct{}),
+		id:                   changefeedID,
+		scheme:               strings.ToLower(sinkURI.Scheme),
+		protocol:             protocol,
+		adminClient:          adminClient,
+		ctx:                  ctx,
+		cancel:               cancel,
+		dead:                 make(chan struct{}),
+		outputRawChangeEvent: outputRawChangeEvent,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -190,10 +194,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	return nil
 }
 
-func (s *dmlSink) Scheme() string {
-	return s.scheme
-}
-
 // Close closes the sink.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
@@ -215,4 +215,9 @@ func (s *dmlSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+// Scheme returns the scheme of this sink.
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }

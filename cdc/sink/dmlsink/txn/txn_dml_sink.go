@@ -160,11 +160,6 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 	return nil
 }
 
-// Scheme returns the sink scheme.
-func (s *dmlSink) Scheme() string {
-	return s.scheme
-}
-
 // Close closes the dmlSink. It won't wait for all pending items backend handled.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
@@ -180,4 +175,8 @@ func (s *dmlSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, false
 }
