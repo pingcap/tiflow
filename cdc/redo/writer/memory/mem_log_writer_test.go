@@ -88,6 +88,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 	require.NoError(t, err)
 
 	require.ErrorIs(t, lw.Close(), context.Canceled)
+<<<<<<< HEAD
 	require.Eventually(t, func() bool {
 		err = lw.WriteEvents(ctx, events...)
 		return err != nil
@@ -95,4 +96,11 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 	require.ErrorContains(t, err, "redo log writer stopped")
 	err = lw.FlushLog(ctx)
 	require.ErrorContains(t, err, "redo log writer stopped")
+=======
+
+	err = lw.WriteEvents(ctx, events...)
+	require.NoError(t, err)
+	err = lw.FlushLog(ctx)
+	require.NoError(t, err)
+>>>>>>> 52b4301388 (redo(ticdc): return internal error in redo writer (#11011))
 }
