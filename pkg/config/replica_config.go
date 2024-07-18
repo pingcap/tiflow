@@ -83,11 +83,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
 		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
-<<<<<<< HEAD
-=======
 		SendAllBootstrapAtStart:          util.AddressOf(DefaultSendAllBootstrapAtStart),
-		DebeziumDisableSchema:            util.AddressOf(false),
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 		OpenProtocol:                     &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{

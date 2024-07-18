@@ -161,7 +161,6 @@ func newDDLManager(
 		zap.Stringer("sinkType", sinkType))
 
 	return &ddlManager{
-<<<<<<< HEAD
 		changfeedID:     changefeedID,
 		ddlSink:         ddlSink,
 		filter:          filter,
@@ -174,24 +173,10 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
-		sinkType:        model.DB,
-		tableCheckpoint: make(map[model.TableName]model.Ts),
-		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
-=======
-		changfeedID:                   changefeedID,
-		ddlSink:                       ddlSink,
-		filter:                        filter,
-		ddlPuller:                     ddlPuller,
-		schema:                        schema,
-		redoDDLManager:                redoManager,
-		redoMetaManager:               redoMetaManager,
-		startTs:                       startTs,
-		checkpointTs:                  checkpointTs,
-		ddlResolvedTs:                 startTs,
-		BDRMode:                       bdrMode,
+		sinkType:                      model.DB,
+		tableCheckpoint:               make(map[model.TableName]model.Ts),
 		pendingDDLs:                   make(map[model.TableName][]*model.DDLEvent),
 		shouldSendAllBootstrapAtStart: shouldSendAllBootstrapAtStart,
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 	}
 }
 

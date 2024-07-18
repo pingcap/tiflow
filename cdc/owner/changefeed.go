@@ -685,14 +685,9 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-<<<<<<< HEAD
 		downstreamType,
 		util.GetOrZero(info.Config.BDRMode),
-=======
-		util.GetOrZero(cfInfo.Config.BDRMode),
-		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
-	)
+		info.Config.Sink.ShouldSendAllBootstrapAtStart())
 
 	// create scheduler
 	cfg := *c.cfg

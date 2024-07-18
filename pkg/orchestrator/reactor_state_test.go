@@ -129,12 +129,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
 							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
 							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
-<<<<<<< HEAD
-=======
 							SendAllBootstrapAtStart:          config.GetDefaultReplicaConfig().Sink.SendAllBootstrapAtStart,
-							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
-							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
 						},
 						Consistent: config.GetDefaultReplicaConfig().Consistent,
@@ -202,12 +197,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
 							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
 							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
-<<<<<<< HEAD
-=======
 							SendAllBootstrapAtStart:          config.GetDefaultReplicaConfig().Sink.SendAllBootstrapAtStart,
-							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
-							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
 						},
 						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
@@ -281,12 +271,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							SendBootstrapIntervalInSec:       config.GetDefaultReplicaConfig().Sink.SendBootstrapIntervalInSec,
 							SendBootstrapInMsgCount:          config.GetDefaultReplicaConfig().Sink.SendBootstrapInMsgCount,
 							SendBootstrapToAllPartition:      config.GetDefaultReplicaConfig().Sink.SendBootstrapToAllPartition,
-<<<<<<< HEAD
-=======
 							SendAllBootstrapAtStart:          config.GetDefaultReplicaConfig().Sink.SendAllBootstrapAtStart,
-							DebeziumDisableSchema:            config.GetDefaultReplicaConfig().Sink.DebeziumDisableSchema,
-							Debezium:                         config.GetDefaultReplicaConfig().Sink.Debezium,
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
 							OpenProtocol:                     config.GetDefaultReplicaConfig().Sink.OpenProtocol,
 						},
 						Consistent: config.GetDefaultReplicaConfig().Consistent,

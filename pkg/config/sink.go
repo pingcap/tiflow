@@ -191,17 +191,7 @@ type SinkConfig struct {
 	// If set to false, bootstrap message will only be sent to the first partition of each topic.
 	// Default value is true.
 	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
-<<<<<<< HEAD
-
-=======
-	// SendAllBootstrapAtStart determines whether to send all tables bootstrap message at changefeed start.
-	SendAllBootstrapAtStart *bool `toml:"send-all-bootstrap-at-start" json:"send-all-bootstrap-at-start,omitempty"`
-	// Debezium only. Whether schema should be excluded in the output.
-	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
-
-	// CSVConfig is only available when the downstream is Storage.
-	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
+	SendAllBootstrapAtStart     *bool `toml:"send-all-bootstrap-at-start" json:"send-all-bootstrap-at-start,omitempty"`
 	// OpenProtocol related configurations
 	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
 }

@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -50,13 +51,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		schema,
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
-<<<<<<< HEAD
-		model.DB, false)
-=======
-		false,
-		false,
-	)
->>>>>>> 58636ede29 (simple (ticdc): support send all tables bootstrap message at changefeed start  (#11239))
+		model.DB, false, false)
 	return res
 }
 
