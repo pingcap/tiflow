@@ -287,7 +287,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 
 			expect = accounts * initBalance
 			if obtained != expect {
-				return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d", tableID, expect, obtained)
+				return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d, endTs: %s", tableID, expect, obtained, endTs)
 			}
 
 			query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
