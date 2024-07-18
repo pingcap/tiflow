@@ -272,7 +272,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 }
 
 // TrySplitAndSortUpdateEvent redo log do nothing
-func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -380,7 +380,7 @@ func (r *RowChangedEvent) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent do nothing
-func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -786,31 +786,25 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
-func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string) error {
-	if !t.shouldSplitUpdateEvent(scheme) {
+func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string, outputRawChangeEvent bool) error {
+	if sink.IsMySQLCompatibleScheme(scheme) || outputRawChangeEvent {
+		// For MySQL Sink, all update events will be split into insert and delete at the puller side
+		// according to whether the changefeed is in safemode. We don't split update event here(in sink)
+		// since there may be OOM issues. For more information, ref https://github.com/tikv/tikv/issues/17062.
+		//
+		// For the Kafka and Storage sink, the outputRawChangeEvent parameter is introduced to control
+		// split behavior. TiCDC only output original change event if outputRawChangeEvent is true.
 		return nil
 	}
+
+	// Try to split update events for the Kafka and Storage sink if outputRawChangeEvent is false.
+	// Note it is only for backward compatibility, and we should remove this logic in the future.
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.Rows = newRows
 	return nil
-}
-
-// Whether split a single update event into delete and insert events？
-//
-// For the MySQL Sink, we don't split any update event.
-// This may cause error like "duplicate entry" when sink to the downstream.
-// This kind of error will cause the changefeed to restart,
-// and then the related update rows will be splitted to insert and delete at puller side.
-//
-// For the Kafka and Storage sink, always split a single unique key changed update event, since:
-// 1. Avro and CSV does not output the previous column values for the update event, so it would
-// cause consumer missing data if the unique key changed event is not split.
-// 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
-func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
-	return !sink.IsMySQLCompatibleScheme(sinkScheme)
 }
 
 // trySplitAndSortUpdateEvent try to split update events if unique key is updated
@@ -822,8 +816,7 @@ func trySplitAndSortUpdateEvent(
 	split := false
 	for _, e := range events {
 		if e == nil {
-			log.Warn("skip emit nil event",
-				zap.Any("event", e))
+			log.Warn("skip emit nil event", zap.Any("event", e))
 			continue
 		}
 
@@ -833,8 +826,7 @@ func trySplitAndSortUpdateEvent(
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
-			log.Warn("skip emit empty row event",
-				zap.Any("event", e))
+			log.Warn("skip emit empty row event", zap.Any("event", e))
 			continue
 		}
 
@@ -860,7 +852,7 @@ func trySplitAndSortUpdateEvent(
 
 // ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
-// If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+// If is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
 func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
@@ -898,10 +890,22 @@ func SplitUpdateEvent(
 	// so it won't have an impact and no more full deep copy wastes memory.
 	deleteEvent := *updateEvent
 	deleteEvent.Columns = nil
+	if deleteEvent.Checksum != nil {
+		deleteEvent.Checksum.Current = 0
+	}
 
 	insertEvent := *updateEvent
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.PreColumns = nil
+	if insertEvent.Checksum != nil {
+		insertEvent.Checksum.Previous = 0
+	}
+
+	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
+		zap.Uint64("commitTs", updateEvent.CommitTs),
+		zap.Any("table", updateEvent.TableInfo),
+		zap.Any("preCols", updateEvent.PreColumns),
+		zap.Any("cols", updateEvent.Columns))
 
 	return &deleteEvent, &insertEvent, nil
 }

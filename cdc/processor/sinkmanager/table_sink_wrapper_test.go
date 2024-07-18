@@ -52,8 +52,8 @@ func (m *mockSink) WriteEvents(events ...*dmlsink.CallbackableEvent[*model.RowCh
 	return nil
 }
 
-func (m *mockSink) Scheme() string {
-	return sink.BlackHoleScheme
+func (m *mockSink) SchemeOption() (string, bool) {
+	return sink.BlackHoleScheme, false
 }
 
 func (m *mockSink) GetEvents() []*dmlsink.CallbackableEvent[*model.RowChangedEvent] {

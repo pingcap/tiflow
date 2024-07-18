@@ -92,7 +92,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
+	kvStorage, err := h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
@@ -149,7 +149,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	cli, err := h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
+	cli, err := h.helpers.getEtcdClient(ctx, cfg.PDAddrs, tlsCfg)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -338,8 +338,8 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
 	credential := cfg.PDConfig.toCredential()
-
-	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
+	ctx := c.Request.Context()
+	kvStore, err := h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -357,7 +357,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
 
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
+		getVerifiedTables(ctx, replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -468,7 +468,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
 		pdAddrs := updateCfConfig.PDAddrs
 		credentials := updateCfConfig.PDConfig.toCredential()
-		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
+		storage, err = h.helpers.createTiStore(ctx, pdAddrs, credentials)
 		if err != nil {
 			_ = c.Error(errors.Trace(err))
 		}
