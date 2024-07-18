@@ -134,7 +134,7 @@ func TestCreateChangefeed(t *testing.T) {
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 	cfConfig.PDAddrs = []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"}
@@ -152,7 +152,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 4: failed to verify tables
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -176,9 +176,9 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 5:
 	helpers.EXPECT().
-		getEtcdClient(gomock.Any(), gomock.Any()).
+		getEtcdClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
@@ -221,7 +221,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 6: success
 	helpers.EXPECT().
-		getEtcdClient(gomock.Any(), gomock.Any()).
+		getEtcdClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
 	ctrl.EXPECT().
 		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -446,7 +446,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).AnyTimes()
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	mockCapture.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
@@ -650,7 +650,7 @@ func TestVerifyTable(t *testing.T) {
 	body, err := json.Marshal(&updateCfg)
 	require.Nil(t, err)
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 
@@ -665,10 +665,10 @@ func TestVerifyTable(t *testing.T) {
 
 	// case 3: getVerifiedTables failed
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
@@ -690,7 +690,7 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
@@ -702,6 +702,21 @@ func TestVerifyTable(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+
+	// case 5: context canceled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil, ctx.Err()).
+		Times(1)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(ctx, verify.method, verify.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "context canceled")
 }
 
 func TestResumeChangefeed(t *testing.T) {
