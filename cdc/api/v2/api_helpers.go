@@ -403,16 +403,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
-<<<<<<< HEAD
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
-=======
-// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
-// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
-// or it is the checkpointTs of the changefeed before it is paused.
-// we need to check weather the resuming changefeed is gc safe or not.
-func (APIV2HelpersImpl) verifyResumeChangefeedConfig(
-	ctx context.Context,
->>>>>>> de3a888a64 (api (ticdc): check http request context in api helper (#11165))
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
