@@ -374,21 +374,6 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	}
 }
 
-func TestSinkManagerNeedsStuckCheck(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 16)
-	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
-	defer func() {
-		cancel()
-		manager.Close()
-	}()
-
-	require.False(t, manager.needsStuckCheck())
-}
-
 func TestSinkManagerRestartTableSinks(t *testing.T) {
 	failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause", "return")
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause")
