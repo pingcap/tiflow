@@ -905,8 +905,8 @@ github.com/pingcap/tidb v1.1.0-beta.0.20240722024203-504960d51b2a h1:lIj1fFRvB1E
 github.com/pingcap/tidb v1.1.0-beta.0.20240722024203-504960d51b2a/go.mod h1:2FO9Yzc8HOYk+aZRYrguuwN6OS12TE+OA2RtukAS+Z8=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20240627074325-184b010f800a h1:fBoFiow0elfjOQrOCFW2EJrwv94d5RyaxzUMF8WdeJE=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20240627074325-184b010f800a/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240722015532-8edd4ed54376 h1:tz757zpST60fweJB5ZjVl74kQGbRrpmIiTtF6BdnMow=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20240722015532-8edd4ed54376/go.mod h1:c/4la2yfv1vBYvtIG8WCDyDinLMDIUC5+zLRHiafY+Y=
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50 h1:fVNBE06Rjec+EIHaYAKAHa/bIt5lnu3Zh9O6kV7ZAdg=
 github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
