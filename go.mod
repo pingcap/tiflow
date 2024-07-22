@@ -67,8 +67,14 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20240522024016-df42997c2c57
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20240718034632-b8bfc5fb2255
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240718034632-b8bfc5fb2255
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20240722024203-504960d51b2a
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240722015532-8edd4ed54376
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -85,9 +91,16 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20240531122021-7a74511a5241
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20240708075403-19f65c59bb89
+=======
+	github.com/thanhpk/randstr v1.0.6
+	github.com/tikv/client-go/v2 v2.0.8-0.20240703095801-d73cc1ed6503
+	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
+	github.com/tikv/pd/client v0.0.0-20240717053728-5ec6af403019
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -106,17 +119,25 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
+<<<<<<< HEAD
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842
 	golang.org/x/net v0.25.0
 	golang.org/x/oauth2 v0.18.0
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.20.0
+=======
+	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8
+	golang.org/x/net v0.27.0
+	golang.org/x/oauth2 v0.21.0
+	golang.org/x/sync v0.7.0
+	golang.org/x/sys v0.22.0
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	golang.org/x/text v0.16.0
 	golang.org/x/time v0.5.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240521202816-d264139d666e
 	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.4.5
 	gorm.io/gorm v1.24.5
@@ -159,7 +180,16 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/ks3sdklib/aws-sdk-go v1.2.6 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+<<<<<<< HEAD
 	github.com/ncruces/go-strftime v0.1.9 // indirect
+=======
+	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
+	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/otiai10/copy v1.2.0 // indirect
+	github.com/qri-io/jsonpointer v0.1.1 // indirect
+	github.com/qri-io/jsonschema v0.2.1 // indirect
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -305,8 +335,13 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
+<<<<<<< HEAD
 	github.com/prometheus/common v0.53.0 // indirect
 	github.com/prometheus/procfs v0.15.0 // indirect
+=======
+	github.com/prometheus/common v0.55.0 // indirect
+	github.com/prometheus/procfs v0.15.1 // indirect
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
@@ -352,10 +387,17 @@ require (
 	go.opentelemetry.io/otel/sdk v1.22.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/term v0.20.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+=======
+	golang.org/x/crypto v0.25.0 // indirect
+	golang.org/x/mod v0.18.0 // indirect
+	golang.org/x/term v0.22.0
+	golang.org/x/tools v0.22.0 // indirect
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
