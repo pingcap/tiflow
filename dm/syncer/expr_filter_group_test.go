@@ -17,9 +17,16 @@ import (
 	"context"
 	"testing"
 
+<<<<<<< HEAD
 	ddl2 "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
+=======
+	ddl2 "github.com/pingcap/tidb/pkg/ddl"
+	context2 "github.com/pingcap/tidb/pkg/expression/context"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/util/filter"
+>>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -439,7 +446,7 @@ create table t (
 	require.NoError(t, err)
 	require.Len(t, exprs, 1)
 	expr := exprs[0]
-	require.Equal(t, "0", expr.String())
+	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues))
 
 	// skip nothing
 	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
