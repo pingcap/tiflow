@@ -435,10 +435,17 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			watermark := atomic.LoadUint64(&progress.watermark)
 			if ts < watermark {
-				log.Panic("partition resolved ts fallback, skip it",
+				if message.TopicPartition.Offset > progress.watermarkOffset {
+					log.Panic("partition resolved ts fallback, skip it",
+						zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+						zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+						zap.Int32("partition", partition))
+				}
+				log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
 					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
 					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 					zap.Int32("partition", partition))
+				continue
 			}
 
 			for tableID, group := range eventGroup {
