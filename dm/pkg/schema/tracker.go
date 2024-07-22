@@ -221,12 +221,12 @@ func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	if tr.closed.Load() {
 		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
 	}
-	return tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
+	return tr.upstreamTracker.TableByName(context.Background(), model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 }
 
 // GetCreateTable returns the `CREATE TABLE` statement of the table.
 func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (string, error) {
-	tableInfo, err := tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
+	tableInfo, err := tr.upstreamTracker.TableByName(ctx, model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 	if err != nil {
 		return "", err
 	}
@@ -257,7 +257,7 @@ func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
 // TODO: move out of this package!
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
 	col = strings.ToLower(col)
-	t, err := tr.upstreamTracker.TableByName(model.NewCIStr(db), model.NewCIStr(tbl))
+	t, err := tr.upstreamTracker.TableByName(context.Background(), model.NewCIStr(db), model.NewCIStr(tbl))
 	if err != nil {
 		return nil, err
 	}
@@ -339,13 +339,15 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, nil, ddl.OnExistIgnore)
+	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, nil, ddl.WithOnExist(ddl.OnExistIgnore))
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
 func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
 	var err error
-	if err = tr.upstreamTracker.BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
+	if err = tr.upstreamTracker.BatchCreateTableWithInfo(
+		tr.se, schema, info[l:r], ddl.WithOnExist(ddl.OnExistIgnore),
+	); kv.ErrEntryTooLarge.Equal(err) {
 		if r-l == 1 {
 			return err
 		}
