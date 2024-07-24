@@ -83,6 +83,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
 		SendBootstrapToAllPartition:      util.AddressOf(DefaultSendBootstrapToAllPartition),
+		SendAllBootstrapAtStart:          util.AddressOf(DefaultSendAllBootstrapAtStart),
 		OpenProtocol:                     &OpenProtocolConfig{OutputOldValue: true},
 	},
 	Consistent: &ConsistentConfig{

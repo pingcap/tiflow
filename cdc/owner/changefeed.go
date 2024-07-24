@@ -687,7 +687,7 @@ LOOP2:
 		c.redoMetaMgr,
 		downstreamType,
 		util.GetOrZero(info.Config.BDRMode),
-	)
+		info.Config.Sink.ShouldSendAllBootstrapAtStart())
 
 	// create scheduler
 	cfg := *c.cfg

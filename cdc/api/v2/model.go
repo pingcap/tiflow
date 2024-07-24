@@ -508,6 +508,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
 		}
 
+		if c.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*c.Sink.SendAllBootstrapAtStart)
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -818,6 +821,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.SendBootstrapToAllPartition != nil {
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
 		}
+
+		if cloned.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*cloned.Sink.SendAllBootstrapAtStart)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -994,6 +1001,7 @@ type SinkConfig struct {
 	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+	SendAllBootstrapAtStart          *bool               `json:"send-all-bootstrap-at-start,omitempty"`
 	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
 }
 

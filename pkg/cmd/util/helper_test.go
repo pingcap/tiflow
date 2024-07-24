@@ -218,6 +218,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
+		SendAllBootstrapAtStart:          util.AddressOf(false),
 	}, cfg.Sink)
 }
 
@@ -254,6 +255,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		SendBootstrapToAllPartition:      util.AddressOf(true),
+		SendAllBootstrapAtStart:          util.AddressOf(false),
 		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
