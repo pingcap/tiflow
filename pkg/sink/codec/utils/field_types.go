@@ -30,6 +30,12 @@ func SetBinChsClnFlag(ft *types.FieldType) *types.FieldType {
 	return ft
 }
 
+// SetFlag set the flag
+func SetFlag(ft *types.FieldType, flag uint) *types.FieldType {
+	ft.SetFlag(flag)
+	return ft
+}
+
 // SetUnsigned set the unsigned flag.
 func SetUnsigned(ft *types.FieldType) *types.FieldType {
 	ft.SetFlag(uint(model.UnsignedFlag))
@@ -56,6 +62,8 @@ func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 		return mysqlType + " zerofill"
 	}
 	return mysqlType
+}
+
 // NewTextFieldType create a new text field type.
 func NewTextFieldType(tp byte) *types.FieldType {
 	ft := types.NewFieldType(tp)

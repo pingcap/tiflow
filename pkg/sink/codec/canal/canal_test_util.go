@@ -14,15 +14,10 @@
 package canal
 
 import (
-<<<<<<< HEAD
 	mm "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-=======
-	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 )

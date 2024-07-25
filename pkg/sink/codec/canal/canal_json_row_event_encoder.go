@@ -178,8 +178,7 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}

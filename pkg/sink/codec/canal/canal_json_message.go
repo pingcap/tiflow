@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ariga.io/atlas/sql/mysql"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -202,7 +202,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
 		isBinary := isBinaryMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := internal.NewColumn(value, mysqlType).
