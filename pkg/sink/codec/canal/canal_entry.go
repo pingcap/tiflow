@@ -22,16 +22,10 @@ import (
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
 	mm "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-=======
-	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -129,15 +123,9 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-<<<<<<< HEAD
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(c)
-	javaType, err := getJavaSQLType(c, mysqlType)
-=======
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, colName string, updated bool) (*canal.Column, error) {
 	mysqlType := getMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
@@ -316,22 +304,8 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
-<<<<<<< HEAD
-func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
-	javaType := internal.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
-
-	switch javaType {
-	case internal.JavaSQLTypeBINARY, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeLONGVARBINARY:
-		if strings.Contains(mysqlType, "text") {
-			return internal.JavaSQLTypeCLOB, nil
-		}
-		return internal.JavaSQLTypeBLOB, nil
-	}
-
-=======
 func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(tp, flag.IsBinary())
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !c.Flag.IsUnsigned() {
 		return javaType, nil
@@ -405,37 +379,12 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 	return mysqlType
 }
 
-<<<<<<< HEAD
-// when decoding the canal format, remove `unsigned` to get the original `mysql type`.
-func trimUnsignedFromMySQLType(mysqlType string) string {
-	return strings.TrimSuffix(mysqlType, " unsigned")
-}
-
-func getMySQLType(c *model.Column) string {
-	mysqlType := types.TypeStr(c.Type)
-	// make `mysqlType` representation keep the same as the canal official implementation
-	mysqlType = withUnsigned4MySQLType(mysqlType, c.Flag.IsUnsigned())
-
-	if !c.Flag.IsBinary() {
-		return mysqlType
-	}
-
-	if types.IsTypeBlob(c.Type) {
-		return strings.Replace(mysqlType, "text", "blob", 1)
-	}
-
-	if types.IsTypeChar(c.Type) {
-		return strings.Replace(mysqlType, "char", "binary", 1)
-	}
-
-=======
 func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 	if zerofill &&
 		!strings.HasPrefix(mysqlType, "bit") &&
 		!strings.HasPrefix(mysqlType, "year") {
 		return mysqlType + " zerofill"
 	}
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	return mysqlType
 }
 

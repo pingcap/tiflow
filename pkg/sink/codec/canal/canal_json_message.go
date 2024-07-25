@@ -15,14 +15,19 @@ package canal
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
+	"ariga.io/atlas/sql/mysql"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	canal "github.com/pingcap/tiflow/proto/canal"
+	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
@@ -213,8 +218,6 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
-<<<<<<< HEAD
-=======
 func extractBasicMySQLType(mysqlType string) string {
 	for i := 0; i < len(mysqlType); i++ {
 		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
@@ -265,7 +268,6 @@ func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) 
 	return result
 }
 
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 func isBinaryMySQLType(mysqlType string) bool {
 	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }

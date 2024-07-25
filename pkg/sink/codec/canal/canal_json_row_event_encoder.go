@@ -61,16 +61,9 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-<<<<<<< HEAD
-			mysqlType := getMySQLType(col)
-			javaType, err := getJavaSQLType(col, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-=======
 			javaType, ok := javaTypeMap[col.Name]
 			if !ok {
 				return cerror.ErrCanalEncodeFailed.GenWithStack("java type is not found for column %s", col.Name)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 			}
 			value, err := builder.formatValue(col.Value, javaType)
 			if err != nil {
@@ -193,12 +186,8 @@ func newJSONMessageForDML(
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-<<<<<<< HEAD
-				mysqlTypeMap[col.Name] = mysqlType
-=======
 				javaTypeMap[col.Name] = javaType
 				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 			}
 		}
 		if emptyColumn {

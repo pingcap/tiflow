@@ -19,13 +19,9 @@ import (
 	"encoding/json"
 	"testing"
 
-<<<<<<< HEAD
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-=======
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
