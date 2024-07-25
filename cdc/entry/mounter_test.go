@@ -1554,7 +1554,7 @@ func TestBuildTableInfo(t *testing.T) {
 	tz, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
 	require.NoError(t, err)
 	p := parser.New()
-	for _, c := range cases {
+	for i, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
@@ -1619,7 +1619,7 @@ func TestNewDMRowChange(t *testing.T) {
 		},
 	}
 	p := parser.New()
-	for i, c := range cases {
+	for _, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
