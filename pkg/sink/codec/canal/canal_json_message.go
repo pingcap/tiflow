@@ -178,7 +178,13 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		oldColumns := msg.getOld()
+		for key, value := range msg.getData() {
+			if _, ok := oldColumns[key]; !ok {
+				oldColumns[key] = value
+			}
+		}
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(oldColumns, mysqlType)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +203,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
 		isBinary := isBinaryMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := internal.NewColumn(value, mysqlType).
@@ -211,6 +217,15 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 		return strings.Compare(result[i].Name, result[j].Name) > 0
 	})
 	return result, nil
+}
+
+func extractBasicMySQLType(mysqlType string) string {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return mysqlType[:i]
+		}
+	}
+	return mysqlType
 }
 
 func isBinaryMySQLType(mysqlType string) bool {
