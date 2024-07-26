@@ -14,8 +14,6 @@
 package utils
 
 import (
-	"strings"
-
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
@@ -46,22 +44,6 @@ func SetUnsigned(ft *types.FieldType) *types.FieldType {
 func SetElems(ft *types.FieldType, elems []string) *types.FieldType {
 	ft.SetElems(elems)
 	return ft
-}
-
-// when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
-// it should have the form `t unsigned`, such as `int unsigned`
-func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
-	if unsigned && mysqlType != "bit" && mysqlType != "year" {
-		return mysqlType + " unsigned"
-	}
-	return mysqlType
-}
-
-func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if zerofill && !strings.HasPrefix(mysqlType, "year") {
-		return mysqlType + " zerofill"
-	}
-	return mysqlType
 }
 
 // NewTextFieldType create a new text field type.
