@@ -54,7 +54,11 @@ type Config struct {
 	AvroConfluentSchemaRegistry    string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
-	AvroGlueSchemaRegistry         *config.GlueSchemaRegistryConfig
+	// Support debezium time convert
+	// https://debezium.io/documentation/reference/1.9/connectors/mysql.html#mysql-temporal-types
+	// https://docs.pingcap.com/zh/tidb/stable/data-type-date-and-time
+	AvroTimePrecisionHandlingMode string
+	AvroGlueSchemaRegistry        *config.GlueSchemaRegistryConfig
 	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
 	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
 	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
@@ -115,6 +119,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroConfluentSchemaRegistry:    "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+		AvroTimePrecisionHandlingMode:  "string",
 		AvroEnableWatermark:            false,
 
 		OnlyOutputUpdatedColumns:   false,
@@ -136,6 +141,7 @@ const (
 	codecOPTEnableTiDBExtension            = "enable-tidb-extension"
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
+	codecOPTAvroTimePrecisionHandlingMode  = "avro-time-precision-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
 )
@@ -149,6 +155,10 @@ const (
 	BigintUnsignedHandlingModeString = "string"
 	// BigintUnsignedHandlingModeLong is the long mode for unsigned bigint handling
 	BigintUnsignedHandlingModeLong = "long"
+	// TimePrecisionHandlingModeString is the string mode for time precision handling
+	TimePrecisionHandlingModeString = "string"
+	// TimePrecisionHandlingModeAdaptiveTimeMicroseconds is the adaptive_time_microseconds mode for time precision handling
+	TimePrecisionHandlingModeAdaptiveTimeMicroseconds = "adaptive_time_microseconds"
 )
 
 type urlConfig struct {
@@ -157,6 +167,7 @@ type urlConfig struct {
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
 	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
+	AvroTimePrecisionHandlingMode  *string `form:"avro-time-precision-handling-mode"`
 
 	// AvroEnableWatermark is the option for enabling watermark in avro protocol
 	// only used for internal testing, do not set this in the production environment since the
@@ -206,6 +217,14 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		*urlParameter.AvroBigintUnsignedHandlingMode != "" {
 		c.AvroBigintUnsignedHandlingMode = *urlParameter.AvroBigintUnsignedHandlingMode
 	}
+	if urlParameter.AvroTimePrecisionHandlingMode != nil &&
+		*urlParameter.AvroTimePrecisionHandlingMode != "" {
+		c.AvroTimePrecisionHandlingMode = *urlParameter.AvroTimePrecisionHandlingMode
+	}
+	if urlParameter.EncodingFormatType != nil &&
+		*urlParameter.EncodingFormatType != "" {
+		c.EncodingFormat = EncodingFormatType(*urlParameter.EncodingFormatType)
+	}
 	if urlParameter.AvroEnableWatermark != nil {
 		if c.EnableTiDBExtension && c.Protocol == config.ProtocolAvro {
 			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
@@ -218,7 +237,8 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
 		c.AvroGlueSchemaRegistry = replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig
 	}
-	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
+	if c.Protocol == config.ProtocolAvro &&
+		replicaConfig.ForceReplicate {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled, when using avro protocol`)
 	}
@@ -311,6 +331,7 @@ func mergeConfig(
 				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+				dest.AvroTimePrecisionHandlingMode = codecConfig.AvroTimePrecisionHandlingMode
 				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
 		}
@@ -383,6 +404,18 @@ func (c *Config) Validate() error {
 			)
 		}
 
+		// TODO: Should apply to debezium json format
+		if c.IsDebeziumAvroFormat() &&
+			c.AvroTimePrecisionHandlingMode != TimePrecisionHandlingModeString &&
+			c.AvroTimePrecisionHandlingMode != TimePrecisionHandlingModeAdaptiveTimeMicroseconds {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`%s value could only be "%s" or "%s"`,
+				codecOPTAvroTimePrecisionHandlingMode,
+				TimePrecisionHandlingModeString,
+				TimePrecisionHandlingModeAdaptiveTimeMicroseconds,
+			)
+		}
+
 		if c.EnableRowChecksum {
 			if !(c.EnableTiDBExtension && c.AvroDecimalHandlingMode == DecimalHandlingModeString &&
 				c.AvroBigintUnsignedHandlingMode == BigintUnsignedHandlingModeString) {
@@ -434,4 +467,12 @@ func (c *Config) SchemaRegistryType() string {
 		return SchemaRegistryTypeGlue
 	}
 	return "unknown"
+}
+
+func (c *Config) IsDebeziumAvroFormat() bool {
+	return c.Protocol == config.ProtocolDebezium && c.EncodingFormat == EncodingFormatAvro
+}
+
+func (c *Config) IsDebeziumJsonFormat() bool {
+	return c.Protocol == config.ProtocolDebezium && c.EncodingFormat == EncodingFormatJSON
 }

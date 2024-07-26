@@ -17,6 +17,8 @@ import (
 	"context"
 
 	"github.com/linkedin/goavro/v2"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 // SchemaManager is an interface for schema registry
@@ -53,4 +55,16 @@ type schemaCacheEntry struct {
 	// codec is associated with the schemaID, used to decode the message
 	codec  *goavro.Codec
 	header []byte
+}
+
+func NewSchemaManager(ctx context.Context, config *common.Config) (SchemaManager, error) {
+	schemaRegistryType := config.SchemaRegistryType()
+	switch schemaRegistryType {
+	case common.SchemaRegistryTypeConfluent:
+		return NewConfluentSchemaManager(ctx, config.AvroConfluentSchemaRegistry, nil)
+	case common.SchemaRegistryTypeGlue:
+		return NewGlueSchemaManager(ctx, config.AvroGlueSchemaRegistry)
+	default:
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(schemaRegistryType)
+	}
 }

@@ -360,8 +360,19 @@ var (
 		"encode to avro native data",
 		errors.RFCCodeText("CDC:ErrAvroEncodeFailed"),
 	)
+
+	ErrDebeziumBeforeAvroEncodeFailed = errors.Normalize(
+		"encode to debezium avro before native data",
+		errors.RFCCodeText("CDC:ErrDebeziumBeforeAvroEncodeFailed"),
+	)
+
+	ErrDebeziumAfterAvroEncodeFailed = errors.Normalize(
+		"encode to debezium avro after native data",
+		errors.RFCCodeText("CDC:ErrDebeziumAfterAvroEncodeFailed"),
+	)
+
 	ErrAvroEncodeToBinary = errors.Normalize(
-		"encode to binray from native",
+		"encode to binary from native",
 		errors.RFCCodeText("CDC:ErrAvroEncodeToBinary"),
 	)
 	ErrAvroSchemaAPIError = errors.Normalize(

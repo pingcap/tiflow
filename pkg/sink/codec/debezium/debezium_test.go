@@ -16,6 +16,8 @@ package debezium
 import (
 	"context"
 	"encoding/json"
+	"math/big"
+	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -25,7 +27,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -193,7 +197,11 @@ func (s *debeziumSuite) TestDataTypes() {
 	cfg := common.NewConfig(config.ProtocolDebezium)
 	cfg.TimeZone = time.UTC
 	cfg.DebeziumDisableSchema = s.disableSchema
-	encoder := NewBatchEncoderBuilder(cfg, "dbserver1").Build()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	builder, err := NewBatchEncoderBuilder(ctx, cfg, "dbserver1")
+	s.Require().Nil(err)
+	encoder := builder.Build()
 	for _, row := range rows {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 		s.Require().Nil(err)
@@ -202,4 +210,105 @@ func (s *debeziumSuite) TestDataTypes() {
 	messages := encoder.Build()
 	s.Require().Len(messages, 1)
 	s.requireDebeziumJSONEq(dataDbzOutput, messages[0].Value)
+}
+
+func TestDMLEventE2E(t *testing.T) {
+	codecConfig := common.NewConfig(config.ProtocolDebezium)
+	codecConfig.EncodingFormat = common.EncodingFormatAvro
+	codecConfig.EnableTiDBExtension = false
+	codecConfig.AvroConfluentSchemaRegistry = "http://127.0.0.1:8081"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
+
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(event.Columns), func(i, j int) {
+		event.Columns[i], event.Columns[j] = event.Columns[j], event.Columns[i]
+		colInfos[i], colInfos[j] = colInfos[j], colInfos[i]
+	})
+
+	for _, decimalHandling := range []string{"precise", "string"} {
+		for _, unsignedBigintHandling := range []string{"long", "string"} {
+			for _, timePrecisionHandling := range []string{"adaptive_time_microseconds", "string"} {
+				codecConfig.AvroDecimalHandlingMode = decimalHandling
+				codecConfig.AvroBigintUnsignedHandlingMode = unsignedBigintHandling
+				codecConfig.AvroTimePrecisionHandlingMode = timePrecisionHandling
+
+				encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+				require.NoError(t, err)
+				require.NotNil(t, encoder)
+
+				// debezium topic name format: topic_prefix.schema_name.table_name
+				topic := "avro-test-topic.test.t"
+				err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
+				require.NoError(t, err)
+
+				messages := encoder.Build()
+				require.Len(t, messages, 1)
+				message := messages[0]
+
+				schemaM, err := avro.NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+				require.NoError(t, err)
+
+				var key, value, schema map[string]interface{}
+				key, _, err = avro.DecodeRawBytes(ctx, schemaM, message.Key, topic)
+				require.Equal(t, int32(127), key["tu1"])
+				value, schema, err = avro.DecodeRawBytes(ctx, schemaM, message.Value, topic)
+				namespace := schema["namespace"].(string)
+				after := value["after"].(map[string]interface{})[namespace+".Value"].(map[string]interface{})
+				require.Equal(t, float32(3.14), after["floatT"].(map[string]interface{})["float"])
+				if decimalHandling == "precise" {
+					v, bl := new(big.Rat).SetString("2333.654321")
+					require.Equal(t, true, bl)
+					require.Equal(t, v, after["decimalT"].(map[string]interface{})["bytes.decimal"])
+					v, bl = new(big.Rat).SetString("2333.123456")
+					require.Equal(t, true, bl)
+					require.Equal(t, v, after["decimalTu"].(map[string]interface{})["bytes.decimal"])
+					v, bl = new(big.Rat).SetString("1.7371")
+					require.Equal(t, true, bl)
+					require.Equal(t, v, after["decimalTu2"].(map[string]interface{})["bytes.decimal"])
+				} else {
+					require.Equal(t, "2333.654321", after["decimalT"].(map[string]interface{})["string"])
+					require.Equal(t, "2333.123456", after["decimalTu"].(map[string]interface{})["string"])
+					require.Equal(t, "1.7371", after["decimalTu2"].(map[string]interface{})["string"])
+				}
+				if unsignedBigintHandling == "string" {
+					require.Equal(t, "9223372036854775807", after["biu1"].(map[string]interface{})["string"])
+					require.Equal(t, "9223372036854775808", after["biu2"].(map[string]interface{})["string"])
+					require.Equal(t, "0", after["biu3"].(map[string]interface{})["string"])
+					require.Equal(t, nil, after["biu4"])
+				} else {
+					require.Equal(t, int64(9223372036854775807), after["biu1"].(map[string]interface{})["long"])
+					require.Equal(t, int64(-9223372036854775808), after["biu2"].(map[string]interface{})["long"])
+					require.Equal(t, int64(0), after["biu3"].(map[string]interface{})["long"])
+					require.Equal(t, nil, after["biu4"])
+				}
+				if timePrecisionHandling == "adaptive_time_microseconds" {
+					require.Equal(t, int32(18312), after["dateT"].(map[string]interface{})["int"])
+					require.Equal(t, int64(1582165220000), after["datetimeT"].(map[string]interface{})["long"])
+					require.Equal(t, int64(8420000), after["timeT"].(map[string]interface{})["long"])
+				} else {
+					require.Equal(t, "2020-02-20", after["dateT"].(map[string]interface{})["string"])
+					require.Equal(t, "2020-02-20 02:20:20", after["datetimeT"].(map[string]interface{})["string"])
+					require.Equal(t, "02:20:20", after["timeT"].(map[string]interface{})["string"])
+				}
+
+				decoder := avro.NewDecoder(codecConfig, schemaM, topic, nil)
+				err = decoder.AddKeyValue(message.Key, message.Value)
+				require.NoError(t, err)
+
+				messageType, exist, err := decoder.HasNext()
+				require.NoError(t, err)
+				require.True(t, exist)
+				require.Equal(t, model.MessageTypeRow, messageType)
+
+				decodedEvent, err := decoder.NextRowChangedEvent()
+				require.NoError(t, err)
+				require.NotNil(t, decodedEvent)
+
+				TeardownEncoderAndSchemaRegistry4Testing()
+			}
+		}
+	}
 }

@@ -54,12 +54,19 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder, err = open.NewBatchDecoder(ctx, option.codecConfig, upstreamTiDB)
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, option.codecConfig, upstreamTiDB)
-	case config.ProtocolAvro:
-		schemaM, err := avro.NewConfluentSchemaManager(ctx, option.schemaRegistryURI, nil)
-		if err != nil {
-			return decoder, cerror.Trace(err)
+	case config.ProtocolAvro, config.ProtocolDebezium:
+		if option.codecConfig.IsDebeziumJsonFormat() {
+			err = cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				"Not supported protocol: %s, format: %s",
+				config.ProtocolDebezium,
+				string(option.codecConfig.EncodingFormat))
+		} else {
+			schemaM, err := avro.NewConfluentSchemaManager(ctx, option.schemaRegistryURI, nil)
+			if err != nil {
+				return decoder, cerror.Trace(err)
+			}
+			decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 		}
-		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
 	default:

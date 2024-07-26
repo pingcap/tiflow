@@ -14,7 +14,6 @@
 package debezium
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
@@ -49,8 +48,7 @@ func TestEncodeInsert(t *testing.T) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	buf, err := codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -82,11 +80,11 @@ func TestEncodeInsert(t *testing.T) {
 			"transaction": null
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 
 	codec.config.DebeziumDisableSchema = false
-	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+
+	buf, err = codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -187,7 +185,7 @@ func TestEncodeInsert(t *testing.T) {
 			]
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 }
 
 func TestEncodeUpdate(t *testing.T) {
@@ -216,8 +214,7 @@ func TestEncodeUpdate(t *testing.T) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	buf, err := codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -251,11 +248,10 @@ func TestEncodeUpdate(t *testing.T) {
 			"transaction": null
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 
 	codec.config.DebeziumDisableSchema = false
-	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	buf, err = codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -356,12 +352,11 @@ func TestEncodeUpdate(t *testing.T) {
 			]
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 
 	codec.config.DebeziumOutputOldValue = false
 	codec.config.DebeziumDisableSchema = true
-	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	buf, err = codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -390,7 +385,7 @@ func TestEncodeUpdate(t *testing.T) {
 			"after": { "tiny": 1 }
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 }
 
 func TestEncodeDelete(t *testing.T) {
@@ -416,8 +411,7 @@ func TestEncodeDelete(t *testing.T) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	buf, err := codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -449,11 +443,10 @@ func TestEncodeDelete(t *testing.T) {
 			"transaction": null
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 
 	codec.config.DebeziumDisableSchema = false
-	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	buf, err = codec.EncodeValue(nil, "topic", e)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -554,7 +547,7 @@ func TestEncodeDelete(t *testing.T) {
 			]
 		}
 	}
-	`, buf.String())
+	`, string(buf))
 }
 
 func BenchmarkEncodeOneTinyColumn(b *testing.B) {
@@ -578,12 +571,10 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		_, err := codec.EncodeValue(nil, "topic", e)
+		require.Nil(b, err)
 	}
 }
 
@@ -608,12 +599,10 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		_, err := codec.EncodeValue(nil, "topic", e)
+		require.Nil(b, err)
 	}
 }
 
@@ -639,11 +628,9 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 		}}, tableInfo),
 	}
 
-	buf := bytes.NewBuffer(nil)
-
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		_, err := codec.EncodeValue(nil, "topic", e)
+		require.Nil(b, err)
 	}
 }

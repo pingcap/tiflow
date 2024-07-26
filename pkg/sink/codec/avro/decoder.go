@@ -26,16 +26,19 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
 type decoder struct {
-	config *common.Config
-	topic  string
+	config   *common.Config
+	protocol config.Protocol
+	topic    string
 
 	upstreamTiDB *sql.DB
 
@@ -54,6 +57,7 @@ func NewDecoder(
 ) codec.RowEventDecoder {
 	return &decoder{
 		config:       config,
+		protocol:     config.Protocol,
 		topic:        topic,
 		schemaM:      schemaM,
 		upstreamTiDB: db,
@@ -108,15 +112,57 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 	// for the delete event, only have key part, it holds primary key or the unique key columns.
 	// for the insert / update, extract the value part, it holds all columns.
-	isDelete := len(d.value) == 0
-	if isDelete {
-		// delete event only have key part, treat it as the value part also.
-		valueMap = keyMap
-		valueSchema = keySchema
+	var isDelete bool
+	if d.protocol == config.ProtocolAvro {
+		isDelete = len(d.value) == 0
+		if isDelete {
+			// delete event only have key part, treat it as the value part also.
+			valueMap = keyMap
+			valueSchema = keySchema
+		} else {
+			valueMap, valueSchema, err = d.decodeValue(ctx)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
 	} else {
 		valueMap, valueSchema, err = d.decodeValue(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+
+		op := valueMap[debeziumOp].(string)
+		if op == deleteOperation {
+			valueMap = keyMap
+			valueSchema = keySchema
+		} else {
+			namespace := valueSchema["namespace"].(string)
+			commitTs := valueMap[debeziumSource].(map[string]interface{})[debeziumSourceCommitTS].(int64)
+
+			valueSchema = valueSchema["fields"].([]interface{})[0].(map[string]interface{})["type"].([]interface{})[1].(map[string]interface{})
+			fieldsSchema := append(valueSchema["fields"].([]interface{}),
+				map[string]interface{}{
+					"name":    tidbOp,
+					"type":    "string",
+					"default": "",
+				},
+				map[string]interface{}{
+					"name":    tidbCommitTs,
+					"type":    "long",
+					"default": 0,
+				},
+				map[string]interface{}{
+					"name":    tidbPhysicalTime,
+					"type":    "long",
+					"default": 0,
+				})
+			valueSchema["fields"] = fieldsSchema
+			valueSchema["namespace"] = namespace
+
+			valueMap = valueMap[debeziumAfter].(map[string]interface{})[namespace+".Value"].(map[string]interface{})
+			valueMap[tidbOp] = op
+			valueMap[tidbCommitTs] = commitTs
+			valueMap[tidbPhysicalTime] = oracle.ExtractPhysical(uint64(commitTs))
 		}
 	}
 
@@ -417,24 +463,24 @@ func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
 	return id, data[18:], nil
 }
 
-func decodeRawBytes(
+func DecodeRawBytes(
 	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
 ) (map[string]interface{}, map[string]interface{}, error) {
 	var schemaID schemaID
-	var binary []byte
+	var buf []byte
 	var err error
 	var cid int
 	var gid string
 
 	switch schemaM.RegistryType() {
 	case common.SchemaRegistryTypeConfluent:
-		cid, binary, err = extractConfluentSchemaIDAndBinaryData(data)
+		cid, buf, err = extractConfluentSchemaIDAndBinaryData(data)
 		if err != nil {
 			return nil, nil, err
 		}
 		schemaID.confluentSchemaID = cid
 	case common.SchemaRegistryTypeGlue:
-		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
+		gid, buf, err = extractGlueSchemaIDAndBinaryData(data)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -443,12 +489,12 @@ func decodeRawBytes(
 		return nil, nil, errors.New("unknown schema registry type")
 	}
 
-	codec, err := schemaM.Lookup(ctx, topic, schemaID)
+	avroCodec, err := schemaM.Lookup(ctx, topic, schemaID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	native, _, err := codec.NativeFromBinary(binary)
+	native, _, err := avroCodec.NativeFromBinary(buf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -459,7 +505,7 @@ func decodeRawBytes(
 	}
 
 	schema := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(codec.Schema()), &schema); err != nil {
+	if err := json.Unmarshal([]byte(avroCodec.Schema()), &schema); err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
@@ -469,11 +515,60 @@ func decodeRawBytes(
 func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.key
 	d.key = nil
-	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
+	return DecodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
 func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.value
 	d.value = nil
-	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
+	return DecodeRawBytes(ctx, d.schemaM, data, d.topic)
+}
+
+func flagFromTiDBType(tp string) model.ColumnFlagType {
+	var flag model.ColumnFlagType
+	if strings.Contains(tp, "UNSIGNED") {
+		flag.SetIsUnsigned()
+	}
+	return flag
+}
+
+func mysqlTypeFromTiDBType(tidbType string) byte {
+	var result byte
+	switch tidbType {
+	case "INT", "INT UNSIGNED":
+		result = mysql.TypeLong
+	case "BIGINT", "BIGINT UNSIGNED":
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
+	}
+	return result
 }

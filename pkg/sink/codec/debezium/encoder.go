@@ -14,15 +14,17 @@
 package debezium
 
 import (
-	"bytes"
 	"context"
-	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"go.uber.org/zap"
 )
 
 // BatchEncoder encodes message into Debezium format.
@@ -30,38 +32,66 @@ type BatchEncoder struct {
 	messages []*common.Message
 
 	config *common.Config
-	codec  *dbzCodec
+
+	codec codec.Format
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
-func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(_ uint64) (*common.Message, error) {
 	// Currently ignored. Debezium MySQL Connector does not emit such event.
 	return nil, nil
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
-	_ context.Context,
-	_ string,
+	ctx context.Context,
+	topic string,
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	valueBuf := bytes.Buffer{}
-	err := d.codec.EncodeRowChangedEvent(e, &valueBuf)
+	op := avro.GetOperation(e)
+	if op == "" {
+		log.Warn("skip unknown operation", zap.Any("rowChangedEvent", e))
+		return nil
+	}
+
+	key, err := d.codec.EncodeKey(ctx, topic, e)
 	if err != nil {
+		log.Error("debezium encoding key failed",
+			zap.String("format", string(d.config.EncodingFormat)),
+			zap.Error(err),
+			zap.Any("event", e))
 		return errors.Trace(err)
 	}
-	// TODO: Use a streaming compression is better.
-	value, err := common.Compress(
-		d.config.ChangefeedID,
-		d.config.LargeMessageHandle.LargeMessageHandleCompression,
-		valueBuf.Bytes(),
-	)
+
+	value, err := d.codec.EncodeValue(ctx, topic, e)
 	if err != nil {
+		log.Error("debezium encoding value failed",
+			zap.String("format", string(d.config.EncodingFormat)),
+			zap.Error(err),
+			zap.Any("event", e))
 		return errors.Trace(err)
 	}
+
+	if d.config.IsDebeziumJsonFormat() {
+		// TODO: Use a streaming compression is better.
+		value, err = common.Compress(
+			d.config.ChangefeedID,
+			d.config.LargeMessageHandle.LargeMessageHandleCompression,
+			value,
+		)
+	}
+
+	if err != nil {
+		log.Error("compress debezium encoding value failed",
+			zap.String("format", string(d.config.EncodingFormat)),
+			zap.Error(err),
+			zap.Any("event", e))
+		return errors.Trace(err)
+	}
+
 	m := &common.Message{
-		Key:      nil,
+		Key:      key,
 		Value:    value,
 		Ts:       e.CommitTs,
 		Schema:   e.TableInfo.GetSchemaNamePtr(),
@@ -72,13 +102,21 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	}
 	m.IncRowsCount()
 
+	if m.Length() > d.config.MaxMessageBytes {
+		log.Warn("Single message is too large for avro",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", m.Length()),
+			zap.Any("table", e.TableInfo.TableName))
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs(m.Length())
+	}
+
 	d.messages = append(d.messages, m)
 	return nil
 }
 
 // EncodeDDLEvent implements the RowEventEncoder interface
 // DDL message unresolved tso
-func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+func (d *BatchEncoder) EncodeDDLEvent(_ *model.DDLEvent) (*common.Message, error) {
 	// Schema Change Events are currently not supported.
 	return nil, nil
 }
@@ -95,36 +133,68 @@ func (d *BatchEncoder) Build() []*common.Message {
 }
 
 // newBatchEncoder creates a new Debezium BatchEncoder.
-func newBatchEncoder(c *common.Config, clusterID string) codec.RowEventEncoder {
-	batch := &BatchEncoder{
+func newBatchEncoder(c *common.Config, format codec.Format) codec.RowEventEncoder {
+	return &BatchEncoder{
 		messages: nil,
 		config:   c,
-		codec: &dbzCodec{
-			config:    c,
-			clusterID: clusterID,
-			nowFunc:   time.Now,
-		},
+		codec:    format,
 	}
-	return batch
 }
 
 type batchEncoderBuilder struct {
-	config    *common.Config
-	clusterID string
+	config *common.Config
+	format codec.Format
 }
 
 // NewBatchEncoderBuilder creates a Debezium batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config, clusterID string) codec.RowEventEncoderBuilder {
-	return &batchEncoderBuilder{
-		config:    config,
-		clusterID: clusterID,
+func NewBatchEncoderBuilder(
+	ctx context.Context,
+	config *common.Config,
+	clusterID string,
+) (codec.RowEventEncoderBuilder, error) {
+	var format codec.Format
+	if config.EncodingFormat == common.EncodingFormatAvro {
+		schemaM, err := avro.NewSchemaManager(ctx, config)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		format = avro.NewAvroCodec(config.ChangefeedID.Namespace, config.ChangefeedID.ID, schemaM, config)
+	} else {
+		format = newDebeziumJsonCodec(config, clusterID)
 	}
+	return &batchEncoderBuilder{
+		config: config,
+		format: format,
+	}, nil
 }
 
 // Build a `BatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return newBatchEncoder(b.config, b.clusterID)
+	return newBatchEncoder(b.config, b.format)
 }
 
 // CleanMetrics do nothing
 func (b *batchEncoderBuilder) CleanMetrics() {}
+
+// SetupEncoderAndSchemaRegistry4Testing start a local schema registry for testing.
+func SetupEncoderAndSchemaRegistry4Testing(
+	ctx context.Context,
+	config *common.Config,
+) (*BatchEncoder, error) {
+	avro.StartHTTPInterceptForTestingRegistry()
+	schemaM, err := avro.NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &BatchEncoder{
+		messages: make([]*common.Message, 0, 1),
+		config:   config,
+		codec:    avro.NewAvroCodec(model.DefaultNamespace, "default", schemaM, config),
+	}, nil
+}
+
+// TeardownEncoderAndSchemaRegistry4Testing stop the local schema registry for testing.
+func TeardownEncoderAndSchemaRegistry4Testing() {
+	avro.StopHTTPInterceptForTestingRegistry()
+}

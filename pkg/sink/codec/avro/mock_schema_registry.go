@@ -34,7 +34,7 @@ type mockRegistry struct {
 	newID    int
 }
 
-func startHTTPInterceptForTestingRegistry() {
+func StartHTTPInterceptForTestingRegistry() {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -141,6 +141,6 @@ func startHTTPInterceptForTestingRegistry() {
 		})
 }
 
-func stopHTTPInterceptForTestingRegistry() {
+func StopHTTPInterceptForTestingRegistry() {
 	httpmock.DeactivateAndReset()
 }

@@ -59,6 +59,12 @@ type RowEventEncoderBuilder interface {
 	CleanMetrics()
 }
 
+// Format is an abstraction for event key/value format.
+type Format interface {
+	EncodeKey(context.Context, string, *model.RowChangedEvent) ([]byte, error)
+	EncodeValue(context.Context, string, *model.RowChangedEvent) ([]byte, error)
+}
+
 // TxnEventEncoder is an abstraction for txn events encoder.
 type TxnEventEncoder interface {
 	// AppendTxnEvent append a txn event into the buffer.
