@@ -178,7 +178,13 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		oldColumns := msg.getOld()
+		for key, value := range msg.getData() {
+			if _, ok := oldColumns[key]; !ok {
+				oldColumns[key] = value
+			}
+		}
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(oldColumns, mysqlType)
 		if err != nil {
 			return nil, err
 		}
