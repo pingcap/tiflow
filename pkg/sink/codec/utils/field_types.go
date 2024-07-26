@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"strings"
 )
 
 // SetBinChsClnFlag set the binary charset flag.
@@ -52,4 +53,9 @@ func NewTextFieldType(tp byte) *types.FieldType {
 	ft.SetCollate(mysql.DefaultCollationName)
 	ft.SetCharset(mysql.DefaultCharset)
 	return ft
+}
+
+// IsBinaryMySQLType return true if the given mysqlType string is a binary type
+func IsBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }
