@@ -14,11 +14,12 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"strings"
 )
 
 // SetBinChsClnFlag set the binary charset flag.
