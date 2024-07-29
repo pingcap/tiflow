@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"text/template"
 
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/util/codec"
@@ -51,7 +52,8 @@ func newMockPDClient(normal bool) *mockPDClient {
 	mock.testServer = httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
-			_, _ = w.Write([]byte("{}"))
+			tmpl, _ := template.New("").Parse("{{.}}")
+			tmpl.Execute(w, "{}")
 		},
 	))
 	mock.url = mock.testServer.URL
@@ -190,7 +192,8 @@ func TestScanRegions(t *testing.T) {
 			info.Count = len(info.Regions)
 			data, _ := json.Marshal(info)
 			t.Logf("%s", string(data))
-			_, _ = w.Write(data)
+			tmpl, _ := template.New("").Parse("{{.}}")
+			tmpl.Execute(w, data)
 		},
 	))
 	defer mockPDServer.Close()

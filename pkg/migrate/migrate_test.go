@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -489,7 +490,8 @@ func newMockPDClient(normal bool) *mockPDClient {
 	mock.testServer = httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
-			_, _ = w.Write([]byte(mock.respData))
+			tmpl, _ := template.New("").Parse("{{.}}")
+			tmpl.Execute(w, mock.respData)
 		},
 	))
 	mock.url = mock.testServer.URL

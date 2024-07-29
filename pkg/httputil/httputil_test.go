@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,14 +113,16 @@ func TestTimeout(t *testing.T) {
 func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	//nolint:errcheck
-	w.Write([]byte(httputilServerMsg))
+	tmpl, _ := template.New("").Parse("{{.}}")
+	tmpl.Execute(w, httputilServerMsg)
 }
 
 func createHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	//nolint:errcheck
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`"{"id": "value"}"`))
+	tmpl, _ := template.New("").Parse("{{.}}")
+	tmpl.Execute(w, `"{"id": "value"}"`)
 }
 
 func sleepHandler(d time.Duration) http.HandlerFunc {

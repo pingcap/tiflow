@@ -15,6 +15,7 @@ package rest
 
 import (
 	"context"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,7 +37,8 @@ func TestRestRequestSuccess(t *testing.T) {
 		rw.Header().Set("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusOK)
 		if r.URL.Path == "/api/v1/test" {
-			_, _ = rw.Write([]byte(`{"cdc": "hello world"}`))
+			tmpl, _ := template.New("").Parse("{{.}}")
+			tmpl.Execute(rw, `{"cdc": "hello world"}`)
 		}
 	}))
 	defer testServer.Close()
@@ -51,10 +53,11 @@ func TestRestRequestSuccess(t *testing.T) {
 func TestRestRequestFailed(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
-		_, _ = rw.Write([]byte(`{
+		tmpl, _ := template.New("").Parse("{{.}}")
+		tmpl.Execute(rw, `{
 			"error_msg": "test rest request failed",
 			"error_code": "test rest request failed"
-		}`))
+		}`)
 	}))
 	defer testServer.Close()
 
@@ -67,10 +70,11 @@ func TestRestRequestFailed(t *testing.T) {
 func TestRestRawRequestFailed(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
-		_, _ = rw.Write([]byte(`{
+		tmpl, _ := template.New("").Parse("{{.}}")
+		tmpl.Execute(rw, `{
 			"error_msg": "test rest request failed",
 			"error_code": "test rest request failed"
-		}`))
+		}`)
 	}))
 	defer testServer.Close()
 

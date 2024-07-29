@@ -15,6 +15,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 
 	"github.com/go-oauth2/oauth2/v4/errors"
@@ -152,7 +153,8 @@ func run(_ *cobra.Command, _ []string) {
 		}
 	})))
 	http.Handle("/.well-known/openid-configuration", logMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(fmt.Sprintf(openIDConfiguration, serverConfig.port, serverConfig.port, serverConfig.port)))
+		tmpl, _ := template.New("").Parse("{{.}}")
+		tmpl.Execute(w, template.HTML(fmt.Sprintf(openIDConfiguration, serverConfig.port, serverConfig.port, serverConfig.port)))
 		w.WriteHeader(200)
 	})))
 	log.Info("starting auth2 server", zap.Int("port", serverConfig.port))

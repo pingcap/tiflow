@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -97,7 +98,11 @@ func IsHTTPBadRequestError(err error) bool {
 // WriteError write error message to response
 func WriteError(w http.ResponseWriter, statusCode int, err error) {
 	w.WriteHeader(statusCode)
-	_, err = w.Write([]byte(err.Error()))
+	tmpl, err := template.New("").Parse("{{.}}")
+	if err != nil {
+		log.Error("parse error", zap.Error(err))
+	}
+	err = tmpl.Execute(w, err.Error())
 	if err != nil {
 		log.Error("write error", zap.Error(err))
 	}
@@ -113,7 +118,11 @@ func WriteData(w http.ResponseWriter, data interface{}) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(js)
+	tmpl, err := template.New("").Parse("{{.}}")
+	if err != nil {
+		log.Error("parse error", zap.Error(err))
+	}
+	err = tmpl.Execute(w, js)
 	if err != nil {
 		log.Error("fail to write data", zap.Error(err))
 	}
