@@ -15,6 +15,7 @@ package avro
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
@@ -34,6 +36,8 @@ import (
 type decoder struct {
 	config *common.Config
 	topic  string
+
+	upstreamTiDB *sql.DB
 
 	schemaM SchemaManager
 
@@ -46,11 +50,13 @@ func NewDecoder(
 	config *common.Config,
 	schemaM SchemaManager,
 	topic string,
+	db *sql.DB,
 ) codec.RowEventDecoder {
 	return &decoder{
-		config:  config,
-		topic:   topic,
-		schemaM: schemaM,
+		config:       config,
+		topic:        topic,
+		schemaM:      schemaM,
+		upstreamTiDB: db,
 	}
 }
 
@@ -129,6 +135,13 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	corrupted := isCorrupted(valueMap)
+	if found {
+		event.Checksum = &integrity.Checksum{
+			Current:   uint32(expectedChecksum),
+			Corrupted: corrupted,
+		}
+	}
 
 	if isCorrupted(valueMap) {
 		log.Warn("row data is corrupted",
@@ -146,7 +159,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	if found {
-		if err := common.VerifyChecksum(event.Columns, event.TableInfo.Columns, uint32(expectedChecksum)); err != nil {
+		if err = common.VerifyChecksum(event, d.upstreamTiDB); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}

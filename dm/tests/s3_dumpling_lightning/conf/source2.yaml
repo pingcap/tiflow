@@ -10,4 +10,5 @@ from:
   password: '123456'
   port: 3307
 checker:
-  check-enable: false
+  check-enable: true
+  backoff-max: 1s
