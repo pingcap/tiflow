@@ -53,7 +53,7 @@ func newMockPDClient(normal bool) *mockPDClient {
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
 			tmpl, _ := template.New("").Parse("{{.}}")
-			tmpl.Execute(w, "{}")
+			_ = tmpl.Execute(w, "{}")
 		},
 	))
 	mock.url = mock.testServer.URL
@@ -193,7 +193,7 @@ func TestScanRegions(t *testing.T) {
 			data, _ := json.Marshal(info)
 			t.Logf("%s", string(data))
 			tmpl, _ := template.New("").Parse("{{.}}")
-			tmpl.Execute(w, data)
+			_ = tmpl.Execute(w, data)
 		},
 	))
 	defer mockPDServer.Close()

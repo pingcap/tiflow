@@ -114,7 +114,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	//nolint:errcheck
 	tmpl, _ := template.New("").Parse("{{.}}")
-	tmpl.Execute(w, httputilServerMsg)
+	_ = tmpl.Execute(w, httputilServerMsg)
 }
 
 func createHandler(w http.ResponseWriter, req *http.Request) {
@@ -122,7 +122,7 @@ func createHandler(w http.ResponseWriter, req *http.Request) {
 	//nolint:errcheck
 	w.WriteHeader(http.StatusCreated)
 	tmpl, _ := template.New("").Parse("{{.}}")
-	tmpl.Execute(w, `"{"id": "value"}"`)
+	_ = tmpl.Execute(w, `"{"id": "value"}"`)
 }
 
 func sleepHandler(d time.Duration) http.HandlerFunc {

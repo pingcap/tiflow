@@ -491,7 +491,7 @@ func newMockPDClient(normal bool) *mockPDClient {
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
 			tmpl, _ := template.New("").Parse("{{.}}")
-			tmpl.Execute(w, mock.respData)
+			_ = tmpl.Execute(w, mock.respData)
 		},
 	))
 	mock.url = mock.testServer.URL
