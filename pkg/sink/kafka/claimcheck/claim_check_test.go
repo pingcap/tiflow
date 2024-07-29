@@ -22,14 +22,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClaimCheckFileName(t *testing.T) {
+func TestClaimCheck(t *testing.T) {
 	ctx := context.Background()
 
 	changefeedID := model.DefaultChangeFeedID("test")
 	largeHandleConfig := config.NewDefaultLargeMessageHandleConfig()
+
+	claimCheck, err := New(ctx, largeHandleConfig, changefeedID)
+	require.NoError(t, err)
+	require.Nil(t, claimCheck)
+
 	largeHandleConfig.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	largeHandleConfig.ClaimCheckStorageURI = "file:///tmp/abc/"
-	claimCheck, err := New(ctx, largeHandleConfig, changefeedID)
+	claimCheck, err = New(ctx, largeHandleConfig, changefeedID)
 	require.NoError(t, err)
 
 	fileName := claimCheck.FileNameWithPrefix("file.json")
