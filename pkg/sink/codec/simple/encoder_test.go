@@ -1586,8 +1586,6 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 		}
 	}
 }
-<<<<<<< HEAD
-=======
 
 func TestDecoder(t *testing.T) {
 	ctx := context.Background()
@@ -1655,4 +1653,3 @@ func TestMarshallerError(t *testing.T) {
 	require.False(t, hasNext)
 	require.Equal(t, model.MessageTypeUnknown, messageType)
 }
->>>>>>> 7531086b08 (codec(ticdc): simple protocol introduce mock marshaller to improve ut coverage (#11098))
