@@ -98,14 +98,8 @@ func IsHTTPBadRequestError(err error) bool {
 // WriteError write error message to response
 func WriteError(w http.ResponseWriter, statusCode int, err error) {
 	w.WriteHeader(statusCode)
-	tmpl, err := template.New("").Parse("{{.}}")
-	if err != nil {
-		log.Error("parse error", zap.Error(err))
-	}
-	err = tmpl.Execute(w, err.Error())
-	if err != nil {
-		log.Error("write error", zap.Error(err))
-	}
+	tmpl, _ := template.New("").Parse("{{.}}")
+	_ = tmpl.Execute(w, err.Error())
 }
 
 // WriteData write data to response with http status code 200
