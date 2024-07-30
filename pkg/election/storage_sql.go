@@ -92,13 +92,21 @@ func (s *SQLStorage) Update(ctx context.Context, record *Record, _ bool) error {
 	}
 
 	if record.Version == 0 {
-		_, err := s.db.ExecContext(ctx,
-			fmt.Sprintf(sqlInsertRecord, s.tableName), sqlRecordID, record.Version+1, recordBytes)
+		stmt, err := s.db.PrepareContext(ctx, fmt.Sprintf(sqlInsertRecord, s.tableName))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		_, err = stmt.ExecContext(ctx, sqlRecordID, record.Version+1, recordBytes)
+
 		return errors.Trace(err)
 	}
 
-	result, err := s.db.ExecContext(ctx,
-		fmt.Sprintf(sqlUpdateRecord, s.tableName), record.Version+1, recordBytes, sqlRecordID, record.Version)
+	stmt, err := s.db.PrepareContext(ctx, fmt.Sprintf(sqlUpdateRecord, s.tableName))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	result, err := stmt.ExecContext(ctx, record.Version+1, recordBytes, sqlRecordID, record.Version)
+
 	if err != nil {
 		return errors.Trace(err)
 	}

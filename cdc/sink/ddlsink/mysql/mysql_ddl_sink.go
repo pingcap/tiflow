@@ -199,8 +199,12 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
+		stmt, err := tx.PrepareContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 		if err != nil {
+			log.Error("Failed to creates a prepared statement", zap.String("query", "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";"))
+			return err
+		}
+		if _, err = stmt.ExecContext(ctx); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID), zap.Error(err))
@@ -221,7 +225,12 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
-	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+	stmt, err := tx.PrepareContext(ctx, ddl.Query)
+	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", ddl.Query))
+		return err
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback", zap.String("sql", ddl.Query),
 				zap.String("namespace", m.id.Namespace),

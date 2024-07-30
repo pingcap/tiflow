@@ -38,8 +38,11 @@ func CreateSchemaIfNotExists(ctx context.Context, storeConf model.StoreConfig) e
 	defer db.Close()
 
 	query := fmt.Sprintf("CREATE DATABASE if not exists %s", schema)
-	_, err = db.ExecContext(ctx, query)
+	stmt, err := db.PrepareContext(ctx, query)
 	if err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 

@@ -280,8 +280,12 @@ func SnapshotQuery(
 	}
 	defer conn.Close()
 
-	_, err = conn.ExecContext(ctx, query)
+	stmt, err := conn.PrepareContext(ctx, query)
 	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", query))
+		return nil, err
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 		if ok {
 			// Error 8055 (HY000): snapshot is older than GC safe point

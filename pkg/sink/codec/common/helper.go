@@ -146,8 +146,12 @@ func queryRowChecksumAux(
 	var result uint32
 	// 1. set snapshot read
 	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
-	_, err := conn.ExecContext(ctx, query)
+	stmt, err := conn.PrepareContext(ctx, query)
 	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", query))
+		return result
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 		if ok {
 			// Error 8055 (HY000): snapshot is older than GC safe point
@@ -202,7 +206,12 @@ func MustSnapshotQuery(
 
 	// 1. set snapshot read
 	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
-	_, err = conn.ExecContext(ctx, query)
+	stmt, err := conn.PrepareContext(ctx, query)
+	if err != nil {
+		log.Panic("Failed to creates a prepared statement", zap.String("query", query))
+	}
+	_, err = stmt.ExecContext(ctx)
+
 	if err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 		if ok {

@@ -249,8 +249,12 @@ func updateTableSummary(ctx context.Context, db *sql.DB, instanceID, schema, tab
 // createCheckpointTable creates checkpoint tables, include `summary` and `chunk`
 func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 	createSchemaSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`;", checkpointSchemaName)
-	_, err := db.ExecContext(ctx, createSchemaSQL)
+	stmt, err := db.PrepareContext(ctx, createSchemaSQL)
 	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", createSchemaSQL))
+		return errors.Trace(err)
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		log.Info("create schema", zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -266,8 +270,12 @@ func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 		"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
 		"PRIMARY KEY(`schema`, `table`));"
 
-	_, err = db.ExecContext(ctx, createSummaryTableSQL)
+	stmt, err = db.PrepareContext(ctx, createSummaryTableSQL)
 	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", createSummaryTableSQL))
+		return errors.Trace(err)
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		log.Error("create chunk table", zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -291,8 +299,13 @@ func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 		"`state` enum('not_checked', 'checking', 'success', 'failed', 'ignore', 'error') DEFAULT 'not_checked'," +
 		"`update_time` datetime ON UPDATE CURRENT_TIMESTAMP," +
 		"PRIMARY KEY(`schema`, `table`, `instance_id`, `chunk_id`));"
-	_, err = db.ExecContext(ctx, createChunkTableSQL)
+
+	stmt, err = db.PrepareContext(ctx, createChunkTableSQL)
 	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", createChunkTableSQL))
+		return errors.Trace(err)
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
 		log.Error("create chunk table", zap.Error(err))
 		return errors.Trace(err)
 	}

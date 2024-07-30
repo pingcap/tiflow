@@ -643,8 +643,12 @@ func (s *mysqlBackend) multiStmtExecute(
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	start := time.Now()
-	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
-	if execError != nil {
+	stmt, err := tx.PrepareContext(ctx, multiStmtSQL)
+	if err != nil {
+		log.Error("Failed to creates a prepared statement", zap.String("query", multiStmtSQL))
+		return err
+	}
+	if _, execError := stmt.ExecContext(ctx, multiStmtArgs...); execError != nil {
 		err := logDMLTxnErr(
 			wrapMysqlTxnError(execError),
 			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
@@ -686,7 +690,13 @@ func (s *mysqlBackend) sequenceExecute(
 
 		var execError error
 		if prepStmt == nil {
-			_, execError = tx.ExecContext(ctx, query, args...)
+			stmt, err := tx.PrepareContext(ctx, query)
+			if err != nil {
+				log.Error("Failed to creates a prepared statement", zap.String("query", query))
+				cancelFunc()
+				return err
+			}
+			_, execError = stmt.ExecContext(ctx, args...)
 		} else {
 			//nolint:sqlclosecheck
 			_, execError = tx.Stmt(prepStmt).ExecContext(ctx, args...)
