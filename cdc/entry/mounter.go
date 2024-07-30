@@ -641,17 +641,10 @@ func verifyRawBytesChecksum(
 func (m *mounter) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
 	columns []*model.ColumnData, rawColumns []types.Datum,
-	key kv.Key, isPreRow bool,
+	key kv.Key, decoder *rowcodec.DatumMapDecoder,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
-	}
-
-	var decoder *rowcodec.DatumMapDecoder
-	if isPreRow {
-		decoder = m.preDecoder
-	} else {
-		decoder = m.decoder
 	}
 
 	version := decoder.ChecksumVersion()
@@ -712,7 +705,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, m.preDecoder)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
@@ -744,7 +737,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, m.decoder)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
