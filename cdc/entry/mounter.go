@@ -708,6 +708,7 @@ func (m *mounter) mountRowKVEntry(
 		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, m.preDecoder)
 		if err != nil {
 			log.Error("calculate the previous columns checksum failed",
+				zap.Int("checksumVersion", m.preDecoder.ChecksumVersion()),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", preRawCols))
 			return nil, rawRow, errors.Trace(err)
@@ -715,6 +716,7 @@ func (m *mounter) mountRowKVEntry(
 
 		if !matched {
 			log.Error("previous columns checksum mismatch",
+				zap.Int("checksumVersion", m.preDecoder.ChecksumVersion()),
 				zap.Uint32("checksum", preChecksum),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", preRawCols))
@@ -740,12 +742,14 @@ func (m *mounter) mountRowKVEntry(
 		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, m.decoder)
 		if err != nil {
 			log.Error("calculate the current columns checksum failed",
+				zap.Int("checksumVersion", m.decoder.ChecksumVersion()),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", rawCols))
 			return nil, rawRow, errors.Trace(err)
 		}
 		if !matched {
 			log.Error("current columns checksum mismatch",
+				zap.Int("checksumVersion", m.decoder.ChecksumVersion()),
 				zap.Uint32("checksum", currentChecksum),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", rawCols))
