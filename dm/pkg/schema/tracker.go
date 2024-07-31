@@ -339,11 +339,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-<<<<<<< HEAD
-	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
-=======
 	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, nil, ddl.WithOnExist(ddl.OnExistIgnore))
->>>>>>> 2fcbb315f0 (dep(*): update tidb to include DM SchemaTracker fix (#11410))
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.

@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	exprctx "github.com/pingcap/tidb/pkg/expression/context"
-	exprctximpl "github.com/pingcap/tidb/pkg/expression/contextimpl"
+	"github.com/pingcap/tidb/pkg/expression/contextsession"
 	infoschema "github.com/pingcap/tidb/pkg/infoschema/context"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -150,14 +150,10 @@ func UnpackTableID(id string) *filter.Table {
 	}
 }
 
-type exprCtxImpl struct {
-	*session
-	*exprctximpl.ExprCtxExtendedImpl
-}
 type session struct {
 	sessionctx.Context
 	vars                 *variable.SessionVars
-	exprctx              *exprCtxImpl
+	exprctx              exprctx.ExprContext
 	values               map[fmt.Stringer]interface{}
 	builtinFunctionUsage map[string]uint32
 	mu                   sync.RWMutex
@@ -218,10 +214,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
-	sessionCtx.exprctx = &exprCtxImpl{
-		session:             &sessionCtx,
-		ExprCtxExtendedImpl: exprctximpl.NewExprExtendedImpl(&sessionCtx),
-	}
+	sessionCtx.exprctx = contextsession.NewSessionExprContext(&sessionCtx)
 	return &sessionCtx
 }
 
