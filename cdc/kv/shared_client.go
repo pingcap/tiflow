@@ -59,9 +59,10 @@ const (
 
 	scanRegionsConcurrency = 1024
 
-	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
-	resolveLockMinInterval  time.Duration  = 10 * time.Second
-	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
+	loadRegionRetryInterval time.Duration = 100 * time.Millisecond
+	// TIGATE: to reduce memory usage.
+	resolveLockMinInterval time.Duration  = 60 * time.Second
+	invalidSubscriptionID  SubscriptionID = SubscriptionID(0)
 )
 
 var (
@@ -881,7 +882,7 @@ func (s *SharedClient) newSubscribedTable(
 func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksTargetTs, targetTs)
 	res := r.rangeLock.IterAll(r.tryResolveLock)
-	s.logRegionDetails("event feed finds slow locked ranges",
+	log.Debug("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
