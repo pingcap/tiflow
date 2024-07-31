@@ -1130,11 +1130,11 @@ func TestChecksumAfterAddColumns(t *testing.T) {
 	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
 	helper.Tk().MustExec("use test")
 
-	_ = helper.DDL2Event("create table t (a int primary key)")
-	event := helper.DML2Event("insert into t values (1)", "test", "t")
+	_ = helper.DDL2Event("create table t (a int primary key, b float)")
+	event := helper.DML2Event("insert into t values (1, 3.1415)", "test", "t")
 	require.NotNil(t, event)
 
-	_ = helper.DDL2Event("alter table t add column b int default 1")
+	_ = helper.DDL2Event("alter table t add column c double default 2.713952")
 
 	tableInfo, ok := helper.schemaStorage.GetLastSnapshot().TableByName("test", "t")
 	require.True(t, ok)
@@ -1154,6 +1154,44 @@ func TestChecksumAfterAddColumns(t *testing.T) {
 	}
 	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
 	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+
+	_ = helper.DDL2Event("alter table t drop column b")
+	_, oldValue = helper.getLastKeyValue(tableInfo.ID)
+
+	helper.Tk().MustExec("update t set c = 3.1415 where a = 1")
+	key, value = helper.getLastKeyValue(tableInfo.ID)
+	ts = helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV = &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent = model.NewPolymorphicEvent(rawKV)
+	err = helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+
+	_ = helper.DDL2Event("alter table t add column b int default 5")
+	_, oldValue = helper.getLastKeyValue(tableInfo.ID)
+
+	helper.Tk().MustExec("update t set c = 10 where a = 1")
+	key, value = helper.getLastKeyValue(tableInfo.ID)
+	ts = helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV = &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent = model.NewPolymorphicEvent(rawKV)
+	err = helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
 	require.NoError(t, err)
 	require.NotNil(t, polymorphicEvent.Row)
 }
@@ -1193,6 +1231,25 @@ func TestChecksumAfterDropColumns(t *testing.T) {
 	}
 	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
 	err := helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(t, err)
+	require.NotNil(t, polymorphicEvent.Row)
+
+	_ = helper.DDL2Event("alter table t add column b int default 5")
+	_, oldValue = helper.getLastKeyValue(tableInfo.ID)
+
+	helper.Tk().MustExec("update t set c = 3 where a = 1")
+	key, value = helper.getLastKeyValue(tableInfo.ID)
+	ts = helper.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV = &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: oldValue,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent = model.NewPolymorphicEvent(rawKV)
+	err = helper.mounter.DecodeEvent(context.Background(), polymorphicEvent)
 	require.NoError(t, err)
 	require.NotNil(t, polymorphicEvent.Row)
 }
