@@ -1,72 +1,9 @@
-// Copyright 2022 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-// ============================================================
-// Forked from https://github.com/golang-design/chann.
-// Copyright 2021 The golang.design Initiative Authors.
-// All rights reserved. Use of this source code is governed
-// by a MIT license that can be found in the LICENSE file.
-//
-// Written by Changkun Ou <changkun.de>
-
-// Package chann providesa a unified channel package.
-//
-// The package is compatible with existing buffered and unbuffered
-// channels. For example, in Go, to create a buffered or unbuffered
-// channel, one uses built-in function `make` to create a channel:
-//
-//	ch := make(chan int)     // unbuffered channel
-//	ch := make(chan int, 42) // or buffered channel
-//
-// However, all these channels have a finite capacity for caching, and
-// it is impossible to create a channel with unlimited capacity, namely,
-// an unbounded channel.
-//
-// This package provides the ability to create all possible types of
-// channels. To create an unbuffered or a buffered channel:
-//
-//	ch := chann.New[int](chann.Cap(0))  // unbuffered channel
-//	ch := chann.New[int](chann.Cap(42)) // or buffered channel
-//
-// More importantly, when the capacity of the channel is unspecified,
-// or provided as negative values, the created channel is an unbounded
-// channel:
-//
-//	ch := chann.New[int]()               // unbounded channel
-//	ch := chann.New[int](chann.Cap(-42)) // or unbounded channel
-//
-// Furthermore, all channels provides methods to send (In()),
-// receive (Out()), and close (Close()).
-//
-// An unbounded channel is not a buffered channel with infinite capacity,
-// and they have different memory model semantics in terms of receiving
-// a value: The recipient of a buffered channel is immediately available
-// after a send is complete. However, the recipient of an unbounded channel
-// may be available within a bounded time frame after a send is complete.
-//
-// Note that to close a channel, must use Close() method instead of the
-// language built-in method
-// Two additional methods: ApproxLen and Cap returns the current status
-// of the channel: an approximation of the current length of the channel,
-// as well as the current capacity of the channel.
-//
-// See https://golang.design/research/ultimate-channel to understand
-// the motivation of providing this package and the possible use cases
-// with this package.
 package chann
 
 import (
 	"sync/atomic"
+
+	"github.com/pingcap/tiflow/pkg/deque"
 )
 
 // Opt represents an option to configure the created channel. The current possible
@@ -98,8 +35,10 @@ func Cap(n int) Opt {
 // Chann is a generic channel abstraction that can be either buffered,
 // unbuffered, or unbounded. To create a new channel, use New to allocate
 // one, and use Cap to configure the capacity of the channel.
+//
+// Deprecated: Just Don't Use It. Use a channel please.
 type Chann[T any] struct {
-	q       []T
+	queue   *deque.Deque[T]
 	in, out chan T
 	close   chan struct{}
 	cfg     *config
@@ -144,8 +83,9 @@ func New[T any](opts ...Opt) *Chann[T] {
 		ch.in = make(chan T, ch.cfg.cap)
 		ch.out = ch.in
 	case unbounded:
-		ch.in = make(chan T, 16)
-		ch.out = make(chan T, 16)
+		ch.in = make(chan T, 1)
+		ch.out = make(chan T, 1)
+		ch.queue = deque.NewDeque[T](32, 0)
 		go ch.unboundedProcessing()
 	}
 	return ch
@@ -175,39 +115,36 @@ func (ch *Chann[T]) Close() {
 // unboundedProcessing is a processing loop that implements unbounded
 // channel semantics.
 func (ch *Chann[T]) unboundedProcessing() {
-	var nilT T
-
 	for {
-		select {
-		case e, ok := <-ch.in:
-			if !ok {
-				panic("chann: send-only channel ch.In() closed unexpectedly")
-			}
-			atomic.AddInt64(&ch.cfg.len, 1)
-			ch.q = append(ch.q, e)
-		case <-ch.close:
-			ch.unboundedTerminate()
-			return
-		}
-
-		for len(ch.q) > 0 {
+		e, ok := ch.queue.Front()
+		if ok {
 			select {
-			case ch.out <- ch.q[0]:
+			case ch.out <- e:
 				atomic.AddInt64(&ch.cfg.len, -1)
-				ch.q[0] = nilT
-				ch.q = ch.q[1:]
+				ch.queue.PopFront()
 			case e, ok := <-ch.in:
 				if !ok {
 					panic("chann: send-only channel ch.In() closed unexpectedly")
 				}
 				atomic.AddInt64(&ch.cfg.len, 1)
-				ch.q = append(ch.q, e)
+				ch.queue.PushBack(e)
+			case <-ch.close:
+				ch.unboundedTerminate()
+				return
+			}
+		} else {
+			select {
+			case e, ok := <-ch.in:
+				if !ok {
+					panic("chann: send-only channel ch.In() closed unexpectedly")
+				}
+				atomic.AddInt64(&ch.cfg.len, 1)
+				ch.queue.PushBack(e)
 			case <-ch.close:
 				ch.unboundedTerminate()
 				return
 			}
 		}
-		ch.q = nil
 	}
 }
 
@@ -215,19 +152,19 @@ func (ch *Chann[T]) unboundedProcessing() {
 // and make sure all unprocessed elements be consumed if there is
 // a pending receiver.
 func (ch *Chann[T]) unboundedTerminate() {
-	var zeroT T
-
 	close(ch.in)
 	for e := range ch.in {
-		ch.q = append(ch.q, e)
+		// ch.q = append(ch.q, e)
+		ch.queue.PushBack(e)
 	}
-	for len(ch.q) > 0 {
+
+	for e, ok := ch.queue.PopFront(); ok; e, ok = ch.queue.PopFront() {
 		// NOTICE: If no receiver is receiving the element, it will be blocked.
 		// So the consumer have to deal with all the elements in the queue.
-		ch.out <- ch.q[0]
-		ch.q[0] = zeroT // de-reference earlier to help GC
-		ch.q = ch.q[1:]
+		ch.out <- e
+		atomic.AddInt64(&ch.cfg.len, -1)
 	}
+
 	close(ch.out)
 	close(ch.close)
 }
