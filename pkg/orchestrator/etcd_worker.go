@@ -398,12 +398,11 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 	return nil
 }
 
+// TODO: for tigate
 func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	ret := make(map[util.EtcdKey][]byte)
 	for k, v := range worker.rawState {
-		vCloned := make([]byte, len(v.value))
-		copy(vCloned, v.value)
-		ret[util.NewEtcdKey(k.String())] = vCloned
+		ret[util.NewEtcdKey(k.String())] = v.value
 	}
 	return ret
 }
