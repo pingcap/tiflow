@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	tidbConfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/ddl/schematracker"
 	"github.com/pingcap/tidb/pkg/executor"
@@ -135,6 +136,10 @@ func (tr *Tracker) Init(
 	}()
 
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
+
+	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
+		conf.MaxIndexLength = 3328
+	})
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
