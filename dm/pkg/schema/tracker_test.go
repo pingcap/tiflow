@@ -619,6 +619,36 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
 }
 
+func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
+	// origin table info
+	p := parser.New()
+	se := timock.NewContext()
+	ctx := context.Background()
+	node, err := p.ParseOneStmt("create table t(a int, b int, c varchar(10))", "utf8mb4", "utf8mb4_bin")
+	require.NoError(t, err)
+	oriTi, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	require.NoError(t, err)
+
+	// tracker and sqlmock
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableID := "`test`.`test`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("test", "create table t(a bigint(20), b varbinary(767), c varbinary(767), d varbinary(767), e varbinary(767), primary key(a), key(b, c, d, e, a))"))
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
+	require.NoError(t, err)
+	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+}
+
 func TestReTrackDownStreamIndex(t *testing.T) {
 	// origin table info
 	p := parser.New()
