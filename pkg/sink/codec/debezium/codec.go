@@ -41,7 +41,7 @@ type dbzCodec struct {
 	nowFunc   func() time.Time
 }
 
-func newDebeziumJsonCodec(c *common.Config, clusterID string) codec.Format {
+func newDebeziumJSONCodec(c *common.Config, clusterID string) codec.Format {
 	return &dbzCodec{
 		config:    c,
 		clusterID: clusterID,
@@ -525,10 +525,13 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
+// EncodeKey encode debezium json format message key
 func (c *dbzCodec) EncodeKey(_ context.Context, _ string, _ *model.RowChangedEvent) ([]byte, error) {
+	// Debezium message key are currently not supported.
 	return nil, nil
 }
 
+// EncodeValue encode debezium json format message value
 func (c *dbzCodec) EncodeValue(_ context.Context, _ string, e *model.RowChangedEvent) ([]byte, error) {
 	valueBuf := bytes.Buffer{}
 	jWriter := util.BorrowJSONWriter(&valueBuf)

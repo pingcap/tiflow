@@ -463,6 +463,7 @@ func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
 	return id, data[18:], nil
 }
 
+// DecodeRawBytes returns the avro data and schema
 func DecodeRawBytes(
 	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
 ) (map[string]interface{}, map[string]interface{}, error) {

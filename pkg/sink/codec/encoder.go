@@ -61,7 +61,9 @@ type RowEventEncoderBuilder interface {
 
 // Format is an abstraction for event key/value format.
 type Format interface {
+	// EncodeKey encode the specified format message key
 	EncodeKey(context.Context, string, *model.RowChangedEvent) ([]byte, error)
+	// EncodeValue encode the specified format message value
 	EncodeValue(context.Context, string, *model.RowChangedEvent) ([]byte, error)
 }
 

@@ -160,7 +160,7 @@ func NewBatchEncoderBuilder(
 		}
 		format = avro.NewAvroCodec(config.ChangefeedID.Namespace, config.ChangefeedID.ID, schemaM, config)
 	} else {
-		format = newDebeziumJsonCodec(config, clusterID)
+		format = newDebeziumJSONCodec(config, clusterID)
 	}
 	return &batchEncoderBuilder{
 		config: config,

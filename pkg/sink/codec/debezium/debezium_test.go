@@ -253,8 +253,10 @@ func TestDMLEventE2E(t *testing.T) {
 
 				var key, value, schema map[string]interface{}
 				key, _, err = avro.DecodeRawBytes(ctx, schemaM, message.Key, topic)
+				require.NoError(t, err)
 				require.Equal(t, int32(127), key["tu1"])
 				value, schema, err = avro.DecodeRawBytes(ctx, schemaM, message.Value, topic)
+				require.NoError(t, err)
 				namespace := schema["namespace"].(string)
 				after := value["after"].(map[string]interface{})[namespace+".Value"].(map[string]interface{})
 				require.Equal(t, float32(3.14), after["floatT"].(map[string]interface{})["float"])

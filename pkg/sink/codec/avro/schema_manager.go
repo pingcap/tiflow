@@ -57,6 +57,7 @@ type schemaCacheEntry struct {
 	header []byte
 }
 
+// NewSchemaManager creates a confluent or glue schema manger
 func NewSchemaManager(ctx context.Context, config *common.Config) (SchemaManager, error) {
 	schemaRegistryType := config.SchemaRegistryType()
 	switch schemaRegistryType {

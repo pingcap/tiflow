@@ -469,10 +469,12 @@ func (c *Config) SchemaRegistryType() string {
 	return "unknown"
 }
 
+// IsDebeziumAvroFormat returns whether debezium avro format
 func (c *Config) IsDebeziumAvroFormat() bool {
 	return c.Protocol == config.ProtocolDebezium && c.EncodingFormat == EncodingFormatAvro
 }
 
+// IsDebeziumJsonFormat returns returns whether debezium json format
 func (c *Config) IsDebeziumJsonFormat() bool {
 	return c.Protocol == config.ProtocolDebezium && c.EncodingFormat == EncodingFormatJSON
 }

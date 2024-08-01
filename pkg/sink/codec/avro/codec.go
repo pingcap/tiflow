@@ -40,6 +40,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Codec represents the avro format
 type Codec struct {
 	namespace    string
 	changeFeedID string
@@ -147,6 +148,7 @@ const (
 	debeziumSourceCommitTS    = "commit_ts"
 )
 
+// NewAvroCodec creates avro format
 func NewAvroCodec(
 	namespace string,
 	changeFeedID string,
@@ -162,6 +164,7 @@ func NewAvroCodec(
 	}
 }
 
+// EncodeKey encode avro format message key
 func (c *Codec) EncodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
 	cols, colInfos := e.HandleKeyColInfos()
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
@@ -202,6 +205,7 @@ func (c *Codec) EncodeKey(ctx context.Context, topic string, e *model.RowChanged
 	return data, nil
 }
 
+// EncodeValue encode avro format message value
 func (c *Codec) EncodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
 	columns := e.GetColumns()
 	// Handle delete event for protocol avro and debezium
@@ -257,6 +261,7 @@ func (c *Codec) EncodeValue(ctx context.Context, topic string, e *model.RowChang
 	return data, nil
 }
 
+// GetOperation returns row changed event operation
 func GetOperation(e *model.RowChangedEvent) string {
 	if e.IsInsert() {
 		return insertOperation
@@ -492,7 +497,6 @@ func (c *Codec) columns2DebeziumAvroData(
 			return nil, cerror.WrapError(cerror.ErrDebeziumAfterAvroEncodeFailed, err)
 		}
 		envelope[debeziumAfter] = goavro.Union(unionKey, ret)
-		break
 	case updateOperation:
 		// set before field value
 		input := &avroEncodeInput{
@@ -514,7 +518,6 @@ func (c *Codec) columns2DebeziumAvroData(
 			return nil, cerror.WrapError(cerror.ErrDebeziumAfterAvroEncodeFailed, err)
 		}
 		envelope[debeziumAfter] = goavro.Union(unionKey, ret)
-		break
 	case deleteOperation:
 		input := &avroEncodeInput{
 			columns:  e.GetPreColumns(),
@@ -526,7 +529,6 @@ func (c *Codec) columns2DebeziumAvroData(
 		}
 		envelope[debeziumBefore] = goavro.Union(unionKey, ret)
 		envelope[debeziumAfter] = nil
-		break
 	default:
 		// do nothing
 	}
