@@ -39,7 +39,7 @@ const (
 
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
-	tableResolvedTsBufferSize int = 256
+	tableResolvedTsBufferSize int = 64
 
 	defaultPullerOutputChanSize = 128
 
