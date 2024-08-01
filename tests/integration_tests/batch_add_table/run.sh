@@ -21,7 +21,7 @@ function run_with_fast_create_table() {
 
 	TOPIC_NAME="ticdc-batch-add-table-test-$RANDOM"
 	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=3&max-message-bytes=10485760" ;;
 	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	pulsar)
 		run_pulsar_cluster $WORK_DIR normal
@@ -31,7 +31,7 @@ function run_with_fast_create_table() {
 	esac
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
 	case $SINK_TYPE in
-	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=3&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
 	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
 	esac
@@ -54,8 +54,10 @@ function run_with_fast_create_table() {
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+  sleep 60
+
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists batch_add_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists batch_add_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 100
 	# check the ddl of this table is skipped
 	check_table_not_exists test.t_1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
