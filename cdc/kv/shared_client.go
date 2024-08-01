@@ -494,8 +494,6 @@ func (s *SharedClient) createRegionRequest(region regionInfo) *cdcpb.ChangeDataR
 		log.Info("foo", zap.Any("clusterID", s.clusterID), zap.Any("ticdcVersion", version.ReleaseSemver()))
 		atomic.AddInt32(&count, 1)
 	}
-
-	log.Info("fizz")
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
 		RegionId:     region.verID.GetID(),
