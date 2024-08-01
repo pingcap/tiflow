@@ -54,7 +54,7 @@ function run_with_fast_create_table() {
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-  sleep 60
+	sleep 60
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists batch_add_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 100
