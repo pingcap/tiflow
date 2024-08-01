@@ -247,9 +247,16 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo, indexID int64) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
+		var offset int
+		for idx, column := range columns {
+			if column.Name.O == col {
+				offset = idx
+				break
+			}
+		}
 		indexColumns[i] = &timodel.IndexColumn{
 			Name:   timodel.NewCIStr(col),
-			Offset: i,
+			Offset: offset,
 		}
 	}
 
