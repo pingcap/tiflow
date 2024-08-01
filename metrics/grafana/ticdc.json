@@ -7808,7 +7808,7 @@
           },
           "yaxes": [
             {
-              "format": "none",
+              "format": "percent",
               "label": null,
               "logBase": 1,
               "max": null,
