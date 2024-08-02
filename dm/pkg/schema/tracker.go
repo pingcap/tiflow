@@ -134,7 +134,7 @@ func (tr *Tracker) Init(
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
 
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
-		conf.MaxIndexLength = 3328
+		conf.MaxIndexLength = 12288
 	})
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
