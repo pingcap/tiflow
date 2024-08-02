@@ -547,11 +547,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 
-<<<<<<< HEAD
-	a := 244
-=======
 	a := 263
->>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
