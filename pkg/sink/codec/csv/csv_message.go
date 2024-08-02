@@ -174,6 +174,11 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 	} else {
 		c.commitTs = 0
 	}
+	if c.config.OutputOldValue {
+		// When c.config.OutputOldValue, we need an extra column "is-updated".
+		// TODO: use this flag to guarantee data consistency in update uk/pk scenario.
+		dataColIdx++
+	}
 	c.columns = c.columns[:0]
 
 	for i := dataColIdx; i < len(datums); i++ {

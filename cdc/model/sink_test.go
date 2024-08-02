@@ -613,21 +613,32 @@ func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
 
-	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme)
+	outputRawChangeEvent := true
+	notOutputRawChangeEvent := false
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 2)
 
 	txn = &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
-	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
 
 	txn2 := &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
 	}
-	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn2.Rows, 2)
 }
