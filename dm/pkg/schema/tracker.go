@@ -133,6 +133,7 @@ func (tr *Tracker) Init(
 
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
 
+	// set max-index-length to maximum allowable (3072*4)
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
 		conf.MaxIndexLength = 12288
 	})
