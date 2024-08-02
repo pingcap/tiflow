@@ -495,7 +495,11 @@ func (s *EventSorter) handleEvents(
 		if !ok {
 			return
 		}
-		batchCh <- batchEvent
+		select {
+		case <-s.closed:
+			return
+		case batchCh <- batchEvent:
+		}
 	}
 }
 

@@ -158,7 +158,7 @@ func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 // newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
 func newTiColumnInfo(
 	column *columnSchema, colID int64, indexes []*IndexSchema,
-) (*timodel.ColumnInfo, error) {
+) *timodel.ColumnInfo {
 	col := new(timodel.ColumnInfo)
 	col.ID = colID
 	col.Name = timodel.NewCIStr(column.Name)
@@ -194,24 +194,26 @@ func newTiColumnInfo(
 		default:
 		}
 	}
-	err := col.SetDefaultValue(defaultValue)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-	}
 
 	for _, index := range indexes {
-		if index.Primary {
-			for _, name := range index.Columns {
-				if name == column.Name {
+		for _, name := range index.Columns {
+			if name == column.Name {
+				if index.Primary {
 					col.AddFlag(mysql.PriKeyFlag)
-					break
+				} else if index.Unique {
+					col.AddFlag(mysql.UniqueKeyFlag)
+				} else {
+					col.AddFlag(mysql.MultipleKeyFlag)
 				}
 			}
-			break
 		}
 	}
 
-	return col, nil
+	err := col.SetDefaultValue(defaultValue)
+	if err != nil {
+		log.Panic("set default value failed", zap.Any("column", col), zap.Any("default", defaultValue))
+	}
+	return col
 }
 
 // IndexSchema is the schema of the index.
@@ -242,7 +244,7 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 }
 
 // newTiIndexInfo convert IndexSchema to a tidb index info.
-func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *timodel.IndexInfo {
+func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo, indexID int64) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
 		var offset int
@@ -259,6 +261,7 @@ func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo) *ti
 	}
 
 	return &timodel.IndexInfo{
+		ID:      indexID,
 		Name:    timodel.NewCIStr(indexSchema.Name),
 		Columns: indexColumns,
 		Unique:  indexSchema.Unique,
@@ -323,20 +326,16 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
+func newTableInfo(m *TableSchema) *model.TableInfo {
 	var (
 		database      string
-		table         string
-		tableID       int64
 		schemaVersion uint64
 	)
+
+	tidbTableInfo := &timodel.TableInfo{}
 	if m != nil {
 		database = m.Schema
-		table = m.Table
-		tableID = m.TableID
 		schemaVersion = m.Version
-<<<<<<< HEAD
-=======
 
 		tidbTableInfo.ID = m.TableID
 		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
@@ -348,65 +347,27 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 			nextMockID += 100
 			tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
 		}
+
+		mockIndexID := int64(1)
 		for _, idx := range m.Indexes {
-			index := newTiIndexInfo(idx, tidbTableInfo.Columns)
+			index := newTiIndexInfo(idx, tidbTableInfo.Columns, mockIndexID)
 			tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
+			mockIndexID += 1
 		}
->>>>>>> 70e4d6e3b8 (encoder(ticdc): fix simple decoder set index column offset incorrect (#11222))
 	}
-	tidbTableInfo := &timodel.TableInfo{
-		ID:       tableID,
-		Name:     timodel.NewCIStr(table),
-		UpdateTS: schemaVersion,
-	}
-
-	if m == nil {
-		return &model.TableInfo{
-			TableName: model.TableName{
-				Schema:  database,
-				Table:   table,
-				TableID: tableID,
-			},
-			TableInfo: tidbTableInfo,
-		}, nil
-	}
-
-	nextMockID := int64(100)
-	for _, col := range m.Columns {
-		tiCol, err := newTiColumnInfo(col, nextMockID, m.Indexes)
-		nextMockID += 100
-		if err != nil {
-			return nil, err
-		}
-		tidbTableInfo.Columns = append(tidbTableInfo.Columns, tiCol)
-	}
-	for _, idx := range m.Indexes {
-		index := newTiIndexInfo(idx)
-		tidbTableInfo.Indices = append(tidbTableInfo.Indices, index)
-	}
-	info := model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
-
-	return info, nil
+	return model.WrapTableInfo(100, database, schemaVersion, tidbTableInfo)
 }
 
 // newDDLEvent converts from message to DDLEvent.
-func newDDLEvent(msg *message) (*model.DDLEvent, error) {
+func newDDLEvent(msg *message) *model.DDLEvent {
 	var (
 		tableInfo    *model.TableInfo
 		preTableInfo *model.TableInfo
-		err          error
 	)
 
-	tableInfo, err = newTableInfo(msg.TableSchema)
-	if err != nil {
-		return nil, err
-	}
-
+	tableInfo = newTableInfo(msg.TableSchema)
 	if msg.PreTableSchema != nil {
-		preTableInfo, err = newTableInfo(msg.PreTableSchema)
-		if err != nil {
-			return nil, err
-		}
+		preTableInfo = newTableInfo(msg.PreTableSchema)
 	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
@@ -414,7 +375,7 @@ func newDDLEvent(msg *message) (*model.DDLEvent, error) {
 		TableInfo:    tableInfo,
 		PreTableInfo: preTableInfo,
 		Query:        msg.SQL,
-	}, nil
+	}
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
@@ -453,8 +414,9 @@ func buildRowChangedEvent(
 			Version:   msg.Checksum.Version,
 		}
 
-		if msg.Checksum.Corrupted || previousCorrupted {
-			log.Warn("consumer detect previous checksum corrupted",
+		corrupted := msg.Checksum.Corrupted || previousCorrupted || currentCorrupted
+		if corrupted {
+			log.Warn("consumer detect checksum corrupted",
 				zap.String("schema", msg.Schema),
 				zap.String("table", msg.Table))
 			for _, col := range result.PreColumns {
@@ -467,13 +429,6 @@ func buildRowChangedEvent(
 					zap.Any("value", col.Value),
 					zap.Any("default", colInfo.GetDefaultValue()))
 			}
-			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
-		}
-
-		if msg.Checksum.Corrupted || currentCorrupted {
-			log.Warn("consumer detect checksum corrupted",
-				zap.String("schema", msg.Schema),
-				zap.String("table", msg.Table))
 			for _, col := range result.Columns {
 				colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each column for debugging",
