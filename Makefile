@@ -114,7 +114,7 @@ endif
 BUILDTS := $(shell date -u '+%Y-%m-%d %H:%M:%S')
 GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
-GOVERSION := $(shell go version)
+GOVERSION := $(shell ${GO} version)
 
 # Version LDFLAGS.
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
