@@ -296,7 +296,8 @@ const (
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+		"claim-check-raw-value": false
       },
       "glue-schema-registry-config": {
         "region":"region",

@@ -351,15 +351,9 @@ func (b *batchEncoderBuilder) CleanMetrics() {
 func NewBatchEncoderBuilder(
 	ctx context.Context, config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	var (
-		claimCheck *claimcheck.ClaimCheck
-		err        error
-	)
-	if config.LargeMessageHandle.EnableClaimCheck() {
-		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	claimCheck, err := claimcheck.New(ctx, config.LargeMessageHandle, config.ChangefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return &batchEncoderBuilder{
 		config:     config,
