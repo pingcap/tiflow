@@ -297,3 +297,8 @@ func (s *SchemaTestHelper) Close() {
 	s.domain.Close()
 	s.storage.Close() //nolint:errcheck
 }
+
+// SchemaStorage returns the schema storage
+func (s *SchemaTestHelper) SchemaStorage() SchemaStorage {
+	return s.schemaStorage
+}
