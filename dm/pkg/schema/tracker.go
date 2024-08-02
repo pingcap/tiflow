@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/ddl/schematracker"
 	"github.com/pingcap/tidb/executor"
@@ -37,6 +38,25 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/sqlexec"
+=======
+	tidbConfig "github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/ddl/schematracker"
+	"github.com/pingcap/tidb/pkg/executor"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/util/mock"
+	"github.com/pingcap/tidb/pkg/util/sqlexec"
+>>>>>>> 319692668d (schematracker(dm): Increase max-index-length config for dm schema tracker (#11465))
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
@@ -131,6 +151,11 @@ func (tr *Tracker) Init(
 	}()
 
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
+
+	// set max-index-length to maximum allowable (3072*4)
+	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
+		conf.MaxIndexLength = 12288
+	})
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
