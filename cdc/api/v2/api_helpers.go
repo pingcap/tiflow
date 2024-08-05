@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -127,6 +129,8 @@ type APIV2Helpers interface {
 	) (ineligibleTables,
 		eligibleTables []model.TableName, err error,
 	)
+	// getPDSafepoint return query servicesafepoint
+	getPDSafepoint(capture.Capture) (*SafePoint, error)
 }
 
 // APIV2HelpersImpl is an implementation of AVIV2Helpers interface
@@ -583,4 +587,26 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	}
 
 	return ineligibleTables, eligibleTables, nil
+}
+
+func (h APIV2HelpersImpl) getPDSafepoint(capture capture.Capture) (*SafePoint, error) {
+	up, err := getCaptureDefaultUpstream(capture)
+	if err != nil {
+		return nil, err
+	}
+	var listServiceGCSafepoint ListServiceGCSafepoint
+	for _, endpoint := range up.PdEndpoints {
+		listServiceGCSafepoint, err = queryListServiceGCSafepoint(endpoint)
+		if err != nil {
+			continue
+		}
+		break
+	}
+	safePoint := &SafePoint{
+		ListServiceGCSafepoint: listServiceGCSafepoint,
+	}
+	sort.Slice(safePoint.ServiceGCSafepoints, func(i, j int) bool {
+		return safePoint.ServiceGCSafepoints[i].SafePoint < safePoint.ServiceGCSafepoints[j].SafePoint
+	})
+	return safePoint, nil
 }

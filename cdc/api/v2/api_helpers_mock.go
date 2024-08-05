@@ -11,6 +11,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	kv "github.com/pingcap/tidb/pkg/kv"
+	capture "github.com/pingcap/tiflow/cdc/capture"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
 	config "github.com/pingcap/tiflow/pkg/config"
@@ -85,6 +86,21 @@ func (m *MockAPIV2Helpers) getPDClient(ctx context.Context, pdAddrs []string, cr
 func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDClient), ctx, pdAddrs, credential)
+}
+
+// getPDSafepoint mocks base method.
+func (m *MockAPIV2Helpers) getPDSafepoint(arg0 capture.Capture) (*SafePoint, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getPDSafepoint", arg0)
+	ret0, _ := ret[0].(*SafePoint)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// getPDSafepoint indicates an expected call of getPDSafepoint.
+func (mr *MockAPIV2HelpersMockRecorder) getPDSafepoint(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDSafepoint", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDSafepoint), arg0)
 }
 
 // getVerifiedTables mocks base method.

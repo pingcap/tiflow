@@ -1327,3 +1327,31 @@ type OpenProtocolConfig struct {
 type DebeziumConfig struct {
 	OutputOldValue bool `json:"output_old_value"`
 }
+
+// ServiceSafePoint is the safepoint for a specific service
+// NOTE: This type is a copy of github.com/tikv/pd/pkg/storage/endpoint.ServiceSafePoint.
+// To reduce dependency tree, we do not import the api package directly.
+type ServiceSafePoint struct {
+	ServiceID string `json:"service_id"`
+	ExpiredAt int64  `json:"expired_at"`
+	SafePoint uint64 `json:"safe_point"`
+}
+
+// ListServiceGCSafepoint is the response for list service GC safepoint.
+// NOTE: This type is a copy of github.com/tikv/pd/server/api.ListServiceGCSafepoint.
+// To reduce dependency tree, we do not import the api package directly.
+type ListServiceGCSafepoint struct {
+	ServiceGCSafepoints   []*ServiceSafePoint `json:"service_gc_safe_points"`
+	MinServiceGcSafepoint uint64              `json:"min_service_gc_safe_point,omitempty"`
+	GCSafePoint           uint64              `json:"gc_safe_point"`
+}
+
+// SafePointConfig represents the configurations for safepoint
+type SafePointConfig struct {
+	StartTs         uint64 `json:"start-ts"`
+	TTL             int64  `json:"ttl"`
+	ServiceIdSuffix string `json:"service-id-suffix"`
+}
+type SafePoint struct {
+	ListServiceGCSafepoint
+}
