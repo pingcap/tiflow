@@ -58,7 +58,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// For kafka cluster with a bad network condition, producer should not try to
 	// waster too much time on sending a message, get response no matter success
 	// or fail as soon as possible is preferred.
-	config.Producer.Retry.Max = 3
+	config.Producer.Retry.Max = 0
 	config.Producer.Retry.Backoff = 100 * time.Millisecond
 
 	// make sure sarama producer flush messages as soon as possible.
@@ -70,12 +70,14 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Net.DialTimeout = o.DialTimeout
 	config.Net.WriteTimeout = o.WriteTimeout
 	config.Net.ReadTimeout = o.ReadTimeout
+	config.Net.MaxOpenRequests = 1
 
+	config.Producer.Idempotent = true
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
+	config.Producer.RequiredAcks = sarama.WaitForAll
 	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
