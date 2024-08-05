@@ -501,26 +501,25 @@ func (m *mounter) verifyColumnChecksum(
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
-	if ok {
-		if checksum == extra {
-			log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
-				zap.Uint32("checksum", checksum), zap.Uint32("extra", extra))
-			return checksum, true, nil
-		}
-		if skipFail {
-			if time.Since(m.lastSkipOldValueTime) > time.Minute {
-				log.Warn("checksum mismatch on the old value, "+
-					"this may caused by Add Column / Drop Column executed, skip verification",
-					zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
-				m.lastSkipOldValueTime = time.Now()
-			}
-			return checksum, true, nil
-		}
+	if ok && checksum == extra {
+		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
+			zap.Uint32("checksum", checksum), zap.Uint32("extra", extra))
+		return checksum, true, nil
+	}
+
+	if !skipFail {
+		log.Error("cannot found the extra checksum, the first checksum mismatched",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
 		return checksum, false, nil
 	}
-	log.Error("cannot found the extra checksum, the first checksum mismatched",
-		zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
-	return checksum, false, nil
+
+	if time.Since(m.lastSkipOldValueTime) > time.Minute {
+		log.Warn("checksum mismatch on the old value, "+
+			"this may caused by Add Column / Drop Column executed, skip verification",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
+		m.lastSkipOldValueTime = time.Now()
+	}
+	return checksum, true, nil
 }
 
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
