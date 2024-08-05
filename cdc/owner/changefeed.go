@@ -154,7 +154,7 @@ type changefeed struct {
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -233,7 +233,7 @@ func newChangefeed4Test(
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
 	cfstateManager FeedStateManager, up *upstream.Upstream,
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -672,7 +672,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, filter)
+	c.ddlPuller = c.newDDLPuller(c.upstream, ddlStartTs, c.id, c.schema, filter)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
