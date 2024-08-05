@@ -88,7 +88,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 // AddKeyValue add the received key and values to the Decoder,
 func (d *Decoder) AddKeyValue(_, value []byte) error {
 	if d.value != nil {
-		return cerror.ErrDecodeFailed.GenWithStack(
+		return cerror.ErrCodecDecode.GenWithStack(
 			"Decoder value already exists, not consumed yet")
 	}
 	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
@@ -269,10 +269,7 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"no message found when decode DDL event")
 	}
-	ddl, err := newDDLEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+	ddl := newDDLEvent(d.msg)
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)

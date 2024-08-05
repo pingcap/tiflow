@@ -3,7 +3,6 @@ module github.com/pingcap/tiflow
 go 1.21
 
 require (
-	blainsmith.com/go/seahash v1.2.1
 	cloud.google.com/go/storage v1.39.1
 	github.com/BurntSushi/toml v1.3.2
 	github.com/DATA-DOG/go-sqlmock v1.5.0
@@ -32,7 +31,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
-	github.com/go-mysql-org/go-mysql v1.7.1-0.20240314115043-2199dfb0ba98
+	github.com/go-mysql-org/go-mysql v1.7.1-0.20240507075657-2bd4573edde2
 	github.com/go-oauth2/oauth2/v4 v4.5.2
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.1
@@ -66,13 +65,13 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.18
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
-	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
+	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20240227073058-929ab83f9754
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240415145106-cd9c676e9ba4
+	github.com/pingcap/tidb v1.1.0-beta.0.20240801132827-888a58b0064b
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240410110152-5fc42c9be2f5
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240801132827-888a58b0064b
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -90,9 +89,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240409022718-714958ccd4d5
+	github.com/tikv/client-go/v2 v2.0.8-0.20240731082154-05c2c6641a7c
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20240322051414-fb9e2d561b6e
+	github.com/tikv/pd/client v0.0.0-20240725040006-f1a90966c375
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -170,7 +169,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
-	github.com/scalalang2/golang-fifo v0.1.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/tidwall/btree v1.7.0 // indirect
@@ -234,7 +232,6 @@ require (
 	github.com/coocood/freecache v1.2.1 // indirect
 	github.com/coocood/rtutil v0.0.0-20190304133409-c84515f646f2 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/creachadair/cityhash v0.1.1 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/danjacques/gofslock v0.0.0-20240212154529-d899e02bfe22 // indirect
@@ -243,8 +240,6 @@ require (
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
-	github.com/dgryski/go-spooky v0.0.0-20170606183049-ed3d087f40e2 // indirect
-	github.com/dgryski/go-stadtx v0.0.0-20181220175827-101ddca05f0b // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect
 	github.com/eapache/go-resiliency v1.4.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
@@ -275,7 +270,6 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
-	github.com/huichen/murmur v0.0.0-20130808212358-e0489551cf51 // indirect
 	github.com/improbable-eng/grpc-web v0.12.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
@@ -294,7 +288,6 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/labstack/echo/v4 v4.10.0 // indirect
-	github.com/leemcloughlin/gofarmhash v0.0.0-20160919192320-0a055c5b87a8 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
@@ -316,7 +309,6 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect
 	github.com/opentracing/basictracer-go v1.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/petermattis/goid v0.0.0-20231207134359-e60b3f734c67 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
@@ -333,7 +325,6 @@ require (
 	github.com/prometheus/common v0.52.2 // indirect
 	github.com/prometheus/procfs v0.13.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/reusee/mmh3 v0.0.0-20140820141314-64b85163255b // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
@@ -350,7 +341,6 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
 	github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a // indirect
-	github.com/tildeleb/hashland v0.1.5 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 // indirect
@@ -370,7 +360,6 @@ require (
 	github.com/xiang90/probing v0.0.0-20221125231312-a49e3df8f510 // indirect
 	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zhangxinngang/murmur v0.0.0-20140309145047-4e88ee1a5950 // indirect
 	go.etcd.io/bbolt v1.3.9 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.12 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -418,5 +407,3 @@ replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace blainsmith.com/go/seahash => github.com/YangKeao/seahash v0.0.0-20240229041150-e7bf269c3140

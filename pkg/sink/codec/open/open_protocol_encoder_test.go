@@ -547,7 +547,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 
-	a := 244
+	a := 263
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
