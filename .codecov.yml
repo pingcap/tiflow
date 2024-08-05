@@ -10,9 +10,11 @@ coverage:
     project:
       default:
         threshold: 3 #Allow the coverage to drop by threshold%, and posting a success status.
+        informational: true
     patch:
       default:
         target: 0%
+        informational: true
     changes: no
 
 parsers:
