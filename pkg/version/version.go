@@ -15,6 +15,7 @@ package version
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/log"
@@ -28,7 +29,6 @@ var (
 	BuildTS        = "None"
 	GitHash        = "None"
 	GitBranch      = "None"
-	GoVersion      = "None"
 )
 
 // ReleaseSemver returns a valid Semantic Versions or an empty if the
@@ -49,7 +49,7 @@ func LogVersionInfo(app string) {
 		zap.String("git-hash", GitHash),
 		zap.String("git-branch", GitBranch),
 		zap.String("utc-build-time", BuildTS),
-		zap.String("go-version", GoVersion),
+		zap.String("go-version", runtime.Version()),
 		zap.Bool("failpoint-build", util.FailpointBuild),
 	)
 }
@@ -61,7 +61,7 @@ func GetRawInfo() string {
 	info += fmt.Sprintf("Git Commit Hash: %s\n", GitHash)
 	info += fmt.Sprintf("Git Branch: %s\n", GitBranch)
 	info += fmt.Sprintf("UTC Build Time: %s\n", BuildTS)
-	info += fmt.Sprintf("Go Version: %s\n", GoVersion)
+	info += fmt.Sprintf("Go Version: %s\n", runtime.Version())
 	info += fmt.Sprintf("Failpoint Build: %t\n", util.FailpointBuild)
 	return info
 }
