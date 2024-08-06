@@ -27,9 +27,7 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-var (
-	serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
-)
+var serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
 
 func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error) {
 	var safepoint ListServiceGCSafepoint
@@ -111,7 +109,6 @@ func (h *OpenAPIV2) querySafePoint(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/safepoint [post]
 func (h *OpenAPIV2) setSafePoint(c *gin.Context) {
-
 	ctx := c.Request.Context()
 
 	safePointConfig := &SafePointConfig{}

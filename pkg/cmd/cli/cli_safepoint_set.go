@@ -38,7 +38,6 @@ func newSetSafePointOptions() *setSafePointOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *setSafePointOptions) addFlags(cmd *cobra.Command) {
-
 	cmd.PersistentFlags().StringVarP(&o.serviceIdSuffix, "service-id-suffix", "", "user-defined", "serviceIdSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
 	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl")
