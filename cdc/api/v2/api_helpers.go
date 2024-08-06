@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/tls"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -602,8 +601,5 @@ func (h APIV2HelpersImpl) getPDSafepoint(pdEndpoints []string) (*SafePoint, erro
 	safePoint := &SafePoint{
 		ListServiceGCSafepoint: listServiceGCSafepoint,
 	}
-	sort.Slice(safePoint.ServiceGCSafepoints, func(i, j int) bool {
-		return safePoint.ServiceGCSafepoints[i].SafePoint < safePoint.ServiceGCSafepoints[j].SafePoint
-	})
 	return safePoint, nil
 }

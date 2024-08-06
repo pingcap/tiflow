@@ -53,7 +53,7 @@ var (
 	}
 )
 
-func (m *mockPDClient4Tso) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, TTL int64, safePoint uint64) (uint64, error) {
+func (m *mockPDClient4SafePoint) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, TTL int64, safePoint uint64) (uint64, error) {
 	return startTs, m.err
 }
 
@@ -84,7 +84,7 @@ func TestQuerySafePoint(t *testing.T) {
 func TestSetSafePoint(t *testing.T) {
 	t.Parallel()
 
-	mockPDClient := &mockPDClient4Tso{}
+	mockPDClient := &mockPDClient4SafePoint{}
 	mockManager := upstream.NewManager4Test(mockPDClient)
 
 	safepoint := testCase{url: "/api/v2/safepoint", method: "POST"}
@@ -174,7 +174,7 @@ func TestSetSafePoint(t *testing.T) {
 func TestDeleteSafePoint(t *testing.T) {
 	t.Parallel()
 
-	mockPDClient := &mockPDClient4Tso{}
+	mockPDClient := &mockPDClient4SafePoint{}
 	mockManager := upstream.NewManager4Test(mockPDClient)
 
 	safepoint := testCase{url: "/api/v2/safepoint", method: "DELETE"}

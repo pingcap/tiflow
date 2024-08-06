@@ -1332,9 +1332,10 @@ type DebeziumConfig struct {
 // NOTE: This type is a copy of github.com/tikv/pd/pkg/storage/endpoint.ServiceSafePoint.
 // To reduce dependency tree, we do not import the api package directly.
 type ServiceSafePoint struct {
-	ServiceID string `json:"service_id"`
-	ExpiredAt int64  `json:"expired_at"`
-	SafePoint uint64 `json:"safe_point"`
+	ServiceID   string `json:"service_id"`
+	SafePoint   uint64 `json:"safe_point"`
+	ExpiredAt   int64  `json:"expired_at"`
+	ExpiredTime string `json:"expired_time"`
 }
 
 // ListServiceGCSafepoint is the response for list service GC safepoint.
@@ -1348,9 +1349,9 @@ type ListServiceGCSafepoint struct {
 
 // SafePointConfig represents the configurations for safepoint
 type SafePointConfig struct {
+	ServiceIdSuffix string `json:"service-id-suffix"`
 	StartTs         uint64 `json:"start-ts"`
 	TTL             int64  `json:"ttl"`
-	ServiceIdSuffix string `json:"service-id-suffix"`
 }
 type SafePoint struct {
 	ListServiceGCSafepoint

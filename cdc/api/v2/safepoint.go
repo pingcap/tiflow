@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -55,6 +56,9 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 	}
 	if err := json.Unmarshal([]byte(content), &safepoint); err != nil {
 		return safepoint, err
+	}
+	for _, s := range safepoint.ServiceGCSafepoints {
+		s.ExpiredTime = time.Unix(s.ExpiredAt, 0).Format(time.RFC3339Nano)
 	}
 	return safepoint, nil
 }
