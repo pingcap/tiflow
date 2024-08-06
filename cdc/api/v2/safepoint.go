@@ -36,7 +36,7 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 	if err != nil {
 		return safepoint, err
 	}
-	var netClient = &http.Client{}
+	netClient := &http.Client{}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, safepointURL.String(), http.NoBody)
 	if err != nil {
 		return safepoint, err
