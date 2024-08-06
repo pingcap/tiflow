@@ -268,7 +268,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Info("event feed send request to grpc stream success",
+		log.Debug("event feed send request to grpc stream success",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
@@ -349,6 +349,15 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				if err = doSend(s.multiplexing, req); err != nil {
 					return err
 				}
+				log.Info("event feed send deregister request to grpc stream success",
+					zap.String("namespace", c.changefeed.Namespace),
+					zap.String("changefeed", c.changefeed.ID),
+					zap.Uint64("streamID", s.streamID),
+					zap.Uint64("requestID", req.RequestId),
+					zap.Uint64("regionID", req.RegionId),
+					zap.Uint64("storeID", rs.storeID),
+					zap.Any("startKey", req.StartKey), zap.Any("endKey", req.EndKey),
+					zap.String("addr", rs.storeAddr))
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
 				delete(tableExclusives, subscriptionID)
 				cc.Release()
@@ -387,11 +396,20 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
 				return err
 			}
-			if err = doSend(cc, c.createRegionRequest(region)); err != nil {
+			req := c.createRegionRequest(region)
+			if err = doSend(cc, req); err != nil {
 				return err
 			}
+			log.Info("event feed send deregister request to grpc stream success",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Uint64("streamID", s.streamID),
+				zap.Uint64("requestID", req.RequestId),
+				zap.Uint64("regionID", req.RegionId),
+				zap.Uint64("storeID", rs.storeID),
+				zap.Any("startKey", req.StartKey), zap.Any("endKey", req.EndKey),
+				zap.String("addr", rs.storeAddr))
 		}
-
 		if region, err = fetchMoreReq(); err != nil {
 			return err
 		}
