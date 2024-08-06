@@ -100,6 +100,8 @@ type mounter struct {
 	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
+
+	lastSkipOldValueTime time.Time
 }
 
 // NewMounter creates a mounter
@@ -475,8 +477,9 @@ func calculateColumnChecksum(
 	return checksum, nil
 }
 
-func verifyColumnChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, decoder *rowcodec.DatumMapDecoder, tz *time.Location,
+func (m *mounter) verifyColumnChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
+	decoder *rowcodec.DatumMapDecoder, skipFail bool,
 ) (uint32, bool, error) {
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
@@ -485,7 +488,7 @@ func verifyColumnChecksum(
 		return 0, true, nil
 	}
 
-	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, tz)
+	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, false, err
@@ -493,31 +496,30 @@ func verifyColumnChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		log.Debug("checksum matched",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
+		log.Debug("checksum matched", zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
-	if !ok {
-		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("first", first))
-		return checksum, false, nil
-	}
-
-	if checksum == extra {
+	if ok && checksum == extra {
 		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
-			zap.Uint32("checksum", checksum),
-			zap.Uint32("extra", extra))
+			zap.Uint32("checksum", checksum), zap.Uint32("extra", extra))
 		return checksum, true, nil
 	}
 
-	log.Error("checksum mismatch",
-		zap.Uint32("checksum", checksum),
-		zap.Uint32("first", first),
-		zap.Uint32("extra", extra))
-	return checksum, false, nil
+	if !skipFail {
+		log.Error("cannot found the extra checksum, the first checksum mismatched",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
+		return checksum, false, nil
+	}
+
+	if time.Since(m.lastSkipOldValueTime) > time.Minute {
+		log.Warn("checksum mismatch on the old value, "+
+			"this may caused by Add Column / Drop Column executed, skip verification",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
+		m.lastSkipOldValueTime = time.Now()
+	}
+	return checksum, true, nil
 }
 
 func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
@@ -657,7 +659,10 @@ func (m *mounter) verifyChecksum(
 	version := decoder.ChecksumVersion()
 	switch version {
 	case 0:
-		return verifyColumnChecksum(columnInfos, rawColumns, decoder, m.tz)
+		// skip old value checksum verification for the checksum v1, since it cannot handle
+		// Update / Delete event correctly, after Add Column / Drop column DDL,
+		// since the table schema does not contain complete column information.
+		return m.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
 	case 1:
 		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
 		if err != nil {
