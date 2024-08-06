@@ -487,6 +487,11 @@ func (s *SharedClient) getStore(
 }
 
 func (s *SharedClient) createRegionRequest(region regionInfo) *cdcpb.ChangeDataRequest {
+	log.Info("create request from region info",
+		zap.Uint64("regionID", region.verID.GetID()),
+		zap.Uint64("requestID", uint64(region.subscribedTable.subscriptionID)),
+		zap.Any("startKey", region.span.StartKey),
+		zap.Any("endKey", region.span.EndKey))
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
 		RegionId:     region.verID.GetID(),
