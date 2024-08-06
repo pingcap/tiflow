@@ -1349,10 +1349,12 @@ type ListServiceGCSafepoint struct {
 
 // SafePointConfig represents the configurations for safepoint
 type SafePointConfig struct {
-	ServiceIdSuffix string `json:"service-id-suffix"`
+	ServiceIDSuffix string `json:"service-id-suffix"`
 	StartTs         uint64 `json:"start-ts"`
 	TTL             int64  `json:"ttl"`
 }
+
+// SafePoint return the safepoint information of the corresponding pd
 type SafePoint struct {
 	ListServiceGCSafepoint
 }

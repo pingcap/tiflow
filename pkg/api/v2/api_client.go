@@ -56,7 +56,7 @@ func (c *APIV2Client) Tso() TsoInterface {
 	return newTso(c)
 }
 
-// Tso returns a TsoInterface to communicate with cdc api
+// SafePoint returns a SafePointInterface to communicate with cdc api
 func (c *APIV2Client) SafePoint() SafePointInterface {
 	if c == nil {
 		return nil

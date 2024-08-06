@@ -25,7 +25,7 @@ import (
 // deleteSafePointOptions defines flags for the `cli safepoint query` command.
 type deleteSafePointOptions struct {
 	startTs         uint64
-	serviceIdSuffix string
+	serviceIDSuffix string
 	clientV2        apiv2client.APIV2Interface
 }
 
@@ -37,7 +37,7 @@ func newDeleteSafePointOptions() *deleteSafePointOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *deleteSafePointOptions) addFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringVarP(&o.serviceIdSuffix, "service-id-suffix", "", "user-defined", "serviceIdSuffix")
+	cmd.PersistentFlags().StringVarP(&o.serviceIDSuffix, "service-id-suffix", "", "user-defined", "serviceIDSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
 
 	// _ = cmd.MarkPersistentFlagRequired("start-ts")
@@ -53,11 +53,11 @@ func (o *deleteSafePointOptions) complete(f factory.Factory) error {
 	return nil
 }
 
-func (o *deleteSafePointOptions) deleteSafePoint(cmd *cobra.Command, f factory.Factory) error {
+func (o *deleteSafePointOptions) deleteSafePoint(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 	safepoint, err := o.clientV2.SafePoint().Delete(ctx, &v2.SafePointConfig{
 		StartTs:         o.startTs,
-		ServiceIdSuffix: o.serviceIdSuffix,
+		ServiceIDSuffix: o.serviceIDSuffix,
 	})
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func newCmdDeleteSafePoint(f factory.Factory) *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.complete(f))
-			util.CheckErr(o.deleteSafePoint(cmd, f))
+			util.CheckErr(o.deleteSafePoint(cmd))
 		},
 	}
 	o.addFlags(command)

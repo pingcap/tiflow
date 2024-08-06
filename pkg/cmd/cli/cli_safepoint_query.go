@@ -52,10 +52,11 @@ func (o *querySafePointOptions) finish(f factory.Factory) error {
 // showSafePoints query pd to get all safepoints
 func (o *querySafePointOptions) showSafePoints(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
-	safepoint, err := o.clientV2.SafePoint().Query(ctx, &v2.SafePointConfig{})
+	safepoint, err := o.clientV2.SafePoint().Query(ctx)
 	if err != nil {
 		return err
 	}
+	// TODO: move to cmd/api
 	if o.onlyCDC {
 		points := make([]*v2.ServiceSafePoint, 0)
 		for _, point := range safepoint.ServiceGCSafepoints {

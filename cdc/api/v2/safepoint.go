@@ -36,7 +36,12 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 	if err != nil {
 		return safepoint, err
 	}
-	resp, err := http.Get(safepointURL.String())
+	var netClient = &http.Client{}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, safepointURL.String(), http.NoBody)
+	if err != nil {
+		return safepoint, err
+	}
+	resp, err := netClient.Do(req)
 	if err != nil {
 		return safepoint, err
 	}
@@ -54,7 +59,7 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 	if err != nil {
 		return safepoint, err
 	}
-	if err := json.Unmarshal([]byte(content), &safepoint); err != nil {
+	if err := json.Unmarshal(content, &safepoint); err != nil {
 		return safepoint, err
 	}
 	for _, s := range safepoint.ServiceGCSafepoints {
@@ -63,8 +68,8 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 	return safepoint, nil
 }
 
-func (h *OpenAPIV2) getServiceID(ServiceIdSuffix string) string {
-	tag := "-" + ServiceIdSuffix
+func (h *OpenAPIV2) getServiceID(serviceIDSuffix string) string {
+	tag := "-" + serviceIDSuffix
 	return h.capture.GetEtcdClient().GetEnsureGCServiceID(tag)
 }
 
@@ -82,17 +87,11 @@ func (h *OpenAPIV2) getPDSafepoint() (*SafePoint, error) {
 // the safepoint information of the corresponding pd is returned.
 //
 // @Tags common,v2
-// @Accept json
 // @Produce json
 // @Success 200 {object} SafePoint
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/safepoint [get]
 func (h *OpenAPIV2) querySafePoint(c *gin.Context) {
-	safePointConfig := &SafePointConfig{}
-	if err := c.BindJSON(safePointConfig); err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 	safePoint, err := h.getPDSafepoint()
 	if err != nil {
 		_ = c.Error(err)
@@ -124,7 +123,7 @@ func (h *OpenAPIV2) setSafePoint(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, errors.New("can't set ttl<=0")))
 		return
 	}
-	serviceID := h.getServiceID(safePointConfig.ServiceIdSuffix)
+	serviceID := h.getServiceID(safePointConfig.ServiceIDSuffix)
 
 	resp := &SafePoint{}
 	err := h.withUpstreamConfig(ctx, &UpstreamConfig{},
@@ -181,7 +180,7 @@ func (h *OpenAPIV2) deleteSafePoint(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	serviceID := h.getServiceID(safePointConfig.ServiceIdSuffix)
+	serviceID := h.getServiceID(safePointConfig.ServiceIDSuffix)
 
 	resp := &SafePoint{}
 	err := h.withUpstreamConfig(ctx, &UpstreamConfig{},

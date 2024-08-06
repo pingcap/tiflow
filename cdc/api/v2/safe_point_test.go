@@ -57,8 +57,6 @@ func (m *mockPDClient4SafePoint) UpdateServiceGCSafePoint(ctx context.Context, s
 	return startTs, m.err
 }
 
-// getPDSafepoint
-
 func TestQuerySafePoint(t *testing.T) {
 	safepoint := testCase{url: "/api/v2/safepoint", method: "GET"}
 
@@ -102,7 +100,7 @@ func TestSetSafePoint(t *testing.T) {
 	errConfig := struct {
 		StartTs         uint64 `json:"start-ts"`
 		TTL             int64  `json:"ttl"` // should bigger than zero
-		ServiceIdSuffix string `json:"service-id-suffix"`
+		ServiceIDSuffix string `json:"service-id-suffix"`
 	}{
 		StartTs: startTs,
 		TTL:     -1,
@@ -193,7 +191,7 @@ func TestDeleteSafePoint(t *testing.T) {
 	errConfig := struct {
 		StartTs         uint64 `json:"start-ts"`
 		TTL             string `json:"ttl"` // shoule be int64
-		ServiceIdSuffix string `json:"service-id-suffix"`
+		ServiceIDSuffix string `json:"service-id-suffix"`
 	}{
 		StartTs: startTs,
 		TTL:     "ttl",

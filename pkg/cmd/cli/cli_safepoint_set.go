@@ -26,7 +26,7 @@ import (
 type setSafePointOptions struct {
 	startTs         uint64
 	ttl             int64
-	serviceIdSuffix string
+	serviceIDSuffix string
 	clientV2        apiv2client.APIV2Interface
 }
 
@@ -38,7 +38,7 @@ func newSetSafePointOptions() *setSafePointOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *setSafePointOptions) addFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringVarP(&o.serviceIdSuffix, "service-id-suffix", "", "user-defined", "serviceIdSuffix")
+	cmd.PersistentFlags().StringVarP(&o.serviceIDSuffix, "service-id-suffix", "", "user-defined", "serviceIDSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
 	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl")
 
@@ -57,11 +57,11 @@ func (o *setSafePointOptions) complete(f factory.Factory) error {
 	return nil
 }
 
-func (o *setSafePointOptions) setSafePoint(cmd *cobra.Command, f factory.Factory) error {
+func (o *setSafePointOptions) setSafePoint(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 	safepoint, err := o.clientV2.SafePoint().Set(ctx, &v2.SafePointConfig{
 		StartTs:         o.startTs,
-		ServiceIdSuffix: o.serviceIdSuffix,
+		ServiceIDSuffix: o.serviceIDSuffix,
 		TTL:             o.ttl,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func newCmdSetSafePoint(f factory.Factory) *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.complete(f))
-			util.CheckErr(o.setSafePoint(cmd, f))
+			util.CheckErr(o.setSafePoint(cmd))
 		},
 	}
 	o.addFlags(command)

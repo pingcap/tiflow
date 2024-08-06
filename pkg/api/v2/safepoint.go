@@ -27,7 +27,7 @@ type SafePointGetter interface {
 
 // SafePointInterface has methods to work with status api
 type SafePointInterface interface {
-	Query(ctx context.Context, config *v2.SafePointConfig) (*v2.SafePoint, error)
+	Query(ctx context.Context) (*v2.SafePoint, error)
 	Set(ctx context.Context, config *v2.SafePointConfig) (*v2.SafePoint, error)
 	Delete(ctx context.Context, config *v2.SafePointConfig) (*v2.SafePoint, error)
 }
@@ -45,11 +45,10 @@ func newSafePoint(c *APIV2Client) *SafePoint {
 }
 
 // Query returns the pd SafePoint
-func (c *SafePoint) Query(ctx context.Context, config *v2.SafePointConfig) (*v2.SafePoint, error) {
+func (c *SafePoint) Query(ctx context.Context) (*v2.SafePoint, error) {
 	result := new(v2.SafePoint)
 	err := c.client.Get().
 		WithURI("safepoint").
-		WithBody(config).
 		Do(ctx).
 		Into(result)
 	return result, err
