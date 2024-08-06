@@ -267,13 +267,15 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Debug("event feed send request to grpc stream success",
+		log.Info("event feed send request to grpc stream success",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
 			zap.Any("subscriptionID", subscriptionID),
 			zap.Uint64("regionID", req.RegionId),
 			zap.Uint64("storeID", rs.storeID),
+			zap.Uint64("requestID", req.RequestId),
+			zap.Any("startKey", req.StartKey), zap.Any("endKey", req.EndKey),
 			zap.String("addr", rs.storeAddr))
 		return nil
 	}
