@@ -11,7 +11,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	kv "github.com/pingcap/tidb/pkg/kv"
-	capture "github.com/pingcap/tiflow/cdc/capture"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
 	config "github.com/pingcap/tiflow/pkg/config"
@@ -89,7 +88,7 @@ func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential int
 }
 
 // getPDSafepoint mocks base method.
-func (m *MockAPIV2Helpers) getPDSafepoint(arg0 capture.Capture) (*SafePoint, error) {
+func (m *MockAPIV2Helpers) getPDSafepoint(arg0 []string) (*SafePoint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getPDSafepoint", arg0)
 	ret0, _ := ret[0].(*SafePoint)

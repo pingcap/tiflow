@@ -66,6 +66,14 @@ func (h *OpenAPIV2) getServiceID(ServiceIdSuffix string) string {
 	return h.capture.GetEtcdClient().GetEnsureGCServiceID(tag)
 }
 
+func (h *OpenAPIV2) getPDSafepoint() (*SafePoint, error) {
+	up, err := getCaptureDefaultUpstream(h.capture)
+	if err != nil {
+		return nil, err
+	}
+	return h.helpers.getPDSafepoint(up.PdEndpoints)
+}
+
 // querySafePoint request and returns safepoints from PD
 // @Summary Get the safepoint information of a TiCDC node
 // @Description This API is a synchronous interface. If the request is successful,
@@ -83,7 +91,7 @@ func (h *OpenAPIV2) querySafePoint(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	safePoint, err := h.helpers.getPDSafepoint(h.capture)
+	safePoint, err := h.getPDSafepoint()
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -139,7 +147,7 @@ func (h *OpenAPIV2) setSafePoint(c *gin.Context) {
 				// }
 				return cerror.ErrCliInvalidServiceSafePoint.GenWithStackByArgs(minServiceSafePoint, safePointConfig.StartTs)
 			}
-			safePoint, err := h.helpers.getPDSafepoint(h.capture)
+			safePoint, err := h.getPDSafepoint()
 			if err != nil {
 				return err
 			}
@@ -197,7 +205,7 @@ func (h *OpenAPIV2) deleteSafePoint(c *gin.Context) {
 				// }
 				return cerror.ErrCliInvalidServiceSafePoint.GenWithStackByArgs(minServiceSafePoint, safePointConfig.StartTs)
 			}
-			safePoint, err := h.helpers.getPDSafepoint(h.capture)
+			safePoint, err := h.getPDSafepoint()
 			if err != nil {
 				return err
 			}

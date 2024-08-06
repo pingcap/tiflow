@@ -57,6 +57,8 @@ func (m *mockPDClient4Tso) UpdateServiceGCSafePoint(ctx context.Context, service
 	return startTs, m.err
 }
 
+// getPDSafepoint
+
 func TestQuerySafePoint(t *testing.T) {
 	safepoint := testCase{url: "/api/v2/safepoint", method: "GET"}
 
@@ -91,7 +93,7 @@ func TestSetSafePoint(t *testing.T) {
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockManager, nil).AnyTimes()
-	helpers.EXPECT().getPDSafepoint(cp).Return(mockSafePoint, nil).AnyTimes()
+	helpers.EXPECT().getPDSafepoint([]string{}).Return(mockSafePoint, nil).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
@@ -208,4 +210,51 @@ func TestDeleteSafePoint(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
 
+	// case 2: get safepoint failed
+	mockPDClient.err = cerrors.ErrAPIGetPDClientFailed
+	sfConfig := SafePointConfig{}
+	body, err := json.Marshal(&sfConfig)
+	require.Nil(t, err)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		safepoint.method, safepoint.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrInternalServerError")
+
+	// case 3: set safepoint less than minServiceSafePoint
+	mockPDClient.err = nil
+	sfConfig = SafePointConfig{
+		StartTs: startTs - 1,
+	}
+	body, err = json.Marshal(&sfConfig)
+	require.Nil(t, err)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		safepoint.method, safepoint.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrCliInvalidServiceSafePoint")
+
+	// case4: success
+	w = httptest.NewRecorder()
+	sfConfig = SafePointConfig{
+		StartTs: startTs,
+		TTL:     ttl,
+	}
+	req, _ = http.NewRequestWithContext(context.Background(),
+		safepoint.method, safepoint.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	resp := SafePoint{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 }

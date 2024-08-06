@@ -78,7 +78,7 @@ func newCmdQuerySafePoint(f factory.Factory) *cobra.Command {
 	o := newQuerySafePointOptions()
 	command := &cobra.Command{
 		Use:   "query",
-		Short: "Get safepoint from PD",
+		Short: "Get safepoint",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.finish(f))
