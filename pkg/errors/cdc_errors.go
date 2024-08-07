@@ -908,7 +908,7 @@ var (
 		errors.RFCCodeText("CDC:ErrCliAborted"),
 	)
 	ErrCliInvalidServiceSafePoint = errors.Normalize(
-		"the minServiceSafePoint is bigger than servicesafepoint, minServiceSafePoint:%d StartTs:%d",
+		"the min-service-safe-point is bigger than start-ts, min-service-safe-point: %d start-ts: %d",
 		errors.RFCCodeText("CDC:ErrCliInvalidServiceSafePoint"),
 	)
 	// Filter error

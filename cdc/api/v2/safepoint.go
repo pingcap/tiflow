@@ -24,10 +24,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
+// NOTE: This variable is a copy of github.com/tikv/pd/tools/pd-ctl/pdctl/command/gc_safepoint_command.
 var serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
 
 func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error) {
@@ -133,19 +136,17 @@ func (h *OpenAPIV2) setSafePoint(c *gin.Context) {
 				return err
 			}
 			if minServiceSafePoint > safePointConfig.StartTs {
-				// query safepoint for update
-				// safePoint, err := h.getPDSafepoint()
-				// if err == nil {
-				// 	for _, s := range safePoint.ServiceGCSafepoints {
-				// 		if s.ServiceID == serviceID {
-				// 			if _, err := client.UpdateServiceGCSafePoint(ctx, serviceID, safePointConfig.TTL, safePointConfig.StartTs); err != nil {
-				// 				return err
-				// 			}
-				// 			break
-				// 		}
-				// 	}
-				// }
-				return cerror.ErrCliInvalidServiceSafePoint.GenWithStackByArgs(minServiceSafePoint, safePointConfig.StartTs)
+				// use minServiceSafePoint to set
+				log.Warn("will use minServiceSafePoint to set safe point",
+					zap.String("service-id", serviceID),
+					zap.Int64("ttl", safePointConfig.TTL),
+					zap.Uint64("min-service-safe-point", minServiceSafePoint),
+					zap.Uint64("start-ts", safePointConfig.StartTs),
+				)
+				minServiceSafePoint, err = client.UpdateServiceGCSafePoint(ctx, serviceID, safePointConfig.TTL, minServiceSafePoint)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCliInvalidServiceSafePoint, err, minServiceSafePoint, safePointConfig.StartTs)
+				}
 			}
 			safePoint, err := h.getPDSafepoint()
 			if err != nil {
@@ -191,19 +192,17 @@ func (h *OpenAPIV2) deleteSafePoint(c *gin.Context) {
 				return err
 			}
 			if minServiceSafePoint > safePointConfig.StartTs {
-				// query safepoint for delete
-				// safePoint, err := h.getPDSafepoint()
-				// if err == nil {
-				// 	for _, s := range safePoint.ServiceGCSafepoints {
-				// 		if s.ServiceID == serviceID {
-				// 			if _, err := client.UpdateServiceGCSafePoint(ctx, serviceID, 0, safePointConfig.StartTs); err != nil {
-				// 				return err
-				// 			}
-				// 			break
-				// 		}
-				// 	}
-				// }
-				return cerror.ErrCliInvalidServiceSafePoint.GenWithStackByArgs(minServiceSafePoint, safePointConfig.StartTs)
+				// use minServiceSafePoint to delete
+				log.Warn("will use minServiceSafePoint to set safe point",
+					zap.String("service-id", serviceID),
+					zap.Int64("ttl", safePointConfig.TTL),
+					zap.Uint64("min-service-safe-point", minServiceSafePoint),
+					zap.Uint64("start-ts", safePointConfig.StartTs),
+				)
+				minServiceSafePoint, err = client.UpdateServiceGCSafePoint(ctx, serviceID, 0, minServiceSafePoint)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCliInvalidServiceSafePoint, err, minServiceSafePoint, safePointConfig.StartTs)
+				}
 			}
 			safePoint, err := h.getPDSafepoint()
 			if err != nil {
