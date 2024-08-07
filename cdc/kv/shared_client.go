@@ -59,9 +59,10 @@ const (
 
 	scanRegionsConcurrency = 1024
 
-	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
-	resolveLockMinInterval  time.Duration  = 10 * time.Second
-	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
+	loadRegionRetryInterval time.Duration = 100 * time.Millisecond
+	// TIGATE: to reduce memory usage.
+	resolveLockMinInterval time.Duration  = 60 * time.Second
+	invalidSubscriptionID  SubscriptionID = SubscriptionID(0)
 )
 
 var (
@@ -486,7 +487,13 @@ func (s *SharedClient) getStore(
 	return rs
 }
 
+var count int32
+
 func (s *SharedClient) createRegionRequest(region regionInfo) *cdcpb.ChangeDataRequest {
+	if atomic.LoadInt32(&count) == 0 {
+		log.Info("foo", zap.Any("clusterID", s.clusterID), zap.Any("ticdcVersion", version.ReleaseSemver()))
+		atomic.AddInt32(&count, 1)
+	}
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
 		RegionId:     region.verID.GetID(),
@@ -881,7 +888,7 @@ func (s *SharedClient) newSubscribedTable(
 func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
 	util.MustCompareAndMonotonicIncrease(&r.staleLocksTargetTs, targetTs)
 	res := r.rangeLock.IterAll(r.tryResolveLock)
-	s.logRegionDetails("event feed finds slow locked ranges",
+	log.Debug("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
