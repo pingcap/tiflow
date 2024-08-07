@@ -46,7 +46,7 @@ type requestedStream struct {
 	logRegionDetails func(msg string, fields ...zap.Field)
 
 	// multiplexing is for sharing one GRPC stream in many tables.
-	multiplexing *sharedconn.ConnAndClient
+	multiplexing *sharedconn.EventFeedClient
 
 	// tableExclusives means one GRPC stream is exclusive by one table.
 	tableExclusives chan tableExclusive
@@ -54,7 +54,7 @@ type requestedStream struct {
 
 type tableExclusive struct {
 	subscriptionID SubscriptionID
-	cc             *sharedconn.ConnAndClient
+	cc             *sharedconn.EventFeedClient
 }
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
@@ -184,7 +184,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		return isCanceled()
 	}
 
-	if cc.Multiplexing() {
+	if cc.IsMultiplexing() {
 		s.multiplexing = cc
 		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
 	} else {
@@ -219,7 +219,7 @@ func (s *requestedStream) receive(
 	ctx context.Context,
 	c *SharedClient,
 	rs *requestedStore,
-	cc *sharedconn.ConnAndClient,
+	cc *sharedconn.EventFeedClient,
 	subscriptionID SubscriptionID,
 ) error {
 	client := cc.Client()
@@ -254,7 +254,7 @@ func (s *requestedStream) receive(
 }
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
-	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
+	doSend := func(cc *sharedconn.EventFeedClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
 		if err := cc.Client().Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
@@ -297,13 +297,13 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 	}
 
-	tableExclusives := make(map[SubscriptionID]*sharedconn.ConnAndClient)
-	getTableExclusiveConn := func(subscriptionID SubscriptionID) (cc *sharedconn.ConnAndClient, err error) {
+	tableExclusives := make(map[SubscriptionID]*sharedconn.EventFeedClient)
+	getTableExclusiveConn := func(subscriptionID SubscriptionID) (cc *sharedconn.EventFeedClient, err error) {
 		if cc = tableExclusives[subscriptionID]; cc == nil {
 			if cc, err = c.grpcPool.Connect(ctx, rs.storeAddr); err != nil {
 				return
 			}
-			if cc.Multiplexing() {
+			if cc.IsMultiplexing() {
 				cc.Release()
 				cc, err = nil, errors.New("multiplexing is enabled, will re-establish the stream")
 				return
@@ -379,7 +379,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			state.start()
 			s.setState(subscriptionID, region.verID.GetID(), state)
 
-			var cc *sharedconn.ConnAndClient
+			var cc *sharedconn.EventFeedClient
 			if s.multiplexing != nil {
 				cc = s.multiplexing
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
