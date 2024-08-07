@@ -39,7 +39,6 @@ func newDeleteSafePointOptions() *deleteSafePointOptions {
 func (o *deleteSafePointOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.serviceIDSuffix, "service-id-suffix", "", "user-defined", "serviceIDSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
-
 }
 
 // complete adapts from the command line args to the data and client required.

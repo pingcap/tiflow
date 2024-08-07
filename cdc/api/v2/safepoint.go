@@ -31,8 +31,10 @@ import (
 )
 
 // NOTE: This variable is a copy of github.com/tikv/pd/tools/pd-ctl/pdctl/command/gc_safepoint_command.
-var serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
-var defaultServiceIDSuffix = "user-defined"
+var (
+	serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
+	defaultServiceIDSuffix   = "user-defined"
+)
 
 func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error) {
 	var safepoint ListServiceGCSafepoint
