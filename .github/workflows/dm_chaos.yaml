@@ -269,13 +269,3 @@ jobs:
           name: chaos-base-logs.${{ matrix.chaos-obj }}
           path: |
             ./logs
-
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
-        if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
-        with:
-          args: "chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
