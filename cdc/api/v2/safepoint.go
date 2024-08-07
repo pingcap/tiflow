@@ -144,10 +144,10 @@ func (h *OpenAPIV2) setSafePoint(c *gin.Context) {
 			if minServiceSafePoint > safePointConfig.StartTs {
 				// use minServiceSafePoint to set
 				log.Warn("will use minServiceSafePoint to set safe point",
-					zap.String("service-id", serviceID),
+					zap.String("serviceId", serviceID),
 					zap.Int64("ttl", safePointConfig.TTL),
-					zap.Uint64("min-service-safe-point", minServiceSafePoint),
-					zap.Uint64("start-ts", safePointConfig.StartTs),
+					zap.Uint64("minServiceSafePoint", minServiceSafePoint),
+					zap.Uint64("startTs", safePointConfig.StartTs),
 				)
 				minServiceSafePoint, err = client.UpdateServiceGCSafePoint(ctx, serviceID, safePointConfig.TTL, minServiceSafePoint)
 				if err != nil {
@@ -200,10 +200,10 @@ func (h *OpenAPIV2) deleteSafePoint(c *gin.Context) {
 			if minServiceSafePoint > safePointConfig.StartTs {
 				// use minServiceSafePoint to delete
 				log.Warn("will use minServiceSafePoint to set safe point",
-					zap.String("service-id", serviceID),
+					zap.String("serviceId", serviceID),
 					zap.Int64("ttl", safePointConfig.TTL),
-					zap.Uint64("min-service-safe-point", minServiceSafePoint),
-					zap.Uint64("start-ts", safePointConfig.StartTs),
+					zap.Uint64("minServiceSafePoint", minServiceSafePoint),
+					zap.Uint64("startTs", safePointConfig.StartTs),
 				)
 				minServiceSafePoint, err = client.UpdateServiceGCSafePoint(ctx, serviceID, 0, minServiceSafePoint)
 				if err != nil {
