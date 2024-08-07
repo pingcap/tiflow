@@ -122,7 +122,7 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 	if err != nil {
 		return err
 	}
-	dsn, err := pmysql.GenBasicDSN(sinkURI, cfg)
+	dsn, err := pmysql.GetDesinationCfg(sinkURI, cfg)
 	if err != nil {
 		return err
 	}

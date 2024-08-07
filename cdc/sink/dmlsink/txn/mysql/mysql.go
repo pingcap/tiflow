@@ -97,6 +97,7 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
+	// TODO: 这里生成多个 dsnStr 返回
 	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
 	if err != nil {
 		return nil, err
@@ -765,6 +766,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				}
 				return 0, 0, err
 			}
+
+			// mysql 8.0 5.7
 
 			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
 			// fall back to the sequantial way.
