@@ -42,9 +42,6 @@ func (o *setSafePointOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
 	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl")
 
-	// _ = cmd.MarkPersistentFlagRequired("service-id-suffix")
-	// _ = cmd.MarkPersistentFlagRequired("start-ts")
-	// _ = cmd.MarkPersistentFlagRequired("ttl")
 }
 
 // complete adapts from the command line args to the data and client required.

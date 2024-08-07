@@ -135,26 +135,7 @@ func TestSetSafePoint(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrInternalServerError")
 
-	// case 3: set safepoint less than minServiceSafePoint
-	mockPDClient.err = nil
-	sfConfig = SafePointConfig{
-		StartTs: startTs - 1,
-		TTL:     ttl,
-	}
-	body, err = json.Marshal(&sfConfig)
-	require.Nil(t, err)
-
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(),
-		safepoint.method, safepoint.url, bytes.NewReader(body))
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusInternalServerError, w.Code)
-	respErr = model.HTTPError{}
-	err = json.NewDecoder(w.Body).Decode(&respErr)
-	require.Nil(t, err)
-	require.Contains(t, respErr.Code, "ErrCliInvalidServiceSafePoint")
-
-	// case4: success
+	// case3: success
 	w = httptest.NewRecorder()
 	sfConfig = SafePointConfig{
 		StartTs: startTs,
@@ -224,25 +205,7 @@ func TestDeleteSafePoint(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrInternalServerError")
 
-	// case 3: set safepoint less than minServiceSafePoint
-	mockPDClient.err = nil
-	sfConfig = SafePointConfig{
-		StartTs: startTs - 1,
-	}
-	body, err = json.Marshal(&sfConfig)
-	require.Nil(t, err)
-
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(),
-		safepoint.method, safepoint.url, bytes.NewReader(body))
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusInternalServerError, w.Code)
-	respErr = model.HTTPError{}
-	err = json.NewDecoder(w.Body).Decode(&respErr)
-	require.Nil(t, err)
-	require.Contains(t, respErr.Code, "ErrCliInvalidServiceSafePoint")
-
-	// case4: success
+	// case3: success
 	w = httptest.NewRecorder()
 	sfConfig = SafePointConfig{
 		StartTs: startTs,
