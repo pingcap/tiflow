@@ -42,7 +42,7 @@ func (o *setSafePointOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.serviceIDSuffix, "service-id-suffix", "", "user-defined", "serviceIDSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
 	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl in seconds, big ttl will be use if ttl-hour is set")
-	cmd.PersistentFlags().Int64Var(&o.ttlHour, "ttl-hour", 24, "set gc-ttl in hours, big ttl will be use if ttl-hour is set")
+	cmd.PersistentFlags().Int64Var(&o.ttlHour, "ttl-hour", 24, "set gc-ttl in hours, big ttl will be use if ttl is set")
 }
 
 // complete adapts from the command line args to the data and client required.
