@@ -26,6 +26,7 @@ import (
 type setSafePointOptions struct {
 	startTs         uint64
 	ttl             int64
+	ttlHour         int64
 	serviceIDSuffix string
 	clientV2        apiv2client.APIV2Interface
 }
@@ -40,7 +41,8 @@ func newSetSafePointOptions() *setSafePointOptions {
 func (o *setSafePointOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.serviceIDSuffix, "service-id-suffix", "", "user-defined", "serviceIDSuffix")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "set cdc safepoint start-ts")
-	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl")
+	cmd.PersistentFlags().Int64Var(&o.ttl, "ttl", 86400, "set gc-ttl in seconds, big ttl will be use if ttl-hour is set")
+	cmd.PersistentFlags().Int64Var(&o.ttlHour, "ttl-hour", 24, "set gc-ttl in hours, big ttl will be use if ttl-hour is set")
 }
 
 // complete adapts from the command line args to the data and client required.
@@ -55,6 +57,10 @@ func (o *setSafePointOptions) complete(f factory.Factory) error {
 
 func (o *setSafePointOptions) setSafePoint(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
+	// will use big ttl
+	if o.ttlHour*3600 > o.ttl {
+		o.ttl = o.ttlHour * 3600
+	}
 	safepoint, err := o.clientV2.SafePoint().Set(ctx, &v2.SafePointConfig{
 		StartTs:         o.startTs,
 		ServiceIDSuffix: o.serviceIDSuffix,

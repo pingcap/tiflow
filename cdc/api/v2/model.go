@@ -1330,7 +1330,7 @@ type DebeziumConfig struct {
 
 // ServiceSafePoint is the safepoint for a specific service
 // NOTE: This type is a copy of github.com/tikv/pd/pkg/storage/endpoint.ServiceSafePoint.
-// To reduce dependency tree, we do not import the api package directly.
+// We modfiy this type, so we do not import the api package directly.
 type ServiceSafePoint struct {
 	ServiceID   string `json:"service_id"`
 	SafePoint   uint64 `json:"safe_point"`
@@ -1340,7 +1340,7 @@ type ServiceSafePoint struct {
 
 // ListServiceGCSafepoint is the response for list service GC safepoint.
 // NOTE: This type is a copy of github.com/tikv/pd/server/api.ListServiceGCSafepoint.
-// To reduce dependency tree, we do not import the api package directly.
+// We modfiy this type, so we do not import the api package directly.
 type ListServiceGCSafepoint struct {
 	ServiceGCSafepoints   []*ServiceSafePoint `json:"service_gc_safe_points"`
 	MinServiceGcSafepoint uint64              `json:"min_service_gc_safe_point,omitempty"`
