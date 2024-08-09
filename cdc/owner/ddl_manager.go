@@ -325,6 +325,13 @@ func (m *ddlManager) tick(
 					zap.Uint64("commitTs", nextDDL.CommitTs),
 					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
+				skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					m.cleanCache(cleanMsg)
+				}
 			}
 			err := m.executeDDL(ctx)
 			if err != nil {
@@ -388,14 +395,6 @@ func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
-		return nil
-	}
-	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if skip {
-		m.cleanCache(cleanMsg)
 		return nil
 	}
 
