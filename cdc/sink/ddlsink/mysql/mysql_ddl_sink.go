@@ -101,17 +101,16 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	lastExecutedDDLCache, err := lru.New(1024)
+	lruCache, err := lru.New(1024)
 	if err != nil {
 		return nil, err
 	}
-
 	m := &DDLSink{
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
 		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
-		lastExecutedNormalDDLCache: lastExecutedDDLCache,
+		lastExecutedNormalDDLCache: lruCache,
 	}
 
 	log.Info("MySQL DDL sink is created",
