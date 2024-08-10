@@ -82,7 +82,6 @@ func NewDDLSink(
 	}
 
 	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
-	log.Warn("dsn", zap.String("dsn", dsnStr))
 	if err != nil {
 		return nil, err
 	}
