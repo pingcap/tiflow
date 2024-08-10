@@ -101,7 +101,7 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	lastExecutedDDLCache, err := lru.New(1000)
+	lastExecutedDDLCache, err := lru.New(1024)
 	if err != nil {
 		return nil, err
 	}
