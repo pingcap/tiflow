@@ -18,9 +18,9 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -61,8 +61,11 @@ type DDLSink struct {
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
-	// map: model.TableName -> struct{}
-	runningAsyncDDLs sync.Map
+
+	// lastExecutedNormalDDLCache is a fast path to check whether aync DDL of a table
+	// is running in downstream.
+	// map: model.TableName -> timodel.ActionType
+	lastExecutedNormalDDLCache *lru.Cache
 }
 
 // NewDDLSink creates a new DDLSink.
@@ -99,11 +102,17 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	lastExecutedDDLCache, err := lru.New(1000)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &DDLSink{
-		id:         changefeedID,
-		db:         db,
-		cfg:        cfg,
-		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		id:                         changefeedID,
+		db:                         db,
+		cfg:                        cfg,
+		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		lastExecutedNormalDDLCache: lastExecutedDDLCache,
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -115,10 +124,17 @@ func NewDDLSink(
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	m.waitAsynExecDone(ctx, ddl)
+
 	if m.shouldAsyncExecDDL(ddl) {
+		m.lastExecutedNormalDDLCache.Remove(ddl.TableInfo.TableName)
 		return m.asyncExecDDL(ctx, ddl)
 	}
-	return m.execDDLWithMaxRetries(ctx, ddl)
+
+	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
+		return errors.Trace(err)
+	}
+	m.lastExecutedNormalDDLCache.Add(ddl.TableInfo.TableName, ddl.Type)
+	return nil
 }
 
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {

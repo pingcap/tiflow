@@ -88,7 +88,6 @@ func (m *DDLSink) asyncExecDDL(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("changefeedID", m.id.String()),
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.String("ddl", ddl.Query))
-		m.runningAsyncDDLs.Store(ddl.TableInfo.TableName, struct{}{})
 		return nil
 	}
 }
@@ -142,15 +141,17 @@ func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.Ta
 }
 
 func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool) {
-	if _, ok := m.runningAsyncDDLs.Load(table); !ok {
+	if v, ok := m.lastExecutedNormalDDLCache.Get(table); ok {
+		ddlType := v.(timodel.ActionType)
+		if ddlType == timodel.ActionAddIndex {
+			log.Panic("invalid ddl type in lastExecutedNormalDDLCache",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.String("ddlType", ddlType.String()))
+		}
 		return true
 	}
 
-	defer func() {
-		if done {
-			m.runningAsyncDDLs.Delete(table)
-		}
-	}()
 	ret := m.db.QueryRowContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
 	if ret.Err() != nil {
 		log.Error("check async exec ddl failed",
