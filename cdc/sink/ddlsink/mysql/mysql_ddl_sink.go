@@ -20,9 +20,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/version"
+	"github.com/pingcap/tidb/dumpling/export"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -295,4 +298,18 @@ func (m *DDLSink) Close() {
 				zap.Error(err))
 		}
 	}
+}
+
+func (m *DDLSink) formatQuery(ddl *model.DDLEvent) {
+	versionInfo, err := export.SelectVersion(m.db)
+	if err != nil {
+		log.Error("fail to get version info", zap.Error(err))
+		return
+	}
+	serverInfo := version.ParseServerInfo(versionInfo)
+	version := semver.New(defaultSupportVectorVersion)
+	if m.cfg.IsTiDB && !serverInfo.ServerVersion.LessThan(*version) {
+		return
+	}
+	ddl.Query = formatQuery(ddl.Query)
 }

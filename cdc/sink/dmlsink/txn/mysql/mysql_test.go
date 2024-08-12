@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -117,6 +118,15 @@ func TestPrepareDML(t *testing.T) {
 		},
 	}, [][]int{{1, 2}})
 
+	tableInfoVector := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{
+		nil, {
+			Name: "a1",
+			Type: mysql.TypeTiDBVectorFloat32,
+		}, {
+			Name: "a3",
+			Type: mysql.TypeTiDBVectorFloat32,
+		}}, [][]int{{}})
+
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -185,22 +195,25 @@ func TestPrepareDML(t *testing.T) {
 				rowCount:        1,
 				approximateSize: 63,
 			},
-		}, {
+		},
+		// vector
+		{
 			input: []*model.RowChangedEvent{
 				{
-					StartTs:  418658114257813518,
-					CommitTs: 418658114257813519,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeTiDBVectorFloat32,
-						Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
-					}, {
-						Name:  "a3",
-						Type:  mysql.TypeTiDBVectorFloat32,
-						Value: util.Must(types.ParseVectorFloat32("[1.1,-2.0,3.33,-4.12,-5]")),
-					}},
-					IndexColumns: [][]int{{}},
+					StartTs:   418658114257813518,
+					CommitTs:  418658114257813519,
+					TableInfo: tableInfoVector,
+					Columns: model.Columns2ColumnDatas(
+						[]*model.Column{
+							nil, {
+								Name:  "a1",
+								Type:  mysql.TypeTiDBVectorFloat32,
+								Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+							}, {
+								Name:  "a3",
+								Type:  mysql.TypeTiDBVectorFloat32,
+								Value: util.Must(types.ParseVectorFloat32("[1.1,-2.0,3.33,-4.12,-5]")),
+							}}, tableInfoVector),
 				},
 			},
 			expected: &preparedDMLs{

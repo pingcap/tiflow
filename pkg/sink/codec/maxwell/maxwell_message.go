@@ -85,7 +85,7 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 					value.Old[colName] = string(v.Value.([]byte))
 				}
 			case mysql.TypeTiDBVectorFloat32:
-				value.Old[v.Name] = v.Value.(types.VectorFloat32).String()
+				value.Old[colName] = v.Value.(types.VectorFloat32).String()
 			default:
 				value.Old[colName] = v.Value
 			}
@@ -135,8 +135,8 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 					}
 				case mysql.TypeTiDBVectorFloat32:
 					val := v.Value.(types.VectorFloat32).String()
-					if value.Old[v.Name] != val {
-						value.Old[v.Name] = val
+					if value.Old[colName] != val {
+						value.Old[colName] = val
 					}
 				default:
 					if value.Data[colName] != v.Value {

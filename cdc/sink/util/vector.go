@@ -14,7 +14,7 @@
 package util
 
 import (
-	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/pkg/table"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 )
