@@ -311,6 +311,9 @@ func fromCsvValToColValue(csvConfig *common.Config, csvVal any, ft types.FieldTy
 	case mysql.TypeBit:
 		val, err := strconv.ParseUint(str, 10, 64)
 		return val, err
+	case mysql.TypeTiDBVectorFloat32:
+		vec, err := types.ParseVectorFloat32(str)
+		return vec.String(), err
 	default:
 		return str, nil
 	}
@@ -362,6 +365,9 @@ func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.F
 			return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed, err)
 		}
 		return setVar.Name, nil
+	case mysql.TypeTiDBVectorFloat32:
+		vec := col.Value.(types.VectorFloat32)
+		return vec.String(), nil
 	default:
 		return col.Value, nil
 	}

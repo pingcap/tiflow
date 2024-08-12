@@ -888,6 +888,9 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		}
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
+	case mysql.TypeTiDBVectorFloat32:
+		b := datum.GetVectorFloat32()
+		return b, b.Len(), "", nil
 	default:
 		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
 		// Make specified convert upper if you need

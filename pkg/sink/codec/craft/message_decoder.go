@@ -353,6 +353,10 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 		fallthrough
 	case mysql.TypeGeometry:
 		return nil, nil
+	case mysql.TypeTiDBVectorFloat32:
+		if val, err := types.ParseVectorFloat32(string(bits)); err != nil {
+			return val, nil
+		}
 	}
 	return nil, nil
 }

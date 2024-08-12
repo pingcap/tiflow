@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/util"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -97,6 +98,13 @@ func TestInsert(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "测试blob", s)
 			require.Equal(t, "blob", col.GetMysqlType())
+		case "vectorfloat32":
+			require.Equal(t, int32(internal.JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.NoError(t, err)
+			require.Equal(t, "[1,2,3,4,5]", col.GetValue())
+			require.Equal(t, "text", col.GetMysqlType())
 		}
 	}
 }

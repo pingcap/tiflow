@@ -42,6 +42,8 @@ const (
 
 	// networkDriftDuration is used to construct a context timeout for database operations.
 	networkDriftDuration = 5 * time.Second
+
+	defaultSupportVectorVersion = "v8.3.0"
 )
 
 // GetDBConnImpl is the implementation of pmysql.Factory.
@@ -197,6 +199,8 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	shouldSwitchDB := needSwitchDB(ddl)
+
+	m.formatQuery(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {

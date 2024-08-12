@@ -109,6 +109,8 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 		} else {
 			result = string(v)
 		}
+	case types.VectorFloat32:
+		result = value.(types.VectorFloat32).String()
 	default:
 		result = fmt.Sprintf("%v", v)
 	}

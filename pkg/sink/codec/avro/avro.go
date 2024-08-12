@@ -359,30 +359,31 @@ const (
 )
 
 var type2TiDBType = map[byte]string{
-	mysql.TypeTiny:       "INT",
-	mysql.TypeShort:      "INT",
-	mysql.TypeInt24:      "INT",
-	mysql.TypeLong:       "INT",
-	mysql.TypeLonglong:   "BIGINT",
-	mysql.TypeFloat:      "FLOAT",
-	mysql.TypeDouble:     "DOUBLE",
-	mysql.TypeBit:        "BIT",
-	mysql.TypeNewDecimal: "DECIMAL",
-	mysql.TypeTinyBlob:   "TEXT",
-	mysql.TypeMediumBlob: "TEXT",
-	mysql.TypeBlob:       "TEXT",
-	mysql.TypeLongBlob:   "TEXT",
-	mysql.TypeVarchar:    "TEXT",
-	mysql.TypeVarString:  "TEXT",
-	mysql.TypeString:     "TEXT",
-	mysql.TypeEnum:       "ENUM",
-	mysql.TypeSet:        "SET",
-	mysql.TypeJSON:       "JSON",
-	mysql.TypeDate:       "DATE",
-	mysql.TypeDatetime:   "DATETIME",
-	mysql.TypeTimestamp:  "TIMESTAMP",
-	mysql.TypeDuration:   "TIME",
-	mysql.TypeYear:       "YEAR",
+	mysql.TypeTiny:              "INT",
+	mysql.TypeShort:             "INT",
+	mysql.TypeInt24:             "INT",
+	mysql.TypeLong:              "INT",
+	mysql.TypeLonglong:          "BIGINT",
+	mysql.TypeFloat:             "FLOAT",
+	mysql.TypeDouble:            "DOUBLE",
+	mysql.TypeBit:               "BIT",
+	mysql.TypeNewDecimal:        "DECIMAL",
+	mysql.TypeTinyBlob:          "TEXT",
+	mysql.TypeMediumBlob:        "TEXT",
+	mysql.TypeBlob:              "TEXT",
+	mysql.TypeLongBlob:          "TEXT",
+	mysql.TypeVarchar:           "TEXT",
+	mysql.TypeVarString:         "TEXT",
+	mysql.TypeString:            "TEXT",
+	mysql.TypeEnum:              "ENUM",
+	mysql.TypeSet:               "SET",
+	mysql.TypeJSON:              "JSON",
+	mysql.TypeDate:              "DATE",
+	mysql.TypeDatetime:          "DATETIME",
+	mysql.TypeTimestamp:         "TIMESTAMP",
+	mysql.TypeDuration:          "TIME",
+	mysql.TypeYear:              "YEAR",
+	mysql.TypeTiDBVectorFloat32: "TiDBVECTORFloat32",
 }
 
 func getTiDBTypeFromColumn(col *model.Column) string {
@@ -812,6 +813,12 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Type:       "int",
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
+	case mysql.TypeTiDBVectorFloat32:
+		return avroSchema{
+			Type: "string",
+			// Type:       "array",
+			Parameters: map[string]string{tidbType: tt},
+		}, nil
 	default:
 		log.Error("unknown mysql type", zap.Any("mysqlType", col.Type))
 		return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
@@ -971,6 +978,9 @@ func (a *BatchEncoder) columnToAvroData(
 			return int32(n), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
+	case mysql.TypeTiDBVectorFloat32:
+		vec := col.Value.(types.VectorFloat32)
+		return vec.String(), "string", nil
 	default:
 		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")

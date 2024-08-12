@@ -61,6 +61,8 @@ func (c *Column) FromRowChangeColumn(col *model.Column) {
 			str = str[1 : len(str)-1]
 		}
 		c.Value = str
+	case mysql.TypeTiDBVectorFloat32:
+		c.Value = col.Value.(types.VectorFloat32).String()
 	default:
 		c.Value = col.Value
 	}

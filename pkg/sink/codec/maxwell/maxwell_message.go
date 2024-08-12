@@ -84,6 +84,8 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 				} else {
 					value.Old[colName] = string(v.Value.([]byte))
 				}
+			case mysql.TypeTiDBVectorFloat32:
+				value.Old[v.Name] = v.Value.(types.VectorFloat32).String()
 			default:
 				value.Old[colName] = v.Value
 			}
@@ -102,6 +104,8 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 				} else {
 					value.Data[colName] = string(v.Value.([]byte))
 				}
+			case mysql.TypeTiDBVectorFloat32:
+				value.Data[v.Name] = v.Value.(types.VectorFloat32).String()
 			default:
 				value.Data[colName] = v.Value
 			}
@@ -128,6 +132,11 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 						if value.Data[colName] != string(v.Value.([]byte)) {
 							value.Old[colName] = string(v.Value.([]byte))
 						}
+					}
+				case mysql.TypeTiDBVectorFloat32:
+					val := v.Value.(types.VectorFloat32).String()
+					if value.Old[v.Name] != val {
+						value.Old[v.Name] = val
 					}
 				default:
 					if value.Data[colName] != v.Value {
@@ -282,6 +291,8 @@ func columnToMaxwellType(columnType byte) (string, error) {
 		return "float", nil
 	case mysql.TypeNewDecimal:
 		return "decimal", nil
+	case mysql.TypeTiDBVectorFloat32:
+		return "string", nil
 	default:
 		return "", cerror.ErrMaxwellInvalidData.GenWithStack("unsupported column type - %v", columnType)
 	}

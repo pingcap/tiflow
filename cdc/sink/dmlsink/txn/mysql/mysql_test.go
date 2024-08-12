@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -183,6 +184,31 @@ func TestPrepareDML(t *testing.T) {
 				values:          [][]interface{}{{2, 2}},
 				rowCount:        1,
 				approximateSize: 63,
+			},
+		}, {
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813518,
+					CommitTs: 418658114257813519,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeTiDBVectorFloat32,
+						Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeTiDBVectorFloat32,
+						Value: util.Must(types.ParseVectorFloat32("[1.1,-2.0,3.33,-4.12,-5]")),
+					}},
+					IndexColumns: [][]int{{}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs:         []model.Ts{418658114257813518},
+				sqls:            []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
+				values:          [][]interface{}{{"[1,2,3,4,5]", "[1.1,-2.0,3.33,-4.12,-5]"}},
+				rowCount:        1,
+				approximateSize: 64,
 			},
 		},
 	}

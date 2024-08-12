@@ -220,6 +220,9 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 		fallthrough
 	case mysql.TypeGeometry:
 		return nil
+	case mysql.TypeTiDBVectorFloat32:
+		vec := value.(types.VectorFloat32)
+		return []byte(vec.String())
 	}
 	return nil
 }
