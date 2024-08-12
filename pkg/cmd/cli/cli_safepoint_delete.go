@@ -19,17 +19,18 @@ import (
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-// deleteSafePointOptions defines flags for the `cli safepoint query` command.
+// deleteSafePointOptions defines flags for the `cli safepoint delete` command.
 type deleteSafePointOptions struct {
 	startTs         uint64
 	serviceIDSuffix string
 	clientV2        apiv2client.APIV2Interface
 }
 
-// newDeleteSafePointOptions creates new deleteSafePointOptions for the `cli safepoint query` command.
+// newDeleteSafePointOptions creates new deleteSafePointOptions for the `cli safepoint delete` command.
 func newDeleteSafePointOptions() *deleteSafePointOptions {
 	return &deleteSafePointOptions{}
 }
@@ -52,6 +53,10 @@ func (o *deleteSafePointOptions) complete(f factory.Factory) error {
 }
 
 func (o *deleteSafePointOptions) deleteSafePoint(cmd *cobra.Command) error {
+	err := o.confirmDeleteSafePoint(cmd)
+	if err != nil {
+		return err
+	}
 	ctx := cmdcontext.GetDefaultContext()
 	safepoint, err := o.clientV2.SafePoint().Delete(ctx, &v2.SafePointConfig{
 		StartTs:         o.startTs,
@@ -63,12 +68,23 @@ func (o *deleteSafePointOptions) deleteSafePoint(cmd *cobra.Command) error {
 	return util.JSONPrint(cmd, safepoint)
 }
 
+func (o *deleteSafePointOptions) confirmDeleteSafePoint(cmd *cobra.Command) error {
+	cmd.Printf("Could you agree to delete this safepoint [Y/N]\n" +
+		"Note: you should only delete safepoint which is created by yourself.\n")
+	confirmed := readYOrN(cmd)
+	if !confirmed {
+		cmd.Println("Abort safepoint delete.")
+		return cerror.ErrCliAborted.FastGenByArgs("cli safepoint delete cancel")
+	}
+	return nil
+}
+
 // newCmdDeleteSafePoint creates the `cli safepoint delete` command.
 func newCmdDeleteSafePoint(f factory.Factory) *cobra.Command {
 	o := newDeleteSafePointOptions()
 	command := &cobra.Command{
 		Use:   "delete",
-		Short: "Delete safepoint",
+		Short: "Delete safepoint. It is a dangerous behavior",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.complete(f))

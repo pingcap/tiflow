@@ -33,7 +33,7 @@ import (
 // NOTE: This variable is a copy of github.com/tikv/pd/tools/pd-ctl/pdctl/command/gc_safepoint_command.
 var (
 	serviceGCSafepointPrefix = "/pd/api/v1/gc/safepoint"
-	defaultServiceIDSuffix   = "user-defined"
+	defaultServiceIDSuffix   = "-cdc-safepoint-suffix-"
 )
 
 func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error) {
@@ -75,10 +75,7 @@ func queryListServiceGCSafepoint(endpoint string) (ListServiceGCSafepoint, error
 }
 
 func (h *OpenAPIV2) getServiceID(serviceIDSuffix string) string {
-	if serviceIDSuffix == "" {
-		serviceIDSuffix = defaultServiceIDSuffix
-	}
-	tag := "-" + serviceIDSuffix
+	tag := defaultServiceIDSuffix + serviceIDSuffix
 	return h.capture.GetEtcdClient().GetEnsureGCServiceID(tag)
 }
 

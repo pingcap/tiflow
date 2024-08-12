@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// setSafePointOptions defines flags for the `cli safepoint query` command.
+// setSafePointOptions defines flags for the `cli safepoint set` command.
 type setSafePointOptions struct {
 	startTs         uint64
 	ttl             int64
@@ -31,7 +31,7 @@ type setSafePointOptions struct {
 	clientV2        apiv2client.APIV2Interface
 }
 
-// newSetSafePointOptions creates new setSafePointOptions for the `cli safepoint query` command.
+// newSetSafePointOptions creates new setSafePointOptions for the `cli safepoint set` command.
 func newSetSafePointOptions() *setSafePointOptions {
 	return &setSafePointOptions{}
 }
@@ -59,6 +59,7 @@ func (o *setSafePointOptions) setSafePoint(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 	// will use big ttl
 	if o.ttlHour*3600 > o.ttl {
+		cmd.Println("will use ttl-hour as gc-ttl")
 		o.ttl = o.ttlHour * 3600
 	}
 	safepoint, err := o.clientV2.SafePoint().Set(ctx, &v2.SafePointConfig{

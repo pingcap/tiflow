@@ -601,5 +601,5 @@ func (h APIV2HelpersImpl) getPDSafepoint(pdEndpoints []string) (*SafePoint, erro
 	safePoint := &SafePoint{
 		ListServiceGCSafepoint: listServiceGCSafepoint,
 	}
-	return safePoint, nil
+	return safePoint, errors.Wrap(err, "all queries of get safepoint from PD failed")
 }
