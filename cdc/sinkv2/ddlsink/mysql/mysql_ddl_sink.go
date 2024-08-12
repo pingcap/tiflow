@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"time"
 
-	cerrors "github.com/pingcap/errors"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -29,7 +29,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+=======
+	"github.com/pingcap/tiflow/pkg/errors"
+>>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -61,6 +65,11 @@ type mysqlDDLSink struct {
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
+
+	// lastExecutedNormalDDLCache is a fast path to check whether aync DDL of a table
+	// is running in downstream.
+	// map: model.TableName -> timodel.ActionType
+	lastExecutedNormalDDLCache *lru.Cache
 }
 
 // NewMySQLDDLSink creates a new mysqlDDLSink.
@@ -91,11 +100,29 @@ func NewMySQLDDLSink(
 		return nil, err
 	}
 
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
 	m := &mysqlDDLSink{
 		id:         changefeedID,
 		db:         db,
 		cfg:        cfg,
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
+=======
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	lruCache, err := lru.New(1024)
+	if err != nil {
+		return nil, err
+	}
+	m := &DDLSink{
+		id:                         changefeedID,
+		db:                         db,
+		cfg:                        cfg,
+		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		lastExecutedNormalDDLCache: lruCache,
+>>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -105,11 +132,25 @@ func NewMySQLDDLSink(
 }
 
 // WriteDDLEvent writes a DDL event to the mysql database.
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
 func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if ddl.Type == timodel.ActionAddIndex && m.cfg.IsTiDB {
 		return m.asyncExecAddIndexDDLIfTimeout(ctx, ddl)
+=======
+func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	m.waitAsynExecDone(ctx, ddl)
+
+	if m.shouldAsyncExecDDL(ddl) {
+		m.lastExecutedNormalDDLCache.Remove(ddl.TableInfo.TableName)
+		return m.asyncExecDDL(ctx, ddl)
+>>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	}
-	return m.execDDLWithMaxRetries(ctx, ddl)
+
+	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
+		return errors.Trace(err)
+	}
+	m.lastExecutedNormalDDLCache.Add(ddl.TableInfo.TableName, ddl.Type)
+	return nil
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
@@ -190,7 +231,7 @@ func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error 
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID), zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, cerrors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
+		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),
@@ -226,6 +267,7 @@ func (m *mysqlDDLSink) Close() error {
 
 	return nil
 }
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
 
 // asyncExecAddIndexDDLIfTimeout executes ddl in async mode.
 // this function only works in TiDB, because TiDB will save ddl jobs
@@ -278,3 +320,5 @@ func (m *mysqlDDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *m
 		return nil
 	}
 }
+=======
+>>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go

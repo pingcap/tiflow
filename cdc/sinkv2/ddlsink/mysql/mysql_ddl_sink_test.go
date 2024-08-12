@@ -17,9 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"net/url"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -147,6 +145,7 @@ func TestNeedSwitchDB(t *testing.T) {
 		require.Equal(t, tc.needSwitch, needSwitchDB(tc.ddl))
 	}
 }
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink_test.go
 
 func TestAsyncExecAddIndex(t *testing.T) {
 	ddlExecutionTime := time.Millisecond * 3000
@@ -205,3 +204,5 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	require.True(t, time.Since(start) >= 2*time.Second)
 	sink.Close()
 }
+=======
+>>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink_test.go
