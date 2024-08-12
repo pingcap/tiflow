@@ -29,11 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-=======
 	"github.com/pingcap/tiflow/pkg/errors"
->>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -54,9 +50,10 @@ const (
 var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
 
 // Assert Sink implementation
-var _ ddlsink.DDLEventSink = (*mysqlDDLSink)(nil)
+var _ ddlsink.DDLEventSink = (*DDLSink)(nil)
 
-type mysqlDDLSink struct {
+// DDLSink is a mysql sink for DDL.
+type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// db is the database connection.
@@ -72,12 +69,12 @@ type mysqlDDLSink struct {
 	lastExecutedNormalDDLCache *lru.Cache
 }
 
-// NewMySQLDDLSink creates a new mysqlDDLSink.
-func NewMySQLDDLSink(
+// NewDDLSink creates a new DDLSink.
+func NewDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-) (*mysqlDDLSink, error) {
+) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
@@ -100,18 +97,6 @@ func NewMySQLDDLSink(
 		return nil, err
 	}
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-	m := &mysqlDDLSink{
-		id:         changefeedID,
-		db:         db,
-		cfg:        cfg,
-		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
-=======
-	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-
 	lruCache, err := lru.New(1024)
 	if err != nil {
 		return nil, err
@@ -120,9 +105,8 @@ func NewMySQLDDLSink(
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
-		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		statistics:                 metrics.NewStatistics(ctx, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
->>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -132,18 +116,12 @@ func NewMySQLDDLSink(
 }
 
 // WriteDDLEvent writes a DDL event to the mysql database.
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if ddl.Type == timodel.ActionAddIndex && m.cfg.IsTiDB {
-		return m.asyncExecAddIndexDDLIfTimeout(ctx, ddl)
-=======
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	m.waitAsynExecDone(ctx, ddl)
 
 	if m.shouldAsyncExecDDL(ddl) {
 		m.lastExecutedNormalDDLCache.Remove(ddl.TableInfo.TableName)
 		return m.asyncExecDDL(ctx, ddl)
->>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	}
 
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
@@ -153,7 +131,7 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return nil
 }
 
-func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
@@ -181,7 +159,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
-func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
 	writeTimeout += networkDriftDuration
 	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
@@ -251,15 +229,16 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
+// WriteCheckpointTs writes the checkpoint ts to the mysql database.
+func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
 	return nil
 }
 
 // Close closes the database connection.
-func (m *mysqlDDLSink) Close() error {
+func (m *DDLSink) Close() error {
 	if err := m.db.Close(); err != nil {
-		return cerrors.Trace(err)
+		return errors.Trace(err)
 	}
 	if m.statistics != nil {
 		m.statistics.Close()
@@ -267,58 +246,3 @@ func (m *mysqlDDLSink) Close() error {
 
 	return nil
 }
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-
-// asyncExecAddIndexDDLIfTimeout executes ddl in async mode.
-// this function only works in TiDB, because TiDB will save ddl jobs
-// and execute them asynchronously even if ticdc crashed.
-func (m *mysqlDDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.DDLEvent) error {
-	done := make(chan error, 1)
-	// wait for 2 seconds at most
-	tick := time.NewTimer(2 * time.Second)
-	defer tick.Stop()
-	log.Info("async exec add index ddl start",
-		zap.String("changefeedID", m.id.String()),
-		zap.Uint64("commitTs", ddl.CommitTs),
-		zap.String("ddl", ddl.Query))
-	go func() {
-		if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
-			log.Error("async exec add index ddl failed",
-				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("ddl", ddl.Query))
-			done <- err
-			return
-		}
-		log.Info("async exec add index ddl done",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		done <- nil
-	}()
-
-	select {
-	case <-ctx.Done():
-		// if the ddl is canceled, we just return nil, if the ddl is not received by tidb,
-		// the downstream ddl is lost, because the checkpoint ts is forwarded.
-		log.Info("async add index ddl exits as canceled",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		return nil
-	case err := <-done:
-		// if the ddl is executed within 2 seconds, we just return the result to the caller.
-		return err
-	case <-tick.C:
-		// if the ddl is still running, we just return nil,
-		// then if the ddl is failed, the downstream ddl is lost.
-		// because the checkpoint ts is forwarded.
-		log.Info("async add index ddl is still running",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		return nil
-	}
-}
-=======
->>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go

@@ -24,8 +24,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	dmysql "github.com/go-sql-driver/mysql"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
@@ -40,7 +39,7 @@ func TestWaitAsynExecDone(t *testing.T) {
 		}()
 		if atomic.LoadInt32(&dbIndex) == 0 {
 			// test db
-			db, err := pmysql.MockTestDB()
+			db, err := pmysql.MockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -49,10 +48,6 @@ func TestWaitAsynExecDone(t *testing.T) {
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
 			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
-		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
-			Number:  1305,
-			Message: "FUNCTION test.tidb_version does not exist",
-		})
 
 		// Case 1: there is a running add index job
 		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "sbtest0")).WillReturnRows(
@@ -78,7 +73,7 @@ func TestWaitAsynExecDone(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://root:@127.0.0.1:4000")
 	require.NoError(t, err)
 	replicateCfg := config.GetDefaultReplicaConfig()
-	ddlSink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateCfg)
+	ddlSink, err := NewDDLSink(ctx, sinkURI, replicateCfg)
 	require.NoError(t, err)
 
 	table := model.TableName{Schema: "test", Table: "sbtest0"}
@@ -123,7 +118,7 @@ func TestAsyncExecAddIndex(t *testing.T) {
 		}()
 		if atomic.LoadInt32(&dbIndex) == 0 {
 			// test db
-			db, err := pmysql.MockTestDB()
+			db, err := pmysql.MockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
@@ -132,10 +127,6 @@ func TestAsyncExecAddIndex(t *testing.T) {
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
 			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
-		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
-			Number:  1305,
-			Message: "FUNCTION test.tidb_version does not exist",
-		})
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -149,11 +140,10 @@ func TestAsyncExecAddIndex(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewDDLSink(ctx, sinkURI, rc)
 
 	require.Nil(t, err)
 
@@ -173,6 +163,6 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	err = sink.WriteDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
 	require.True(t, time.Since(start) < ddlExecutionTime)
-	require.True(t, time.Since(start) >= 10*time.Second)
+	require.True(t, time.Since(start) >= 2*time.Second)
 	sink.Close()
 }

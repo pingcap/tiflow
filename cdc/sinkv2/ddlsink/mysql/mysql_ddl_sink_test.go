@@ -69,7 +69,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLDDLSink(ctx, sinkURI, rc)
+	sink, err := NewDDLSink(ctx, sinkURI, rc)
 
 	require.Nil(t, err)
 
@@ -145,64 +145,3 @@ func TestNeedSwitchDB(t *testing.T) {
 		require.Equal(t, tc.needSwitch, needSwitchDB(tc.ddl))
 	}
 }
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink_test.go
-
-func TestAsyncExecAddIndex(t *testing.T) {
-	ddlExecutionTime := time.Millisecond * 3000
-	var dbIndex int32 = 0
-	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			atomic.AddInt32(&dbIndex, 1)
-		}()
-		if atomic.LoadInt32(&dbIndex) == 0 {
-			// test db
-			db, err := pmysql.MockTestDB(true)
-			require.Nil(t, err)
-			return db, nil
-		}
-		// normal db
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		require.Nil(t, err)
-		mock.ExpectQuery("select tidb_version()").
-			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
-		mock.ExpectBegin()
-		mock.ExpectExec("USE `test`;").
-			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("Create index idx1 on test.t1(a)").
-			WillDelayFor(ddlExecutionTime).
-			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectCommit()
-		mock.ExpectClose()
-		return db, nil
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
-	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLDDLSink(ctx, sinkURI, rc)
-
-	require.Nil(t, err)
-
-	ddl1 := &model.DDLEvent{
-		StartTs:  1000,
-		CommitTs: 1010,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "test",
-				Table:  "t1",
-			},
-		},
-		Type:  timodel.ActionAddIndex,
-		Query: "Create index idx1 on test.t1(a)",
-	}
-	start := time.Now()
-	err = sink.WriteDDLEvent(ctx, ddl1)
-	require.Nil(t, err)
-	require.True(t, time.Since(start) < ddlExecutionTime)
-	require.True(t, time.Since(start) >= 2*time.Second)
-	sink.Close()
-}
-=======
->>>>>>> 1e3766ea7d (sink, ddl(ticdc): support add index ddl in downstream (#11476)):cdc/sink/ddlsink/mysql/mysql_ddl_sink_test.go
