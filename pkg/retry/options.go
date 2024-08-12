@@ -33,12 +33,19 @@ type Option func(*retryOptions)
 // IsRetryable checks the error is safe or worth to retry, eg. "context.Canceled" better not retry
 type IsRetryable func(error) bool
 
+type PreExecution func() error
+
 type retryOptions struct {
 	totalRetryDuration time.Duration
 	maxTries           uint64
 	backoffBaseInMs    float64
 	backoffCapInMs     float64
 	isRetryable        IsRetryable
+
+	// preExecutionWhenRetry is executed before every retry attempt, except for the initial run.
+	// If the first execution fails and a retry is triggered, preExecutionWhenRetry() will be called
+	// before the main process is retried. This method ensures that it runs prior to each retry attempt.
+	preExecutionWhenRetry PreExecution
 }
 
 func newRetryOptions() *retryOptions {
@@ -91,6 +98,19 @@ func WithIsRetryableErr(f IsRetryable) Option {
 	return func(o *retryOptions) {
 		if f != nil {
 			o.isRetryable = f
+		}
+	}
+}
+
+// WithPreExecutionWhenRetry allows you to specify a PreExecution action that will be executed
+// before each retry attempt, but only if the initial execution fails. The PreExecution function
+// will run before every retry following the first failure, since retries only occur after the
+// initial attempt has failed. If the initial execution is successful, the PreExecution function
+// will not be triggered, as no retry is necessary.
+func WithPreExecutionWhenRetry(f PreExecution) Option {
+	return func(o *retryOptions) {
+		if f != nil {
+			o.preExecutionWhenRetry = f
 		}
 	}
 }
