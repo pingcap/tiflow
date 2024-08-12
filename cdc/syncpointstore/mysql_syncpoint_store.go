@@ -15,7 +15,6 @@ package syncpointstore
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/url"
 	"time"
@@ -32,7 +31,8 @@ import (
 )
 
 type mysqlSyncPointStore struct {
-	db                     *sql.DB
+	connector *mysql.MySQLDBConnector
+	// db                     *sql.DB
 	clusterID              string
 	syncPointRetention     time.Duration
 	lastCleanSyncPointTime time.Time
@@ -50,31 +50,13 @@ func newMySQLSyncPointStore(
 	if err != nil {
 		return nil, err
 	}
-	getTestDb := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		testDB, err := sql.Open("mysql", dsnStr)
-		if err != nil {
-			return nil, err
-		}
 
-		return testDB, nil
-	}
-	dsnStr, err := mysql.GenerateDSN(ctx, sinkURI, cfg, getTestDb)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	syncDB, err := sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-	err = syncDB.PingContext(ctx)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
+	connector, err := mysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
 
 	log.Info("Start mysql syncpoint sink", zap.String("changefeed", id.String()))
 
 	return &mysqlSyncPointStore{
-		db:                     syncDB,
+		connector:              connector,
 		clusterID:              config.GetGlobalServerConfig().ClusterID,
 		syncPointRetention:     syncPointRetention,
 		lastCleanSyncPointTime: time.Now(),
@@ -201,6 +183,6 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 }
 
 func (s *mysqlSyncPointStore) Close() error {
-	err := s.db.Close()
+	err := s.connector.CurrentDB.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

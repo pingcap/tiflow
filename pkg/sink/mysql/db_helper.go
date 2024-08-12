@@ -32,27 +32,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func ConnectOneAvailableMySQLDB(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) (*sql.DB, error) {
-	dsnStr, err := GenerateDSN(ctx, sinkURI, cfg, CreateMySQLDBConn)
-	if err != nil {
-		return nil, err
-	}
-
-	db, err := CreateMySQLDBConn(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
-func ParseURLAndCreateMySQLDBConn(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) (*sql.DB, error) {
-
-}
-
 // CreateMySQLDBConn creates a mysql database connection with the given dsn.
 func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
-	// TODO(wlwilliamx): 把这里改成生成多个 db 返回？
 	db, err := sql.Open("mysql", dsnStr)
 	if err != nil {
 		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
@@ -70,43 +51,47 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	return db, nil
 }
 
-// TODO: 似乎关键是把这里给改了，改成返回多个 dsnStr。很多地方都用到了这里
-// TODO: comment
 // GenerateDSN generates the dsn with the given config.
-func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) ([]string, error) {
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	dsnCfg, err := GetDesinationCfg(sinkURI, cfg)
+func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config) ([]string, error) {
+	dsnCfg, err := GetDSNCfg(sinkURI, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	dsnStr := make([]string, len(dsnCfg))
+	var oneOfErrs error
+	dsn := make([]string, len(dsnCfg))
 	for i := 0; i < len(dsnCfg); i++ {
-		var testDB *sql.DB
-		// TODO: TestDB 这里冲突了，如果出错就直接返回了
-		testDB, err = GetTestDB(ctx, dsnCfg[i], dbConnFactory)
+		dsn[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfg[i], cfg)
 		if err != nil {
-			return nil, err
+			oneOfErrs = err
 		}
-		defer testDB.Close()
+	}
 
-		dsnStr[i], err = generateDSNByConfig(ctx, dsnCfg[i], cfg, testDB)
-		if err != nil {
-			return nil, err
-		}
+	return dsn, oneOfErrs
+}
 
-		// check if GBK charset is supported by downstream
-		var gbkSupported bool
-		gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
-		if err != nil {
-			return nil, err
-		}
-		if !gbkSupported {
-			log.Warn("GBK charset is not supported by the downstream. "+
-				"Some types of DDLs may fail to execute",
-				zap.String("host", dsnCfg[i].Addr))
-		}
+func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config) (string, error) {
+	testDB, err := GetTestDB(ctx, dsnCfg, CreateMySQLDBConn)
+	if err != nil {
+		return "", err
+	}
+	defer testDB.Close()
+
+	// check if GBK charset is supported by downstream
+	var gbkSupported bool
+	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return "", err
+	}
+	if !gbkSupported {
+		log.Warn("GBK charset is not supported by the downstream. "+
+			"Some types of DDLs may fail to execute",
+			zap.String("host", dsnCfg.Addr))
+	}
+
+	dsnStr, err := generateDSNByConfig(ctx, dsnCfg, cfg, testDB)
+	if err != nil {
+		return "", err
 	}
 
 	return dsnStr, nil
@@ -259,8 +244,8 @@ func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Facto
 	return testDB, err
 }
 
-// GetDesinationCfg generates a basic DSN from the given config.
-func GetDesinationCfg(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
+// GetDSNCfg generates a basic DSN from the given config.
+func GetDSNCfg(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()

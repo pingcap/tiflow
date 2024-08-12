@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"time"
 
-	cerrors "github.com/pingcap/errors"
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -55,7 +54,8 @@ var _ ddlsink.Sink = (*DDLSink)(nil)
 // DDLSink is a sink that writes DDL events to MySQL.
 type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
-	id model.ChangeFeedID
+	id        model.ChangeFeedID
+	connector *pmysql.MySQLDBConnector
 	// db is the database connection.
 	db  *sql.DB
 	cfg *pmysql.Config
@@ -77,29 +77,25 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
+	// TODO: reserve the connector
+	connector, err := pmysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := GetDBConnImpl(ctx, dsnStr)
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, connector.CurrentDB)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, connector.CurrentDB)
 	if err != nil {
 		return nil, err
 	}
 
 	m := &DDLSink{
 		id:         changefeedID,
-		db:         db,
+		connector:  connector,
 		cfg:        cfg,
 		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
 	}
@@ -140,7 +136,9 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 			return err
 		}
 		return nil
-	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
+	}, retry.WithPreExecutionWhenRetry(func() error {
+		return m.connector.SwitchToAvailableMySQLDB(ctx)
+	}), retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDDLMaxRetry),
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
@@ -212,7 +210,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	// we try to set cdc write source for the ddl
 	if err = pmysql.SetWriteSource(pctx, m.cfg, tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			if errors.Cause(rbErr) != context.Canceled {
+			if perrors.Cause(rbErr) != context.Canceled {
 				log.Error("Failed to rollback",
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID), zap.Error(err))
@@ -235,7 +233,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID), zap.Error(err))
-		return cerror.WrapError(cerror.ErrMySQLTxnError, cerrors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
+		return cerror.WrapError(cerror.ErrMySQLTxnError, perrors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),
