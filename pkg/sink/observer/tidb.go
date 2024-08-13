@@ -20,6 +20,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"go.uber.org/zap"
 )
 
@@ -106,14 +108,14 @@ var (
 
 // TiDBObserver is a tidb performance observer. It's not thread-safe.
 type TiDBObserver struct {
-	db *sql.DB
+	connector *mysql.MySQLDBConnector
 }
 
 // Tick implements Observer
 func (o *TiDBObserver) Tick(ctx context.Context) error {
 	m1 := make([]*tidbConnIdleDuration, 0)
 	if err := queryMetrics[tidbConnIdleDuration](
-		ctx, o.db, queryConnIdleDurationStmt, &m1); err != nil {
+		ctx, o.connector, queryConnIdleDurationStmt, &m1); err != nil {
 		return err
 	}
 	for _, m := range m1 {
@@ -129,7 +131,7 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 
 	m2 := make([]*tidbConnCount, 0)
 	if err := queryMetrics[tidbConnCount](
-		ctx, o.db, queryConnCountStmt, &m2); err != nil {
+		ctx, o.connector, queryConnCountStmt, &m2); err != nil {
 		return err
 	}
 	for _, m := range m2 {
@@ -141,7 +143,7 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 
 	m3 := make([]*tidbQueryDuration, 0)
 	if err := queryMetrics[tidbQueryDuration](
-		ctx, o.db, queryQueryDurationStmt, &m3); err != nil {
+		ctx, o.connector, queryQueryDurationStmt, &m3); err != nil {
 		return err
 	}
 	for _, m := range m3 {
@@ -153,7 +155,7 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 
 	m4 := make([]*tidbTxnDuration, 0)
 	if err := queryMetrics[tidbTxnDuration](
-		ctx, o.db, queryTxnDurationStmt, &m4); err != nil {
+		ctx, o.connector, queryTxnDurationStmt, &m4); err != nil {
 		return err
 	}
 	for _, m := range m4 {
@@ -168,13 +170,13 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 
 // Close implements Observer
 func (o *TiDBObserver) Close() error {
-	return o.db.Close()
+	return o.connector.CurrentDB.Close()
 }
 
 // NewTiDBObserver creates a new TiDBObserver instance
-func NewTiDBObserver(db *sql.DB) *TiDBObserver {
+func NewTiDBObserver(connector *mysql.MySQLDBConnector) *TiDBObserver {
 	return &TiDBObserver{
-		db: db,
+		connector: connector,
 	}
 }
 
@@ -232,26 +234,30 @@ type metricColumnIface[T metricColumnImpl] interface {
 }
 
 func queryMetrics[T metricColumnImpl, F metricColumnIface[T]](
-	ctx context.Context, db *sql.DB, stmt string, metrics *[]F,
+	ctx context.Context, connector *mysql.MySQLDBConnector, stmt string, metrics *[]F,
 ) error {
-	rows, err := db.QueryContext(ctx, stmt)
-	if err != nil {
-		return errors.WrapError(errors.ErrMySQLQueryError, err)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Warn("query metrics close rows failed", zap.Error(err))
-		}
-		if rows.Err() != nil {
-			log.Warn("query metrics rows has error", zap.Error(rows.Err()))
-		}
-	}()
-	for rows.Next() {
-		var m F = new(T)
-		if err := rows.Scan(m.columns()...); err != nil {
+	return retry.Do(ctx, func() error {
+		rows, err := connector.CurrentDB.QueryContext(ctx, stmt)
+		if err != nil {
 			return errors.WrapError(errors.ErrMySQLQueryError, err)
 		}
-		*metrics = append(*metrics, m)
-	}
-	return nil
+		defer func() {
+			if err := rows.Close(); err != nil {
+				log.Warn("query metrics close rows failed", zap.Error(err))
+			}
+			if rows.Err() != nil {
+				log.Warn("query metrics rows has error", zap.Error(rows.Err()))
+			}
+		}()
+		for rows.Next() {
+			var m F = new(T)
+			if err := rows.Scan(m.columns()...); err != nil {
+				return errors.WrapError(errors.ErrMySQLQueryError, err)
+			}
+			*metrics = append(*metrics, m)
+		}
+		return nil
+	}, retry.WithPreExecutionWhenRetry(func() error {
+		return connector.SwitchToAvailableMySQLDB(ctx)
+	}), retry.WithMaxTries(2))
 }

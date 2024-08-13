@@ -81,25 +81,23 @@ func NewObserver(
 			return nil, err
 		}
 
-		dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, options.dbConnFactory)
+		connector, err := pmysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, options.dbConnFactory)
 		if err != nil {
 			return nil, err
 		}
-		db, err := options.dbConnFactory(ctx, dsnStr)
-		if err != nil {
-			return nil, err
-		}
-		db.SetMaxIdleConns(2)
-		db.SetMaxOpenConns(2)
+		connector.ConfigureDBWhenSwitch(func() {
+			connector.CurrentDB.SetMaxIdleConns(2)
+			connector.CurrentDB.SetMaxOpenConns(2)
+		}, true)
 
-		isTiDB, err := pmysql.CheckIsTiDB(ctx, db)
+		isTiDB, err := pmysql.CheckIsTiDB(ctx, connector.CurrentDB)
 		if err != nil {
 			return nil, err
 		}
 		if isTiDB {
-			return NewTiDBObserver(db), nil
+			return NewTiDBObserver(connector), nil
 		}
-		_ = db.Close()
+		_ = connector.CurrentDB.Close()
 		return NewDummyObserver(), nil
 	}
 	return &observerAgent{creator: creator}, nil
