@@ -15,7 +15,6 @@ package mysql
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/url"
 	"time"
@@ -56,9 +55,7 @@ type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id        model.ChangeFeedID
 	connector *pmysql.MySQLDBConnector
-	// db is the database connection.
-	db  *sql.DB
-	cfg *pmysql.Config
+	cfg       *pmysql.Config
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
@@ -77,8 +74,7 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	// TODO: reserve the connector
-	connector, err := pmysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
+	connector, err := pmysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +187,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	start := time.Now()
 	log.Info("Start exec DDL", zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID))
-	tx, err := m.db.BeginTx(ctx, nil)
+	tx, err := m.connector.CurrentDB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -264,8 +260,8 @@ func (m *DDLSink) Close() {
 	if m.statistics != nil {
 		m.statistics.Close()
 	}
-	if m.db != nil {
-		if err := m.db.Close(); err != nil {
+	if m.connector.CurrentDB != nil {
+		if err := m.connector.CurrentDB.Close(); err != nil {
 			log.Warn("MySQL ddl sink close db wit error",
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
