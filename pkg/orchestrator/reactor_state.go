@@ -259,8 +259,8 @@ func (s *ChangefeedReactorState) RemoveChangefeed() {
 		})
 }
 
-// ResumeChnagefeed resumes the changefeed and set the checkpoint ts.
-func (s *ChangefeedReactorState) ResumeChnagefeed(overwriteCheckpointTs uint64) {
+// ResumeChangefeed resumes the changefeed and set the checkpoint ts.
+func (s *ChangefeedReactorState) ResumeChangefeed(overwriteCheckpointTs uint64) {
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		changed := false
 		if info == nil {

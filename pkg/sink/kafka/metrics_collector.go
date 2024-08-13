@@ -51,6 +51,8 @@ const (
 	requestLatencyInMsMetricNamePrefix = "request-latency-in-ms-for-broker-"
 	requestsInFlightMetricNamePrefix   = "requests-in-flight-for-broker-"
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
+
+	p99 = "p99"
 )
 
 type saramaMetricsCollector struct {
@@ -128,19 +130,23 @@ func (m *saramaMetricsCollector) updateBrokers(ctx context.Context) {
 func (m *saramaMetricsCollector) collectProducerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
-
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean() / 100)
+			WithLabelValues(namespace, changefeedID, "avg").
+			Set(histogram.Snapshot().Mean())
+		compressionRatioGauge.WithLabelValues(namespace, changefeedID, p99).
+			Set(histogram.Snapshot().Percentile(0.99))
 	}
 
 	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
 	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
 		recordsPerRequestGauge.
-			WithLabelValues(namespace, changefeedID).
+			WithLabelValues(namespace, changefeedID, "avg").
 			Set(histogram.Snapshot().Mean())
+		recordsPerRequestGauge.
+			WithLabelValues(namespace, changefeedID, p99).
+			Set(histogram.Snapshot().Percentile(0.99))
 	}
 }
 
@@ -149,13 +155,12 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-
 		outgoingByteRateMetric := m.registry.Get(
 			getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
 			OutgoingByteRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 
 		requestRateMetric := m.registry.Get(
@@ -163,15 +168,18 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
 			RequestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 
 		requestLatencyMetric := m.registry.Get(
 			getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
 			RequestLatencyGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean() / 1000) // convert millisecond to second.
+				WithLabelValues(namespace, changefeedID, brokerID, "avg").
+				Set(histogram.Snapshot().Mean() / 1000)
+			RequestLatencyGauge.
+				WithLabelValues(namespace, changefeedID, brokerID, p99).
+				Set(histogram.Snapshot().Percentile(0.99) / 1000)
 		}
 
 		requestsInFlightMetric := m.registry.Get(getBrokerMetricName(
@@ -187,7 +195,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
 			responseRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().RateMean())
+				Set(meter.Snapshot().Rate1())
 		}
 	}
 }

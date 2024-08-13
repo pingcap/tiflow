@@ -107,6 +107,7 @@ func (m *MetaMock) Delete(ctx context.Context, key string, opts ...metaModel.OpO
 	return m.deleteNoLock(ctx, key, opts...)
 }
 
+//nolint:unparam
 func (m *MetaMock) deleteNoLock(_ context.Context, key string, _ ...metaModel.OpOption) (*metaModel.DeleteResponse, metaModel.Error) {
 	delete(m.store, key)
 	m.revision++
@@ -125,6 +126,7 @@ func (m *MetaMock) Put(ctx context.Context, key, value string) (*metaModel.PutRe
 	return m.putNoLock(ctx, key, value)
 }
 
+//nolint:unparam
 func (m *MetaMock) putNoLock(_ context.Context, key, value string) (*metaModel.PutResponse, metaModel.Error) {
 	m.store[key] = value
 	m.revision++
@@ -143,6 +145,7 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaModel.OpOpti
 	return m.getNoLock(ctx, key, opts...)
 }
 
+//nolint:unparam
 func (m *MetaMock) getNoLock(_ context.Context, key string, _ ...metaModel.OpOption) (*metaModel.GetResponse, metaModel.Error) {
 	ret := &metaModel.GetResponse{
 		Header: &metaModel.ResponseHeader{

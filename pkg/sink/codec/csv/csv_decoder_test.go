@@ -16,9 +16,7 @@ import (
 	"context"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -32,45 +30,21 @@ func TestCSVBatchDecoder(t *testing.T) {
 "U","employee","hr",433305438660591630,102,"Alex","Alice","2018-06-15","Beijing"
 `
 	ctx := context.Background()
-	tableInfo := &model.TableInfo{
-		TableName: model.TableName{
-			Schema: "hr",
-			Table:  "employee",
-		},
-		TableInfo: &timodel.TableInfo{
-			Name: timodel.NewCIStr("employee"),
-			Columns: []*timodel.ColumnInfo{
-				{
-					Name:      timodel.NewCIStr("Id"),
-					FieldType: *types.NewFieldType(mysql.TypeInt24),
-				},
-				{
-					Name:      timodel.NewCIStr("LastName"),
-					FieldType: *types.NewFieldType(mysql.TypeVarchar),
-				},
-				{
-					Name:      timodel.NewCIStr("FirstName"),
-					FieldType: *types.NewFieldType(mysql.TypeVarchar),
-				},
-				{
-					Name:      timodel.NewCIStr("HireDate"),
-					FieldType: *types.NewFieldType(mysql.TypeDate),
-				},
-				{
-					Name:      timodel.NewCIStr("OfficeLocation"),
-					FieldType: *types.NewFieldType(mysql.TypeVarchar),
-				},
-			},
-		},
-	}
-	decoder, err := NewBatchDecoder(ctx, &common.Config{
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	_ = helper.DDL2Event("create database hr")
+	createTableDDL := helper.DDL2Event("create table hr.employee(Id int, LastName varchar(255), FirstName varchar(255), HireDate date, OfficeLocation varchar(255))")
+
+	codecConfig := &common.Config{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",
 		NullString:      "\\N",
 		IncludeCommitTs: true,
-	}, tableInfo, []byte(csvData))
-	require.Nil(t, err)
+	}
+	decoder, err := NewBatchDecoder(ctx, codecConfig, createTableDDL.TableInfo, []byte(csvData))
+	require.NoError(t, err)
 
 	for i := 0; i < 5; i++ {
 		tp, hasNext, err := decoder.HasNext()

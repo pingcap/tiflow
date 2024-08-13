@@ -125,7 +125,8 @@ func rowChangeToMsg(
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
 	if e.TableInfo.IsPartitionTable() {
-		partition = &e.PhysicalTableID
+		tableID := e.GetTableID()
+		partition = &tableID
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,
@@ -149,7 +150,7 @@ func rowChangeToMsg(
 			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
 		}
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
-			(len(value.PreColumns) == 0 && !config.OpenOutputOldValue)) {
+			(len(value.PreColumns) == 0 && config.OpenOutputOldValue)) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
 		if config.OnlyOutputUpdatedColumns {

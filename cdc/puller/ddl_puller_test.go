@@ -66,12 +66,12 @@ func tsToRawKVEntry(_ *testing.T, ts model.Ts) *model.RawKVEntry {
 
 func inputDDL(t *testing.T, puller *ddlJobPullerImpl, job *timodel.Job) {
 	rawJob := jonToRawKVEntry(t, job)
-	puller.Input(context.Background(), rawJob, []tablepb.Span{})
+	puller.Input(context.Background(), rawJob, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
 func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
 	rawTs := tsToRawKVEntry(t, ts)
-	puller.Input(context.Background(), rawTs, []tablepb.Span{})
+	puller.Input(context.Background(), rawTs, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
 func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {

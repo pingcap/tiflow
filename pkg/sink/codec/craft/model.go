@@ -469,7 +469,7 @@ func (b *RowChangedEventBuffer) Encode() []byte {
 func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent, onlyHandleKeyColumns bool) (rows, size int) {
 	var partition int64 = -1
 	if ev.TableInfo.IsPartitionTable() {
-		partition = ev.PhysicalTableID
+		partition = ev.GetTableID()
 	}
 
 	var schema, table *string

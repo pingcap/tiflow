@@ -52,8 +52,6 @@ type TableInfo struct {
 	Version uint64
 	// ColumnID -> offset in model.TableInfo.Columns
 	columnsOffset map[int64]int
-	// ColumnID -> offset in model.TableInfo.Indices
-	indicesOffset map[int64]int
 	// Column name -> ColumnID
 	nameToColID map[string]int64
 
@@ -112,7 +110,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
-		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		nameToColID:      make(map[string]int64, len(info.Columns)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]*ColumnFlagType, len(info.Columns)),
@@ -160,8 +157,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
 	}
 
-	for i, idx := range ti.Indices {
-		ti.indicesOffset[idx.ID] = i
+	for _, idx := range ti.Indices {
 		if ti.IsIndexUnique(idx) {
 			ti.hasUniqueColumn = true
 		}

@@ -88,7 +88,7 @@ func (o *applyRedoOptions) run(cmd *cobra.Command) error {
 	if o.enableProfiling {
 		go func() {
 			server := &http.Server{
-				Addr:              ":6060",
+				Addr:              "127.0.0.1:6060",
 				ReadHeaderTimeout: 5 * time.Second,
 			}
 			log.Info("Start http pprof server", zap.String("addr", server.Addr))

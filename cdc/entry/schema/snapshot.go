@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,6 +30,10 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
+)
+
+const (
+	mTablePrefix = "Table"
 )
 
 // Snapshot stores the source TiDB all schema information.
@@ -43,7 +48,7 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	switch job.Type {
 	case timodel.ActionCreateSchema, timodel.ActionModifySchemaCharsetAndCollate, timodel.ActionDropSchema:
 		return nil, nil
-	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
+	case timodel.ActionCreateTable, timodel.ActionCreateTables, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		// no pre table info
 		return nil, nil
 	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable, timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
@@ -122,8 +127,8 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 	return version, nil
 }
 
-// NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSnapshotFromMeta(
+// NewSnapshotFromMeta creates a schema snapshot from meta.
+func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
 	meta *timeta.Meta,
 	currentTs uint64,
@@ -136,28 +141,19 @@ func NewSingleSnapshotFromMeta(
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(id, meta, currentTs, forceReplicate, filter)
-}
 
-// NewSnapshotFromMeta creates a schema snapshot from meta.
-func NewSnapshotFromMeta(
-	id model.ChangeFeedID,
-	meta *timeta.Meta,
-	currentTs uint64,
-	forceReplicate bool,
-	filter filter.Filter,
-) (*Snapshot, error) {
 	start := time.Now()
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
+	tableCount := 0
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
-			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
+			log.Debug("ignore database", zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
 			continue
 		}
 		vid := newVersionedID(dbinfo.ID, tag)
@@ -167,31 +163,41 @@ func NewSnapshotFromMeta(
 		vname := newVersionedEntityName(-1, dbinfo.Name.O, tag) // -1 means the entity is a schema.
 		vname.target = dbinfo.ID
 		snap.inner.schemaNameToID.ReplaceOrInsert(vname)
-		// get all tables Name
-		tableNames, err := meta.ListSimpleTables(dbinfo.ID)
+
+		rawTables, err := meta.GetMetasByDBID(dbinfo.ID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
-		tableNeeded := make([]*timodel.TableNameInfo, 0, len(tableNames))
-		// filter tables
-		for _, table := range tableNames {
-			if filter.ShouldIgnoreTable(dbinfo.Name.O, table.Name.O) {
-				log.Debug("ignore table", zap.String("table", table.Name.O))
+		tableInfos := make([]*timodel.TableInfo, 0, len(rawTables)/2)
+		for _, r := range rawTables {
+			tableKey := string(r.Field)
+			if !strings.HasPrefix(tableKey, mTablePrefix) {
 				continue
 			}
-			tableNeeded = append(tableNeeded, table)
-		}
-		tableInfos := make([]*timodel.TableInfo, 0, len(tableNeeded))
-		for _, table := range tableNeeded {
-			tableInfo, err := meta.GetTable(dbinfo.ID, table.ID)
+
+			tbName := &timodel.TableNameInfo{}
+			err := json.Unmarshal(r.Value, tbName)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			tableInfos = append(tableInfos, tableInfo)
+
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, tbName.Name.O) {
+				log.Debug("ignore table", zap.String("db", dbinfo.Name.O),
+					zap.String("table", tbName.Name.O))
+				continue
+			}
+
+			tbInfo := &timodel.TableInfo{}
+			err = json.Unmarshal(r.Value, tbInfo)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			tableInfos = append(tableInfos, tbInfo)
 		}
 
 		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
+			tableCount++
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,
@@ -204,8 +210,8 @@ func NewSnapshotFromMeta(
 				target: tableInfo.ID,
 			})
 
-			ineligible := !tableInfo.IsEligible(forceReplicate)
-			if ineligible {
+			eligible := tableInfo.IsEligible(forceReplicate)
+			if !eligible {
 				snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -213,16 +219,18 @@ func NewSnapshotFromMeta(
 					vid := newVersionedID(partition.ID, tag)
 					vid.target = tableInfo
 					snap.inner.partitions.ReplaceOrInsert(vid)
-					if ineligible {
+					if !eligible {
 						snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
 				}
 			}
 		}
 	}
+
 	snap.inner.currentTs = currentTs
 	log.Info("schema snapshot created",
 		zap.Stringer("changefeed", id),
+		zap.Int("tables", tableCount),
 		zap.Uint64("currentTs", currentTs),
 		zap.Any("duration", time.Since(start).Seconds()))
 	return snap, nil
@@ -471,6 +479,15 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		err := s.inner.renameTables(job, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
+		}
+	case timodel.ActionCreateTables:
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		for _, tableInfo := range multiTableInfos {
+			err := s.inner.createTable(model.WrapTableInfo(job.SchemaID, job.SchemaName,
+				job.BinlogInfo.FinishedTS, tableInfo), job.BinlogInfo.FinishedTS)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
