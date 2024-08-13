@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
@@ -67,7 +66,7 @@ func NewObserver(
 
 		sinkURI, err := url.Parse(sinkURIStr)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+			return nil, errors.WrapError(errors.ErrSinkURIInvalid, err)
 		}
 
 		scheme := strings.ToLower(sinkURI.Scheme)
