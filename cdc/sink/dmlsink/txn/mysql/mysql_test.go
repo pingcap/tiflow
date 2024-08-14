@@ -68,7 +68,7 @@ func newMySQLBackend(
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
+	dbConnFactory pmysql.ConnectionFactory,
 ) (*mysqlBackend, error) {
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, changefeedID, sink.TxnSink)

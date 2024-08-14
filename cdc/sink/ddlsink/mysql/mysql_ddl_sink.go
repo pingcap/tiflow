@@ -46,7 +46,7 @@ const (
 
 // GetDBConnImpl is the implementation of pmysql.Factory.
 // Exported for testing.
-var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+var GetDBConnImpl pmysql.ConnectionFactory = pmysql.CreateMySQLDBConn
 
 // Assert Sink implementation
 var _ ddlsink.Sink = (*DDLSink)(nil)

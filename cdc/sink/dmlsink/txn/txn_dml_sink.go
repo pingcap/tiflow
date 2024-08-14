@@ -62,7 +62,7 @@ type dmlSink struct {
 // Exported for testing.
 // Maybe we can use a better way to do this. Because this is not thread-safe.
 // You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
-var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+var GetDBConnImpl pmysql.ConnectionFactory = pmysql.CreateMySQLDBConn
 
 // NewMySQLSink creates a mysql dmlSink with given parameters.
 func NewMySQLSink(

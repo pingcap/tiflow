@@ -33,6 +33,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// type
+
 // CreateMySQLDBConn creates a mysql database connection with the given dsn.
 func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
@@ -53,7 +55,7 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 }
 
 // GenerateDSN generates the dsn with the given config.
-func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) (dsnStr string, err error) {
+func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	dsn, err := GenBasicDSN(sinkURI, cfg)
@@ -216,7 +218,7 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 
 // GetTestDB checks and adjusts the password of the given DSN,
 // it will return a DB instance opened with the adjusted password.
-func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
+func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory ConnectionFactory) (*sql.DB, error) {
 	password := dbConfig.Passwd
 	if dbConnFactory == nil {
 		dbConnFactory = CreateMySQLDBConn

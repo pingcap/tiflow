@@ -18,5 +18,10 @@ import (
 	"database/sql"
 )
 
-// Factory is the factory for creating db connection.
-type Factory func(ctx context.Context, dsnStr string) (*sql.DB, error)
+// ConnectionFactory is the factory for creating db connection.
+type ConnectionFactory func(ctx context.Context, dsnStr string) (*sql.DB, error)
+
+type IDBConnectionProvider interface {
+	CreateTemporaryConnection(ctx context.Context, dsnStr string) (*sql.DB, error)
+	CreatePersistentConnection(ctx context.Context, dsnStr string) (*sql.DB, error)
+}
