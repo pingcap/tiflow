@@ -51,17 +51,17 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	return db, nil
 }
 
-// GenerateDSN generates the dsn with the given config.
-func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config) ([]string, error) {
-	dsnCfg, err := GetDSNCfg(sinkURI, cfg)
+// GenerateDSNs generates the DSN with the given config.
+func GenerateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) ([]string, error) {
+	dsnCfgs, err := GetDSNCfgs(sinkURI, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	var oneOfErrs error
-	dsn := make([]string, len(dsnCfg))
-	for i := 0; i < len(dsnCfg); i++ {
-		dsn[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfg[i], cfg)
+	dsn := make([]string, len(dsnCfgs))
+	for i := 0; i < len(dsnCfgs); i++ {
+		dsn[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfgs[i], cfg, dbConnFactory)
 		if err != nil {
 			oneOfErrs = err
 		}
@@ -70,8 +70,8 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config) ([]string, 
 	return dsn, oneOfErrs
 }
 
-func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config) (string, error) {
-	testDB, err := GetTestDB(ctx, dsnCfg, CreateMySQLDBConn)
+func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory Factory) (string, error) {
+	testDB, err := GetTestDB(ctx, dsnCfg, dbConnFactory)
 	if err != nil {
 		return "", err
 	}
@@ -244,8 +244,9 @@ func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Facto
 	return testDB, err
 }
 
-// GetDSNCfg generates a basic DSN from the given config.
-func GetDSNCfg(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
+// TODO: update comments
+// GetDSNCfgs generates basic DSNs from the given config.
+func GetDSNCfgs(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
@@ -257,27 +258,27 @@ func GetDSNCfg(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
 	hosts := getMultiAddressesInURL(sinkURI.Host)
 
 	// This will handle the IPv6 address format.
-	dsnCfg := make([]*dmysql.Config, len(hosts))
-	for i := 0; i < len(dsnCfg); i++ {
+	dsnCfgs := make([]*dmysql.Config, len(hosts))
+	for i := 0; i < len(dsnCfgs); i++ {
 		var err error
 		dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, hosts[i], cfg.TLS)
-		if dsnCfg[i], err = dmysql.ParseDSN(dsnStr); err != nil {
+		if dsnCfgs[i], err = dmysql.ParseDSN(dsnStr); err != nil {
 			return nil, errors.Trace(err)
 		}
 
 		// create test db used for parameter detection
 		// Refer https://github.com/go-sql-driver/mysql#parameters
-		if dsnCfg[i].Params == nil {
-			dsnCfg[i].Params = make(map[string]string, 1)
+		if dsnCfgs[i].Params == nil {
+			dsnCfgs[i].Params = make(map[string]string, 1)
 		}
 		if cfg.Timezone != "" {
-			dsnCfg[i].Params["time_zone"] = cfg.Timezone
+			dsnCfgs[i].Params["time_zone"] = cfg.Timezone
 		}
-		dsnCfg[i].Params["readTimeout"] = cfg.ReadTimeout
-		dsnCfg[i].Params["writeTimeout"] = cfg.WriteTimeout
-		dsnCfg[i].Params["timeout"] = cfg.DialTimeout
+		dsnCfgs[i].Params["readTimeout"] = cfg.ReadTimeout
+		dsnCfgs[i].Params["writeTimeout"] = cfg.WriteTimeout
+		dsnCfgs[i].Params["timeout"] = cfg.DialTimeout
 	}
-	return dsnCfg, nil
+	return dsnCfgs, nil
 }
 
 func getMultiAddressesInURL(hostStr string) []string {
@@ -285,11 +286,11 @@ func getMultiAddressesInURL(hostStr string) []string {
 	for i := 0; i < len(hosts); i++ {
 		hostnameAndPort := strings.Split(hosts[i], ":")
 		if len(hostnameAndPort) == 1 {
+			// If only the hostname is provided, add the default port 4000.
 			hostnameAndPort = append(hostnameAndPort, "4000")
 		} else if len(hostnameAndPort) == 2 && hostnameAndPort[1] == "" {
+			// If both the hostname and port are provided, but the port is empty, then set the port to the default port 4000.
 			hostnameAndPort[1] = "4000"
-		} else {
-			// TODO: invalid host, report error?
 		}
 		hosts[i] = hostnameAndPort[0] + ":" + hostnameAndPort[1]
 	}

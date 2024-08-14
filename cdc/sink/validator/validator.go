@@ -122,11 +122,11 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 	if err != nil {
 		return err
 	}
-	dsn, err := pmysql.GetDSNCfg(sinkURI, cfg)
+	dsnList, err := pmysql.GetDSNCfgs(sinkURI, cfg)
 	if err != nil {
 		return err
 	}
-	testDB, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
+	testDB, err := pmysql.GetTestDB(ctx, dsnList[0], pmysql.CreateMySQLDBConn)
 	if err != nil {
 		return err
 	}

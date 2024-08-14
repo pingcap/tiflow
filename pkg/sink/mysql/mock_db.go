@@ -27,6 +27,10 @@ func MockTestDB() (*sql.DB, error) {
 		return nil, err
 	}
 
+	mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+		"where character_set_name = 'gbk';").WillReturnRows(
+		sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+	)
 	columns := []string{"Variable_name", "Value"}
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
@@ -47,10 +51,6 @@ func MockTestDB() (*sql.DB, error) {
 			sqlmock.NewRows(columns).
 				AddRow("tidb_enable_external_ts_read", "OFF"),
 		)
-	mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
-		"where character_set_name = 'gbk';").WillReturnRows(
-		sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
-	)
 	mock.ExpectQuery("select tidb_version()").
 		WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
 	mock.ExpectQuery("select tidb_version()").

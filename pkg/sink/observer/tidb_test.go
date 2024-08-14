@@ -15,9 +15,12 @@ package observer
 
 import (
 	"context"
+	"database/sql"
+	"net/url"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +30,7 @@ func TestTiDBObserver(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	require.NoError(t, err)
 
+	mockSQLForPassCreateConnCheck(mock)
 	mock.ExpectQuery(queryConnIdleDurationStmt).
 		WillReturnRows(
 			sqlmock.NewRows(
@@ -68,10 +72,53 @@ func TestTiDBObserver(t *testing.T) {
 		)
 	mock.ExpectClose()
 
+	mockGetDBConnImpl := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		return db, nil
+	}
+	cfg := mysql.NewConfig()
+	sinkURIStr := "mysql://127.0.0.1:3306/"
+	sinkURI, err := url.Parse(sinkURIStr)
+	require.NoError(t, err)
 	ctx := context.Background()
-	observer := NewTiDBObserver(db)
+	connector, err := mysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, mockGetDBConnImpl)
+	require.NoError(t, err)
+
+	observer := NewTiDBObserver(connector)
 	err = observer.Tick(ctx)
 	require.NoError(t, err)
 	err = observer.Close()
 	require.NoError(t, err)
+}
+
+func mockSQLForPassCreateConnCheck(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+		"where character_set_name = 'gbk';").WillReturnRows(
+		sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+	)
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+	mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+		WillReturnRows(
+			sqlmock.NewRows(columns).
+				AddRow("tidb_placement_mode", "IGNORE"),
+		)
+	mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+		WillReturnRows(
+			sqlmock.NewRows(columns).
+				AddRow("tidb_enable_external_ts_read", "OFF"),
+		)
+	mock.ExpectClose()
+	// mock.ExpectQuery("select tidb_version()").
+	// 	WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+	// mock.ExpectQuery("select tidb_version()").
+	// 	WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+	// mock.ExpectClose()
 }
