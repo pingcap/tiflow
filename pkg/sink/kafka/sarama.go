@@ -142,6 +142,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 				zap.String("desiredVersion", kafkaVersion.String()))
 		}
 	}
+	log.Info("Kafka version", zap.String("version", config.Version.String()))
 	return config, nil
 }
 
