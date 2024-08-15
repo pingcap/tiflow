@@ -58,11 +58,9 @@ type dmlSink struct {
 	scheme string
 }
 
-// GetDBConnImpl is the implementation of pmysql.Factory.
+// GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
 // Exported for testing.
-// Maybe we can use a better way to do this. Because this is not thread-safe.
-// You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
-var GetDBConnImpl pmysql.ConnectionFactory = pmysql.CreateMySQLDBConn
+var GetDBConnImpl pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
 
 // NewMySQLSink creates a mysql dmlSink with given parameters.
 func NewMySQLSink(

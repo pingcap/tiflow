@@ -100,25 +100,22 @@ func TestApply(t *testing.T) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
 
-	dbIndex := 0
 	// DML sink and DDL sink share the same db
 	db := getMockDB(t)
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
-		if dbIndex%2 == 0 {
-			testDB, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return testDB, nil
-		}
+	dbConnFactory := pmysql.DBConnectionFactoryForTest{}
+	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		testDB, err := pmysql.MockTestDB()
+		require.Nil(t, err)
+		return testDB, nil
+	})
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		return db, nil
-	}
+	})
 
 	getDMLDBConnBak := txn.GetDBConnImpl
-	txn.GetDBConnImpl = mockGetDBConn
+	txn.GetDBConnImpl = &dbConnFactory
 	getDDLDBConnBak := mysqlDDL.GetDBConnImpl
-	mysqlDDL.GetDBConnImpl = mockGetDBConn
+	mysqlDDL.GetDBConnImpl = &dbConnFactory
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
@@ -322,25 +319,22 @@ func TestApplyBigTxn(t *testing.T) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
 
-	dbIndex := 0
 	// DML sink and DDL sink share the same db
 	db := getMockDBForBigTxn(t)
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
-		if dbIndex%2 == 0 {
-			testDB, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return testDB, nil
-		}
+	dbConnFactory := pmysql.DBConnectionFactoryForTest{}
+	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		testDB, err := pmysql.MockTestDB()
+		require.Nil(t, err)
+		return testDB, nil
+	})
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		return db, nil
-	}
+	})
 
 	getDMLDBConnBak := txn.GetDBConnImpl
-	txn.GetDBConnImpl = mockGetDBConn
+	txn.GetDBConnImpl = &dbConnFactory
 	getDDLDBConnBak := mysqlDDL.GetDBConnImpl
-	mysqlDDL.GetDBConnImpl = mockGetDBConn
+	mysqlDDL.GetDBConnImpl = &dbConnFactory
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {

@@ -33,8 +33,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// type
-
 // CreateMySQLDBConn creates a mysql database connection with the given dsn.
 func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
@@ -55,6 +53,13 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 }
 
 // GenerateDSN generates the dsn with the given config.
+// GenerateDSN uses the provided dbConnFactory to create a temporary connection
+// to the downstream database specified by the sinkURI. This temporary connection
+// is used to query important information from the downstream database, such as
+// version, charset, and other relevant details. After the required information
+// is retrieved, the temporary connection is closed. The retrieved data is then
+// used to populate additional parameters into the Sink URI, refining
+// the connection URL (dsnStr).
 func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
