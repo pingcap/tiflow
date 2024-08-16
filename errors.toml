@@ -171,6 +171,11 @@ error = '''
 TiCDC cluster is unhealthy
 '''
 
+["CDC:ErrCodeNilFunction"]
+error = '''
+function is not initialized
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
