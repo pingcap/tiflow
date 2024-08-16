@@ -64,10 +64,17 @@ type IDBConnectionFactory interface {
 // the necessary database connections.
 type DBConnectionFactory struct{}
 
+// CreateTemporaryConnection creates a temporary database connection used to query
+// essential information from the downstream database, such as version and charset.
+// This connection is intended to be short-lived and will be closed after the necessary
+// information is retrieved.
 func (d *DBConnectionFactory) CreateTemporaryConnection(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	return CreateMySQLDBConn(ctx, dsnStr)
 }
 
+// CreateStandardConnection creates the standard database connection that will be
+// used by the system for ongoing operations. This connection is based on the refined
+// Sink URI containing the necessary parameters gathered from the temporary connection.
 func (d *DBConnectionFactory) CreateStandardConnection(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	return CreateMySQLDBConn(ctx, dsnStr)
 }
@@ -92,14 +99,24 @@ type DBConnectionFactoryForTest struct {
 	standard ConnectionFactory
 }
 
+// SetTemporaryConnectionFactory sets the connection factory that will be used to
+// create the temporary connection during testing. This allows for custom behavior
+// during unit tests when different connection logic is required.
 func (d *DBConnectionFactoryForTest) SetTemporaryConnectionFactory(f ConnectionFactory) {
 	d.temp = f
 }
 
+// SetStandardConnectionFactory sets the connection factory that will be used to
+// create the standard connection during testing. This provides the ability to mock
+// the connection behavior specifically for the standard connection phase.
 func (d *DBConnectionFactoryForTest) SetStandardConnectionFactory(f ConnectionFactory) {
 	d.standard = f
 }
 
+// CreateTemporaryConnection creates a temporary database connection during testing
+// using the connection factory set by SetTemporaryConnectionFactory. If no factory
+// has been set, it returns an error. This method allows for customized connection
+// logic during the temporary connection phase in unit tests.
 func (d *DBConnectionFactoryForTest) CreateTemporaryConnection(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	if d.temp == nil {
 		return nil, cerror.ErrCodeNilFunction.GenWithStackByArgs()
@@ -107,6 +124,10 @@ func (d *DBConnectionFactoryForTest) CreateTemporaryConnection(ctx context.Conte
 	return d.temp(ctx, dsnStr)
 }
 
+// CreateStandardConnection creates the standard database connection during testing
+// using the connection factory set by SetStandardConnectionFactory. If no factory
+// has been set, it returns an error. This method supports custom connection behavior
+// during the standard connection phase in unit tests.
 func (d *DBConnectionFactoryForTest) CreateStandardConnection(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	if d.standard == nil {
 		return nil, cerror.ErrCodeNilFunction.GenWithStackByArgs()
