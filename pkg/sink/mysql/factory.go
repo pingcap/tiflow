@@ -135,4 +135,7 @@ func (d *DBConnectionFactoryForTest) CreateStandardConnection(ctx context.Contex
 	return d.standard(ctx, dsnStr)
 }
 
+// ConnectionFactory is a function type that takes a context and a DSN (Data Source Name) string
+// as input parameters, and returns a pointer to an sql.DB object and an error. This function type
+// is typically used to create and configure database connections.
 type ConnectionFactory func(ctx context.Context, dsnStr string) (*sql.DB, error)
