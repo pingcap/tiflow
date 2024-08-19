@@ -170,16 +170,12 @@ func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 	if err != nil {
 		return nil, err
 	}
-
-	if !d.config.LargeMessageHandle.ClaimCheckRawValue {
-		claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
-		if err != nil {
-			return nil, err
-		}
-		data = claimCheckM.Value
+	claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+	if err != nil {
+		return nil, err
 	}
 
-	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, data)
+	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
 	if err != nil {
 		return nil, err
 	}
