@@ -33,25 +33,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// CreateMySQLDBConn creates a mysql database connection with the given dsn.
-func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-
-	err = db.PingContext(ctx)
-	if err != nil {
-		// close db to recycle resources
-		if closeErr := db.Close(); closeErr != nil {
-			log.Warn("close db failed", zap.Error(err))
-		}
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-
-	return db, nil
-}
-
 // GenerateDSN generates the dsn with the given config.
 // GenerateDSN uses the provided dbConnFactory to create a temporary connection
 // to the downstream database specified by the sinkURI. This temporary connection

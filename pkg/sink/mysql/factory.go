@@ -17,7 +17,9 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // IDBConnectionFactory is an interface designed specifically to facilitate unit testing
@@ -139,3 +141,25 @@ func (d *DBConnectionFactoryForTest) CreateStandardConnection(ctx context.Contex
 // as input parameters, and returns a pointer to an sql.DB object and an error. This function type
 // is typically used to create and configure database connections.
 type ConnectionFactory func(ctx context.Context, dsnStr string) (*sql.DB, error)
+
+// CreateMySQLDBConn establishes a connection to a MySQL database and pings it to verify the connection.
+// It takes a context for managing cancellation and timeouts, and a DSN (Data Source Name) string as input.
+// The function returns a pointer to an sql.DB object, representing the connection, or an error if the connection fails.
+func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+	}
+
+	// Ping the database to verify that the connection is established and functioning.
+	err = db.PingContext(ctx)
+	if err != nil {
+		// If pinging fails, attempt to close the connection to release resources.
+		if closeErr := db.Close(); closeErr != nil {
+			log.Warn("close db failed", zap.Error(err))
+		}
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+	}
+
+	return db, nil
+}
