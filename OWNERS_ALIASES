@@ -1,7 +1,7 @@
 # Sort the member alphabetically.
 aliases:
   sig-critical-approvers-cdc:
-    - kevin-xianliu
+    - yudongusa
     - BenMeadowcroft
   sig-critical-approvers-dm:
     - yudongusa
