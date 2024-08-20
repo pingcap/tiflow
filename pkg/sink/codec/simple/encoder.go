@@ -166,18 +166,10 @@ type builder struct {
 
 // NewBuilder returns a new builder
 func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
-	var (
-		claimCheck *claimcheck.ClaimCheck
-		err        error
-	)
-	if config.LargeMessageHandle.EnableClaimCheck() {
-		claimCheck, err = claimcheck.New(ctx,
-			config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	claimCheck, err := claimcheck.New(ctx, config.LargeMessageHandle, config.ChangefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-
 	m, err := newMarshaller(config)
 	return &builder{
 		config:     config,

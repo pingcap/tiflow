@@ -28,8 +28,8 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 	defer helper.Close()
 
 	sql := `create table test.t(
-    	t tinyint primary key,
-		tu1 tinyint unsigned default 1,
+    	t tinyint,
+		tu1 tinyint unsigned default 1 primary key,
 		tu2 tinyint unsigned default 2,
 		tu3 tinyint unsigned default 3,
 		tu4 tinyint unsigned default 4,

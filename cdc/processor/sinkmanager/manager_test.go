@@ -135,7 +135,7 @@ func TestAddTable(t *testing.T) {
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
 	err := manager.StartTable(span, 1)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
+	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs.Load())
 
 	progress := manager.sinkProgressHeap.pop()
 	require.Equal(t, span, progress.span)
@@ -359,7 +359,7 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 
-	source.AddTable(span, "test", 100)
+	source.AddTable(span, "test", 100, func() model.Ts { return 0 })
 	manager.AddTable(span, 100, math.MaxUint64)
 	manager.StartTable(span, 100)
 	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
@@ -376,21 +376,6 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	case <-timer.C:
 		log.Panic("must get an error instead of a timeout")
 	}
-}
-
-func TestSinkManagerNeedsStuckCheck(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 16)
-	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
-	defer func() {
-		cancel()
-		manager.Close()
-	}()
-
-	require.False(t, manager.needsStuckCheck())
 }
 
 func TestSinkManagerRestartTableSinks(t *testing.T) {

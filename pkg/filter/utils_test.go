@@ -48,6 +48,7 @@ func TestVerifyTableRules(t *testing.T) {
 		cfg      *config.FilterConfig
 		hasError bool
 	}{
+		{&config.FilterConfig{}, false},
 		{&config.FilterConfig{Rules: []string{""}}, false},
 		{&config.FilterConfig{Rules: []string{"*.*"}}, false},
 		{&config.FilterConfig{Rules: []string{"test.*ms"}}, false},
@@ -56,7 +57,10 @@ func TestVerifyTableRules(t *testing.T) {
 		{&config.FilterConfig{Rules: []string{"*.*", "*.*.*", "*.*.*.*"}}, true},
 	}
 	for _, c := range cases {
-		_, err := VerifyTableRules(c.cfg)
+		f, err := VerifyTableRules(c.cfg)
 		require.Equal(t, c.hasError, err != nil, "case: %s", c.cfg.Rules)
+		if !c.hasError {
+			require.True(t, f != nil)
+		}
 	}
 }

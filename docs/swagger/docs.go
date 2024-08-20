@@ -1447,6 +1447,10 @@ var doc = `{
                 "output-column-id": {
                     "type": "boolean"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "worker-count": {
                     "type": "integer"
                 }
@@ -1601,6 +1605,10 @@ var doc = `{
                 },
                 "max-message-bytes": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "partition-num": {
                     "type": "integer"
@@ -1816,6 +1824,10 @@ var doc = `{
                 "operation-timeout": {
                     "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "pulsar-producer-cache-size": {
                     "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
@@ -2452,6 +2464,9 @@ var doc = `{
                 "output_column_id": {
                     "type": "boolean"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "worker_count": {
                     "type": "integer"
                 }
@@ -2723,6 +2738,9 @@ var doc = `{
                 "max_message_bytes": {
                     "type": "integer"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "partition_num": {
                     "type": "integer"
                 },
@@ -2943,6 +2961,9 @@ var doc = `{
                 },
                 "operation-timeout": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "type": "boolean"
                 },
                 "pulsar-producer-cache-size": {
                     "type": "integer"

@@ -64,7 +64,7 @@ func TestDMLEventE2E(t *testing.T) {
 			schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 			require.NoError(t, err)
 
-			decoder := NewDecoder(codecConfig, schemaM, topic)
+			decoder := NewDecoder(codecConfig, schemaM, topic, nil)
 			err = decoder.AddKeyValue(message.Key, message.Value)
 			require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestDDLEventE2E(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(codecConfig, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic, nil)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -129,7 +129,7 @@ func TestResolvedE2E(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(codecConfig, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic, nil)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestAvroEncode(t *testing.T) {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
-	require.Equal(t, int32(127), res.(map[string]interface{})["t"])
+	require.Equal(t, int32(127), res.(map[string]interface{})["tu1"])
 
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)

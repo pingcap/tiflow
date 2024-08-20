@@ -201,7 +201,7 @@ var (
 		errors.RFCCodeText("CDC:ErrKafkaCreateTopic"),
 	)
 	ErrKafkaInvalidTopicExpression = errors.Normalize(
-		"invalid topic expression",
+		"invalid topic expression: %s ",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
 	ErrKafkaConfigNotFound = errors.Normalize(
@@ -399,6 +399,10 @@ var (
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
+	)
+	ErrSinkIncompatibleConfig = errors.Normalize(
+		"incompatible configuration %s",
+		errors.RFCCodeText("CDC:ErrSinkIncompatibleConfig"),
 	)
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",

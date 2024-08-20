@@ -498,7 +498,7 @@ kafka send message failed
 
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
-invalid topic expression
+invalid topic expression: %s 
 '''
 
 ["CDC:ErrLeaseExpired"]
@@ -914,6 +914,11 @@ serve http error
 ["CDC:ErrServerIsNotReady"]
 error = '''
 cdc server is not ready
+'''
+
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
 '''
 
 ["CDC:ErrSinkInvalidConfig"]

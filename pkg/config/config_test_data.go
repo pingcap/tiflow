@@ -70,6 +70,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
@@ -166,12 +167,12 @@ const (
     },
     "messages": {
       "client-max-batch-interval": 10000000,
-      "client-max-batch-size": 8388608,
-      "client-max-batch-count": 128,
+      "client-max-batch-size": 67108864,
+      "client-max-batch-count": 1024,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4,
+      "server-worker-pool-size": 8,
       "max-recv-msg-size": 268435456,
       "keep-alive-time": 30000000000,
       "keep-alive-timeout": 10000000000
@@ -295,7 +296,8 @@ const (
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+		"claim-check-raw-value": false
       },
       "glue-schema-registry-config": {
         "region":"region",
@@ -337,6 +339,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
@@ -511,6 +514,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true

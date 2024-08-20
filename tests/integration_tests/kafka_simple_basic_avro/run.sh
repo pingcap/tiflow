@@ -34,7 +34,7 @@ function run() {
 	sleep 5 # wait for changefeed to start
 	# determine the sink uri and run corresponding consumer
 	# currently only kafka and pulsar are supported
-	run_kafka_consumer $WORK_DIR $SINK_URI
+	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?" --config="$CUR/conf/changefeed.toml" 2>&1 &
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first

@@ -604,21 +604,32 @@ func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
 
-	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme)
+	outputRawChangeEvent := true
+	notOutputRawChangeEvent := false
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 2)
 
 	txn = &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
-	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
 
 	txn2 := &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
 	}
-	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn2.Rows, 2)
 }
@@ -654,7 +665,7 @@ func TestToRedoLog(t *testing.T) {
 	eventInRedoLog := event.ToRedoLog()
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
 	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)
-	require.Equal(t, event.PhysicalTableID, eventInRedoLog.RedoRow.Row.Table.TableID)
+	require.Equal(t, event.GetTableID(), eventInRedoLog.RedoRow.Row.Table.TableID)
 	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
 	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
 	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, tableInfo))
