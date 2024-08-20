@@ -86,7 +86,7 @@ func NewMySQLBackends(
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
+	dbConnFactory pmysql.IDBConnectionFactory,
 	statistics *metrics.Statistics,
 ) ([]*mysqlBackend, error) {
 	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)

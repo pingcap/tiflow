@@ -32,27 +32,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// CreateMySQLDBConn creates a mysql database connection with the given dsn.
-func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-
-	err = db.PingContext(ctx)
-	if err != nil {
-		// close db to recycle resources
-		if closeErr := db.Close(); closeErr != nil {
-			log.Warn("close db failed", zap.Error(err))
-		}
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-
-	return db, nil
-}
-
 // GenerateDSNs generates the DSN with the given config.
-func GenerateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) ([]string, error) {
+// GenerateDSNs uses the provided dbConnFactory to create a temporary connection
+// to the downstream database specified by the sinkURI. This temporary connection
+// is used to query important information from the downstream database, such as
+// version, charset, and other relevant details. After the required information
+// is retrieved, the temporary connection is closed. The retrieved data is then
+// used to populate additional parameters into the Sink URI, refining
+// the connection URL (dsnStr).
+func GenerateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) ([]string, error) {
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	dsnCfgs, err := GetDSNCfgs(sinkURI, cfg)
 	if err != nil {
 		return nil, err
@@ -70,7 +60,7 @@ func GenerateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFact
 	return dsn, oneOfErrs
 }
 
-func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory Factory) (string, error) {
+func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory ConnectionFactory) (string, error) {
 	testDB, err := GetTestDB(ctx, dsnCfg, dbConnFactory)
 	if err != nil {
 		return "", err
@@ -226,7 +216,7 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 
 // GetTestDB checks and adjusts the password of the given DSN,
 // it will return a DB instance opened with the adjusted password.
-func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
+func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory ConnectionFactory) (*sql.DB, error) {
 	password := dbConfig.Passwd
 	if dbConnFactory == nil {
 		dbConnFactory = CreateMySQLDBConn

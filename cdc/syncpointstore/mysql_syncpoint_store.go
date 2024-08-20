@@ -27,12 +27,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/sink/mysql"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 type mysqlSyncPointStore struct {
-	connector              *mysql.MySQLDBConnector
+	id                     model.ChangeFeedID
+	cfg                    *pmysql.Config
+	connector              *pmysql.MySQLDBConnector
 	clusterID              string
 	syncPointRetention     time.Duration
 	lastCleanSyncPointTime time.Time
@@ -41,27 +44,40 @@ type mysqlSyncPointStore struct {
 // newSyncPointStore create a sink to record the syncPoint map in downstream DB for every changefeed
 func newMySQLSyncPointStore(
 	ctx context.Context,
-	id model.ChangeFeedID,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	syncPointRetention time.Duration,
+	replicaConfig *config.ReplicaConfig,
 ) (SyncPointStore, error) {
-	cfg := mysql.NewConfig()
-	err := cfg.Apply(config.GetGlobalServerConfig().TZ, id, sinkURI, config.GetDefaultReplicaConfig())
+	cfg := pmysql.NewConfig()
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	connector, err := mysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
+	connector, err := pmysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Start mysql syncpoint sink", zap.String("changefeed", id.String()))
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, connector.CurrentDB)
+	if err != nil {
+		return nil, err
+	}
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, connector.CurrentDB)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Start mysql syncpoint sink",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID))
 
 	return &mysqlSyncPointStore{
+		id:                     changefeedID,
+		cfg:                    cfg,
 		connector:              connector,
 		clusterID:              config.GetGlobalServerConfig().ClusterID,
-		syncPointRetention:     syncPointRetention,
+		syncPointRetention:     util.GetOrZero(replicaConfig.SyncPointRetention),
 		lastCleanSyncPointTime: time.Now(),
 	}, nil
 }
@@ -71,14 +87,31 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		database := filter.TiCDCSystemSchema
 		tx, err := s.connector.CurrentDB.BeginTx(ctx, nil)
 		if err != nil {
-			log.Error("create sync table: begin Tx fail", zap.Error(err))
+			log.Error("create sync table: begin Tx fail",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID), zap.Error(err))
 			return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "create sync table: begin Tx fail;"))
 		}
+
+		// we try to set cdc write source for the ddl
+		if err = pmysql.SetWriteSource(ctx, s.cfg, tx); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				if errors.Cause(rbErr) != context.Canceled {
+					log.Error("Failed to rollback",
+						zap.String("namespace", s.id.Namespace),
+						zap.String("changefeed", s.id.ID), zap.Error(err))
+				}
+			}
+			return err
+		}
+
 		_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 		if err != nil {
 			err2 := tx.Rollback()
 			if err2 != nil {
-				log.Error("failed to create syncpoint table", zap.Error(err2))
+				log.Error("failed to create syncpoint table",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID), zap.Error(err2))
 			}
 			return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 		}
@@ -86,26 +119,30 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		if err != nil {
 			err2 := tx.Rollback()
 			if err2 != nil {
-				log.Error("failed to create syncpoint table", zap.Error(err2))
+				log.Error("failed to create syncpoint table",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID), zap.Error(err2))
 			}
 			return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 		}
 		query := `CREATE TABLE IF NOT EXISTS %s
-		(
-			ticdc_cluster_id varchar (255),
-			changefeed varchar(255),
-			primary_ts varchar(18),
-			secondary_ts varchar(18),
-			created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			INDEX (created_at),
-			PRIMARY KEY (changefeed, primary_ts)
-		);`
+	(
+		ticdc_cluster_id varchar (255),
+		changefeed varchar(255),
+		primary_ts varchar(18),
+		secondary_ts varchar(18),
+		created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		INDEX (created_at),
+		PRIMARY KEY (changefeed, primary_ts)
+	);`
 		query = fmt.Sprintf(query, filter.SyncPointTable)
 		_, err = tx.Exec(query)
 		if err != nil {
 			err2 := tx.Rollback()
 			if err2 != nil {
-				log.Error("failed to create syncpoint table", zap.Error(err2))
+				log.Error("failed to create syncpoint table",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID), zap.Error(err2))
 			}
 			return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 		}

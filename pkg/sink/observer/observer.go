@@ -37,14 +37,14 @@ type Observer interface {
 
 // NewObserverOpt represents available options when creating a new observer.
 type NewObserverOpt struct {
-	dbConnFactory pmysql.Factory
+	dbConnFactory pmysql.ConnectionFactory
 }
 
 // NewObserverOption configures NewObserverOpt.
 type NewObserverOption func(*NewObserverOpt)
 
 // WithDBConnFactory specifies factory to create db connection.
-func WithDBConnFactory(factory pmysql.Factory) NewObserverOption {
+func WithDBConnFactory(factory pmysql.ConnectionFactory) NewObserverOption {
 	return func(opt *NewObserverOpt) {
 		opt.dbConnFactory = factory
 	}

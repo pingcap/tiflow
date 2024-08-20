@@ -68,7 +68,7 @@ func newMySQLBackend(
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
+	dbConnFactory pmysql.IDBConnectionFactory,
 ) (*mysqlBackend, error) {
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, changefeedID, sink.TxnSink)
@@ -205,29 +205,19 @@ func TestAdjustSQLMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1" +
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed),
-		sinkURI, config.GetDefaultReplicaConfig(), mockGetDBConn)
+		sinkURI, config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -290,24 +280,14 @@ func TestNewMySQLTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
 	_, err = newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), pmysql.CreateMySQLDBConn)
+		config.GetDefaultReplicaConfig(), &pmysql.DBConnectionFactory{})
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
 // Test OnTxnEvent and Flush interfaces. Event callbacks should be called correctly after flush.
 func TestNewMySQLBackendExecDML(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").
@@ -316,7 +296,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		mock.ExpectCommit()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -329,7 +309,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
@@ -433,18 +413,8 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		Number: uint16(infoschema.ErrDatabaseNotExists.Code()),
 	}
 
-	dbIndex := 0
-	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
@@ -453,7 +423,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -462,7 +432,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -510,18 +480,8 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		Number: uint16(infoschema.ErrTableNotExists.Code()),
 	}
 
-	dbIndex := 0
-	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
@@ -530,7 +490,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -539,7 +499,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -587,18 +547,8 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		Number: mysql.ErrLockDeadlock,
 	}
 
-	dbIndex := 0
-	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		for i := 0; i < 2; i++ {
 			mock.ExpectBegin()
@@ -609,7 +559,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		}
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -618,7 +568,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(2)
 
@@ -656,18 +606,8 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		},
 	}
 
-	dbIndex := 0
-	mockDBInsertDupEntry := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`) VALUES (?)").
@@ -677,7 +617,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 			WillReturnError(errDup)
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -687,7 +627,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 			"&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockDBInsertDupEntry)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(1)
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -708,22 +648,12 @@ func TestNeedSwitchDB(t *testing.T) {
 }
 
 func TestNewMySQLBackend(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -733,7 +663,7 @@ func TestNewMySQLBackend(t *testing.T) {
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
@@ -742,23 +672,12 @@ func TestNewMySQLBackend(t *testing.T) {
 }
 
 func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		require.Contains(t, dsnStr, "root@tcp([::1]:3306)")
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -768,28 +687,18 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
 
 func TestGBKSupported(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	zapcore, logs := observer.New(zap.WarnLevel)
 	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
@@ -804,7 +713,7 @@ func TestGBKSupported(t *testing.T) {
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 
 	// no gbk-related warning log will be output because GBK charset is supported
@@ -834,25 +743,15 @@ func TestHolderString(t *testing.T) {
 }
 
 func TestMySQLSinkExecDMLError(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -861,7 +760,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+		config.GetDefaultReplicaConfig(), dbConnFactory)
 	require.Nil(t, err)
 
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
