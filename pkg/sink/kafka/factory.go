@@ -112,7 +112,11 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, par
 			Partition: int32(i),
 		}
 	}
-	return p.producer.SendMessages(msgs)
+	errs := p.producer.SendMessages(msgs)
+	for _, err := range errs.(sarama.ProducerErrors) {
+		log.Warn("Write to kafka failed", zap.Error(err))
+	}
+	return errs
 }
 
 func (p *saramaSyncProducer) Close() {
