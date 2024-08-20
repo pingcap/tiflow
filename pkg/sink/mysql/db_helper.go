@@ -32,32 +32,32 @@ import (
 	"go.uber.org/zap"
 )
 
-// GenerateDSNs generates the DSN with the given config.
-// GenerateDSNs uses the provided dbConnFactory to create a temporary connection
+// generateDSNs generates the DSNs with the given config.
+// generateDSNs uses the provided dbConnFactory to create a temporary connection
 // to the downstream database specified by the sinkURI. This temporary connection
 // is used to query important information from the downstream database, such as
 // version, charset, and other relevant details. After the required information
 // is retrieved, the temporary connection is closed. The retrieved data is then
 // used to populate additional parameters into the Sink URI, refining
-// the connection URL (dsnStr).
-func GenerateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) ([]string, error) {
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+// the connection URL.
+func generateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) ([]string, error) {
 	dsnCfgs, err := GetDSNCfgs(sinkURI, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	var oneOfErrs error
-	dsn := make([]string, len(dsnCfgs))
+	dsnList := make([]string, len(dsnCfgs))
 	for i := 0; i < len(dsnCfgs); i++ {
-		dsn[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfgs[i], cfg, dbConnFactory)
+		// dsn format of the driver:
+		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+		dsnList[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfgs[i], cfg, dbConnFactory)
 		if err != nil {
 			oneOfErrs = err
 		}
 	}
 
-	return dsn, oneOfErrs
+	return dsnList, oneOfErrs
 }
 
 func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory ConnectionFactory) (string, error) {
@@ -234,8 +234,11 @@ func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Conne
 	return testDB, err
 }
 
-// TODO: update comments
-// GetDSNCfgs generates basic DSNs from the given config.
+// GetDSNCfgs generates DSN configurations for multiple addresses contained in the given sinkURI.
+// If the sinkURI contains multiple host addresses, the function will generate a DSN configuration
+// for each address. It uses the provided `Config` to set various parameters such as TLS, timeouts,
+// and the database timezone. The function supports IPv6 address formats and ensures that appropriate
+// query parameters are applied. The DSN configurations are returned as a slice of `*mysql.Config` objects.
 func GetDSNCfgs(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]

@@ -27,20 +27,19 @@ type MySQLDBConnector struct {
 	nextTry int
 
 	// dbConnFactory is a Factory function for MySQLDBConnector that creates database connections.
-	dbConnFactory Factory
+	dbConnFactory IDBConnectionFactory
 
 	// configureDBWhenSwitch stores the function that will be automatically invoked
 	// to configure a new MySQL connection after switching to it using the
 	// SwitchToAvailableMySQLDB function. This function will be set by the
 	// ConfigureDBWhenSwitch method and can be applied to both newly established
 	// connections and the current active connection if required.
-	configureDBWhenSwitch ConfigureDBWhenSwitch
+	configureDBWhenSwitch func()
 }
 
-type ConfigureDBWhenSwitch func()
-
+// New a MySQLDBConnector for creating DB connection.
 func NewMySQLDBConnector(ctx context.Context, cfg *Config, sinkURI *url.URL) (*MySQLDBConnector, error) {
-	return NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, CreateMySQLDBConn)
+	return NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, &DBConnectionFactory{})
 }
 
 // New a MySQLDBConnector by the given factory function for creating DB connection.
@@ -48,17 +47,17 @@ func NewMySQLDBConnector(ctx context.Context, cfg *Config, sinkURI *url.URL) (*M
 // [scheme]://[user[:password]@][host[:port]][,host[:port]][,host[:port]][/path][?param1=value1&paramN=valueN]
 // User must ensure that each address ([host[:port]]) in the sinkURI (if there are multiple addresses)
 // is valid, otherwise returns an error.
-func NewMySQLDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.URL, dbConnFactory Factory) (*MySQLDBConnector, error) {
+func NewMySQLDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.URL, dbConnFactory IDBConnectionFactory) (*MySQLDBConnector, error) {
 	if dbConnFactory == nil {
-		dbConnFactory = CreateMySQLDBConn
+		dbConnFactory = &DBConnectionFactory{}
 	}
 
-	// GenerateDSN function parses multiple addresses from the URL (if any)
+	// generateDSNs function parses multiple addresses from the URL (if any)
 	// and generates a DSN (Data Source Name) for each one.
 	// For each DSN, the function attempts to create a connection and perform a Ping
 	// to verify its availability.
 	// If any of the DSNs are unavailable, the function immediately returns an error.
-	dsnList, err := GenerateDSNs(ctx, sinkURI, cfg, dbConnFactory)
+	dsnList, err := generateDSNs(ctx, sinkURI, cfg, dbConnFactory.CreateTemporaryConnection)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +103,7 @@ func (c *MySQLDBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
 			continue
 		}
 
-		db, err := c.dbConnFactory(ctx, c.dsnList[c.nextTry])
+		db, err := c.dbConnFactory.CreateStandardConnection(ctx, c.dsnList[c.nextTry])
 		c.nextTry = (c.nextTry + 1) % len(c.dsnList)
 		if err == nil {
 			c.CurrentDB = db
@@ -125,7 +124,7 @@ func (c *MySQLDBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
 // MySQLDBConnector.CurrentDB also requires configuration, you can set
 // `needConfigureCurrentDB` to true, and this function will automatically apply
 // the configuration function `f` to it as well.
-func (c *MySQLDBConnector) ConfigureDBWhenSwitch(f ConfigureDBWhenSwitch, needConfigureCurrentDB bool) {
+func (c *MySQLDBConnector) ConfigureDBWhenSwitch(f func(), needConfigureCurrentDB bool) {
 	if f == nil {
 		return
 	}

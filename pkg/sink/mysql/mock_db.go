@@ -55,6 +55,9 @@ func MockTestDB() (*sql.DB, error) {
 		WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
 	mock.ExpectQuery("select tidb_version()").
 		WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+
+	// Once mock.ExpectClose() has been called, the sql.DB can be closed multiple times
+	// without raising any errors.
 	mock.ExpectClose()
 	return db, nil
 }
