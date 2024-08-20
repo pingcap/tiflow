@@ -32,7 +32,6 @@ type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption      string `toml:"large-message-handle-option" json:"large-message-handle-option"`
 	LargeMessageHandleCompression string `toml:"large-message-handle-compression" json:"large-message-handle-compression"`
 	ClaimCheckStorageURI          string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
-	ClaimCheckRawValue            bool   `toml:"claim-check-raw-value" json:"claim-check-raw-value"`
 }
 
 // NewDefaultLargeMessageHandleConfig return the default Config.
@@ -80,10 +79,6 @@ func (c *LargeMessageHandleConfig) AdjustAndValidate(protocol Protocol, enableTi
 		if c.ClaimCheckStorageURI == "" {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
-		}
-		if c.ClaimCheckRawValue && protocol == ProtocolOpen {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle is set to claim-check, raw value is not supported for the open protocol")
 		}
 	}
 

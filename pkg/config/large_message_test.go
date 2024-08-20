@@ -58,7 +58,7 @@ func TestLargeMessageHandle4NotSupportedProtocol(t *testing.T) {
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
-func TestHandleKeyOnly4CanalJSON(t *testing.T) {
+func TestLargeMessageHandle4CanalJSON(t *testing.T) {
 	t.Parallel()
 
 	// large-message-handle not set, always no error
@@ -68,45 +68,27 @@ func TestHandleKeyOnly4CanalJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, largeMessageHandle.Disabled())
 
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionHandleKeyOnly
+	for _, option := range []string{
+		LargeMessageHandleOptionHandleKeyOnly,
+		LargeMessageHandleOptionClaimCheck,
+	} {
+		largeMessageHandle.LargeMessageHandleOption = option
+		if option == LargeMessageHandleOptionClaimCheck {
+			largeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
+		}
 
-	// `enable-tidb-extension` is false, return error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
-	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
-
-	// `enable-tidb-extension` is true, no error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, true)
-	require.NoError(t, err)
-	require.Equal(t, LargeMessageHandleOptionHandleKeyOnly, largeMessageHandle.LargeMessageHandleOption)
-}
-
-func TestClaimCheck4CanalJSON(t *testing.T) {
-	t.Parallel()
-
-	// large-message-handle not set, always no error
-	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
-
-	err := largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
-	require.NoError(t, err)
-	require.True(t, largeMessageHandle.Disabled())
-
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionClaimCheck
-	largeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
-
-	for _, rawValue := range []bool{false, true} {
-		largeMessageHandle.ClaimCheckRawValue = rawValue
 		// `enable-tidb-extension` is false, return error
-		err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
+		err := largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 		require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 
 		// `enable-tidb-extension` is true, no error
 		err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, true)
 		require.NoError(t, err)
-		require.Equal(t, LargeMessageHandleOptionClaimCheck, largeMessageHandle.LargeMessageHandleOption)
+		require.Equal(t, option, largeMessageHandle.LargeMessageHandleOption)
 	}
 }
 
-func TestHandleKeyOnly4OpenProtocol(t *testing.T) {
+func TestLargeMessageHandle4OpenProtocol(t *testing.T) {
 	t.Parallel()
 
 	// large-message-handle not set, always no error
@@ -116,88 +98,23 @@ func TestHandleKeyOnly4OpenProtocol(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, largeMessageHandle.Disabled())
 
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionHandleKeyOnly
-	// `enable-tidb-extension` is false, return error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
-	require.NoError(t, err)
+	for _, o := range []string{
+		LargeMessageHandleOptionHandleKeyOnly,
+		LargeMessageHandleOptionClaimCheck,
+	} {
+		largeMessageHandle.LargeMessageHandleOption = o
+		if o == LargeMessageHandleOptionClaimCheck {
+			largeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
+		}
 
-	// `enable-tidb-extension` is true, no error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
-	require.NoError(t, err)
-	require.Equal(t, LargeMessageHandleOptionHandleKeyOnly, largeMessageHandle.LargeMessageHandleOption)
-}
+		// `enable-tidb-extension` is false, return error
+		err := largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
+		require.NoError(t, err)
 
-func TestClaimCheck4OpenProtocol(t *testing.T) {
-	t.Parallel()
+		// `enable-tidb-extension` is true, no error
+		err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
+		require.NoError(t, err)
+		require.Equal(t, o, largeMessageHandle.LargeMessageHandleOption)
 
-	// large-message-handle not set, always no error
-	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
-
-	err := largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
-	require.NoError(t, err)
-	require.True(t, largeMessageHandle.Disabled())
-
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionClaimCheck
-	largeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
-
-	// `enable-tidb-extension` is false, return error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
-	require.NoError(t, err)
-
-	// `enable-tidb-extension` is true, no error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
-	require.NoError(t, err)
-	require.Equal(t, LargeMessageHandleOptionClaimCheck, largeMessageHandle.LargeMessageHandleOption)
-
-	largeMessageHandle.ClaimCheckRawValue = true
-	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
-	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
-}
-
-func TestHandleKeyOnly4SimpleProtocol(t *testing.T) {
-	t.Parallel()
-
-	// large-message-handle not set, always no error
-	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
-
-	err := largeMessageHandle.AdjustAndValidate(ProtocolSimple, false)
-	require.NoError(t, err)
-	require.True(t, largeMessageHandle.Disabled())
-
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionHandleKeyOnly
-	// `enable-tidb-extension` is false, return error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolSimple, false)
-	require.NoError(t, err)
-
-	// `enable-tidb-extension` is true, no error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolSimple, true)
-	require.NoError(t, err)
-	require.Equal(t, LargeMessageHandleOptionHandleKeyOnly, largeMessageHandle.LargeMessageHandleOption)
-}
-
-func TestClaimCheck4SimpleProtocol(t *testing.T) {
-	t.Parallel()
-
-	// large-message-handle not set, always no error
-	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
-
-	err := largeMessageHandle.AdjustAndValidate(ProtocolSimple, false)
-	require.NoError(t, err)
-	require.True(t, largeMessageHandle.Disabled())
-
-	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionClaimCheck
-	largeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
-
-	// `enable-tidb-extension` is false, return error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolSimple, false)
-	require.NoError(t, err)
-
-	// `enable-tidb-extension` is true, no error
-	err = largeMessageHandle.AdjustAndValidate(ProtocolSimple, true)
-	require.NoError(t, err)
-	require.Equal(t, LargeMessageHandleOptionClaimCheck, largeMessageHandle.LargeMessageHandleOption)
-
-	largeMessageHandle.ClaimCheckRawValue = true
-	err = largeMessageHandle.AdjustAndValidate(ProtocolSimple, true)
-	require.NoError(t, err)
+	}
 }

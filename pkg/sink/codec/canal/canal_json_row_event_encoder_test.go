@@ -214,50 +214,46 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	codecConfig.MaxMessageBytes = 500
 	ctx := context.Background()
 
-	for _, rawValue := range []bool{false, true} {
-		codecConfig.LargeMessageHandle.ClaimCheckRawValue = rawValue
+	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
 
-		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		encoder := builder.Build()
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+	require.NoError(t, err)
 
-		_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
-		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-		require.NoError(t, err)
+	// this is a large message, should be delivered to the external storage.
+	claimCheckLocationMessage := encoder.Build()[0]
 
-		// this is a large message, should be delivered to the external storage.
-		claimCheckLocationMessage := encoder.Build()[0]
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
 
-		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
+	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
+	require.NoError(t, err)
 
-		err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
-		require.NoError(t, err)
+	messageType, ok, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.Equal(t, messageType, model.MessageTypeRow)
+	require.True(t, ok)
 
-		messageType, ok, err := decoder.HasNext()
-		require.NoError(t, err)
-		require.Equal(t, messageType, model.MessageTypeRow)
+	decodedLargeEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+
+	require.Equal(t, insertEvent.CommitTs, decodedLargeEvent.CommitTs)
+	require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedLargeEvent.TableInfo.GetSchemaName())
+	require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
+	require.Nil(t, nil, decodedLargeEvent.PreColumns)
+
+	decodedColumns := make(map[string]*model.ColumnData, len(decodedLargeEvent.Columns))
+	for _, column := range decodedLargeEvent.Columns {
+		colName := decodedLargeEvent.TableInfo.ForceGetColumnName(column.ColumnID)
+		decodedColumns[colName] = column
+	}
+	for _, col := range insertEvent.Columns {
+		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
+		decoded, ok := decodedColumns[colName]
 		require.True(t, ok)
-
-		decodedLargeEvent, err := decoder.NextRowChangedEvent()
-		require.NoError(t, err, rawValue)
-
-		require.Equal(t, insertEvent.CommitTs, decodedLargeEvent.CommitTs)
-		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedLargeEvent.TableInfo.GetSchemaName())
-		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
-		require.Nil(t, nil, decodedLargeEvent.PreColumns)
-
-		decodedColumns := make(map[string]*model.ColumnData, len(decodedLargeEvent.Columns))
-		for _, column := range decodedLargeEvent.Columns {
-			colName := decodedLargeEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-			decodedColumns[colName] = column
-		}
-		for _, col := range insertEvent.Columns {
-			colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-			decoded, ok := decodedColumns[colName]
-			require.True(t, ok)
-			require.EqualValues(t, col.Value, decoded.Value)
-		}
+		require.EqualValues(t, col.Value, decoded.Value)
 	}
 }
 
