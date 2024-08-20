@@ -101,6 +101,21 @@ type DBConnectionFactoryForTest struct {
 	standard ConnectionFactory
 }
 
+// NewDBConnectionFactoryForTest creates a new instance of DBConnectionFactoryForTest
+// with a predefined temporary connection creation method. This method is initialized
+// to use a mock database connection, which is commonly required in the current unit tests.
+// By setting up the temporary connection creation logic directly in this constructor,
+// it eliminates the need to repeatedly call SetTemporaryConnectionFactory to set up
+// the temporary connection factory in each test. This streamlines the setup process
+// for unit tests that require a mock temporary connection.
+func NewDBConnectionFactoryForTest() *DBConnectionFactoryForTest {
+	dbConnFactory := &DBConnectionFactoryForTest{}
+	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		return MockTestDB()
+	})
+	return dbConnFactory
+}
+
 // SetTemporaryConnectionFactory sets the connection factory that will be used to
 // create the temporary connection during testing. This allows for custom behavior
 // during unit tests when different connection logic is required.

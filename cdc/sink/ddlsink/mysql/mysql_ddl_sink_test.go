@@ -30,12 +30,7 @@ import (
 )
 
 func TestWriteDDLEvent(t *testing.T) {
-	dbConnFactory := pmysql.DBConnectionFactoryForTest{}
-	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		db, err := pmysql.MockTestDB()
-		require.Nil(t, err)
-		return db, nil
-	})
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
@@ -62,7 +57,7 @@ func TestWriteDDLEvent(t *testing.T) {
 		mock.ExpectClose()
 		return db, nil
 	})
-	GetDBConnImpl = &dbConnFactory
+	GetDBConnImpl = dbConnFactory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

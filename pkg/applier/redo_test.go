@@ -102,20 +102,15 @@ func TestApply(t *testing.T) {
 
 	// DML sink and DDL sink share the same db
 	db := getMockDB(t)
-	dbConnFactory := pmysql.DBConnectionFactoryForTest{}
-	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		testDB, err := pmysql.MockTestDB()
-		require.Nil(t, err)
-		return testDB, nil
-	})
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		return db, nil
 	})
 
 	getDMLDBConnBak := txn.GetDBConnImpl
-	txn.GetDBConnImpl = &dbConnFactory
+	txn.GetDBConnImpl = dbConnFactory
 	getDDLDBConnBak := mysqlDDL.GetDBConnImpl
-	mysqlDDL.GetDBConnImpl = &dbConnFactory
+	mysqlDDL.GetDBConnImpl = dbConnFactory
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
@@ -321,20 +316,15 @@ func TestApplyBigTxn(t *testing.T) {
 
 	// DML sink and DDL sink share the same db
 	db := getMockDBForBigTxn(t)
-	dbConnFactory := pmysql.DBConnectionFactoryForTest{}
-	dbConnFactory.SetTemporaryConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		testDB, err := pmysql.MockTestDB()
-		require.Nil(t, err)
-		return testDB, nil
-	})
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		return db, nil
 	})
 
 	getDMLDBConnBak := txn.GetDBConnImpl
-	txn.GetDBConnImpl = &dbConnFactory
+	txn.GetDBConnImpl = dbConnFactory
 	getDDLDBConnBak := mysqlDDL.GetDBConnImpl
-	mysqlDDL.GetDBConnImpl = &dbConnFactory
+	mysqlDDL.GetDBConnImpl = dbConnFactory
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
