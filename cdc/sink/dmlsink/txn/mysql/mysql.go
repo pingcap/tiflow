@@ -260,7 +260,7 @@ func (s *mysqlBackend) Close() (err error) {
 	}
 	if s.connector.CurrentDB != nil {
 		err = s.connector.CurrentDB.Close()
-		s.connector = nil
+		s.connector.CurrentDB = nil
 	}
 	return
 }
