@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"encoding/base64"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -99,7 +100,8 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
-	log.Info("kafka write message sync", zap.Any("Key", message.Key), zap.Any("Key", message.Value), zap.Any("table", message.Table), zap.Any("type", message.Type))
+	val, _ := base64.StdEncoding.DecodeString(string(message.Value))
+	log.Info("kafka write message sync", zap.ByteString("value", val))
 	return err
 }
 
@@ -243,7 +245,9 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
-				log.Info("kafka write message async", zap.Any("Key", ack.Key), zap.Any("Key", ack.Value))
+				val, _ := ack.Value.Encode()
+				val, _ = base64.StdEncoding.DecodeString(string(val))
+				log.Info("kafka write message async", zap.ByteString("value", val))
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
