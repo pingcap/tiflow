@@ -69,7 +69,7 @@ func TestNewMySQLDBConnectorWithFactory_MultiAddressSuccess(t *testing.T) {
 	require.NoError(t, connector.CurrentDB.Close())
 }
 
-// Test NewMySQLDBConnectorWithFactory for error when DSN fail
+// Test NewMySQLDBConnectorWithFactory for error when generate DSNs fail
 func TestNewMySQLDBConnectorWithFactory_generateDSNsFail(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost")
@@ -173,7 +173,7 @@ func TestSwitchToAvailableMySQLDB_SwitchDB(t *testing.T) {
 }
 
 // Test ConfigureDBWhenSwitch to apply configuration function
-func TestConfigureDBWhenSwitch(t *testing.T) {
+func TestConfigureDBWhenSwitch_Success(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost,localhost")
 	cfg := NewConfig()
@@ -205,4 +205,32 @@ func TestConfigureDBWhenSwitch(t *testing.T) {
 	require.NoError(t, connector.CurrentDB.Ping())
 	require.NoError(t, connector.CurrentDB.Close())
 	require.Equal(t, numCallConfigure, 2)
+}
+
+// Test ConfigureDBWhenSwitch when configuration function is nil and switches to a new DB
+func TestConfigureDBWhenSwitch_NilConfigureFunction(t *testing.T) {
+	ctx := context.Background()
+	sinkURI, _ := url.Parse("mysql://user:password@localhost,localhost")
+	cfg := NewConfig()
+
+	dbConnFactory := NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		db, mock, err := sqlmock.New(
+			sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual),
+			sqlmock.MonitorPingsOption(true))
+		require.Nil(t, err)
+		mock.ExpectClose()
+		return db, nil
+	})
+
+	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	require.NoError(t, err)
+	require.NotNil(t, connector)
+	require.NotNil(t, connector.CurrentDB)
+
+	connector.ConfigureDBWhenSwitch(nil, true)
+
+	require.NoError(t, connector.CurrentDB.Close())
+	require.NoError(t, connector.SwitchToAvailableMySQLDB(ctx))
+	require.NoError(t, connector.CurrentDB.Close())
 }
