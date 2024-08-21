@@ -99,7 +99,7 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
-	log.Info("kafka write message sync", zap.Any("msg", message))
+	log.Info("kafka write message sync", zap.Any("Key", message.Key), zap.Any("Key", message.Value), zap.Any("table", message.Table), zap.Any("type", message.Type))
 	return err
 }
 
