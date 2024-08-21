@@ -256,7 +256,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				val = strings.ReplaceAll(val, "\\", "")
 				v, e := base64.StdEncoding.DecodeString(val)
 				if e != nil {
-					log.Error("kafka write error", zap.Error(e))
+					log.Error("kafka write error", zap.Error(e), zap.String("val", val))
 				}
 				log.Info("kafka write message async", zap.Any("v", v))
 			}
