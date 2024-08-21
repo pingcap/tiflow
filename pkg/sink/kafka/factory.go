@@ -243,7 +243,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
-				log.Info("kafka write message async", zap.Any("msg", ack))
+				log.Info("kafka write message async", zap.Any("Key", ack.Key), zap.Any("Key", ack.Value))
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
