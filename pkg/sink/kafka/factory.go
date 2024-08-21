@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"encoding/base64"
+	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -100,8 +101,13 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
-	val, _ := base64.StdEncoding.DecodeString(string(message.Value))
-	log.Info("kafka write message sync", zap.ByteString("value", val))
+	cleanedStr := strings.ReplaceAll(string(message.Value), "\\\"", "")
+	cleanedStr = strings.ReplaceAll(cleanedStr, "\\\\", "")
+	v, e := base64.StdEncoding.DecodeString(cleanedStr)
+	if e != nil {
+		log.Error("kafka write error", zap.Error(e))
+	}
+	log.Info("kafka write message async", zap.Any("v", v))
 	return err
 }
 
@@ -246,8 +252,13 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 				val, _ := ack.Value.Encode()
-				val, _ = base64.StdEncoding.DecodeString(string(val))
-				log.Info("kafka write message async", zap.ByteString("value", val))
+				cleanedStr := strings.ReplaceAll(string(val), "\\\"", "")
+				cleanedStr = strings.ReplaceAll(cleanedStr, "\\\\", "")
+				v, err := base64.StdEncoding.DecodeString(cleanedStr)
+				if err != nil {
+					log.Error("kafka write error", zap.Error(err))
+				}
+				log.Info("kafka write message async", zap.Any("v", v))
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
