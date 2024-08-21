@@ -101,9 +101,9 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
-	cleanedStr := strings.ReplaceAll(string(message.Value), "\\\"", "")
-	cleanedStr = strings.ReplaceAll(cleanedStr, "\\\\", "")
-	v, e := base64.StdEncoding.DecodeString(cleanedStr)
+	val := strings.ReplaceAll(string(message.Value), "\"", "")
+	val = strings.ReplaceAll(val, "\\", "")
+	v, e := base64.StdEncoding.DecodeString(val)
 	if e != nil {
 		log.Error("kafka write error", zap.Error(e))
 	}
@@ -251,12 +251,12 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
-				val, _ := ack.Value.Encode()
-				cleanedStr := strings.ReplaceAll(string(val), "\\\"", "")
-				cleanedStr = strings.ReplaceAll(cleanedStr, "\\\\", "")
-				v, err := base64.StdEncoding.DecodeString(cleanedStr)
-				if err != nil {
-					log.Error("kafka write error", zap.Error(err))
+				x, _ := ack.Value.Encode()
+				val := strings.ReplaceAll(string(x), "\"", "")
+				val = strings.ReplaceAll(val, "\\", "")
+				v, e := base64.StdEncoding.DecodeString(val)
+				if e != nil {
+					log.Error("kafka write error", zap.Error(e))
 				}
 				log.Info("kafka write message async", zap.Any("v", v))
 			}
