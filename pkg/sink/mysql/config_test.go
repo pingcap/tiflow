@@ -133,6 +133,10 @@ func TestGenerateDSNByConfig(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_enable_external_ts_read", "OFF"),
 			)
+		mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+			"where character_set_name = 'gbk';").WillReturnRows(
+			sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+		)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
 		expectedCfg := []string{
@@ -162,6 +166,10 @@ func TestGenerateDSNByConfig(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_enable_external_ts_read", "OFF"),
 			)
+		mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+			"where character_set_name = 'gbk';").WillReturnRows(
+			sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+		)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
 		expectedCfg = []string{

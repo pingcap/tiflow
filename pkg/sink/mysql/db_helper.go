@@ -67,18 +67,6 @@ func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg
 	}
 	defer testDB.Close()
 
-	// check if GBK charset is supported by downstream
-	var gbkSupported bool
-	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
-	if err != nil {
-		return "", err
-	}
-	if !gbkSupported {
-		log.Warn("GBK charset is not supported by the downstream. "+
-			"Some types of DDLs may fail to execute",
-			zap.String("host", dsnCfg.Addr))
-	}
-
 	dsnStr, err := generateDSNByConfig(ctx, dsnCfg, cfg, testDB)
 	if err != nil {
 		return "", err
@@ -168,6 +156,18 @@ func generateDSNByConfig(
 		// set the `tidb_enable_external_ts_read` to `OFF`, so cdc could write to the sink
 		dsnCfg.Params["tidb_enable_external_ts_read"] = fmt.Sprintf(`"%s"`, tidbEnableExternalTSRead)
 	}
+	// check if GBK charset is supported by downstream
+	var gbkSupported bool
+	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return "", err
+	}
+	if !gbkSupported {
+		log.Warn("GBK charset is not supported by the downstream. "+
+			"Some types of DDLs may fail to execute",
+			zap.String("host", dsnCfg.Addr))
+	}
+
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
