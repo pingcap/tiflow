@@ -278,9 +278,10 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
 	}
-	v, e := base64.StdEncoding.DecodeString(string(message.Value))
+	val := strings.ReplaceAll(string(message.Value), "\\\"", "")
+	v, e := base64.StdEncoding.DecodeString(val)
 	if e != nil {
-		log.Error("kafka write decode", zap.Error(e), zap.Any("v", message.Value))
+		log.Error("kafka write decode", zap.Error(e), zap.Any("val", val))
 	}
 	log.Info("kafka write asyncSend", zap.Any("v", v))
 	select {
