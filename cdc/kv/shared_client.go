@@ -343,7 +343,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	s.workers = make([]*sharedRegionWorker, 0, s.config.KVClient.WorkerConcurrent)
 	for i := uint(0); i < s.config.KVClient.WorkerConcurrent; i++ {
-		worker := newSharedRegionWorker(s)
+		worker := newSharedRegionWorker(s, i)
 		g.Go(func() error { return worker.run(ctx) })
 		s.workers = append(s.workers, worker)
 	}

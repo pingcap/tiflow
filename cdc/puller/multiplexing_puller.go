@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -343,7 +344,8 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	// Start workers to handle events received from kv client.
 	for i := range p.inputChs {
 		inputCh := p.inputChs[i]
-		eg.Go(func() error { return p.runEventHandler(ctx, inputCh) })
+		idx := i
+		eg.Go(func() error { return p.runEventHandler(ctx, inputCh, idx) })
 	}
 
 	// Start workers to check and resolve stale locks.
@@ -364,13 +366,17 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 // runEventHandler consumes events from inputCh:
 // 1. If the event is a kv event, consume by calling progress.consume.f.
 // 2. If the event is a resolved event, send it to the resolvedEventsCache of the corresponding progress.
-func (p *MultiplexingPuller) runEventHandler(ctx context.Context, inputCh <-chan kv.MultiplexingEvent) error {
+func (p *MultiplexingPuller) runEventHandler(ctx context.Context, inputCh <-chan kv.MultiplexingEvent, idx int) error {
+	ticker := time.NewTicker(10 * time.Second)
+	metricChanSize := pullerInputChanSize.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, strconv.Itoa(idx))
 	for {
 		var e kv.MultiplexingEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case e = <-inputCh:
+		case <-ticker.C:
+			metricChanSize.Set(float64(len(inputCh)))
 		}
 
 		progress := p.getProgress(e.SubscriptionID)

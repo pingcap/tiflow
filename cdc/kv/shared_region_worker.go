@@ -16,6 +16,8 @@ package kv
 import (
 	"context"
 	"encoding/hex"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -50,11 +52,13 @@ type regionWorkerMetrics struct {
 
 	metricQueueDuration prometheus.Observer
 
-	metricWorkerBusyRatio   prometheus.Gauge
+	metricWorkerBusyRatio prometheus.Gauge
+
 	metricWorkerChannelSize prometheus.Gauge
+	lastRecordTime          time.Time
 }
 
-func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string) *regionWorkerMetrics {
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string, idx int) *regionWorkerMetrics {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -82,8 +86,9 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, sto
 
 	metrics.metricWorkerBusyRatio = workerBusyRatio.WithLabelValues(
 		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "event-handler")
-	metrics.metricWorkerChannelSize = workerChannelSize.WithLabelValues(
-		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "input")
+	metrics.metricWorkerChannelSize = channelSizeGuage.WithLabelValues(
+		changefeedID.Namespace, changefeedID.ID, "region-worker", strconv.Itoa(idx), "input")
+	metrics.lastRecordTime = time.Now()
 
 	return metrics
 }
@@ -98,10 +103,33 @@ type statefulEvent struct {
 	start           time.Time
 }
 
+func (s *statefulEvent) resetResolvedTs(ts uint64, stream *requestedStream) {
+	s.resolvedTsBatch.ts = ts
+	s.resolvedTsBatch.regions = *regionFeedStatesPool.Get().(*[]*regionFeedState)
+	s.stream = stream
+	s.start = time.Now()
+}
+
+func (s *statefulEvent) clear() {
+	s.eventItem.item = nil
+	s.eventItem.state = nil
+	s.resolvedTsBatch.regions = nil
+	s.stream = nil
+}
+
 type eventItem struct {
 	// All items come from one same region.
 	item  *cdcpb.Event
 	state *regionFeedState
+}
+
+var regionFeedStatesPool = sync.Pool{
+	New: func() interface{} {
+		// Use pointer here to prevent static checkers from reporting errors.
+		// Ref: https://github.com/dominikh/go-tools/issues/1336.
+		buf := make([]*regionFeedState, 0, 16)
+		return &buf
+	},
 }
 
 // NOTE: all regions must come from the same subscribedTable, and regions will never be empty.
@@ -118,14 +146,6 @@ func newEventItem(item *cdcpb.Event, state *regionFeedState, stream *requestedSt
 	}
 }
 
-func newResolvedTsBatch(ts uint64, stream *requestedStream) statefulEvent {
-	return statefulEvent{
-		resolvedTsBatch: resolvedTsBatch{ts: ts},
-		stream:          stream,
-		start:           time.Now(),
-	}
-}
-
 type sharedRegionWorker struct {
 	changefeed model.ChangeFeedID
 	client     *SharedClient
@@ -133,16 +153,20 @@ type sharedRegionWorker struct {
 	metrics    *regionWorkerMetrics
 }
 
-func newSharedRegionWorker(c *SharedClient) *sharedRegionWorker {
+func newSharedRegionWorker(c *SharedClient, idx uint) *sharedRegionWorker {
 	return &sharedRegionWorker{
 		changefeed: c.changefeed,
 		client:     c,
 		inputCh:    make(chan statefulEvent, regionWorkerInputChanSize),
-		metrics:    newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
+		metrics:    newRegionWorkerMetrics(c.changefeed, "shared", "shared", int(idx)),
 	}
 }
 
 func (w *sharedRegionWorker) sendEvent(ctx context.Context, event statefulEvent) error {
+	if time.Since(w.metrics.lastRecordTime) > 10*time.Second {
+		w.metrics.metricWorkerChannelSize.Set(float64(len(w.inputCh)))
+		w.metrics.lastRecordTime = time.Now()
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -449,6 +473,10 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 }
 
 func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolvedTsBatch) {
+	defer func() {
+		batch.regions = batch.regions[:0]
+		regionFeedStatesPool.Put(&batch.regions)
+	}()
 	for _, state := range batch.regions {
 		if state.isStale() || !state.isInitialized() {
 			continue
@@ -483,7 +511,7 @@ func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolve
 			e := newMultiplexingEvent(revent, table)
 			select {
 			case table.eventCh <- e:
-				w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
+				w.metrics.metricSendEventResolvedCounter.Add(float64(len(revent.Resolved.Spans)))
 			case <-ctx.Done():
 			}
 		}

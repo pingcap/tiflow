@@ -81,7 +81,7 @@ func NewConnAndClientPool(
 	grpcMetrics *grpc_prometheus.ClientMetrics,
 	maxStreamsPerConn ...int,
 ) *ConnAndClientPool {
-	return newConnAndClientPool(credential, grpcMetrics, 1000)
+	return newConnAndClientPool(credential, grpcMetrics, 16)
 }
 
 func newConnAndClientPool(
