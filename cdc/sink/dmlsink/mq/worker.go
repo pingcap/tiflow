@@ -147,7 +147,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 			}
 			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
 				event.rowEvent.Callback()
-				log.Debug("Skip event of stopped table",
+				log.Warn("Skip event of stopped table",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID),
 					zap.Any("event", event))

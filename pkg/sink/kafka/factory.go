@@ -282,7 +282,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	}
 	val := strings.ReplaceAll(string(message.Value), "\"", "")
 	val = strings.ReplaceAll(val, "\\", "")
-	log.Info("kafka write asyncSend", zap.Any("v", val), zap.ByteString("byte", message.Value))
+	log.Info("kafka write asyncSend", zap.Any("v", val))
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
