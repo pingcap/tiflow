@@ -215,7 +215,7 @@ func (s *server) setMemoryLimit() {
 	}
 	if conf.GcTunerMemoryThreshold > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(uint32(conf.GcTunerMemoryThreshold))
+		gctuner.Tuning(conf.GcTunerMemoryThreshold)
 		log.Info("enable gctuner, set memory limit",
 			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
 			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
