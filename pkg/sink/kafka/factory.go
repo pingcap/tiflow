@@ -278,7 +278,11 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
 	}
-	log.Info("kafka write asyncSend", zap.Any("v", message.Value))
+	v, e := base64.StdEncoding.DecodeString(string(message.Value))
+	if e != nil {
+		log.Error("kafka write decode", zap.Error(e), zap.Any("v", message.Value))
+	}
+	log.Info("kafka write asyncSend", zap.Any("v", v))
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
