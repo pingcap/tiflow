@@ -140,6 +140,11 @@ var (
 		"stop processor by admin command",
 		errors.RFCCodeText("CDC:ErrAdminStopProcessor"),
 	)
+	ErrCodeNilFunction = errors.Normalize(
+		"function is not initialized",
+		errors.RFCCodeText("CDC:ErrCodeNilFunction"),
+	)
+
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible = errors.Normalize(
 		"version is incompatible: %s",
@@ -201,7 +206,7 @@ var (
 		errors.RFCCodeText("CDC:ErrKafkaCreateTopic"),
 	)
 	ErrKafkaInvalidTopicExpression = errors.Normalize(
-		"invalid topic expression",
+		"invalid topic expression: %s ",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
 	ErrKafkaConfigNotFound = errors.Normalize(

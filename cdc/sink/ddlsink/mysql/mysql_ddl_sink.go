@@ -49,9 +49,9 @@ const (
 	defaultSupportVectorVersion = "v8.3.0"
 )
 
-// GetDBConnImpl is the implementation of pmysql.Factory.
+// GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
 // Exported for testing.
-var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+var GetDBConnImpl pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
 
 // Assert Sink implementation
 var _ ddlsink.Sink = (*DDLSink)(nil)
@@ -86,12 +86,12 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl.CreateTemporaryConnection)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := GetDBConnImpl(ctx, dsnStr)
+	db, err := GetDBConnImpl.CreateStandardConnection(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
