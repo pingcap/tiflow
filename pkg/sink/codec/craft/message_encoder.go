@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 

@@ -18,6 +18,7 @@ import (
 
 	model2 "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
@@ -105,7 +106,7 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 					value.Data[colName] = string(v.Value.([]byte))
 				}
 			case mysql.TypeTiDBVectorFloat32:
-				value.Data[v.Name] = v.Value.(types.VectorFloat32).String()
+				value.Data[colName] = v.Value.(types.VectorFloat32).String()
 			default:
 				value.Data[colName] = v.Value
 			}
