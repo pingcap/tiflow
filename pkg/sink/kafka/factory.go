@@ -252,7 +252,9 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 				x, _ := ack.Value.Encode()
-				log.Info("kafka write message async", zap.Any("v", x))
+				val := strings.ReplaceAll(string(x), "\"", "")
+				val = strings.ReplaceAll(val, "\\", "")
+				log.Info("kafka write message async", zap.Any("v", val))
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
@@ -278,12 +280,9 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
 	}
-	val := strings.ReplaceAll(string(message.Value), "\\\"", "")
-	v, e := base64.StdEncoding.DecodeString(val)
-	if e != nil {
-		log.Error("kafka write decode", zap.Error(e), zap.Any("val", val))
-	}
-	log.Info("kafka write asyncSend", zap.Any("v", v))
+	val := strings.ReplaceAll(string(message.Value), "\"", "")
+	val = strings.ReplaceAll(val, "\\", "")
+	log.Info("kafka write asyncSend", zap.Any("v", val), zap.ByteString("byte", message.Value))
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
