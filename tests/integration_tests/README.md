@@ -2,8 +2,8 @@
 
 ### Run integration tests locally
 
-1. Run `make prepare_test_binaries community=true` to download TiCDC related binaries for integration test.
-You can specify version and arch, for example: `make prepare_test_binaries community=true ver=v7.0.0 arch=amd64`.
+1. Run `make prepare_test_binaries` to download TiCDC related binaries for integration test.
+If you need to specify a version, os or arch, use `make prepare_test_binaries community=true ver=v7.0.0 os=linux arch=amd64`. (NOTE: the `community=true` option is necessary when you need to specify a version, arch or whatever.)
 
    You should find these executables in the `tiflow/bin` directory after downloading successfully.
    * `tidb-server` # version >= 6.0.0-rc.1
