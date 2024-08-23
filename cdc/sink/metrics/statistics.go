@@ -104,6 +104,7 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 
 // Close release some internal resources.
 func (b *Statistics) Close() {
+	ExecDDLCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecDDLHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecBatchHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	LargeRowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
