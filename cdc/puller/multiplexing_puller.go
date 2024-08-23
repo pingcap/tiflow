@@ -61,8 +61,7 @@ type tableProgress struct {
 	resolvedTs           atomic.Uint64
 	maxIngressResolvedTs atomic.Uint64
 
-	resolvedEventsCache chan kv.MultiplexingEvent
-	tsTracker           frontier.Frontier
+	tsTracker frontier.Frontier
 
 	consume struct {
 		// This lock is used to prevent the table progress from being
@@ -72,8 +71,7 @@ type tableProgress struct {
 		f       func(context.Context, *model.RawKVEntry, []tablepb.Span) error
 	}
 
-	scheduled atomic.Bool
-	start     time.Time
+	start time.Time
 }
 
 func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.ResolvedSpans) (err error) {
@@ -145,9 +143,6 @@ type MultiplexingPuller struct {
 
 	// inputChs is used to collect events from client.
 	inputChs []chan kv.MultiplexingEvent
-	// tableProgressAdvanceCh is used to notify the tableAdvancer goroutine
-	// to advance the progress of a table.
-	tableProgressAdvanceCh chan *tableProgress
 
 	// NOTE: A tableProgress can have multiple subscription, all of them share
 	// the same tableProgress. So, we use two maps to store the relationshipxxx
@@ -189,12 +184,11 @@ func NewMultiplexingPuller(
 		consume:                 consume,
 		inputChannelIndexer:     inputChannelIndexer,
 		resolvedTsAdvancerCount: resolvedTsAdvancerCount,
-		tableProgressAdvanceCh:  make(chan *tableProgress, tableProgressAdvanceChSize),
 	}
 	mpuller.subscriptions.m = make(map[kv.SubscriptionID]*tableProgress)
 	mpuller.subscriptions.n = spanz.NewHashMap[subscription]()
 
-	mpuller.inputChs = make([]chan kv.MultiplexingEvent, 0, workerCount)
+	mpuller.inputChs = make([]chan kv.MultiplexingEvent, 0, workerCount+resolvedTsAdvancerCount)
 	for i := 0; i < workerCount; i++ {
 		mpuller.inputChs = append(mpuller.inputChs, make(chan kv.MultiplexingEvent, inputChSize))
 	}
@@ -239,9 +233,8 @@ func (p *MultiplexingPuller) subscribe(
 		startTs:         startTs,
 		tableName:       tableName,
 
-		resolvedEventsCache: make(chan kv.MultiplexingEvent, tableResolvedTsBufferSize),
-		tsTracker:           frontier.NewFrontier(0, spans...),
-		start:               time.Now(),
+		tsTracker: frontier.NewFrontier(0, spans...),
+		start:     time.Now(),
 	}
 
 	progress.consume.f = func(
@@ -351,10 +344,6 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	// Start workers to check and resolve stale locks.
 	eg.Go(func() error { return p.runResolveLockChecker(ctx) })
 
-	for i := 0; i < p.resolvedTsAdvancerCount; i++ {
-		eg.Go(func() error { return p.runResolvedTsAdvancer(ctx) })
-	}
-
 	log.Info("MultiplexingPuller starts",
 		zap.String("namespace", p.changefeed.Namespace),
 		zap.String("changefeed", p.changefeed.ID),
@@ -394,14 +383,7 @@ func (p *MultiplexingPuller) runEventHandler(ctx context.Context, inputCh <-chan
 			}
 		} else if e.Resolved != nil {
 			p.CounterResolved.Add(float64(len(e.Resolved.Spans)))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case progress.resolvedEventsCache <- e:
-				p.schedule(ctx, progress)
-			default:
-				p.CounterResolvedDropped.Add(float64(len(e.Resolved.Spans)))
-			}
+			progress.handleResolvedSpans(ctx, e.Resolved)
 		}
 	}
 }
@@ -420,59 +402,6 @@ func (p *MultiplexingPuller) getAllProgresses() map[*tableProgress]struct{} {
 		hashset[value] = struct{}{}
 	}
 	return hashset
-}
-
-func (p *MultiplexingPuller) schedule(ctx context.Context, progress *tableProgress) {
-	if progress.scheduled.CompareAndSwap(false, true) {
-		select {
-		case <-ctx.Done():
-		case p.tableProgressAdvanceCh <- progress:
-		}
-	}
-}
-
-// runResolvedTsAdvancer receives tableProgress from tableProgressAdvanceCh
-// and advances the resolvedTs of the tableProgress.
-func (p *MultiplexingPuller) runResolvedTsAdvancer(ctx context.Context) error {
-	advanceTableProgress := func(ctx context.Context, progress *tableProgress) error {
-		defer func() {
-			progress.scheduled.Store(false)
-			// Schedule the progress again if there are still events in the cache.
-			if len(progress.resolvedEventsCache) > 0 {
-				p.schedule(ctx, progress)
-			}
-		}()
-
-		var event kv.MultiplexingEvent
-		var spans *model.ResolvedSpans
-		for i := 0; i < 128; i++ {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case event = <-progress.resolvedEventsCache:
-				spans = event.RegionFeedEvent.Resolved
-			default:
-				return nil
-			}
-			p.queueResolvedDuration.Observe(float64(time.Since(event.Start).Milliseconds()))
-			if err := progress.handleResolvedSpans(ctx, spans); err != nil {
-				return errors.Trace(err)
-			}
-		}
-		return nil
-	}
-
-	var progress *tableProgress
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case progress = <-p.tableProgressAdvanceCh:
-			if err := advanceTableProgress(ctx, progress); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
 }
 
 func (p *MultiplexingPuller) runResolveLockChecker(ctx context.Context) error {
