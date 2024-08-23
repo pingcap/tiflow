@@ -2,7 +2,7 @@
   "__inputs": [
     {
       "name": "DS_TEST-CLUSTER",
-      "label": "${DS_TEST-CLUSTER}",
+      "label": "test-cluster",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1724397907950,
+  "iteration": 1724397907953,
   "links": [],
   "panels": [
     {
@@ -13795,7 +13795,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": true,
             "show": true,
@@ -13821,18 +13821,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_kvclient_event_size_bytes_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, instance, type))",
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_kvclient_event_size_bytes_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, instance, type)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}-p999",
               "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_kvclient_event_size_bytes_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, instance, type))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{type}}-p95",
-              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -13859,7 +13854,7 @@
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
               "show": true
             },
             {
@@ -21965,7 +21960,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "${DS_TEST-CLUSTER}-TiCDC",
-  "uid": "YiGL8hBZ1",
-  "version": 59
+  "title": "test-cluster-TiCDC",
+  "uid": "YiGL8hBZ1x",
+  "version": 3
 }
