@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"encoding/hex"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -98,10 +99,33 @@ type statefulEvent struct {
 	start           time.Time
 }
 
+func (s *statefulEvent) resetResolvedTs(ts uint64, stream *requestedStream) {
+	s.resolvedTsBatch.ts = ts
+	s.resolvedTsBatch.regions = *regionFeedStatesPool.Get().(*[]*regionFeedState)
+	s.stream = stream
+	s.start = time.Now()
+}
+
+func (s *statefulEvent) clear() {
+	s.eventItem.item = nil
+	s.eventItem.state = nil
+	s.resolvedTsBatch.regions = nil
+	s.stream = nil
+}
+
 type eventItem struct {
 	// All items come from one same region.
 	item  *cdcpb.Event
 	state *regionFeedState
+}
+
+var regionFeedStatesPool = sync.Pool{
+	New: func() interface{} {
+		// Use pointer here to prevent static checkers from reporting errors.
+		// Ref: https://github.com/dominikh/go-tools/issues/1336.
+		buf := make([]*regionFeedState, 0, 16)
+		return &buf
+	},
 }
 
 // NOTE: all regions must come from the same subscribedTable, and regions will never be empty.
@@ -115,14 +139,6 @@ func newEventItem(item *cdcpb.Event, state *regionFeedState, stream *requestedSt
 		eventItem: eventItem{item, state},
 		stream:    stream,
 		start:     time.Now(),
-	}
-}
-
-func newResolvedTsBatch(ts uint64, stream *requestedStream) statefulEvent {
-	return statefulEvent{
-		resolvedTsBatch: resolvedTsBatch{ts: ts},
-		stream:          stream,
-		start:           time.Now(),
 	}
 }
 
@@ -449,6 +465,10 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 }
 
 func (w *sharedRegionWorker) advanceTableSpan(ctx context.Context, batch resolvedTsBatch) {
+	defer func() {
+		batch.regions = batch.regions[:0]
+		regionFeedStatesPool.Put(&batch.regions)
+	}()
 	for _, state := range batch.regions {
 		if state.isStale() || !state.isInitialized() {
 			continue
