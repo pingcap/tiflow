@@ -14,7 +14,7 @@ while [[ ${1} ]]; do
 		db=${2}
 		shift
 		;;
-    --workdir)
+    --out_dir)
 		out_dir=${2}
 		shift
 		;;
