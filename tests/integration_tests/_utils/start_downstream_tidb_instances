@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# Input: db, out_dir
+# --db: the number of tidb instances
+# --out_dir: the directory to store the log files of tidb instances
+db=
+out_dir=
+
+random_file_name=
+
+while [[ ${1} ]]; do
+	case "${1}" in
+	--db)
+		db=${2}
+		shift
+		;;
+    --workdir)
+		out_dir=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+# Ensure out_dir exists
+mkdir -p "$out_dir"
+
+# Function to generate random socket config
+randomGenSocketsConf() {
+    random_str=$(date '+%s%N')
+    
+    # For macOS, generate a random string from /dev/random
+    if [ "$(uname)" == "Darwin" ]; then
+        random_str=$(cat /dev/random | LC_ALL=C tr -dc "a-zA-Z0-9" | head -c 10)
+    fi
+    
+    # Create a unique configuration file
+    random_file_name="$out_dir/tidb-config-$random_str.toml"
+    
+    # Copy base configuration and append socket configuration
+    cat "$out_dir/tidb-config.toml" >"$random_file_name"
+    echo "socket = \"/tmp/tidb-$random_str.sock\"" >>"$random_file_name"
+}
+
+echo "Starting Downstream TiDB..."
+tidb-server -V
+for i in $(seq 1 $db); do
+    port_var="DOWN_TIDB_PORT_${i}"
+    status_var="DOWN_TIDB_STATUS_${i}"
+    
+    # Generate random socket configuration
+    randomGenSocketsConf
+    
+    # Start the tidb-server
+    tidb-server \
+        -P ${!port_var} \
+        -config "$random_file_name" \
+        --store tikv \
+        --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+        --status=${!status_var} \
+        --log-file "$out_dir/tidb_down_$i.log" &
+done
+
+echo "Verifying Downstream TiDB is started..."
+for index in $(seq 1 $db); do
+    port_var="DOWN_TIDB_PORT_${index}"
+    i=0
+    while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${!port_var} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+        i=$((i + 1))
+        if [ "$i" -gt 60 ]; then
+            echo 'Failed to start downstream TiDB'
+            exit 1
+        fi
+        sleep 2
+    done
+done
