@@ -2,8 +2,10 @@
 
 ### Run integration tests locally
 
-1. Run `make prepare_test_binaries community=true` to download TiCDC related binaries for integration test.
-You can specify version and arch, for example: `make prepare_test_binaries community=true ver=v7.0.0 arch=amd64`.
+1. Run `make prepare_test_binaries` to download TiCDC related binaries for integration test.
+If you need to specify a version, os or arch, you can use, for example: `make prepare_test_binaries community=true ver=v7.0.0 os=linux arch=amd64`. (The `community=true` option is necessary when you need to specify a version, arch or whatever.)
+
+   > Note: Please be aware that if you manually specify the versions of the TiDB-related components during the download process, there is a potential risk of incompatibility if the specified versions do not match the current TiCDC version. For example, see issue #11507 where version mismatches caused incompatibility problems during integration tests.
 
    You should find these executables in the `tiflow/bin` directory after downloading successfully.
    * `tidb-server` # version >= 6.0.0-rc.1
@@ -20,7 +22,7 @@ You can specify version and arch, for example: `make prepare_test_binaries commu
 
    > You could download these binaries by yourself from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz) and [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz).
 
-2. These are programs/packages need be installed.
+2. These are programs/packages need be installed manually.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
      currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
    * [s3cmd](https://s3tools.org/download)
