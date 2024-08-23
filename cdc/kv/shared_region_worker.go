@@ -34,7 +34,7 @@ import (
 // other components in TiCDC, including worker pool task chan size, mounter
 // chan size etc.
 // TODO: unified channel buffer mechanism
-var regionWorkerInputChanSize = 32
+var regionWorkerInputChanSize = 1024
 
 type regionWorkerMetrics struct {
 	metricReceivedEventSize prometheus.Observer
