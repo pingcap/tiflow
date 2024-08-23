@@ -98,6 +98,12 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		return
 	}
 
+	switch ddl.Type {
+	case timodel.ActionCreateTable, timodel.ActionCreateTables:
+		return
+	default:
+	}
+
 	tables := make(map[model.TableName]struct{})
 	if ddl.TableInfo != nil {
 		tables[ddl.TableInfo.TableName] = struct{}{}
@@ -124,6 +130,12 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		case <-ticker.C:
 			done := m.checkAsyncExecDDLDone(ctx, tables)
 			if done {
+				log.Info("async exec ddl done",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Any("tables", tables),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("ddl", ddl.Query))
 				return
 			}
 		}
@@ -152,17 +164,17 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 		}
 		return true
 	}
-	log.Info("async ddl not in the cache", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 
 	ret := m.db.QueryRowContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
 	if ret.Err() != nil {
 		log.Error("check async exec ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
+			zap.Duration("duration", time.Since(start)),
 			zap.Error(ret.Err()))
 		return true
 	}
-	log.Info("async ddl query success", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
+	log.Debug("async ddl execution status query success", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 
 	var jobID, jobType, schemaState, schemaID, tableID, state, query string
 	if err := ret.Scan(&jobID, &jobType, &schemaState, &schemaID, &tableID, &state, &query); err != nil {
@@ -170,15 +182,16 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 			log.Error("check async exec ddl failed",
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
+				zap.Duration("duration", time.Since(start)),
 				zap.Error(err))
 		}
-		log.Info("async ddl is done, since scan no result", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 		return true
 	}
 
 	log.Info("async ddl is still running",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)),
 		zap.String("table", table.String()),
 		zap.String("jobID", jobID),
 		zap.String("jobType", jobType),
