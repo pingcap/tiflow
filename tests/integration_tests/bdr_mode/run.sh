@@ -10,11 +10,9 @@ SINK_TYPE=$1
 
 function run() {
 	# BDR mode only supports mysql sink
-	# TODO(Ling Jin): enable this test after the tikv panic fixed.
-	return
-	#	if [ "$SINK_TYPE" != "mysql" ]; then
-	#		return
-	#	fi
+	if [ "$SINK_TYPE" != "mysql" ]; then
+		return
+	fi
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
