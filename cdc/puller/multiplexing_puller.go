@@ -36,7 +36,7 @@ import (
 
 const (
 	resolveLockFence        time.Duration = 4 * time.Second
-	resolveLockTickInterval time.Duration = 2 * time.Second
+	resolveLockTickInterval time.Duration = 10 * time.Second
 
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
@@ -75,21 +75,14 @@ type tableProgress struct {
 }
 
 func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.ResolvedSpans) (err error) {
-	for _, resolvedSpan := range e.Spans {
-		if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
-			log.Panic("the resolved span is not in the table spans",
-				zap.String("namespace", p.changefeed.Namespace),
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("tableName", p.tableName),
-				zap.Any("spans", p.spans))
-		}
-		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
-		if e.ResolvedTs > p.maxIngressResolvedTs.Load() {
-			p.maxIngressResolvedTs.Store(e.ResolvedTs)
-		}
-	}
-	resolvedTs := p.tsTracker.Frontier()
-
+	// if len(e.Spans) > 1 || e.Spans[0].Span.TableID != p.spans[0].TableID {
+	// 	log.Panic("the resolved span is invalid",
+	// 		zap.String("namespace", p.changefeed.Namespace),
+	// 		zap.String("changefeed", p.changefeed.ID),
+	// 		zap.String("tableName", p.tableName),
+	// 		zap.Any("spans", p.spans))
+	// }
+	resolvedTs := e.ResolvedTs
 	if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
 		log.Info("puller is initialized",
 			zap.String("namespace", p.changefeed.Namespace),
