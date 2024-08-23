@@ -30,6 +30,11 @@ while [[ ${1} ]]; do
 	fi
 done
 
+if [ "$db" -gt 3 ]; then
+    echo 'The integration test only supports a maximum of 3 TiDB instances'
+    exit 1
+fi
+
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
