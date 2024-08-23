@@ -34,7 +34,7 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 
 	GO111MODULE=on go run bank.go case.go -u "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/bank" \
 		-d "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1})/bank" --test-round=20000 \
-		-a "${DOWN_TIDB_HOST}:${DOWN_TIDB_STATUS}"
+		-a "${DOWN_TIDB_HOST}:${DOWN_TIDB_STATUS_1}"
 
 	cleanup_process $CDC_BINARY
 	echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
