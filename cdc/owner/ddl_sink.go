@@ -238,7 +238,8 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 	log.Info("begin emit ddl event",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID),
-		zap.Any("DDL", ddl))
+		zap.Uint64("commitTs", ddl.CommitTs),
+		zap.String("DDL", ddl.Query))
 
 	doWrite := func() (err error) {
 		if err = s.makeSinkReady(ctx); err == nil {
@@ -251,14 +252,16 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 			log.Error("Execute DDL failed",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
-				zap.Any("DDL", ddl),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("DDL", ddl.Query),
 				zap.Error(err))
 		} else {
 			ddl.Done.Store(true)
 			log.Info("Execute DDL succeeded",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
-				zap.Any("DDL", ddl))
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("DDL", ddl.Query))
 		}
 		return
 	}

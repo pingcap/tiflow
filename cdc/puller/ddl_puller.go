@@ -329,8 +329,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
-			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+			zap.Int64("schemaVersion", p.schemaVersion),
+			zap.String("query", job.Query))
 		return true, nil
 	}
 

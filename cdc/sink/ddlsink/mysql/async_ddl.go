@@ -29,7 +29,7 @@ import (
 var checkRunningAddIndexSQL = `
 SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
 FROM information_schema.ddl_jobs
-WHERE DB_NAME = "%s" 
+WHERE DB_NAME = "%s"
     AND TABLE_NAME = "%s"
     AND JOB_TYPE LIKE "add index%%"
     AND (STATE = "running" OR STATE = "queueing")
@@ -109,7 +109,7 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		return
 	}
 
-	log.Debug("wait async exec ddl done",
+	log.Info("wait async exec ddl done",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Any("tables", tables),
@@ -141,6 +141,7 @@ func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.Ta
 }
 
 func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool) {
+	start := time.Now()
 	if v, ok := m.lastExecutedNormalDDLCache.Get(table); ok {
 		ddlType := v.(timodel.ActionType)
 		if ddlType == timodel.ActionAddIndex {
@@ -149,6 +150,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 				zap.String("changefeed", m.id.ID),
 				zap.String("ddlType", ddlType.String()))
 		}
+		log.Info("async ddl is done, since not in the cache", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 		return true
 	}
 
@@ -168,6 +170,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 				zap.String("changefeed", m.id.ID),
 				zap.Error(err))
 		}
+		log.Info("async ddl is done, since scan no result", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 		return true
 	}
 
