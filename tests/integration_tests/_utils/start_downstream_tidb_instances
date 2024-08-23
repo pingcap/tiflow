@@ -30,6 +30,9 @@ while [[ ${1} ]]; do
 	fi
 done
 
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
+
 # Ensure out_dir exists
 mkdir -p "$out_dir"
 
