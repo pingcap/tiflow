@@ -48,7 +48,7 @@ function run() {
 	ensure $MAX_RETRIES check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "null" ""
 
 	for i in $(seq $DB_COUNT); do
-		check_table_exists "changefeed_auto_stop_$i.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists "changefeed_auto_stop_$i.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

@@ -39,13 +39,13 @@ function run() {
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	for i in $(seq 1 3); do
-		check_table_exists test.table${i} ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+		check_table_exists test.table${i} ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 300
 
 	run_sql "rename table test.table1 to test.table10, test.table2 to test.table20" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists test.table10 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
-	check_table_exists test.table20 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists test.table10 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
+	check_table_exists test.table20 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 300
 
 	run_sql_file $CUR/data/step2.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -54,7 +54,7 @@ function run() {
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table20?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" 20
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_finish?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" "finish"
 
-	check_table_exists test.finish ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists test.finish ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 300
 
 	cleanup_process $CDC_BINARY

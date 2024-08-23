@@ -15,7 +15,7 @@ function sql_check() {
 
 	# check table availability.
 	echo "run sql_check", ${DOWN_TIDB_HOST}
-	run_sql "SELECT id, val FROM test.availability1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "SELECT id, val FROM test.availability1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "id: 1" &&
 		check_contains "val: 1" &&
 		check_contains "id: 2" &&
@@ -30,13 +30,13 @@ function check_result() {
 
 function empty() {
 	sql=$*
-	run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_not_contains "id:"
 }
 
 function nonempty() {
 	sql=$*
-	run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "id:"
 }
 
@@ -66,7 +66,7 @@ function test_kill_capture() {
 	echo "owner id" $owner_id
 
 	# wait for the tables to appear
-	check_table_exists test.availability1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 20
+	check_table_exists test.availability1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 20
 
 	run_sql "INSERT INTO test.availability1(id, val) VALUES (1, 1);"
 	ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=1'

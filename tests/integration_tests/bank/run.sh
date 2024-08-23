@@ -17,11 +17,11 @@ function prepare() {
 
 	# create table to upstream.
 	run_sql "CREATE DATABASE bank" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "CREATE DATABASE bank" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE DATABASE bank" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	run_cdc_cli changefeed create --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/"
+	run_cdc_cli changefeed create --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1}/"
 }
 
 trap stop_tidb_cluster EXIT
@@ -33,7 +33,7 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 	set -euxo pipefail
 
 	GO111MODULE=on go run bank.go case.go -u "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/bank" \
-		-d "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/bank" --test-round=20000 \
+		-d "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1})/bank" --test-round=20000 \
 		-a "${DOWN_TIDB_HOST}:${DOWN_TIDB_STATUS}"
 
 	cleanup_process $CDC_BINARY

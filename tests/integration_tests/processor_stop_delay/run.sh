@@ -38,7 +38,7 @@ function run() {
 	run_sql "CREATE DATABASE processor_stop_delay;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table processor_stop_delay.t (id int primary key auto_increment, t datetime DEFAULT CURRENT_TIMESTAMP)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO processor_stop_delay.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "processor_stop_delay.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "processor_stop_delay.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# pause changefeed first, and then resume the changefeed. The processor stop

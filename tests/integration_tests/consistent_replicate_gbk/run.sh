@@ -60,8 +60,8 @@ function run() {
 	run_sql "CREATE TABLE consistent_replicate_gbk.GBKTABLE (id INT,name varchar(128),country char(32),city varchar(64),description text,image tinyblob,PRIMARY KEY (id)) ENGINE = InnoDB CHARSET = gbk;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO consistent_replicate_gbk.GBKTABLE VALUES (1, '测试', '中国', '上海', '你好,世界', 0xC4E3BAC3CAC0BDE7);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table consistent_replicate_gbk.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "consistent_replicate_gbk.GBKTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "consistent_replicate_gbk.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
+	check_table_exists "consistent_replicate_gbk.GBKTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "consistent_replicate_gbk.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 120
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.

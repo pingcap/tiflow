@@ -51,7 +51,7 @@ function run() {
 	# wait for above sql done in the up source
 	sleep 2
 
-	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	sequential_cases1=(
 		"list_changefeed"

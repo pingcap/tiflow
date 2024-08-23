@@ -72,7 +72,7 @@ EOF
 	done
 
 	run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists region_merge.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists region_merge.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

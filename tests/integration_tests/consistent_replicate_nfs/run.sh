@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 stop() {
 	# to distinguish whether the test failed in the DML synchronization phase or the DDL synchronization phase
-	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_nfs.usertable;")
+	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT_1} -uroot -e "select count(*) from consistent_replicate_nfs.usertable;")
 	stop_tidb_cluster
 }
 
@@ -33,7 +33,7 @@ function run() {
 
 	run_sql "CREATE DATABASE consistent_replicate_nfs;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=consistent_replicate_nfs
-	check_table_exists "consistent_replicate_nfs.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "consistent_replicate_nfs.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	cleanup_process $CDC_BINARY
 	# to ensure row changed events have been replicated to TiCDC

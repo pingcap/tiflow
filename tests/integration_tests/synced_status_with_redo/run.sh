@@ -99,7 +99,7 @@ function run_normal_case_and_unavailable_pd() {
 	fi
 
 	run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
-	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	sleep 5 # wait data insert
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
@@ -151,7 +151,7 @@ function run_case_with_unavailable_tikv() {
 
 	# case 3: test in unavailable tikv cluster
 	run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
-	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	sleep 5 # make data inserted into downstream
 	kill_tikv
@@ -213,7 +213,7 @@ function run_case_with_unavailable_tidb() {
 
 	# case 3: test in unavailable tikv cluster
 	run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
-	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	sleep 5 # make data inserted into downstream
 	kill_tidb

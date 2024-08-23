@@ -40,10 +40,10 @@ function run() {
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 
-	check_table_exists charset_gbk_test0.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists charset_gbk_test0.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists charset_gbk_test1.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists charset_gbk_test0.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists charset_gbk_test0.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists charset_gbk_test1.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	echo "check table exists success"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60

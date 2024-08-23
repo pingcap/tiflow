@@ -42,7 +42,7 @@ function run() {
 
 	for i in $(seq 1 $TABLE_COUNT); do
 		table="changefeed_pause_resume.t$i"
-		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 
 	for i in $(seq 1 10); do

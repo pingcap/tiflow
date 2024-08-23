@@ -31,7 +31,7 @@ function resume_changefeed_in_stopped_state() {
 	done
 	for i in $(seq 1 2); do
 		table="test.table$i"
-		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config2.toml
 	cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
@@ -55,11 +55,11 @@ function resume_changefeed_in_stopped_state() {
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$checkpointTs3 --no-confirm=true
 	for i in $(seq 5 6); do
 		table="test.table$i"
-		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 
 	stmt="select count(*) as table_count from information_schema.tables where table_schema='test'"
-	run_sql "$stmt" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && check_contains "table_count: 4"
+	run_sql "$stmt" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} && check_contains "table_count: 4"
 	run_sql "$stmt" ${UP_TIDB_HOST} ${UP_TIDB_PORT} && check_contains "table_count: 6"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config1.toml
 
@@ -68,9 +68,9 @@ function resume_changefeed_in_stopped_state() {
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$checkpointTs1 --no-confirm=true
 	for i in $(seq 3 4); do
 		table="test.table$i"
-		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
-	run_sql "$stmt" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && check_contains "table_count: 6"
+	run_sql "$stmt" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} && check_contains "table_count: 6"
 	run_sql "$stmt" ${UP_TIDB_HOST} ${UP_TIDB_PORT} && check_contains "table_count: 6"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config2.toml
 
@@ -96,7 +96,7 @@ function resume_changefeed_in_failed_state() {
 	done
 	for i in $(seq 1 2); do
 		table="test1.table$i"
-		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config3.toml
 

@@ -45,13 +45,13 @@ function run() {
 	# Add a check table to reduce check time, or if we check data with sync diff
 	# directly, there maybe a lot of diff data at first because of the incremental scan
 	run_sql "CREATE table move_table.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "move_table.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "move_table.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	cd $CUR
 	GO111MODULE=on go run main.go 2>&1 | tee $WORK_DIR/tester.log
 	cd $WORK_DIR
 
-	check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 	run_sql "truncate table move_table.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# move back
@@ -60,7 +60,7 @@ function run() {
 	cd $WORK_DIR
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 	run_sql "CREATE table move_table.check2(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "move_table.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists "move_table.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

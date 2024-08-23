@@ -11,6 +11,7 @@ tidb_config=
 pd_config=
 tikv_config=
 multiple_upstream_pd=
+downstream_db=
 random_file_name=
 
 # Random generate the sockets config.
@@ -46,6 +47,10 @@ while [[ ${1} ]]; do
 		;;
 	--multiple-upstream-pd)
 		multiple_upstream_pd=${2}
+		shift
+		;;
+	--downstream_db)
+		downstream_db=${2}
 		shift
 		;;
 	*)
@@ -245,14 +250,16 @@ tidb-server \
 
 echo "Starting Downstream TiDB..."
 tidb-server -V
-randomGenSocketsConf
-tidb-server \
-	-P ${DOWN_TIDB_PORT} \
-	-config "$random_file_name" \
-	--store tikv \
-	--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-	--status=${DOWN_TIDB_STATUS} \
-	--log-file "$OUT_DIR/tidb_down.log" &
+for i in $(seq 1 $downstream_db); do
+	randomGenSocketsConf
+	tidb-server \
+		-P ${!DOWN_TIDB_PORT_${i}} \
+		-config "$random_file_name" \
+		--store tikv \
+		--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+		--status=${!DOWN_TIDB_STATUS_${i}} \
+		--log-file "$OUT_DIR/tidb_down_$i.log" &
+done
 
 echo "Verifying Upstream TiDB is started..."
 i=0
@@ -276,21 +283,23 @@ while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-charact
 done
 
 echo "Verifying Downstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-	i=$((i + 1))
-	if [ "$i" -gt 60 ]; then
-		echo 'Failed to start downstream TiDB'
-		exit 1
-	fi
-	sleep 2
+for index in $(seq 1 $downstream_db); do
+	i=0
+	while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${!DOWN_TIDB_PORT_${index}} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start downstream TiDB'
+			exit 1
+		fi
+		sleep 2
+	done
 done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-run_sql "CREATE user 'normal'@'%' identified by '123456';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-run_sql "GRANT select,insert,update,delete,index,create,drop,alter,create view,references ON *.* TO 'normal'@'%';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-run_sql "FLUSH privileges" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+run_sql "CREATE user 'normal'@'%' identified by '123456';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+run_sql "GRANT select,insert,update,delete,index,create,drop,alter,create view,references ON *.* TO 'normal'@'%';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+run_sql "FLUSH privileges" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"
