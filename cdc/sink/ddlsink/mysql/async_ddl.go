@@ -150,9 +150,9 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 				zap.String("changefeed", m.id.ID),
 				zap.String("ddlType", ddlType.String()))
 		}
-		log.Info("async ddl is done, since not in the cache", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 		return true
 	}
+	log.Info("async ddl not in the cache", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
 
 	ret := m.db.QueryRowContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
 	if ret.Err() != nil {
@@ -162,6 +162,8 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 			zap.Error(ret.Err()))
 		return true
 	}
+	log.Info("async ddl query success", zap.Any("table", table), zap.Duration("duration", time.Since(start)))
+
 	var jobID, jobType, schemaState, schemaID, tableID, state, query string
 	if err := ret.Scan(&jobID, &jobType, &schemaState, &schemaID, &tableID, &state, &query); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
