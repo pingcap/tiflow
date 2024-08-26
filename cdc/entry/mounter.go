@@ -95,6 +95,7 @@ type mounter struct {
 	metricIgnoredDMLEventCounter prometheus.Counter
 
 	integrity *integrity.Config
+	buf       []byte
 
 	// decoder and preDecoder are used to decode the raw value, also used to extract checksum,
 	// they should not be nil after decode at least one event in the row format v2.
@@ -450,8 +451,8 @@ func datum2Column(
 	return cols, rawCols, columnInfos, nil
 }
 
-func calculateColumnChecksum(
-	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, tz *time.Location,
+func (m *mounter) calculateColumnChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
 ) (uint32, error) {
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
@@ -467,10 +468,10 @@ func calculateColumnChecksum(
 
 	calculator := rowcodec.RowData{
 		Cols: columns,
-		Data: make([]byte, 0),
+		Data: m.buf,
 	}
 
-	checksum, err := calculator.Checksum(tz)
+	checksum, err := calculator.Checksum(m.tz)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -488,7 +489,7 @@ func (m *mounter) verifyColumnChecksum(
 		return 0, true, nil
 	}
 
-	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
+	checksum, err := m.calculateColumnChecksum(columnInfos, rawColumns)
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
 		return 0, false, err
@@ -598,18 +599,16 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 	return types.Datum{}, nil
 }
 
-func verifyRawBytesChecksum(
+func (m *mounter) verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder,
-	key kv.Key, tz *time.Location,
+	key kv.Key,
 ) (uint32, bool, error) {
 	expected, ok := decoder.GetChecksum()
 	if !ok {
 		return 0, true, nil
 	}
-	var (
-		columnIDs []int64
-		datums    []*types.Datum
-	)
+	datums := make([]*types.Datum, 0, len(columns))
+	columnIDs := make([]int64, 0, len(columns))
 	for _, col := range columns {
 		// TiDB does not encode null value into the bytes, so just ignore it.
 		if col.Value == nil {
@@ -624,14 +623,13 @@ func verifyRawBytesChecksum(
 		datums = append(datums, &datum)
 		columnIDs = append(columnIDs, columnID)
 	}
-	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, key, nil)
+	obtained, err := decoder.CalculateRawChecksum(m.tz, columnIDs, datums, key, m.buf)
 	if err != nil {
 		return 0, false, errors.Trace(err)
 	}
 	if obtained == expected {
 		return expected, true, nil
 	}
-
 	log.Error("raw bytes checksum mismatch",
 		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained))
 
@@ -664,14 +662,14 @@ func (m *mounter) verifyChecksum(
 		// since the table schema does not contain complete column information.
 		return m.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
 	case 1:
-		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
+		expected, matched, err := m.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
 		if !matched {
 			return expected, matched, err
 		}
-		columnChecksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
+		columnChecksum, err := m.calculateColumnChecksum(columnInfos, rawColumns)
 		if err != nil {
 			log.Error("failed to calculate column-level checksum, after raw checksum verification passed", zap.Error(err))
 			return 0, false, errors.Trace(err)
