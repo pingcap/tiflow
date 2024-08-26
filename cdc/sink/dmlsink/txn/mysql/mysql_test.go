@@ -196,7 +196,7 @@ func TestPrepareDML(t *testing.T) {
 				approximateSize: 63,
 			},
 		},
-		// vector
+		// vector type
 		{
 			input: []*model.RowChangedEvent{
 				{
