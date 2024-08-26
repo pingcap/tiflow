@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Input: db, out_dir
-# --db: the number of tidb instances
-# --out_dir: the directory to store the log files of tidb instances
+# Input: db, out_dir, suffix
+# --db: The number of tidb instances
+# --out_dir: The directory to store the log files of tidb instances
+# --suffix: Refers to the suffix of `DOWN_TIDB_PORT` as defined in the `test_prepare` file.
+#   NOTE: This is helpful when using multiple downstream TiDB instances. 
+#   If only one downstream TiDB instance is needed, this can be ignored.
 db=
 out_dir=
+suffix=1
 
 random_file_name=
 
@@ -16,6 +20,10 @@ while [[ ${1} ]]; do
 		;;
     --out_dir)
 		out_dir=${2}
+		shift
+		;;
+    --suffix)
+		suffix=${2}
 		shift
 		;;
 	*)
@@ -30,8 +38,8 @@ while [[ ${1} ]]; do
 	fi
 done
 
-if [ "$db" -gt 3 ]; then
-    echo 'The integration test only supports a maximum of 3 TiDB instances'
+if [ $((db + suffix - 1)) -gt 3 ]; then
+    echo 'The integration test only supports a maximum of 3 downstream TiDB instances'
     exit 1
 fi
 
@@ -60,7 +68,7 @@ randomGenSocketsConf() {
 
 echo "Starting Downstream TiDB..."
 tidb-server -V
-for i in $(seq 1 $db); do
+for i in $(seq $suffix $((db + suffix - 1))); do
     port_var="DOWN_TIDB_PORT_${i}"
     status_var="DOWN_TIDB_STATUS_${i}"
     
@@ -78,7 +86,7 @@ for i in $(seq 1 $db); do
 done
 
 echo "Verifying Downstream TiDB is started..."
-for index in $(seq 1 $db); do
+for index in $(seq $suffix $((db + suffix - 1))); do
     port_var="DOWN_TIDB_PORT_${index}"
     i=0
     while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${!port_var} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
@@ -90,3 +98,11 @@ for index in $(seq 1 $db); do
         sleep 2
     done
 done
+
+if [ "$db" -gt 0 ]; then
+    port_var="DOWN_TIDB_PORT_${suffix}"
+	run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${!port_var}
+	run_sql "CREATE user 'normal'@'%' identified by '123456';" ${DOWN_TIDB_HOST} ${!port_var}
+	run_sql "GRANT select,insert,update,delete,index,create,drop,alter,create view,references ON *.* TO 'normal'@'%';" ${DOWN_TIDB_HOST} ${!port_var}
+	run_sql "FLUSH privileges" ${DOWN_TIDB_HOST} ${!port_var}
+fi
