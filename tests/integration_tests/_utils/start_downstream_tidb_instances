@@ -48,6 +48,7 @@ source $CUR/../_utils/test_prepare
 
 # Ensure out_dir exists
 mkdir -p "$out_dir"
+rm -f "$out_dir/downstream_tidb_instances_pids.log"
 
 # Function to generate random socket config
 randomGenSocketsConf() {
@@ -83,6 +84,7 @@ for i in $(seq $suffix $((db + suffix - 1))); do
         --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
         --status=${!status_var} \
         --log-file "$out_dir/tidb_down_$i.log" &
+    echo $! >> "$out_dir/downstream_tidb_instances_pids.log"
 done
 
 echo "Verifying Downstream TiDB is started..."
