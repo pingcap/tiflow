@@ -440,6 +440,13 @@ func (m *mounter) verifyChecksum(
 		return 0, false, errors.New("cannot found the decoder to get the checksum")
 	}
 
+	version := decoder.ChecksumVersion()
+	if version != 0 {
+		log.Debug("checksum is not v1, this happens since upstream TiDB is in a higher version, ignore it",
+			zap.Int("version", version))
+		return 0, true, nil
+	}
+
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
