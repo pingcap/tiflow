@@ -679,6 +679,9 @@ func (v *checksumVerifier) verifyChecksum(
 		// Update / Delete event correctly, after Add Column / Drop column DDL,
 		// since the table schema does not contain complete column information.
 		checksum, matched, err = v.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
+		if err != nil {
+			return 0, false, errors.Trace(err)
+		}
 	case 1:
 		matched, err := v.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
 		if err != nil {
