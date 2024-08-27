@@ -89,9 +89,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240821073530-75e3705e58f1
+	github.com/tikv/client-go/v2 v2.0.8-0.20240703095801-d73cc1ed6503
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20240805092608-838ee7983b78
+	github.com/tikv/pd/client v0.0.0-20240717053728-5ec6af403019
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -114,7 +114,7 @@ require (
 	golang.org/x/net v0.28.0
 	golang.org/x/oauth2 v0.21.0
 	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.24.0
+	golang.org/x/sys v0.23.0
 	golang.org/x/text v0.17.0
 	golang.org/x/time v0.5.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
