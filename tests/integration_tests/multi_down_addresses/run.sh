@@ -41,7 +41,7 @@ function run() {
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/diff_config_2.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
 	# Round 2
 	# begin -> shutdown tidb 2 -> insert -> commit -> check_sync_diff
@@ -51,7 +51,7 @@ function run() {
 	kill $pid2
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/diff_config_3.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 
 	# Round 3
 	# begin -> insert -> recover tidb 1 -> shutdown tidb 3 -> commit -> check_sync_diff
@@ -64,7 +64,7 @@ function run() {
 	pid1=${down_tidb_pids[0]}
 	kill $pid3
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/diff_config_1.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_1.toml
 
 	# Round 4
 	# begin -> insert -> recover tidb 2 -> shutdown tidb 1 -> insert -> commit -> check_sync_diff
@@ -78,7 +78,7 @@ function run() {
 	kill $pid1
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(4, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/diff_config_2.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
 	# Round 5
 	# begin -> insert -> commit -> recover tidb 3 -> shutdown tidb 2 -> begin -> insert -> commit -> check_sync_diff
@@ -91,7 +91,7 @@ function run() {
 	kill $pid2
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(5, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/diff_config_3.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 }
 
 # No need to support kafka and storage sink.
