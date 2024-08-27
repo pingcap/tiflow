@@ -204,8 +204,8 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	})
 
 	start := time.Now()
-	log.Info("Start exec DDL", zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs),
-		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID))
+	log.Info("Start exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	tx, err := m.connector.CurrentDB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -236,25 +236,24 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("sql", ddl.Query),
+			log.Error("Failed to rollback",
 				zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID), zap.Error(err))
+				zap.String("changefeed", m.id.ID),
+				zap.String("sql", ddl.Query),
+				zap.Error(err))
 		}
 		return err
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("Failed to exec DDL", zap.String("sql", ddl.Query),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", m.id.Namespace),
-			zap.String("changefeed", m.id.ID), zap.Error(err))
+		log.Error("Failed to exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
+			zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query), zap.Error(err))
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
-	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),
-		zap.Duration("duration", time.Since(start)),
-		zap.String("namespace", m.id.Namespace),
-		zap.String("changefeed", m.id.ID))
+	log.Info("Exec DDL succeeded",
+		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query))
 	return nil
 }
 

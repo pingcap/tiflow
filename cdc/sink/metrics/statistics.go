@@ -37,6 +37,7 @@ func NewStatistics(ctx context.Context,
 	namespcae := statistics.changefeedID.Namespace
 	changefeedID := statistics.changefeedID.ID
 	s := sinkType.String()
+	statistics.metricExecDDLCount = ExecDDLCounter.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricTotalWriteBytesCnt = TotalWriteBytesCounter.WithLabelValues(namespcae, changefeedID, s)
@@ -52,6 +53,8 @@ type Statistics struct {
 	captureAddr  string
 	changefeedID model.ChangeFeedID
 
+	// Counter for DDL Executed.
+	metricExecDDLCount prometheus.Counter
 	// Histogram for DDL Executing duration.
 	metricExecDDLHis prometheus.Observer
 	// Histogram for DML batch size.
@@ -95,11 +98,13 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 		return err
 	}
 	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
+	b.metricExecDDLCount.Inc()
 	return nil
 }
 
 // Close release some internal resources.
 func (b *Statistics) Close() {
+	ExecDDLCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecDDLHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecBatchHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	LargeRowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
