@@ -684,7 +684,7 @@ func (v *checksumVerifier) verifyChecksum(
 			return 0, false, errors.Trace(err)
 		}
 	case 1:
-		matched, err := v.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
+		matched, err = v.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
