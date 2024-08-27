@@ -632,6 +632,7 @@ func (v *checksumVerifier) verifyRawBytesChecksum(
 	if !ok {
 		return true, nil
 	}
+	v.buf = v.buf[:0]
 	v.datums = v.datums[:0]
 	v.columnIDs = v.columnIDs[:0]
 	for _, col := range columns {
