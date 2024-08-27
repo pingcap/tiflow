@@ -76,7 +76,7 @@ function run() {
 	mapfile -t down_tidb_pids < "$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
 	kill $pid1
-	run_sql "INSERT INTO multi_down_addresses.round VALUES(4, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.round VALUES(41, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
@@ -89,7 +89,7 @@ function run() {
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 3
 	kill $pid2
-	run_sql "INSERT INTO multi_down_addresses.round VALUES(5, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.round VALUES(51, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 }
