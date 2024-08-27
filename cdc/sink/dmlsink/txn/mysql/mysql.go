@@ -61,7 +61,7 @@ const (
 type mysqlBackend struct {
 	workerID    int
 	changefeed  string
-	connector   *pmysql.MySQLDBConnector
+	connector   pmysql.MySQLDBConnector
 	cfg         *pmysql.Config
 	dmlMaxRetry uint64
 
@@ -177,7 +177,7 @@ func NewMySQLBackends(
 		backends = append(backends, &mysqlBackend{
 			workerID:    i,
 			changefeed:  changefeed,
-			connector:   connector,
+			connector:   *connector,
 			cfg:         cfg,
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
