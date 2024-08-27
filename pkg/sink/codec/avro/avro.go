@@ -440,6 +440,8 @@ func mysqlTypeFromTiDBType(tidbType string) byte {
 		result = mysql.TypeDuration
 	case "YEAR":
 		result = mysql.TypeYear
+	case "TiDBVECTORFloat32":
+		result = mysql.TypeTiDBVectorFloat32
 	default:
 		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
 	}
@@ -979,8 +981,10 @@ func (a *BatchEncoder) columnToAvroData(
 		}
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeTiDBVectorFloat32:
-		vec := col.Value.(types.VectorFloat32)
-		return vec.String(), "string", nil
+		if vec, ok := col.Value.(types.VectorFloat32); ok {
+			return vec.String(), "string", nil
+		}
+		return nil, "", cerror.ErrAvroEncodeFailed
 	default:
 		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")

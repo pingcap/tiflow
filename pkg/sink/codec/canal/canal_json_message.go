@@ -287,6 +287,7 @@ func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) 
 		if err != nil {
 			log.Panic("invalid column value for double", zap.Any("col", result), zap.Error(err))
 		}
+	case mysql.TypeTiDBVectorFloat32:
 	}
 
 	result.Value = value

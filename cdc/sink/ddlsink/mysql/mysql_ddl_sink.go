@@ -46,7 +46,7 @@ const (
 	// networkDriftDuration is used to construct a context timeout for database operations.
 	networkDriftDuration = 5 * time.Second
 
-	defaultSupportVectorVersion = "v8.3.0"
+	defaultSupportVectorVersion = "8.3.0"
 )
 
 // GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
@@ -71,6 +71,8 @@ type DDLSink struct {
 	// is running in downstream.
 	// map: model.TableName -> timodel.ActionType
 	lastExecutedNormalDDLCache *lru.Cache
+
+	needFormat bool
 }
 
 // NewDDLSink creates a new DDLSink.
@@ -110,12 +112,14 @@ func NewDDLSink(
 	if err != nil {
 		return nil, err
 	}
+
 	m := &DDLSink{
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
 		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
+		needFormat:                 needFormatDDL(db, cfg.IsTiDB),
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -203,7 +207,11 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	shouldSwitchDB := needSwitchDB(ddl)
 
-	m.formatQuery(ddl)
+	// Convert vector type to string type for unsupport database
+	if m.needFormat {
+		ddl.Query = formatQuery(ddl.Query)
+		log.Warn("format ddl query", zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
+	}
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
@@ -278,6 +286,22 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
+// needFormatDDL checks vector type support
+func needFormatDDL(db *sql.DB, isTiDB bool) bool {
+	versionInfo, err := export.SelectVersion(db)
+	if err != nil {
+		log.Warn("fail to get version", zap.Error(err), zap.Bool("isTiDB", isTiDB))
+		return false
+	}
+	serverInfo := version.ParseServerInfo(versionInfo)
+	version := semver.New(defaultSupportVectorVersion)
+	if !isTiDB || serverInfo.ServerVersion.LessThan(*version) {
+		log.Error("downstream unsupport vector type. hack: we convert it to longtext", zap.String("support version", version.String()), zap.Bool("isTiDB", isTiDB))
+		return true
+	}
+	return false
+}
+
 // WriteCheckpointTs does nothing.
 func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
@@ -297,18 +321,4 @@ func (m *DDLSink) Close() {
 				zap.Error(err))
 		}
 	}
-}
-
-func (m *DDLSink) formatQuery(ddl *model.DDLEvent) {
-	versionInfo, err := export.SelectVersion(m.db)
-	if err != nil {
-		log.Error("fail to get version info", zap.Error(err))
-		return
-	}
-	serverInfo := version.ParseServerInfo(versionInfo)
-	version := semver.New(defaultSupportVectorVersion)
-	if m.cfg.IsTiDB && !serverInfo.ServerVersion.LessThan(*version) {
-		return
-	}
-	ddl.Query = formatQuery(ddl.Query)
 }

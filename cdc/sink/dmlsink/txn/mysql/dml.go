@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -117,6 +118,10 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 			args = append(args, col.Value)
 		}
 	} else {
+		// convert vector to string
+		if val, ok := col.Value.(types.VectorFloat32); ok {
+			col.Value = val.String()
+		}
 		args = append(args, col.Value)
 	}
 

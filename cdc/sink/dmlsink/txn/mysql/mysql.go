@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
-	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -619,8 +618,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		callbacks = nil
 	}
 
-	// Convert vector to string
-	decodeVector(values)
 	return &preparedDMLs{
 		startTs:         startTs,
 		sqls:            sqls,
@@ -867,18 +864,6 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	}
 
 	return errors.ErrCode(mysqlErr.Number), true
-}
-
-func decodeVector(values [][]interface{}) {
-	for i := 0; i < len(values); i++ {
-		value := values[i]
-		for j := 0; j < len(value); j++ {
-			switch value[j].(type) {
-			case types.VectorFloat32:
-				value[j] = value[j].(types.VectorFloat32).String()
-			}
-		}
-	}
 }
 
 // Only for testing.

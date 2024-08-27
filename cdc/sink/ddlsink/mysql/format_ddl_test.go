@@ -15,37 +15,18 @@ package mysql
 
 import (
 	"bytes"
+	"testing"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-type visiter struct{}
-
-func (f *visiter) Enter(n ast.Node) (node ast.Node, skipChildren bool) {
-	switch v := n.(type) {
-	case *ast.ColumnDef:
-		switch v.Tp.GetType() {
-		case mysql.TypeTiDBVectorFloat32:
-			v.Tp.SetType(mysql.TypeLongBlob)
-			v.Tp.SetCharset("")
-			v.Tp.SetCollate("")
-			v.Tp.SetFlen(-1)
-			v.Options = []*ast.ColumnOption{} // clear COMMENT
-		}
-	}
-	return n, false
-}
-
-func (f *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
-	return n, true
-}
-
-func formatQuery(sql string) string {
+func TestFormatQuery(t *testing.T) {
+	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` VECTOR(5));"
+	expectSql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -58,5 +39,5 @@ func formatQuery(sql string) string {
 	if err = stmt.Restore(restoreCtx); err != nil {
 		log.Error("format query restore failed", zap.Error(err))
 	}
-	return buf.String()
+	require.Equal(t, buf.String(), expectSql)
 }

@@ -101,8 +101,8 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 				zap.Any("col", c), zap.Error(err))
 		}
 		col.Value = uint64(val)
+	case mysql.TypeTiDBVectorFloat32:
 	default:
-		col.Value = c.Value
 	}
 	return col
 }
