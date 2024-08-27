@@ -435,8 +435,9 @@ func (m *mounter) verifyChecksum(
 	}
 
 	version := decoder.ChecksumVersion()
-	if version == 1 {
-		log.Info("checksum v2 found, this happens since upstream TiDB is in a higher version, ignore it")
+	if version != 0 {
+		log.Info("checksum is not v1, this happens since upstream TiDB is in a higher version, ignore it",
+			zap.Int("version", version))
 		return 0, true, nil
 	}
 
