@@ -50,12 +50,12 @@ type MySQLDBConnector struct {
 	configureDBWhenSwitch func()
 }
 
-// New a MySQLDBConnector for creating DB connection.
+// NewMySQLDBConnector new a MySQLDBConnector for creating DB connection.
 func NewMySQLDBConnector(ctx context.Context, cfg *Config, sinkURI *url.URL) (*MySQLDBConnector, error) {
 	return NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, &DBConnectionFactory{})
 }
 
-// New a MySQLDBConnector by the given factory function for creating DB connection.
+// NewMySQLDBConnectorWithFactory new a MySQLDBConnector by the given factory function for creating DB connection.
 // The sinkURI format:
 // [scheme]://[user[:password]@][host[:port]][,host[:port]][,host[:port]][/path][?param1=value1&paramN=valueN]
 // User must ensure that each address ([host[:port]]) in the sinkURI (if there are multiple addresses)

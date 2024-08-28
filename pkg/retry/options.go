@@ -33,6 +33,8 @@ type Option func(*retryOptions)
 // IsRetryable checks the error is safe or worth to retry, eg. "context.Canceled" better not retry
 type IsRetryable func(error) bool
 
+// PreExecution defines a function type that is expected to return an error.
+// This function is designed to be executed before retry attempts, but only after the initial execution has failed.
 type PreExecution func() error
 
 type retryOptions struct {

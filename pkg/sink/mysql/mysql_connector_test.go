@@ -148,7 +148,7 @@ func TestSwitchToAvailableMySQLDB_SwitchDB(t *testing.T) {
 		require.Nil(t, err)
 		mock.ExpectPing()
 		mock.ExpectClose()
-		return db, nil
+		return db, err
 	}
 
 	var dbCandidates [3]*sql.DB
