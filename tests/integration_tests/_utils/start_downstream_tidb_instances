@@ -4,7 +4,7 @@
 # --db: The number of tidb instances
 # --out_dir: The directory to store the log files of tidb instances
 # --suffix: Refers to the suffix of `DOWN_TIDB_PORT` as defined in the `test_prepare` file.
-#   NOTE: This is helpful when using multiple downstream TiDB instances. 
+#   NOTE: This is helpful when using multiple downstream TiDB instances.
 #   If only one downstream TiDB instance is needed, this can be ignored.
 db=
 out_dir=
@@ -18,11 +18,11 @@ while [[ ${1} ]]; do
 		db=${2}
 		shift
 		;;
-    --out_dir)
+	--out_dir)
 		out_dir=${2}
 		shift
 		;;
-    --suffix)
+	--suffix)
 		suffix=${2}
 		shift
 		;;
@@ -39,8 +39,8 @@ while [[ ${1} ]]; do
 done
 
 if [ $((db + suffix - 1)) -gt 3 ]; then
-    echo 'The integration test only supports a maximum of 3 downstream TiDB instances'
-    exit 1
+	echo 'The integration test only supports a maximum of 3 downstream TiDB instances'
+	exit 1
 fi
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -52,57 +52,57 @@ rm -f "$out_dir/downstream_tidb_instances_pids.log"
 
 # Function to generate random socket config
 randomGenSocketsConf() {
-    random_str=$(date '+%s%N')
-    
-    # For macOS, generate a random string from /dev/random
-    if [ "$(uname)" == "Darwin" ]; then
-        random_str=$(cat /dev/random | LC_ALL=C tr -dc "a-zA-Z0-9" | head -c 10)
-    fi
-    
-    # Create a unique configuration file
-    random_file_name="$out_dir/tidb-config-$random_str.toml"
-    
-    # Copy base configuration and append socket configuration
-    cat "$out_dir/tidb-config.toml" >"$random_file_name"
-    echo "socket = \"/tmp/tidb-$random_str.sock\"" >>"$random_file_name"
+	random_str=$(date '+%s%N')
+
+	# For macOS, generate a random string from /dev/random
+	if [ "$(uname)" == "Darwin" ]; then
+		random_str=$(cat /dev/random | LC_ALL=C tr -dc "a-zA-Z0-9" | head -c 10)
+	fi
+
+	# Create a unique configuration file
+	random_file_name="$out_dir/tidb-config-$random_str.toml"
+
+	# Copy base configuration and append socket configuration
+	cat "$out_dir/tidb-config.toml" >"$random_file_name"
+	echo "socket = \"/tmp/tidb-$random_str.sock\"" >>"$random_file_name"
 }
 
 echo "Starting Downstream TiDB..."
 tidb-server -V
 for i in $(seq $suffix $((db + suffix - 1))); do
-    port_var="DOWN_TIDB_PORT_${i}"
-    status_var="DOWN_TIDB_STATUS_${i}"
-    
-    # Generate random socket configuration
-    randomGenSocketsConf
-    
-    # Start the tidb-server
-    tidb-server \
-        -P ${!port_var} \
-        -config "$random_file_name" \
-        --store tikv \
-        --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-        --status=${!status_var} \
-        --log-file "$out_dir/tidb_down_$i.log" &
-    echo $! >> "$out_dir/downstream_tidb_instances_pids.log"
+	port_var="DOWN_TIDB_PORT_${i}"
+	status_var="DOWN_TIDB_STATUS_${i}"
+
+	# Generate random socket configuration
+	randomGenSocketsConf
+
+	# Start the tidb-server
+	tidb-server \
+		-P ${!port_var} \
+		-config "$random_file_name" \
+		--store tikv \
+		--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+		--status=${!status_var} \
+		--log-file "$out_dir/tidb_down_$i.log" &
+	echo $! >>"$out_dir/downstream_tidb_instances_pids.log"
 done
 
 echo "Verifying Downstream TiDB is started..."
 for index in $(seq $suffix $((db + suffix - 1))); do
-    port_var="DOWN_TIDB_PORT_${index}"
-    i=0
-    while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${!port_var} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-        i=$((i + 1))
-        if [ "$i" -gt 60 ]; then
-            echo 'Failed to start downstream TiDB'
-            exit 1
-        fi
-        sleep 2
-    done
+	port_var="DOWN_TIDB_PORT_${index}"
+	i=0
+	while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${!port_var} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+		i=$((i + 1))
+		if [ "$i" -gt 60 ]; then
+			echo 'Failed to start downstream TiDB'
+			exit 1
+		fi
+		sleep 2
+	done
 done
 
 if [ "$db" -gt 0 ]; then
-    port_var="DOWN_TIDB_PORT_${suffix}"
+	port_var="DOWN_TIDB_PORT_${suffix}"
 	run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${!port_var}
 	run_sql "CREATE USER IF NOT EXISTS 'normal'@'%' identified by '123456';" ${DOWN_TIDB_HOST} ${!port_var}
 	run_sql "GRANT select,insert,update,delete,index,create,drop,alter,create view,references ON *.* TO 'normal'@'%';" ${DOWN_TIDB_HOST} ${!port_var}

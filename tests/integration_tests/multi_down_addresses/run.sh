@@ -16,7 +16,7 @@ function prepare() {
 
 	# Start downstream TiDB instances
 	start_downstream_tidb_instances --db 3 --out_dir $WORK_DIR
-	mapfile -t down_tidb_pids < "$WORK_DIR/downstream_tidb_instances_pids.log"
+	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	echo "Started downstream TiDB instances with PIDs: ${down_tidb_pids[@]}"
 
 	# Start the CDC synchronization task.
@@ -60,7 +60,7 @@ function run() {
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
-	mapfile -t down_tidb_pids < "$WORK_DIR/downstream_tidb_instances_pids.log"
+	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid1=${down_tidb_pids[0]}
 	kill $pid3
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -73,7 +73,7 @@ function run() {
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(4, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 2
-	mapfile -t down_tidb_pids < "$WORK_DIR/downstream_tidb_instances_pids.log"
+	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
 	kill $pid1
 	run_sql "INSERT INTO multi_down_addresses.round VALUES(41, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
