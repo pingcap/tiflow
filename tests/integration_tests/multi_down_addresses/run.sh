@@ -25,7 +25,7 @@ function prepare_create() {
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_cdc_cli changefeed create \
 		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1},${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_2},${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_3}/" \
-		--changefeed-id="multi_down_addresses"
+		--changefeed-id="multi-down-addresses"
 	sleep 5
 
 	# Prepare tables for test `cdc cli changefeed create` and `cdc cli changefeed update`
@@ -107,11 +107,11 @@ function prepare_update() {
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	echo "Started downstream TiDB instances with PIDs: ${down_tidb_pids[@]}"
 
-	run_cdc_cli changefeed pause -c "multi_down_addresses"
+	run_cdc_cli changefeed pause -c "multi-down-addresses"
 	run_cdc_cli changefeed update \
-		-c "multi_down_addresses" \
+		-c "multi-down-addresses" \
 		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1},${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_2}/"
-	run_cdc_cli changefeed resume -c "multi_down_addresses"
+	run_cdc_cli changefeed resume -c "multi-down-addresses"
 	sleep 5
 
 	check_table_exists multi_down_addresses.update ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
