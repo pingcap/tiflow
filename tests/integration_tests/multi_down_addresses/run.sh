@@ -30,7 +30,7 @@ function prepare_create() {
 
 	# Prepare tables for test `cdc cli changefeed create` and `cdc cli changefeed update`
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists multi_down_addresses.create ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
+	check_table_exists multi_down_addresses.changefeed_create ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
 }
 
 function run_create() {
@@ -43,7 +43,7 @@ function run_create() {
 	# tidb 2 should works
 	kill $pid1
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
@@ -53,7 +53,7 @@ function run_create() {
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	kill $pid2
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 
@@ -61,7 +61,7 @@ function run_create() {
 	# begin -> insert -> recover tidb 1 -> shutdown tidb 3 -> commit -> check_sync_diff
 	# tidb 1 should works
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
@@ -74,13 +74,13 @@ function run_create() {
 	# begin -> insert -> recover tidb 2 -> shutdown tidb 1 -> insert -> commit -> check_sync_diff
 	# tidb 2 should works
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(4, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(4, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 2
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
 	kill $pid1
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(41, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(41, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
@@ -88,13 +88,13 @@ function run_create() {
 	# begin -> insert -> commit -> recover tidb 3 -> shutdown tidb 2 -> begin -> insert -> commit -> check_sync_diff
 	# tidb 3 should works
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(5, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(5, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 3
 	pid3=${down_tidb_pids[0]}
 	kill $pid2
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(51, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(51, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 
@@ -114,7 +114,7 @@ function prepare_update() {
 	run_cdc_cli changefeed resume -c "multi-down-addresses"
 	sleep 5
 
-	check_table_exists multi_down_addresses.update ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
+	check_table_exists multi_down_addresses.changefeed_update ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
 }
 
 function run_update() {
@@ -126,7 +126,7 @@ function run_update() {
 	# tidb 2 should works
 	kill $pid1
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.update VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_update VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
@@ -134,7 +134,7 @@ function run_update() {
 	# begin -> insert -> recover tidb 1 -> shutdown tidb 2 -> commit -> check_sync_diff
 	# tidb 1 should works
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.update VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_update VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
@@ -147,13 +147,13 @@ function run_update() {
 	# begin -> insert -> recover tidb 2 -> shutdown tidb 1 -> insert -> commit -> check_sync_diff
 	# tidb 2 should works
 	run_sql "BEGIN;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.update VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_update VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 2
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
 	kill $pid1
-	run_sql "INSERT INTO multi_down_addresses.create VALUES(31, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(31, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "COMMIT;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 }
