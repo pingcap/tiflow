@@ -32,7 +32,7 @@ type MetricsCollector interface {
 
 const (
 	// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
-	RefreshMetricsInterval = 15 * time.Second
+	RefreshMetricsInterval = 5 * time.Second
 	// refreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
 	// Do not set it too small, because it will cause too many requests to kafka cluster.
 	// Every request will get all topics and all brokers information.
