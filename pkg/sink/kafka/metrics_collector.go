@@ -32,7 +32,7 @@ type MetricsCollector interface {
 
 const (
 	// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
-	RefreshMetricsInterval = 5 * time.Second
+	RefreshMetricsInterval = 15 * time.Second
 	// refreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
 	// Do not set it too small, because it will cause too many requests to kafka cluster.
 	// Every request will get all topics and all brokers information.
@@ -53,6 +53,7 @@ const (
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
 
 	p99 = "p99"
+	avg = "avg"
 )
 
 type saramaMetricsCollector struct {
@@ -133,7 +134,7 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
-			WithLabelValues(namespace, changefeedID, "avg").
+			WithLabelValues(namespace, changefeedID, avg).
 			Set(histogram.Snapshot().Mean())
 		compressionRatioGauge.WithLabelValues(namespace, changefeedID, p99).
 			Set(histogram.Snapshot().Percentile(0.99))
@@ -142,7 +143,7 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
 	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
 		recordsPerRequestGauge.
-			WithLabelValues(namespace, changefeedID, "avg").
+			WithLabelValues(namespace, changefeedID, avg).
 			Set(histogram.Snapshot().Mean())
 		recordsPerRequestGauge.
 			WithLabelValues(namespace, changefeedID, p99).
@@ -175,7 +176,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 			getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
 			RequestLatencyGauge.
-				WithLabelValues(namespace, changefeedID, brokerID, "avg").
+				WithLabelValues(namespace, changefeedID, brokerID, avg).
 				Set(histogram.Snapshot().Mean() / 1000)
 			RequestLatencyGauge.
 				WithLabelValues(namespace, changefeedID, brokerID, p99).
@@ -206,9 +207,14 @@ func getBrokerMetricName(prefix, brokerID string) string {
 
 func (m *saramaMetricsCollector) cleanupProducerMetrics() {
 	compressionRatioGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, avg)
+	compressionRatioGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, p99)
+
 	recordsPerRequestGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, avg)
+	recordsPerRequestGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, p99)
 }
 
 func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
@@ -221,7 +227,9 @@ func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 		RequestRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		RequestLatencyGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
+			DeleteLabelValues(namespace, changefeedID, brokerID, avg)
+		RequestLatencyGauge.
+			DeleteLabelValues(namespace, changefeedID, brokerID, p99)
 		requestsInFlightGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		responseRateGauge.
