@@ -22,11 +22,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// MySQLDBConnector manages the database connection, handling reconnections
+// DBConnector manages the database connection, handling reconnections
 // in case of connection failures when calling SwitchToAvailableMySQLDB method.
 // To execute SQL queries or interact with the database, use the CurrentDB field of
-// MySQLDBConnector to access the underlying *sql.DB instance, i.e., MySQLDBConnector.CurrentDB.
-type MySQLDBConnector struct {
+// DBConnector to access the underlying *sql.DB instance, i.e., DBConnector.CurrentDB.
+type DBConnector struct {
 	// Current connnection to a MySQL-compatible DB.
 	CurrentDB *sql.DB
 
@@ -39,7 +39,7 @@ type MySQLDBConnector struct {
 	// used to try to find an available DB server in Round-Robin mode.
 	nextTry int
 
-	// dbConnFactory is a Factory function for MySQLDBConnector that creates database connections.
+	// dbConnFactory is a Factory function for DBConnector that creates database connections.
 	dbConnFactory IDBConnectionFactory
 
 	// configureDBWhenSwitch stores the function that will be automatically invoked
@@ -50,17 +50,17 @@ type MySQLDBConnector struct {
 	configureDBWhenSwitch func()
 }
 
-// NewMySQLDBConnector new a MySQLDBConnector for creating DB connection.
-func NewMySQLDBConnector(ctx context.Context, cfg *Config, sinkURI *url.URL) (*MySQLDBConnector, error) {
-	return NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, &DBConnectionFactory{})
+// NewDBConnector new a DBConnector for creating DB connection.
+func NewDBConnector(ctx context.Context, cfg *Config, sinkURI *url.URL) (*DBConnector, error) {
+	return NewDBConnectorWithFactory(ctx, cfg, sinkURI, &DBConnectionFactory{})
 }
 
-// NewMySQLDBConnectorWithFactory new a MySQLDBConnector by the given factory function for creating DB connection.
+// NewDBConnectorWithFactory new a DBConnector by the given factory function for creating DB connection.
 // The sinkURI format:
 // [scheme]://[user[:password]@][host[:port]][,host[:port]][,host[:port]][/path][?param1=value1&paramN=valueN]
 // User must ensure that each address ([host[:port]]) in the sinkURI (if there are multiple addresses)
 // is valid, otherwise returns an error.
-func NewMySQLDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.URL, dbConnFactory IDBConnectionFactory) (*MySQLDBConnector, error) {
+func NewDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.URL, dbConnFactory IDBConnectionFactory) (*DBConnector, error) {
 	if dbConnFactory == nil {
 		dbConnFactory = &DBConnectionFactory{}
 	}
@@ -75,7 +75,7 @@ func NewMySQLDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *u
 		return nil, err
 	}
 
-	connector := &MySQLDBConnector{dsnList: dsnList, nextTry: 0, dbConnFactory: dbConnFactory}
+	connector := &DBConnector{dsnList: dsnList, nextTry: 0, dbConnFactory: dbConnFactory}
 
 	err = connector.SwitchToAvailableMySQLDB(ctx)
 	if err != nil {
@@ -86,9 +86,9 @@ func NewMySQLDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *u
 }
 
 // SwitchToAvailableMySQLDB attempts to switch to an available MySQL-compatible database connection
-// if the current connection is invalid, and it updates MySQLDBConnector.CurrentDB for user to use it.
-// If there is only one DSN in MySQLDBConnector, switching is not possible.
-func (c *MySQLDBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
+// if the current connection is invalid, and it updates DBConnector.CurrentDB for user to use it.
+// If there is only one DSN in DBConnector, switching is not possible.
+func (c *DBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
 	// If a connection has already been established and there is only one DSN (Data Source Name) available,
 	// it is not possible to connect a different DSN. Therefore, simply return from the function.
 	if len(c.dsnList) == 1 && c.CurrentDB != nil {
@@ -134,10 +134,10 @@ func (c *MySQLDBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
 // when switching to an available connection using the SwitchToAvailableMySQLDB function.
 // By providing the function `f` as an argument, it ensures that any newly established
 // connection is automatically configured after the switch. Additionally, if the existing
-// MySQLDBConnector.CurrentDB also requires configuration, you can set
+// DBConnector.CurrentDB also requires configuration, you can set
 // `needConfigureCurrentDB` to true, and this function will automatically apply
 // the configuration function `f` to it as well.
-func (c *MySQLDBConnector) ConfigureDBWhenSwitch(f func(), needConfigureCurrentDB bool) {
+func (c *DBConnector) ConfigureDBWhenSwitch(f func(), needConfigureCurrentDB bool) {
 	if f == nil {
 		return
 	}

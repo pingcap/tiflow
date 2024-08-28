@@ -80,7 +80,7 @@ func TestTiDBObserver(t *testing.T) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	require.NoError(t, err)
 	ctx := context.Background()
-	connector, err := mysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := mysql.NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 
 	observer := NewTiDBObserver(connector)

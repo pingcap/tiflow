@@ -35,7 +35,7 @@ import (
 type mysqlSyncPointStore struct {
 	id                     model.ChangeFeedID
 	cfg                    *pmysql.Config
-	connector              *pmysql.MySQLDBConnector
+	connector              *pmysql.DBConnector
 	clusterID              string
 	syncPointRetention     time.Duration
 	lastCleanSyncPointTime time.Time
@@ -54,7 +54,7 @@ func newMySQLSyncPointStore(
 		return nil, err
 	}
 
-	connector, err := pmysql.NewMySQLDBConnector(ctx, cfg, sinkURI)
+	connector, err := pmysql.NewDBConnector(ctx, cfg, sinkURI)
 	if err != nil {
 		return nil, err
 	}

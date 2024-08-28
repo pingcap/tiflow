@@ -108,7 +108,7 @@ var (
 
 // TiDBObserver is a tidb performance observer. It's not thread-safe.
 type TiDBObserver struct {
-	connector *mysql.MySQLDBConnector
+	connector *mysql.DBConnector
 }
 
 // Tick implements Observer
@@ -174,7 +174,7 @@ func (o *TiDBObserver) Close() error {
 }
 
 // NewTiDBObserver creates a new TiDBObserver instance
-func NewTiDBObserver(connector *mysql.MySQLDBConnector) *TiDBObserver {
+func NewTiDBObserver(connector *mysql.DBConnector) *TiDBObserver {
 	return &TiDBObserver{
 		connector: connector,
 	}
@@ -234,7 +234,7 @@ type metricColumnIface[T metricColumnImpl] interface {
 }
 
 func queryMetrics[T metricColumnImpl, F metricColumnIface[T]](
-	ctx context.Context, connector *mysql.MySQLDBConnector, stmt string, metrics *[]F,
+	ctx context.Context, connector *mysql.DBConnector, stmt string, metrics *[]F,
 ) error {
 	return retry.Do(ctx, func() error {
 		rows, err := connector.CurrentDB.QueryContext(ctx, stmt)

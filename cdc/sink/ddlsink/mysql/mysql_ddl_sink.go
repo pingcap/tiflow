@@ -55,7 +55,7 @@ var _ ddlsink.Sink = (*DDLSink)(nil)
 type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id        model.ChangeFeedID
-	connector *pmysql.MySQLDBConnector
+	connector *pmysql.DBConnector
 	cfg       *pmysql.Config
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
@@ -80,7 +80,7 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	connector, err := pmysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, GetDBConnImpl)
+	connector, err := pmysql.NewDBConnectorWithFactory(ctx, cfg, sinkURI, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}

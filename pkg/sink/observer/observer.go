@@ -80,7 +80,7 @@ func NewObserver(
 			return nil, err
 		}
 
-		connector, err := pmysql.NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, options.dbConnFactory)
+		connector, err := pmysql.NewDBConnectorWithFactory(ctx, cfg, sinkURI, options.dbConnFactory)
 		if err != nil {
 			return nil, err
 		}

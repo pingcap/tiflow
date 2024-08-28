@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test NewMySQLDBConnectorWithFactory for successful single address initialization
-func TestNewMySQLDBConnectorWithFactory_SingleAddressSuccess(t *testing.T) {
+// Test NewDBConnectorWithFactory for successful single address initialization
+func TestNewDBConnectorWithFactory_SingleAddressSuccess(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost")
 	cfg := NewConfig()
@@ -41,7 +41,7 @@ func TestNewMySQLDBConnectorWithFactory_SingleAddressSuccess(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
@@ -49,8 +49,8 @@ func TestNewMySQLDBConnectorWithFactory_SingleAddressSuccess(t *testing.T) {
 	require.NoError(t, connector.CurrentDB.Close())
 }
 
-// Test NewMySQLDBConnectorWithFactory for successful multiple addresses initialization
-func TestNewMySQLDBConnectorWithFactory_MultiAddressSuccess(t *testing.T) {
+// Test NewDBConnectorWithFactory for successful multiple addresses initialization
+func TestNewDBConnectorWithFactory_MultiAddressSuccess(t *testing.T) {
 	ctx := context.Background()
 	// Create a sinkURI which contains 3 addresses
 	sinkURI, _ := url.Parse("mysql://user:password@localhost,localhost,localhost")
@@ -73,7 +73,7 @@ func TestNewMySQLDBConnectorWithFactory_MultiAddressSuccess(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
@@ -82,8 +82,8 @@ func TestNewMySQLDBConnectorWithFactory_MultiAddressSuccess(t *testing.T) {
 	require.NoError(t, connector.CurrentDB.Close())
 }
 
-// Test NewMySQLDBConnectorWithFactory for error when generate DSNs fail
-func TestNewMySQLDBConnectorWithFactory_generateDSNsFail(t *testing.T) {
+// Test NewDBConnectorWithFactory for error when generate DSNs fail
+func TestNewDBConnectorWithFactory_generateDSNsFail(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost")
 	cfg := NewConfig()
@@ -100,7 +100,7 @@ func TestNewMySQLDBConnectorWithFactory_generateDSNsFail(t *testing.T) {
 		return nil, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.Error(t, err)
 	require.Nil(t, connector)
 	require.Equal(t, numCallStandard, 0)
@@ -123,7 +123,7 @@ func TestSwitchToAvailableMySQLDB_CurrentDBValid(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
@@ -164,7 +164,7 @@ func TestSwitchToAvailableMySQLDB_SwitchDB(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
@@ -202,7 +202,7 @@ func TestConfigureDBWhenSwitch_Success(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
@@ -236,7 +236,7 @@ func TestConfigureDBWhenSwitch_NilConfigureFunction(t *testing.T) {
 		return db, nil
 	})
 
-	connector, err := NewMySQLDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
+	connector, err := NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	require.NoError(t, err)
 	require.NotNil(t, connector)
 	require.NotNil(t, connector.CurrentDB)
