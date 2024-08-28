@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "down"
 
-    target-check-tables = ["multi_down_addresses.round"]
+    target-check-tables = ["multi_down_addresses.?*"]
 
 [data-sources]
 [data-sources.up]
