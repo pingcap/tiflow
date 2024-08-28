@@ -258,6 +258,6 @@ func queryMetrics[T metricColumnImpl, F metricColumnIface[T]](
 		}
 		return nil
 	}, retry.WithPreExecutionWhenRetry(func() error {
-		return connector.SwitchToAvailableMySQLDB(ctx)
+		return connector.SwitchToAnAvailableDB(ctx)
 	}), retry.WithMaxTries(2))
 }

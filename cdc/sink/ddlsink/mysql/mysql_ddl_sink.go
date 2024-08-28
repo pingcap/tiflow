@@ -152,7 +152,7 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 		}
 		return nil
 	}, retry.WithPreExecutionWhenRetry(func() error {
-		return m.connector.SwitchToAvailableMySQLDB(ctx)
+		return m.connector.SwitchToAnAvailableDB(ctx)
 	}), retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDDLMaxRetry),

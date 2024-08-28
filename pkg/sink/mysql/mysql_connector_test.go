@@ -106,8 +106,8 @@ func TestNewDBConnectorWithFactory_generateDSNsFail(t *testing.T) {
 	require.Equal(t, numCallStandard, 0)
 }
 
-// Test SwitchToAvailableMySQLDB when current DB is valid
-func TestSwitchToAvailableMySQLDB_CurrentDBValid(t *testing.T) {
+// Test SwitchToAnAvailableDB when current DB is valid
+func TestSwitchToAnAvailableDB_CurrentDBValid(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost,localhost,localhost")
 	cfg := NewConfig()
@@ -129,14 +129,14 @@ func TestSwitchToAvailableMySQLDB_CurrentDBValid(t *testing.T) {
 	require.NotNil(t, connector.CurrentDB)
 	dbBeforeSwitch := connector.CurrentDB
 
-	require.NoError(t, connector.SwitchToAvailableMySQLDB(ctx))
+	require.NoError(t, connector.SwitchToAnAvailableDB(ctx))
 	dbAfterSwitch := connector.CurrentDB
 	require.Equal(t, dbBeforeSwitch, dbAfterSwitch)
 	require.NoError(t, connector.CurrentDB.Close())
 }
 
-// Test SwitchToAvailableMySQLDB when current DB is invalid and switches to a new DB
-func TestSwitchToAvailableMySQLDB_SwitchDB(t *testing.T) {
+// Test SwitchToAnAvailableDB when current DB is invalid and switches to a new DB
+func TestSwitchToAnAvailableDB_SwitchDB(t *testing.T) {
 	ctx := context.Background()
 	sinkURI, _ := url.Parse("mysql://user:password@localhost:123,localhost:456,localhost:789")
 	cfg := NewConfig()
@@ -175,7 +175,7 @@ func TestSwitchToAvailableMySQLDB_SwitchDB(t *testing.T) {
 		require.NoError(t, dbCandidates[i].Close())
 		require.Error(t, dbCandidates[i].Ping())
 		if i != len(dbCandidates)-1 {
-			require.NoError(t, connector.SwitchToAvailableMySQLDB(ctx))
+			require.NoError(t, connector.SwitchToAnAvailableDB(ctx))
 			require.NoError(t, connector.CurrentDB.Ping())
 			dbAfterSwitch := connector.CurrentDB
 			require.NotEqual(t, dbBeforeSwitch, dbAfterSwitch)
@@ -214,7 +214,7 @@ func TestConfigureDBWhenSwitch_Success(t *testing.T) {
 
 	require.NoError(t, connector.CurrentDB.Ping())
 	require.NoError(t, connector.CurrentDB.Close())
-	require.NoError(t, connector.SwitchToAvailableMySQLDB(ctx))
+	require.NoError(t, connector.SwitchToAnAvailableDB(ctx))
 	require.NoError(t, connector.CurrentDB.Ping())
 	require.NoError(t, connector.CurrentDB.Close())
 	require.Equal(t, numCallConfigure, 2)
@@ -244,6 +244,6 @@ func TestConfigureDBWhenSwitch_NilConfigureFunction(t *testing.T) {
 	connector.ConfigureDBWhenSwitch(nil, true)
 
 	require.NoError(t, connector.CurrentDB.Close())
-	require.NoError(t, connector.SwitchToAvailableMySQLDB(ctx))
+	require.NoError(t, connector.SwitchToAnAvailableDB(ctx))
 	require.NoError(t, connector.CurrentDB.Close())
 }

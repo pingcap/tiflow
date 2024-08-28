@@ -23,7 +23,7 @@ import (
 )
 
 // DBConnector manages the database connection, handling reconnections
-// in case of connection failures when calling SwitchToAvailableMySQLDB method.
+// in case of connection failures when calling SwitchToAnAvailableDB method.
 // To execute SQL queries or interact with the database, use the CurrentDB field of
 // DBConnector to access the underlying *sql.DB instance, i.e., DBConnector.CurrentDB.
 type DBConnector struct {
@@ -44,7 +44,7 @@ type DBConnector struct {
 
 	// configureDBWhenSwitch stores the function that will be automatically invoked
 	// to configure a new MySQL connection after switching to it using the
-	// SwitchToAvailableMySQLDB function. This function will be set by the
+	// SwitchToAnAvailableDB function. This function will be set by the
 	// ConfigureDBWhenSwitch method and can be applied to both newly established
 	// connections and the current active connection if required.
 	configureDBWhenSwitch func()
@@ -77,7 +77,7 @@ func NewDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.UR
 
 	connector := &DBConnector{dsnList: dsnList, nextTry: 0, dbConnFactory: dbConnFactory}
 
-	err = connector.SwitchToAvailableMySQLDB(ctx)
+	err = connector.SwitchToAnAvailableDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +85,10 @@ func NewDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.UR
 	return connector, nil
 }
 
-// SwitchToAvailableMySQLDB attempts to switch to an available MySQL-compatible database connection
+// SwitchToAnAvailableDB attempts to switch to an available MySQL-compatible database connection
 // if the current connection is invalid, and it updates DBConnector.CurrentDB for user to use it.
 // If there is only one DSN in DBConnector, switching is not possible.
-func (c *DBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
+func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 	// If a connection has already been established and there is only one DSN (Data Source Name) available,
 	// it is not possible to connect a different DSN. Therefore, simply return from the function.
 	if len(c.dsnList) == 1 && c.CurrentDB != nil {
@@ -131,7 +131,7 @@ func (c *DBConnector) SwitchToAvailableMySQLDB(ctx context.Context) error {
 }
 
 // ConfigureDBWhenSwitch allows for automatic configuration of a new MySQL connection
-// when switching to an available connection using the SwitchToAvailableMySQLDB function.
+// when switching to an available connection using the SwitchToAnAvailableDB function.
 // By providing the function `f` as an argument, it ensures that any newly established
 // connection is automatically configured after the switch. Additionally, if the existing
 // DBConnector.CurrentDB also requires configuration, you can set

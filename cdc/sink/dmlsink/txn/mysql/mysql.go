@@ -797,7 +797,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
 	}, retry.WithPreExecutionWhenRetry(func() error {
-		return s.connector.SwitchToAvailableMySQLDB(pctx)
+		return s.connector.SwitchToAnAvailableDB(pctx)
 	}), retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(s.dmlMaxRetry),

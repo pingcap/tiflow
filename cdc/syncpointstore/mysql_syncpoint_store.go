@@ -149,7 +149,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		err = tx.Commit()
 		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to create syncpoint table;"))
 	}, retry.WithPreExecutionWhenRetry(func() error {
-		return s.connector.SwitchToAvailableMySQLDB(ctx)
+		return s.connector.SwitchToAnAvailableDB(ctx)
 	}), retry.WithMaxTries(2))
 }
 
@@ -226,7 +226,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		err = tx.Commit()
 		return cerror.WrapError(cerror.ErrMySQLTxnError, errors.WithMessage(err, "failed to write syncpoint table;"))
 	}, retry.WithPreExecutionWhenRetry(func() error {
-		return s.connector.SwitchToAvailableMySQLDB(ctx)
+		return s.connector.SwitchToAnAvailableDB(ctx)
 	}), retry.WithMaxTries(2))
 }
 
