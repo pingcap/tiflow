@@ -45,7 +45,7 @@ function run_create() {
 	# tidb 2 should works
 	kill $pid1
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(11, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
 
 	# Round 2
