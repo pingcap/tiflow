@@ -42,7 +42,7 @@ function run_create() {
 
 	# Round 1
 	# shutdown tidb 1 -> insert -> insert -> check_sync_diff
-	# tidb 2 should works
+	# tidb 2 should work
 	kill $pid1
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(11, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -50,9 +50,8 @@ function run_create() {
 
 	# Round 2
 	# insert -> shutdown tidb 2 -> update -> update -> check_sync_diff
-	# tidb 3 should works
+	# tidb 3 should work
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(2, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	kill $pid2
 	run_sql "UPDATE multi_down_addresses.changefeed_create SET val=2 WHERE round=2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "UPDATE multi_down_addresses.changefeed_create SET val=3 WHERE round=2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -60,10 +59,9 @@ function run_create() {
 
 	# Round 3
 	# insert -> update -> recover tidb 1 -> shutdown tidb 3 -> update -> check_sync_diff
-	# tidb 1 should works
+	# tidb 1 should work
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(3, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "UPDATE multi_down_addresses.changefeed_create SET val=2 WHERE round=3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid1=${down_tidb_pids[0]}
@@ -73,10 +71,9 @@ function run_create() {
 
 	# Round 4
 	# insert -> insert -> recover tidb 2 -> shutdown tidb 1 -> update -> delete -> check_sync_diff
-	# tidb 2 should works
+	# tidb 2 should work
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(4, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(41, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 2
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
@@ -87,10 +84,9 @@ function run_create() {
 
 	# Round 5
 	# insert -> update -> recover tidb 3 -> shutdown tidb 2 -> insert -> delete -> check_sync_diff
-	# tidb 3 should works
+	# tidb 3 should work
 	run_sql "INSERT INTO multi_down_addresses.changefeed_create VALUES(5, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "UPDATE multi_down_addresses.changefeed_create SET val=2 WHERE round=5;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 3
 	pid3=${down_tidb_pids[0]}
 	kill $pid2
@@ -98,7 +94,9 @@ function run_create() {
 	run_sql "DELETE FROM multi_down_addresses.changefeed_create WHERE round=51;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_3.toml
 
+	# Kill all tidb instances
 	kill $pid3
+	sleep 5
 }
 
 function prepare_update() {
@@ -110,7 +108,8 @@ function prepare_update() {
 	run_cdc_cli changefeed pause -c "multi-down-addresses"
 	run_cdc_cli changefeed update \
 		-c "multi-down-addresses" \
-		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1},${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_2}/"
+		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_1},${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT_2}/" \
+		--no-confirm
 	run_cdc_cli changefeed resume -c "multi-down-addresses"
 	sleep 5
 }
@@ -122,7 +121,7 @@ function run_update() {
 
 	# Round 1
 	# shutdown tidb 1 -> insert -> insert -> insert -> check_sync_diff
-	# tidb 2 should works
+	# tidb 2 should work
 	kill $pid1
 	run_sql "INSERT INTO multi_down_addresses.changefeed_update VALUES(1, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO multi_down_addresses.changefeed_update VALUES(11, 1);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -131,10 +130,9 @@ function run_update() {
 
 	# Round 2
 	# create -> insert -> recover tidb 1 -> shutdown tidb 2 -> drop -> check_sync_diff
-	# tidb 1 should works
+	# tidb 1 should work
 	run_sql "CREATE TABLE multi_down_addresses.ddl1 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO multi_down_addresses.ddl1 VALUES(2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid1=${down_tidb_pids[0]}
@@ -144,10 +142,9 @@ function run_update() {
 
 	# Round 3
 	# create -> create -> recover tidb 2 -> shutdown tidb 1 -> create -> drop -> check_sync_diff
-	# tidb 2 should works
+	# tidb 2 should work
 	run_sql "CREATE TABLE multi_down_addresses.ddl3 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE multi_down_addresses.ddl33 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 5
 	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 2
 	mapfile -t down_tidb_pids <"$WORK_DIR/downstream_tidb_instances_pids.log"
 	pid2=${down_tidb_pids[0]}
@@ -155,6 +152,17 @@ function run_update() {
 	run_sql "CREATE TABLE multi_down_addresses.ddl333 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "DROP TABLE multi_down_addresses.ddl3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_2.toml
+
+	# Round 4
+	# create -> create -> recover tidb 1 -> shutdown tidb 2 -> create -> drop -> check_sync_diff
+	# tidb 1 should work
+	run_sql "CREATE TABLE multi_down_addresses.ddl4 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE TABLE multi_down_addresses.ddl44 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	start_downstream_tidb_instances --db 1 --out_dir $WORK_DIR --suffix 1
+	kill $pid2
+	run_sql "CREATE TABLE multi_down_addresses.ddl444 (round INT PRIMARY KEY)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "DROP TABLE multi_down_addresses.ddl44;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config_1.toml
 }
 
 # No need to support kafka and storage sink.
@@ -166,7 +174,7 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 	run_create $*
 	prepare_update $*
 	run_update $*
-	
+
 	check_logs $WORK_DIR
 	echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
 fi
