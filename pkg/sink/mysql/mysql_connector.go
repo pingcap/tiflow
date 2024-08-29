@@ -16,6 +16,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 
 	"github.com/pingcap/log"
@@ -93,6 +94,8 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 	// If a connection has already been established and there is only one DSN (Data Source Name) available,
 	// it is not possible to connect a different DSN. Therefore, simply return from the function.
 	if len(c.dsnList) == 1 && c.CurrentDB != nil {
+		log.Debug("cannot switch to other db server, only one address was given",
+			zap.String("DSN", c.dsnList[c.curIndex()]))
 		return nil
 	}
 
@@ -100,6 +103,8 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 		// Check if the current connection is available; return immediately if it is.
 		err := c.CurrentDB.PingContext(ctx)
 		if err == nil {
+			log.Debug("current connection is vaild, no need to switch",
+				zap.String("DSN", c.dsnList[c.curIndex()]))
 			return nil
 		}
 
@@ -119,15 +124,23 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 
 		db, err := c.dbConnFactory.CreateStandardConnection(ctx, c.dsnList[c.nextTry])
 		c.nextTry = (c.nextTry + 1) % len(c.dsnList)
+
 		if err == nil {
 			c.CurrentDB = db
 			if c.configureDBWhenSwitch != nil {
 				c.configureDBWhenSwitch()
 			}
+			log.Info(
+				fmt.Sprintf("current connection is invaild, switch to the %d-th address", c.curIndex()),
+				zap.String("DSN", c.dsnList[c.curIndex()]))
 			return nil
+		} else {
+			log.Debug(fmt.Sprintf("try to switch the %d-th addresses, but it's invaild", c.curIndex()),
+				zap.String("DSN", c.dsnList[c.curIndex()]))
 		}
 	}
 
+	log.Error("fail to switch an available db server, all of the given addresses are invaild")
 	return err
 }
 
@@ -146,4 +159,12 @@ func (c *DBConnector) ConfigureDBWhenSwitch(f func(), needConfigureCurrentDB boo
 	if needConfigureCurrentDB {
 		c.configureDBWhenSwitch()
 	}
+}
+
+func (c *DBConnector) curIndex() int {
+	cur := c.nextTry - 1
+	if cur < 0 {
+		cur = len(c.dsnList) - 1
+	}
+	return cur
 }
