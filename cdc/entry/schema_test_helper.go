@@ -197,6 +197,24 @@ func (s *SchemaTestHelper) DML2Event(dml string, schema, table string) *model.Ro
 	return polymorphicEvent.Row
 }
 
+func (s *SchemaTestHelper) DML2RawKV(dml string, schema, table string) *model.RawKVEntry {
+	s.tk.MustExec(dml)
+	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(schema, table)
+	require.True(s.t, ok)
+
+	key, value := s.getLastKeyValue(tableInfo.ID)
+	ts := s.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: nil,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	return rawKV
+}
+
 func (s *SchemaTestHelper) getLastKeyValue(tableID int64) (key, value []byte) {
 	txn, err := s.storage.Begin()
 	require.NoError(s.t, err)
