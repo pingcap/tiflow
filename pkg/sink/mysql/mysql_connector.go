@@ -65,11 +65,12 @@ func NewDBConnectorWithFactory(ctx context.Context, cfg *Config, sinkURI *url.UR
 		dbConnFactory = &DBConnectionFactory{}
 	}
 
+	log.Debug("create connection by sinkURI", zap.String("sinkURI", sinkURI.String()))
+
 	// generateDSNs function parses multiple addresses from the URL (if any)
 	// and generates a DSN (Data Source Name) for each one.
 	// For each DSN, the function attempts to create a connection and perform a Ping
 	// to verify its availability.
-	// If any of the DSNs are unavailable, the function immediately returns an error.
 	dsnList, err := generateDSNs(ctx, sinkURI, cfg, dbConnFactory.CreateTemporaryConnection)
 	if err != nil {
 		return nil, err

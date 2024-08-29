@@ -40,6 +40,8 @@ import (
 // is retrieved, the temporary connection is closed. The retrieved data is then
 // used to populate additional parameters into the Sink URI, refining
 // the connection URL.
+// NOTE: the function returns no error if not all of the DSNs are unavailable and
+// will report warnings if some of the DSNs are unavailable.
 func generateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) ([]string, error) {
 	dsnCfgs, err := GetDSNCfgs(sinkURI, cfg)
 	if err != nil {
@@ -47,17 +49,23 @@ func generateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFact
 	}
 
 	var oneOfErrs error
+	oneAvailable := false
 	dsnList := make([]string, len(dsnCfgs))
 	for i := 0; i < len(dsnCfgs); i++ {
-		// dsn format of the driver:
+		// DSN format of the driver:
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 		dsnList[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfgs[i], cfg, dbConnFactory)
 		if err != nil {
 			oneOfErrs = err
+		} else {
+			oneAvailable = true
 		}
 	}
 
-	return dsnList, oneOfErrs
+	if !oneAvailable {
+		return nil, oneOfErrs
+	}
+	return dsnList, nil
 }
 
 func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory ConnectionFactory) (string, error) {
@@ -69,8 +77,10 @@ func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg
 
 	dsnStr, err := generateDSNByConfig(ctx, dsnCfg, cfg, testDB)
 	if err != nil {
+		log.Warn("DSN is invaild", zap.String("DSN", dsnCfg.FormatDSN()))
 		return "", err
 	}
+	log.Debug("DSN is vaild", zap.String("DSN", dsnStr))
 
 	return dsnStr, nil
 }
