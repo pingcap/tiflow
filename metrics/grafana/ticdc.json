@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1724759226823,
+  "iteration": 1724839764339,
   "links": [],
   "panels": [
     {
@@ -6122,7 +6122,7 @@
           "id": 612,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
             "max": true,
             "min": false,
@@ -7190,7 +7190,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 7
+            "y": 95
           },
           "hiddenSeries": false,
           "id": 653,
@@ -7298,7 +7298,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 7
+            "y": 95
           },
           "hiddenSeries": false,
           "id": 628,
@@ -7401,7 +7401,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 102
           },
           "hiddenSeries": false,
           "id": 627,
@@ -7504,7 +7504,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 102
           },
           "hiddenSeries": false,
           "id": 630,
@@ -7607,7 +7607,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 21
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 629,
@@ -7710,7 +7710,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 21
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 631,
@@ -7811,7 +7811,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 116
           },
           "hiddenSeries": false,
           "id": 626,
@@ -7912,7 +7912,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 116
           },
           "hiddenSeries": false,
           "id": 709,
@@ -7945,7 +7945,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(avg_over_time(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
@@ -8010,7 +8010,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 123
           },
           "hiddenSeries": false,
           "id": 710,
@@ -8043,7 +8043,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(avg_over_time(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
@@ -8108,7 +8108,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 35
+            "y": 123
           },
           "hiddenSeries": false,
           "id": 711,
@@ -8214,7 +8214,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 130
           },
           "hiddenSeries": false,
           "id": 712,
@@ -8321,7 +8321,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 130
           },
           "hiddenSeries": false,
           "id": 741,
@@ -8419,7 +8419,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 137
           },
           "hiddenSeries": false,
           "id": 740,
@@ -8525,7 +8525,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 137
           },
           "hiddenSeries": false,
           "id": 731,
@@ -8623,7 +8623,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 733,
@@ -8721,7 +8721,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 735,
@@ -8819,7 +8819,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 63
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 739,
@@ -8917,7 +8917,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 63
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 737,
@@ -21953,5 +21953,5 @@
   "timezone": "browser",
   "title": "test-cluster-TiCDC",
   "uid": "YiGL8hBZ1x",
-  "version": 3
+  "version": 2
 }
