@@ -131,11 +131,11 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 				c.configureDBWhenSwitch()
 			}
 			log.Info(
-				fmt.Sprintf("current connection is invaild, switch to the %d-th address", c.curIndex()),
+				fmt.Sprintf("switch to the %d-th address", c.curIndex()+1),
 				zap.String("DSN", c.dsnList[c.curIndex()]))
 			return nil
 		} else {
-			log.Debug(fmt.Sprintf("try to switch the %d-th addresses, but it's invaild", c.curIndex()),
+			log.Debug(fmt.Sprintf("try to switch the %d-th addresses, but it's invaild", c.curIndex()+1),
 				zap.String("DSN", c.dsnList[c.curIndex()]))
 		}
 	}
