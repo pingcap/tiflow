@@ -48,7 +48,7 @@ const (
 	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
 	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
 	// JavaSQLTypeSTRUCT                  JavaSQLType = 2002
-	// JavaSQLTypeARRAY JavaSQLType = 2003
+	// JavaSQLTypeARRAY                   JavaSQLType = 2003
 	// JavaSQLTypeREF                     JavaSQLType = 2006
 	// JavaSQLTypeDATALINK                JavaSQLType = 70
 	// JavaSQLTypeBOOLEAN                 JavaSQLType = 16

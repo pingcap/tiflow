@@ -125,7 +125,8 @@ func TestPrepareDML(t *testing.T) {
 		}, {
 			Name: "a3",
 			Type: mysql.TypeTiDBVectorFloat32,
-		}}, [][]int{{}})
+		},
+	}, [][]int{{}})
 
 	testCases := []struct {
 		input    []*model.RowChangedEvent
@@ -213,7 +214,8 @@ func TestPrepareDML(t *testing.T) {
 								Name:  "a3",
 								Type:  mysql.TypeTiDBVectorFloat32,
 								Value: util.Must(types.ParseVectorFloat32("[1.1,-2.0,3.33,-4.12,-5]")),
-							}}, tableInfoVector),
+							},
+						}, tableInfoVector),
 				},
 			},
 			expected: &preparedDMLs{

@@ -296,7 +296,7 @@ func needFormatDDL(db *sql.DB, isTiDB bool) bool {
 	serverInfo := version.ParseServerInfo(versionInfo)
 	version := semver.New(defaultSupportVectorVersion)
 	if !isTiDB || serverInfo.ServerVersion.LessThan(*version) {
-		log.Error("downstream unsupport vector type. hack: we convert it to longtext", zap.String("support version", version.String()), zap.Bool("isTiDB", isTiDB))
+		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("supportVersion", version.String()), zap.Bool("isTiDB", isTiDB))
 		return true
 	}
 	return false
