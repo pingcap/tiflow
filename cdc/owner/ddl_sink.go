@@ -391,7 +391,6 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (e
 	for {
 		if err = s.makeSyncPointStoreReady(ctx); err == nil {
 			// TODO implement async sink syncPoint
-			// TODO:
 			err = s.syncPointStore.SinkSyncPoint(ctx, s.changefeedID, checkpointTs)
 		}
 		if err == nil {
