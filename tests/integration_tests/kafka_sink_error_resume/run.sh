@@ -42,8 +42,8 @@ function run() {
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 
-	check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "kafka_sink_error_resume.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "kafka_sink_error_resume.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

@@ -17,7 +17,7 @@ function prepare() {
 
 	# create table to upstream.
 	run_sql "CREATE DATABASE api_v2" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "CREATE DATABASE api_v2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE DATABASE api_v2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	cdc cli changefeed create -c="cf-blackhole" --sink-uri="blackhole://"

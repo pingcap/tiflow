@@ -48,8 +48,8 @@ function run() {
 	run_sql "CREATE TABLE ci_collation_compatibility.finish_mark_1 (a int primary key);"
 
 	sleep 30
-	check_table_exists "ci_collation_compatibility.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "ci_collation_compatibility.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+	check_table_exists "ci_collation_compatibility.t" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "ci_collation_compatibility.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

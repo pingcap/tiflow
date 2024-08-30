@@ -61,7 +61,7 @@ const (
 type mysqlBackend struct {
 	workerID    int
 	changefeed  string
-	db          *sql.DB
+	connector   pmysql.DBConnector
 	cfg         *pmysql.Config
 	dmlMaxRetry uint64
 
@@ -97,47 +97,44 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory.CreateTemporaryConnection)
+	connector, err := pmysql.NewDBConnectorWithFactory(ctx, cfg, sinkURI, dbConnFactory)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := dbConnFactory.CreateStandardConnection(ctx, dsnStr)
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, connector.CurrentDB)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, connector.CurrentDB)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-
-	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
-	// two connections are required to process a transaction.
-	// The first connection is held in the tx variable, which is used to manage the transaction.
-	// The second connection is requested through a call to s.db.Prepare
-	// in case of a cache miss for the statement query.
-	// The connection pool for CDC is configured with a static size, equal to the number of workers.
-	// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
-	// When the connection pool is small,
-	// the chance of all connections being active at the same time increases,
-	// leading to exhaustion of available connections and a hang at the "Get Connection" call.
-	// This issue is less likely to occur when the connection pool is larger,
-	// as there are more connections available for use.
-	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
-	db.SetMaxIdleConns(cfg.WorkerCount + 1)
-	db.SetMaxOpenConns(cfg.WorkerCount + 1)
+	connector.ConfigureDBWhenSwitch(func() {
+		// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
+		// two connections are required to process a transaction.
+		// The first connection is held in the tx variable, which is used to manage the transaction.
+		// The second connection is requested through a call to s.db.Prepare
+		// in case of a cache miss for the statement query.
+		// The connection pool for CDC is configured with a static size, equal to the number of workers.
+		// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
+		// When the connection pool is small,
+		// the chance of all connections being active at the same time increases,
+		// leading to exhaustion of available connections and a hang at the "Get Connection" call.
+		// This issue is less likely to occur when the connection pool is larger,
+		// as there are more connections available for use.
+		// Adding an extra connection to the connection pool solves the connection exhaustion issue.
+		connector.CurrentDB.SetMaxIdleConns(cfg.WorkerCount + 1)
+		connector.CurrentDB.SetMaxOpenConns(cfg.WorkerCount + 1)
+	}, true)
 
 	// Inherit the default value of the prepared statement cache from the SinkURI Options
 	cachePrepStmts := cfg.CachePrepStmts
 	if cachePrepStmts {
 		// query the size of the prepared statement cache on serverside
-		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, connector.CurrentDB)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +164,7 @@ func NewMySQLBackends(
 	}
 
 	var maxAllowedPacket int64
-	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
+	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, connector.CurrentDB)
 	if err != nil {
 		log.Warn("failed to query max_allowed_packet, use default value",
 			zap.String("changefeed", changefeed),
@@ -180,7 +177,7 @@ func NewMySQLBackends(
 		backends = append(backends, &mysqlBackend{
 			workerID:    i,
 			changefeed:  changefeed,
-			db:          db,
+			connector:   *connector,
 			cfg:         cfg,
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
@@ -261,9 +258,9 @@ func (s *mysqlBackend) Close() (err error) {
 	if s.stmtCache != nil {
 		s.stmtCache.Purge()
 	}
-	if s.db != nil {
-		err = s.db.Close()
-		s.db = nil
+	if s.connector.CurrentDB != nil {
+		err = s.connector.CurrentDB.Close()
+		s.connector.CurrentDB = nil
 	}
 	return
 }
@@ -673,7 +670,7 @@ func (s *mysqlBackend) sequenceExecute(
 		if s.cachePrepStmts {
 			if stmt, ok := s.stmtCache.Get(query); ok {
 				prepStmt = stmt.(*sql.Stmt)
-			} else if stmt, err := s.db.Prepare(query); err == nil {
+			} else if stmt, err := s.connector.CurrentDB.Prepare(query); err == nil {
 				prepStmt = stmt
 				s.stmtCache.Add(query, stmt)
 			} else {
@@ -741,7 +738,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
-			tx, err := s.db.BeginTx(pctx, nil)
+			tx, err := s.connector.CurrentDB.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, 0, logDMLTxnErr(
 					wrapMysqlTxnError(err),
@@ -799,7 +796,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			zap.Int("workerID", s.workerID),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
-	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
+	}, retry.WithPreExecutionWhenRetry(func() error {
+		return s.connector.SwitchToAnAvailableDB(pctx)
+	}), retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(s.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))

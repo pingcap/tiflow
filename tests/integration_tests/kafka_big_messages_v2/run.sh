@@ -43,7 +43,7 @@ function run() {
 
 	run_sql_file $CUR/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	table="kafka_big_messages.test"
-	check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

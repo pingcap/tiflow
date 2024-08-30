@@ -124,7 +124,7 @@ func IsRetryableDDLError(err error) bool {
 	err = errors.Cause(err)
 	mysqlErr, ok := err.(*gmysql.MySQLError)
 	if !ok {
-		return false
+		return true
 	}
 
 	// If the error is in the black list, return false.

@@ -80,7 +80,7 @@ function run() {
 
 	run_sql_file $CUR/data/start.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	check_table_exists ddl_only_block_related_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists ddl_only_block_related_table.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	kill_cdc_pid $owner_pid
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ExecuteNotDone=return(true)'

@@ -12,6 +12,7 @@ pd_config=
 tikv_config=
 retry_times=3
 multiple_upstream_pd="false"
+downstream_db=1
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -39,6 +40,10 @@ while [[ ${1} ]]; do
 		multiple_upstream_pd=${2}
 		shift
 		;;
+	--downstream_db)
+		downstream_db=${2}
+		shift
+		;;
 	*)
 		echo "Unknown parameter: ${1}" >&2
 		exit 1
@@ -60,13 +65,13 @@ while [ $i -le $retry_times ]; do
 	echo "The ${i} times to try to start tidb cluster..."
 
 	if [[ "$tidb_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --downstream_db ${downstream_db} --tidb-config ${tidb_config}
 	elif [[ "$pd_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config}
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --downstream_db ${downstream_db} --pd-config ${pd_config}
 	elif [[ "$tikv_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tikv-config ${tikv_config}
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --downstream_db ${downstream_db} --tikv-config ${tikv_config}
 	else
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --downstream_db ${downstream_db}
 	fi
 
 	if [ $? -eq 0 ]; then

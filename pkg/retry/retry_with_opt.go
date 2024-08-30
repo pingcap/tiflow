@@ -53,13 +53,23 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 	var start time.Time
 	try := uint64(0)
 	backOff := time.Duration(0)
+	isFirstRun := true
 	for {
+		if isFirstRun {
+			isFirstRun = false
+		} else if retryOption.preExecutionWhenRetry != nil {
+			err := retryOption.preExecutionWhenRetry()
+			if err != nil {
+				return err
+			}
+		}
+
 		err := op()
 		if err == nil {
 			return nil
 		}
 
-		if !retryOption.isRetryable(err) {
+		if retryOption.isRetryable != nil && !retryOption.isRetryable(err) {
 			return err
 		}
 

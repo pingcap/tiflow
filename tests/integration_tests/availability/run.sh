@@ -12,7 +12,7 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 export DOWN_TIDB_HOST
-export DOWN_TIDB_PORT
+export DOWN_TIDB_PORT_1
 
 function prepare() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR

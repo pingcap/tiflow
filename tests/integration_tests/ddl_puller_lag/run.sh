@@ -46,7 +46,7 @@ function sql_check() {
 	# the following statement will be not executed
 
 	# check table ddl_puller_lag1.
-	run_sql "SELECT id, val FROM test.ddl_puller_lag1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "SELECT id, val FROM test.ddl_puller_lag1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "id: 1" &&
 		check_contains "val: 1" &&
 		check_contains "id: 2" &&
@@ -54,7 +54,7 @@ function sql_check() {
 		check_not_contains "id: 3" &&
 
 		# check table ddl_puller_lag2.
-		run_sql "SELECT id, val FROM test.ddl_puller_lag2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		run_sql "SELECT id, val FROM test.ddl_puller_lag2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "id: 1" &&
 		check_contains "val: 1" &&
 		check_contains "id: 2" &&

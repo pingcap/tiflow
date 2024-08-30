@@ -54,7 +54,7 @@ function run() {
 	cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"
 	run_sql "CREATE DATABASE kill_owner_with_ddl;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table kill_owner_with_ddl.t1 (id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "kill_owner_with_ddl.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "kill_owner_with_ddl.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/tiflow/cdc/capture/ownerFlushIntervalInject=return(10)'
 	kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
@@ -78,7 +78,7 @@ function run() {
 	kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
 
 	for i in $(seq 1 3); do
-		check_table_exists "kill_owner_with_ddl.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists "kill_owner_with_ddl.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

@@ -152,9 +152,9 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
-	run_sql "SET GLOBAL tidb_enable_external_ts_read = on;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "SET GLOBAL tidb_enable_external_ts_read = on;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	run_sql "CREATE DATABASE testSync;"
-	run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	# make suer no panic happen when the syncpoint enable and the ddl sink initializing slowly
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/DDLSinkInitializeSlowly=return(true)'
@@ -168,14 +168,14 @@ function run() {
 
 	goSql
 
-	check_table_exists "testSync.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "testSync.simple1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "testSync.simple2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "testSync.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "testSync.simple1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "testSync.simple2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
-	run_sql "SET GLOBAL tidb_enable_external_ts_read = off;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "SET GLOBAL tidb_enable_external_ts_read = off;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	sleep 60
 
-	run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	echo "____________________________________"
 	cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
 	checkDiff

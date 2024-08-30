@@ -18,71 +18,71 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"net"
 	"net/url"
 	"strconv"
+	"strings"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// GenerateDSN generates the dsn with the given config.
-// GenerateDSN uses the provided dbConnFactory to create a temporary connection
+// generateDSNs generates the DSNs with the given config.
+// generateDSNs uses the provided dbConnFactory to create a temporary connection
 // to the downstream database specified by the sinkURI. This temporary connection
 // is used to query important information from the downstream database, such as
 // version, charset, and other relevant details. After the required information
 // is retrieved, the temporary connection is closed. The retrieved data is then
 // used to populate additional parameters into the Sink URI, refining
-// the connection URL (dsnStr).
-func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) (dsnStr string, err error) {
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	dsn, err := GenBasicDSN(sinkURI, cfg)
+// the connection URL.
+// NOTE: the function returns no error if not all of the DSNs are unavailable and
+// will report warnings if some of the DSNs are unavailable.
+func generateDSNs(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory ConnectionFactory) ([]string, error) {
+	dsnCfgs, err := GetDSNCfgs(sinkURI, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	var oneOfErrs error
+	oneAvailable := false
+	dsnList := make([]string, len(dsnCfgs))
+	for i := 0; i < len(dsnCfgs); i++ {
+		// DSN format of the driver:
+		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+		dsnList[i], err = checkAndGenerateDSNByConfig(ctx, dsnCfgs[i], cfg, dbConnFactory)
+		if err != nil {
+			oneOfErrs = err
+		} else {
+			oneAvailable = true
+		}
+	}
+
+	if !oneAvailable {
+		return nil, oneOfErrs
+	}
+	return dsnList, nil
+}
+
+func checkAndGenerateDSNByConfig(ctx context.Context, dsnCfg *dmysql.Config, cfg *Config, dbConnFactory ConnectionFactory) (string, error) {
+	testDB, err := GetTestDB(ctx, dsnCfg, dbConnFactory)
 	if err != nil {
 		return "", err
 	}
-
-	var testDB *sql.DB
-	testDB, err = GetTestDB(ctx, dsn, dbConnFactory)
-	if err != nil {
-		return
-	}
 	defer testDB.Close()
 
-	// we use default sql mode for downstream because all dmls generated and ddls in ticdc
-	// are based on default sql mode.
-	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(mysql.DefaultSQLMode)
+	dsnStr, err := generateDSNByConfig(ctx, dsnCfg, cfg, testDB)
 	if err != nil {
-		return
+		log.Warn("DSN is invaild", zap.String("DSN", dsnCfg.FormatDSN()))
+		return "", err
 	}
-	// NOTE: quote the string is necessary to avoid ambiguities.
-	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
+	log.Debug("DSN is vaild", zap.String("DSN", dsnStr))
 
-	dsnStr, err = generateDSNByConfig(ctx, dsn, cfg, testDB)
-	if err != nil {
-		return
-	}
-
-	// check if GBK charset is supported by downstream
-	var gbkSupported bool
-	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
-	if err != nil {
-		return
-	}
-	if !gbkSupported {
-		log.Warn("GBK charset is not supported by the downstream. "+
-			"Some types of DDLs may fail to execute",
-			zap.String("host", dsn.Addr))
-	}
-
-	return
+	return dsnStr, nil
 }
 
 func generateDSNByConfig(
@@ -106,6 +106,16 @@ func generateDSNByConfig(
 	dsnCfg.Params["timeout"] = cfg.DialTimeout
 	// auto fetch max_allowed_packet on every new connection
 	dsnCfg.Params["maxAllowedPacket"] = "0"
+
+	// we use default sql mode for downstream because all dmls generated and ddls in ticdc
+	// are based on default sql mode.
+	var err error
+	dsnCfg.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(tmysql.DefaultSQLMode)
+	if err != nil {
+		return "", err
+	}
+	// NOTE: quote the string is necessary to avoid ambiguities.
+	dsnCfg.Params["sql_mode"] = strconv.Quote(dsnCfg.Params["sql_mode"])
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
@@ -156,6 +166,18 @@ func generateDSNByConfig(
 		// set the `tidb_enable_external_ts_read` to `OFF`, so cdc could write to the sink
 		dsnCfg.Params["tidb_enable_external_ts_read"] = fmt.Sprintf(`"%s"`, tidbEnableExternalTSRead)
 	}
+	// check if GBK charset is supported by downstream
+	var gbkSupported bool
+	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return "", err
+	}
+	if !gbkSupported {
+		log.Warn("GBK charset is not supported by the downstream. "+
+			"Some types of DDLs may fail to execute",
+			zap.String("host", dsnCfg.Addr))
+	}
+
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
@@ -222,8 +244,12 @@ func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Conne
 	return testDB, err
 }
 
-// GenBasicDSN generates a basic DSN from the given config.
-func GenBasicDSN(sinkURI *url.URL, cfg *Config) (*dmysql.Config, error) {
+// GetDSNCfgs generates DSN configurations for multiple addresses contained in the given sinkURI.
+// If the sinkURI contains multiple host addresses, the function will generate a DSN configuration
+// for each address. It uses the provided `Config` to set various parameters such as TLS, timeouts,
+// and the database timezone. The function supports IPv6 address formats and ensures that appropriate
+// query parameters are applied. The DSN configurations are returned as a slice of `*mysql.Config` objects.
+func GetDSNCfgs(sinkURI *url.URL, cfg *Config) ([]*dmysql.Config, error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
@@ -232,33 +258,46 @@ func GenBasicDSN(sinkURI *url.URL, cfg *Config) (*dmysql.Config, error) {
 	}
 	password, _ := sinkURI.User.Password()
 
-	hostName := sinkURI.Hostname()
-	port := sinkURI.Port()
-	if port == "" {
-		port = "4000"
-	}
+	hosts := getMultiAddressesInURL(sinkURI.Host)
 
 	// This will handle the IPv6 address format.
-	var dsn *dmysql.Config
-	var err error
-	host := net.JoinHostPort(hostName, port)
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, cfg.TLS)
-	if dsn, err = dmysql.ParseDSN(dsnStr); err != nil {
-		return nil, errors.Trace(err)
-	}
+	dsnCfgs := make([]*dmysql.Config, len(hosts))
+	for i := 0; i < len(dsnCfgs); i++ {
+		var err error
+		dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, hosts[i], cfg.TLS)
+		if dsnCfgs[i], err = dmysql.ParseDSN(dsnStr); err != nil {
+			return nil, errors.Trace(err)
+		}
 
-	// create test db used for parameter detection
-	// Refer https://github.com/go-sql-driver/mysql#parameters
-	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
+		// create test db used for parameter detection
+		// Refer https://github.com/go-sql-driver/mysql#parameters
+		if dsnCfgs[i].Params == nil {
+			dsnCfgs[i].Params = make(map[string]string, 1)
+		}
+		if cfg.Timezone != "" {
+			dsnCfgs[i].Params["time_zone"] = cfg.Timezone
+		}
+		dsnCfgs[i].Params["readTimeout"] = cfg.ReadTimeout
+		dsnCfgs[i].Params["writeTimeout"] = cfg.WriteTimeout
+		dsnCfgs[i].Params["timeout"] = cfg.DialTimeout
 	}
-	if cfg.Timezone != "" {
-		dsn.Params["time_zone"] = cfg.Timezone
+	return dsnCfgs, nil
+}
+
+func getMultiAddressesInURL(hostStr string) []string {
+	hosts := strings.Split(hostStr, ",")
+	for i := 0; i < len(hosts); i++ {
+		hostnameAndPort := strings.Split(hosts[i], ":")
+		if len(hostnameAndPort) == 1 {
+			// If only the hostname is provided, add the default port 4000.
+			hostnameAndPort = append(hostnameAndPort, "4000")
+		} else if len(hostnameAndPort) == 2 && hostnameAndPort[1] == "" {
+			// If both the hostname and port are provided, but the port is empty, then set the port to the default port 4000.
+			hostnameAndPort[1] = "4000"
+		}
+		hosts[i] = hostnameAndPort[0] + ":" + hostnameAndPort[1]
 	}
-	dsn.Params["readTimeout"] = cfg.ReadTimeout
-	dsn.Params["writeTimeout"] = cfg.WriteTimeout
-	dsn.Params["timeout"] = cfg.DialTimeout
-	return dsn, nil
+	return hosts
 }
 
 // CheckIfBDRModeIsSupported checks if the downstream supports BDR mode.
@@ -330,7 +369,7 @@ func SetWriteSource(ctx context.Context, cfg *Config, txn *sql.Tx) error {
 	_, err := txn.ExecContext(ctx, query)
 	if err != nil {
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
-			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			mysqlErr.Number == tmysql.ErrUnknownSystemVariable {
 			return nil
 		}
 		return err

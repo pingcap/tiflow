@@ -52,8 +52,8 @@ EOF
 	esac
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists split_region.test1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists split_region.test2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists split_region.test1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists split_region.test2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# split table into 5 regions, run some other DMLs and check data is synchronized to downstream

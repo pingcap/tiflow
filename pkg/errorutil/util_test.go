@@ -98,7 +98,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 		err error
 		ret bool
 	}{
-		{errors.New("raw error"), false},
+		{errors.New("raw error"), true},
 		{newMysqlErr(tmysql.ErrNoDB, "Error: Duplicate key name 'some_key'"), false},
 		{newMysqlErr(tmysql.ErrParse, "Can't create database"), false},
 		{newMysqlErr(tmysql.ErrAccessDenied, "Access denied for user"), false},

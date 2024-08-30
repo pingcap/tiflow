@@ -43,13 +43,13 @@ function run() {
 
 	run_sql "CREATE TABLE sink_retry.finish_mark_1 (a int primary key);"
 	sleep 30
-	check_table_exists "sink_retry.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+	check_table_exists "sink_retry.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
 	run_sql "CREATE TABLE sink_retry.finish_mark_2 (a int primary key);"
 	sleep 30
-	check_table_exists "sink_retry.finish_mark_2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+	check_table_exists "sink_retry.finish_mark_2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

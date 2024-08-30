@@ -43,14 +43,14 @@ function run() {
 	# wait table t1 is processed by cdc server
 	ensure 10 "cdc cli processor list --server http://127.0.0.1:8301 |jq '.|length'|grep -E '^1$'"
 	# check the t1 is replicated to downstream to make sure the t1 is dispatched to cdc1
-	check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 	export GO_FAILPOINTS=''
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 	run_sql "CREATE table processor_resolved_ts_fallback.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table processor_resolved_ts_fallback.t3(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "processor_resolved_ts_fallback.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "processor_resolved_ts_fallback.t3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "processor_resolved_ts_fallback.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
+	check_table_exists "processor_resolved_ts_fallback.t3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	ensure 10 "cdc cli processor list --server http://127.0.0.1:8301 |jq '.|length'|grep -E '^2$'"
 
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t1 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

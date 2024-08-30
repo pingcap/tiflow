@@ -39,7 +39,7 @@ start_tidb_cluster --workdir $WORK_DIR
 trap stop_tidb_cluster EXIT
 
 run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 cd $WORK_DIR
 start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
@@ -51,9 +51,9 @@ run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --chan
 run_sql "use test; create table t1(id bigint primary key, a text, b text as ((regexp_replace(a, '^[1-9]\d{9,29}$', 'aaaaa'))), c text); insert into t1 (id, a, c) values(1,123456, 'ab\\\\\\\\c'); insert into t1 (id, a, c) values(2,1234567890123, 'ab\\\\c');" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 if [ "$SINK_TYPE" == "mysql" ]; then
-	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	sleep 10
-	run_sql "SELECT * from test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "SELECT * from test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "b: 123456" &&
 		check_contains "b: aaaaa" &&
 		check_contains "c: ab\\\\\\\\c" &&
@@ -65,7 +65,7 @@ start_tidb_cluster --workdir $WORK_DIR
 
 ## case 2
 run_sql "set global sql_mode='ANSI_QUOTES';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "set global sql_mode='ANSI_QUOTES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "set global sql_mode='ANSI_QUOTES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 
 start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
@@ -76,9 +76,9 @@ run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --chan
 run_sql "use test; create table t2(id bigint primary key, a date); insert into t2 values(1, '2023-02-08');" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 if [ "$SINK_TYPE" == "mysql" ]; then
-	check_table_exists "test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	sleep 10
-	run_sql "SELECT * from test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+	run_sql "SELECT * from test.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} &&
 		check_contains "a: 2023-02-08"
 fi
 

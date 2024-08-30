@@ -49,7 +49,7 @@ function run() {
 		run_sql "INSERT INTO processor_delay.t$i VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
 	for i in {1..50}; do
-		check_table_exists "processor_delay.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists "processor_delay.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1}
 	done
 
 	if grep -Fa "[PANIC]" ${WORK_DIR}/cdc.log; then

@@ -48,7 +48,7 @@ function run() {
 	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	check_table_exists ddl_manager.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+	check_table_exists ddl_manager.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT_1} 300
 	# make sure all tables are equal in upstream and downstream
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 180
 	cleanup_process $CDC_BINARY

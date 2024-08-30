@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
@@ -38,14 +37,14 @@ type Observer interface {
 
 // NewObserverOpt represents available options when creating a new observer.
 type NewObserverOpt struct {
-	dbConnFactory pmysql.ConnectionFactory
+	dbConnFactory pmysql.IDBConnectionFactory
 }
 
 // NewObserverOption configures NewObserverOpt.
 type NewObserverOption func(*NewObserverOpt)
 
 // WithDBConnFactory specifies factory to create db connection.
-func WithDBConnFactory(factory pmysql.ConnectionFactory) NewObserverOption {
+func WithDBConnFactory(factory pmysql.IDBConnectionFactory) NewObserverOption {
 	return func(opt *NewObserverOpt) {
 		opt.dbConnFactory = factory
 	}
@@ -60,14 +59,14 @@ func NewObserver(
 	opts ...NewObserverOption,
 ) (Observer, error) {
 	creator := func() (Observer, error) {
-		options := &NewObserverOpt{dbConnFactory: pmysql.CreateMySQLDBConn}
+		options := &NewObserverOpt{dbConnFactory: &pmysql.DBConnectionFactory{}}
 		for _, opt := range opts {
 			opt(options)
 		}
 
 		sinkURI, err := url.Parse(sinkURIStr)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+			return nil, errors.WrapError(errors.ErrSinkURIInvalid, err)
 		}
 
 		scheme := strings.ToLower(sinkURI.Scheme)
@@ -81,25 +80,23 @@ func NewObserver(
 			return nil, err
 		}
 
-		dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, options.dbConnFactory)
+		connector, err := pmysql.NewDBConnectorWithFactory(ctx, cfg, sinkURI, options.dbConnFactory)
 		if err != nil {
 			return nil, err
 		}
-		db, err := options.dbConnFactory(ctx, dsnStr)
-		if err != nil {
-			return nil, err
-		}
-		db.SetMaxIdleConns(2)
-		db.SetMaxOpenConns(2)
+		connector.ConfigureDBWhenSwitch(func() {
+			connector.CurrentDB.SetMaxIdleConns(2)
+			connector.CurrentDB.SetMaxOpenConns(2)
+		}, true)
 
-		isTiDB, err := pmysql.CheckIsTiDB(ctx, db)
+		isTiDB, err := pmysql.CheckIsTiDB(ctx, connector.CurrentDB)
 		if err != nil {
 			return nil, err
 		}
 		if isTiDB {
-			return NewTiDBObserver(db), nil
+			return NewTiDBObserver(connector), nil
 		}
-		_ = db.Close()
+		_ = connector.CurrentDB.Close()
 		return NewDummyObserver(), nil
 	}
 	return &observerAgent{creator: creator}, nil

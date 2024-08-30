@@ -39,29 +39,19 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 func TestNewObserver(t *testing.T) {
 	t.Parallel()
 
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() { dbIndex++ }()
-
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
 
 	ctx := context.Background()
 	sinkURI := "mysql://127.0.0.1:21347/"
 	obs, err := NewObserver(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, config.GetDefaultReplicaConfig(),
-		WithDBConnFactory(mockGetDBConn))
+		WithDBConnFactory(dbConnFactory))
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
 		err = obs.Tick(ctx)
