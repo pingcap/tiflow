@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.5.11"
+      "version": "7.5.17"
     },
     {
       "type": "panel",
@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1724397907953,
+  "iteration": 1724839764339,
   "links": [],
   "panels": [
     {
@@ -188,7 +188,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -291,7 +291,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -396,7 +396,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -501,7 +501,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -603,7 +603,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -709,7 +709,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -836,7 +836,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -847,21 +847,12 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\",namespace=\"$namespace\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
+              "expr": "sum(rate(ticdc_sink_batch_row_count_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{namespace}}-{{changefeed}}",
               "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "sum (rate(ticdc_sink_ddl_exec_duration_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-ddl",
-              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -947,7 +938,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1063,7 +1054,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1170,7 +1161,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1278,7 +1269,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1387,7 +1378,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1495,7 +1486,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1602,7 +1593,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1710,7 +1701,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1815,7 +1806,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1921,7 +1912,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2029,7 +2020,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2133,7 +2124,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2256,7 +2247,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2377,7 +2368,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2492,7 +2483,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2601,7 +2592,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2781,7 +2772,7 @@
           "options": {
             "showHeader": true
           },
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "targets": [
             {
               "expr": "rate(ticdc_owner_ownership_counter{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[240s])",
@@ -2850,7 +2841,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2966,7 +2957,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3071,7 +3062,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3170,7 +3161,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3320,7 +3311,7 @@
           "options": {
             "showHeader": true
           },
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "targets": [
             {
               "exemplar": true,
@@ -3334,7 +3325,7 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Changefeed table count",
+          "title": "Capture table count",
           "transformations": [
             {
               "id": "reduce",
@@ -3398,7 +3389,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -3424,7 +3415,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Capture tables count",
+          "title": "changefeed tables count",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -3500,7 +3491,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3611,7 +3602,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3737,7 +3728,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3864,7 +3855,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3967,7 +3958,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4078,7 +4069,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4177,7 +4168,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4459,7 +4450,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4580,7 +4571,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4665,7 +4656,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -4680,7 +4671,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4773,7 +4764,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 4
+            "y": 46
           },
           "hiddenSeries": false,
           "id": 218,
@@ -4797,7 +4788,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4876,7 +4867,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 4
+            "y": 46
           },
           "hiddenSeries": false,
           "id": 229,
@@ -4902,7 +4893,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4981,7 +4972,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 8
+            "y": 50
           },
           "hiddenSeries": false,
           "id": 228,
@@ -5005,7 +4996,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5084,7 +5075,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 8
+            "y": 50
           },
           "hiddenSeries": false,
           "id": 220,
@@ -5108,7 +5099,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5187,7 +5178,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 219,
@@ -5211,7 +5202,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5290,7 +5281,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 224,
@@ -5314,7 +5305,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5393,7 +5384,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 16
+            "y": 58
           },
           "hiddenSeries": false,
           "id": 223,
@@ -5417,7 +5408,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5496,7 +5487,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 16
+            "y": 58
           },
           "hiddenSeries": false,
           "id": 221,
@@ -5520,7 +5511,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5599,7 +5590,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 62
           },
           "hiddenSeries": false,
           "id": 664,
@@ -5624,7 +5615,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5703,7 +5694,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 62
           },
           "hiddenSeries": false,
           "id": 665,
@@ -5728,7 +5719,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5840,7 +5831,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5943,7 +5934,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6027,7 +6018,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6041,7 +6032,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6131,9 +6122,9 @@
           "id": 612,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6147,7 +6138,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6231,7 +6222,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6245,7 +6236,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6334,7 +6325,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6348,7 +6339,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6445,7 +6436,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6459,7 +6450,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6543,7 +6534,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6557,7 +6548,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6678,7 +6669,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6800,7 +6791,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6906,7 +6897,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7003,7 +6994,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7100,7 +7091,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7199,7 +7190,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 7
+            "y": 95
           },
           "hiddenSeries": false,
           "id": 653,
@@ -7221,7 +7212,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7307,7 +7298,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 7
+            "y": 95
           },
           "hiddenSeries": false,
           "id": 628,
@@ -7331,7 +7322,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7354,7 +7345,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Outgoing Bytes",
+          "title": "Kafka Outgoing Bytes / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7410,7 +7401,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 102
           },
           "hiddenSeries": false,
           "id": 627,
@@ -7434,7 +7425,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7457,7 +7448,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Inflight Requests",
+          "title": "Kafka Inflight Requests / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7513,7 +7504,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 102
           },
           "hiddenSeries": false,
           "id": 630,
@@ -7537,7 +7528,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7616,7 +7607,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 21
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 629,
@@ -7640,7 +7631,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7663,7 +7654,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Request Rate",
+          "title": "Kafka Request Rate / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7719,7 +7710,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 21
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 631,
@@ -7743,7 +7734,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7820,7 +7811,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 116
           },
           "hiddenSeries": false,
           "id": 626,
@@ -7844,7 +7835,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7921,7 +7912,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 116
           },
           "hiddenSeries": false,
           "id": 709,
@@ -7943,7 +7934,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7954,10 +7945,10 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-{{index}}",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
               "refId": "A"
             }
           ],
@@ -7965,7 +7956,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "encoder group input channel size",
+          "title": "Encoder group input channel size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8019,7 +8010,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 123
           },
           "hiddenSeries": false,
           "id": 710,
@@ -8041,7 +8032,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8052,7 +8043,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
@@ -8063,7 +8054,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "encoder group output channel size",
+          "title": "Encoder group output channel size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8117,7 +8108,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 35
+            "y": 123
           },
           "hiddenSeries": false,
           "id": 711,
@@ -8139,7 +8130,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8223,7 +8214,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 130
           },
           "hiddenSeries": false,
           "id": 712,
@@ -8245,7 +8236,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8319,6 +8310,210 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "MQ worker send large message to the external storage, this metrics record the message count",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 130
+          },
+          "hiddenSeries": false,
+          "id": 741,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.17",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Claim Check Send Message Count / Second",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "MQ worker send large message to the external storage, this metric record the time cost on send every message.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 137
+          },
+          "hiddenSeries": false,
+          "id": 740,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.17",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_mq_claim_check_send_message_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_duration_sum[1m])) by (namespace, changefeed, instance) / sum(rate(ticdc_sink_mq_claim_check_send_message_duration_count[1m])) by (namespace, changefeed, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-avg",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Claim Check Send Message Duration Percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 2,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Kafka-Go Writer batch messages internally before send to the Kafka cluster.",
           "fieldConfig": {
             "defaults": {},
@@ -8330,7 +8525,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 137
           },
           "hiddenSeries": false,
           "id": 731,
@@ -8352,7 +8547,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8428,7 +8623,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 733,
@@ -8450,7 +8645,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8526,7 +8721,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 735,
@@ -8548,7 +8743,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8624,7 +8819,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 739,
@@ -8646,7 +8841,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8722,7 +8917,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 737,
@@ -8744,7 +8939,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8767,210 +8962,6 @@
           "timeRegions": [],
           "timeShift": null,
           "title": "Error Count (Kafka-Go Only)",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "MQ worker send large message to the external storage, this metric record the time cost on send every message.",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 64
-          },
-          "hiddenSeries": false,
-          "id": 740,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_mq_claim_check_send_message_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P999",
-              "queryType": "randomWalk",
-              "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "rate(ticdc_sink_mq_claim_check_send_message_duration_sum[30s]) / rate(ticdc_sink_mq_claim_check_send_message_duration_count[30s])",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-avg",
-              "refId": "B"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Claim Check Send Message Duration Percentile",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 2,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "MQ worker send large message to the external storage, this metrics record the message count",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 64
-          },
-          "hiddenSeries": false,
-          "id": 741,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
-              "refId": "B"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Claim Check Send Message Count / Second",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -19830,8 +19821,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20016,8 +20007,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [],
@@ -20123,8 +20114,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20245,8 +20236,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -21650,7 +21641,7 @@
       "type": "row"
     }
   ],
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -21962,5 +21953,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 59
+  "version": 60
 }

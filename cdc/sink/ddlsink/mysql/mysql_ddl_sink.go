@@ -109,7 +109,7 @@ func NewDDLSink(
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
-		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		statistics:                 metrics.NewStatistics(changefeedID, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
 	}
 

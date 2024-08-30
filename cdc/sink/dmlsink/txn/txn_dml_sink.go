@@ -72,7 +72,7 @@ func NewMySQLSink(
 	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.TxnSink)
+	statistics := metrics.NewStatistics(changefeedID, sink.TxnSink)
 
 	backendImpls, err := mysql.NewMySQLBackends(ctx, changefeedID, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
