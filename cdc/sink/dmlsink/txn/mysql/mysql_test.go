@@ -213,7 +213,7 @@ func TestPrepareDML(t *testing.T) {
 							}, {
 								Name:  "a3",
 								Type:  mysql.TypeTiDBVectorFloat32,
-								Value: util.Must(types.ParseVectorFloat32("[1.1,-2.0,3.33,-4.12,-5]")),
+								Value: util.Must(types.ParseVectorFloat32("[1.1,-2,3.33,-4.12,-5]")),
 							},
 						}, tableInfoVector),
 				},
@@ -221,7 +221,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813518},
 				sqls:            []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
-				values:          [][]interface{}{{"[1,2,3,4,5]", "[1.1,-2.0,3.33,-4.12,-5]"}},
+				values:          [][]interface{}{{"[1,2,3,4,5]", "[1.1,-2,3.33,-4.12,-5]"}},
 				rowCount:        1,
 				approximateSize: 64,
 			},
@@ -1152,6 +1152,14 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		Charset: charset.CharsetGBK,
 		Flag:    model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 	}}, [][]int{{0, 1}})
+	tableInfoWithVector := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{{
+		Name: "a1",
+		Type: mysql.TypeLong,
+		Flag: model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+	}, {
+		Name: "a3",
+		Type: mysql.TypeTiDBVectorFloat32,
+	}}, [][]int{{0, 1}})
 	testCases := []struct {
 		isTiDB   bool
 		input    []*model.RowChangedEvent
@@ -1464,6 +1472,76 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				values:          [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
 				rowCount:        2,
 				approximateSize: 204,
+			},
+		},
+
+		// inser vector data
+		{
+			isTiDB: true,
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:   418658114257813516,
+					CommitTs:  418658114257813517,
+					TableInfo: tableInfoWithVector,
+					Columns: model.Columns2ColumnDatas([]*model.Column{{
+						Name:  "a1",
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+					}}, tableInfoWithVector),
+					ApproximateDataSize: 10,
+				},
+				{
+					StartTs:   418658114257813516,
+					CommitTs:  418658114257813517,
+					TableInfo: tableInfoWithVector,
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{{
+						Name:  "a1",
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+					}}, tableInfoWithVector),
+					Columns: model.Columns2ColumnDatas([]*model.Column{{
+						Name:  "a1",
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Value: util.Must(types.ParseVectorFloat32("[1.1,-2,3.33,-4.12,-5]")),
+					}}, tableInfoWithVector),
+					ApproximateDataSize: 10,
+				},
+				{
+					StartTs:   418658114257813516,
+					CommitTs:  418658114257813517,
+					TableInfo: tableInfoWithVector,
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{{
+						Name:  "a1",
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Value: util.Must(types.ParseVectorFloat32("[1.1,-2,3.33,-4.12,-5]")),
+					}}, tableInfoWithVector),
+					ApproximateDataSize: 10,
+				},
+			},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
+				sqls: []string{
+					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?)",
+					"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE WHEN " +
+						"`a1` = ? AND `a3` = ? THEN ? END, `a3`=CASE WHEN " +
+						"`a1` = ? AND `a3` = ? THEN ? END WHERE (`a1` = ? AND `a3` = ?)",
+					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
+				},
+				values: [][]interface{}{
+					{3, "[1.1,-2,3.33,-4.12,-5]"},
+					{1, "[1,2,3,4,5]", 3, 1, "[1,2,3,4,5]", "[1.1,-2,3.33,-4.12,-5]", 1, "[1,2,3,4,5]"},
+					{1, "[1,2,3,4,5]"},
+				},
+				rowCount:        3,
+				approximateSize: 325,
 			},
 		},
 	}
