@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -73,7 +74,6 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID: id,
@@ -82,9 +82,8 @@ func newWorker(
 		ticker:       time.NewTicker(batchInterval),
 		encoderGroup: encoderGroup,
 		producer:     producer,
-		statistics:   statistics,
+		statistics:   metrics.NewStatistics(id, sink.RowSink),
 	}
-
 	return w
 }
 
@@ -308,6 +307,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
+	w.statistics.Close()
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

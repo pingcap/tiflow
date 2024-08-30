@@ -26,10 +26,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/atomic"
@@ -89,8 +87,7 @@ func newDMLSink(
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup)
 
 	s := &dmlSink{
 		id:                   changefeedID,
