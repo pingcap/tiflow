@@ -68,6 +68,13 @@ var testCases = []testCase{
 		[]string{"DROP DATABASE IF EXISTS `xs1`"},
 	},
 	{
+		"alter database collate utf8mb4_general_ci",
+		[]string{"ALTER DATABASE `test` COLLATE = utf8mb4_general_ci"},
+		[][]*filter.Table{{genTableName("test", "")}},
+		[][]*filter.Table{{genTableName("xtest", "")}},
+		[]string{"ALTER DATABASE `xtest` COLLATE = utf8mb4_general_ci"},
+	},
+	{
 		"drop table `Ss1`.`tT1`",
 		[]string{"DROP TABLE IF EXISTS `Ss1`.`tT1`"},
 		[][]*filter.Table{{genTableName("Ss1", "tT1")}},
