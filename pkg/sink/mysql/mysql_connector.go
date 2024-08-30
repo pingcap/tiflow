@@ -103,7 +103,7 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 		// Check if the current connection is available; return immediately if it is.
 		err := c.CurrentDB.PingContext(ctx)
 		if err == nil {
-			log.Debug("current connection is vaild, no need to switch",
+			log.Debug("current connection is vaild, no need to switch a downstream db server",
 				zap.String("DSN", c.dsnList[c.curIndex()]))
 			return nil
 		}
@@ -131,13 +131,15 @@ func (c *DBConnector) SwitchToAnAvailableDB(ctx context.Context) error {
 				c.configureDBWhenSwitch()
 			}
 			log.Info(
-				fmt.Sprintf("switch to the %d-th address", c.curIndex()+1),
+				fmt.Sprintf("switch to the %d-th address of downstream db server", c.curIndex()+1),
 				zap.String("DSN", c.dsnList[c.curIndex()]))
 			return nil
-		} else {
-			log.Debug(fmt.Sprintf("try to switch the %d-th addresses, but it's invaild", c.curIndex()+1),
-				zap.String("DSN", c.dsnList[c.curIndex()]))
 		}
+		log.Warn(
+			fmt.Sprintf(
+				"try to switch the %d-th addresses of downstream db server, but it's invaild",
+				c.curIndex()+1),
+			zap.String("DSN", c.dsnList[c.curIndex()]))
 	}
 
 	log.Error("fail to switch an available db server, all of the given addresses are invaild")
