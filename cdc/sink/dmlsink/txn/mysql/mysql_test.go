@@ -52,7 +52,7 @@ func init() {
 	config.StoreGlobalServerConfig(serverConfig)
 }
 
-func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
+func newMySQLBackendWithoutDB() *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
@@ -183,9 +183,7 @@ func TestPrepareDML(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	for _, tc := range testCases {
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &dmlsink.TxnCallbackableEvent{
@@ -1080,9 +1078,8 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		},
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+
+	ms := newMySQLBackendWithoutDB()
 	ms.cfg.SafeMode = false
 	for _, tc := range testCases {
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
@@ -1423,9 +1420,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	ms.cfg.BatchDMLEnable = true
 	ms.cfg.SafeMode = false
 	for _, tc := range testCases {
@@ -1441,8 +1436,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 }
 
 func TestGroupRowsByType(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	tableInfoWithoutPK := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{{
 		Name: "a1",
 		Type: mysql.TypeLong,
@@ -1616,8 +1610,7 @@ func TestGroupRowsByType(t *testing.T) {
 }
 
 func TestBackendGenUpdateSQL(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	table := &model.TableName{Schema: "db", Table: "tb1"}
 
 	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"
