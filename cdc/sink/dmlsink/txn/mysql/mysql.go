@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -467,6 +468,15 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 		}
 	}
 
+	// convert vector to string
+	for _, value := range values {
+		for i, val := range value {
+			switch v := val.(type) {
+			case types.VectorFloat32:
+				value[i] = v.String()
+			}
+		}
+	}
 	return
 }
 
