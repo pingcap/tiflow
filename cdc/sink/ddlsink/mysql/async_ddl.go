@@ -175,11 +175,15 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 	}
 
 	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
-	if err != nil || rows.Err() != nil {
+	defer func() {
+		if rows != nil {
+			_ = rows.Err()
+		}
+	}()
+	if err != nil {
 		log.Error("check async exec ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
-			zap.Error(rows.Err()),
 			zap.Error(err))
 		return true
 	}
