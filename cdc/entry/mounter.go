@@ -470,10 +470,7 @@ func (v *checksumVerifier) calculateColumnChecksum(
 	}
 
 	checksum, err := calculator.Checksum(v.tz)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return checksum, nil
+	return checksum, errors.Trace(err)
 }
 
 // return error if calculate checksum failed, this should not happen.
@@ -482,31 +479,32 @@ func (v *checksumVerifier) calculateColumnChecksum(
 func (v *checksumVerifier) verifyColumnChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum,
 	decoder *rowcodec.DatumMapDecoder, skipFail bool,
-) (uint32, bool, error) {
+) (checksum uint32, corrupted bool, err error) {
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return 0, true, nil
+		return 0, false, nil
 	}
 
-	checksum, err := v.calculateColumnChecksum(columnInfos, rawColumns)
+	checksum, err = v.calculateColumnChecksum(columnInfos, rawColumns)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
-		return 0, false, err
+		log.Error("failed to calculate the checksum",
+			zap.Uint32("first", first), zap.Uint32("checksum", checksum), zap.Error(err))
+		return checksum, false, err
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
 		log.Debug("checksum matched", zap.Uint32("checksum", checksum), zap.Uint32("first", first))
-		return checksum, true, nil
+		return checksum, false, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
 	if ok && checksum == extra {
 		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
 			zap.Uint32("checksum", checksum), zap.Uint32("extra", extra))
-		return checksum, true, nil
+		return checksum, false, nil
 	}
 
 	if !skipFail {
@@ -627,10 +625,10 @@ func newChecksumVerifier(changefeed model.ChangeFeedID, integrity *integrity.Con
 func (v *checksumVerifier) verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder,
 	key kv.Key,
-) (bool, error) {
+) (corrupted bool, err error) {
 	expected, ok := decoder.GetChecksum()
 	if !ok {
-		return true, nil
+		return false, nil
 	}
 	v.buf = v.buf[:0]
 	v.datums = v.datums[:0]
@@ -654,12 +652,12 @@ func (v *checksumVerifier) verifyRawBytesChecksum(
 		return false, errors.Trace(err)
 	}
 	if obtained == expected {
-		return true, nil
+		return false, nil
 	}
 	log.Error("raw bytes checksum mismatch",
 		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained))
 
-	return false, nil
+	return true, nil
 }
 
 // return error when calculate the checksum.
@@ -668,9 +666,9 @@ func (v *checksumVerifier) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
 	columns []*model.ColumnData, rawColumns []types.Datum,
 	key kv.Key, decoder *rowcodec.DatumMapDecoder, isPreRow bool,
-) (checksum uint32, matched bool, err error) {
+) (checksum uint32, corrupted bool, err error) {
 	if !v.integrity.Enabled() {
-		return 0, true, nil
+		return 0, false, nil
 	}
 
 	version := decoder.ChecksumVersion()
@@ -679,16 +677,16 @@ func (v *checksumVerifier) verifyChecksum(
 		// skip old value checksum verification for the checksum v1, since it cannot handle
 		// Update / Delete event correctly, after Add Column / Drop column DDL,
 		// since the table schema does not contain complete column information.
-		checksum, matched, err = v.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
+		checksum, corrupted, err = v.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
 	case 1:
-		matched, err = v.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
+		corrupted, err = v.verifyRawBytesChecksum(tableInfo, columns, decoder, key)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
-		if matched {
+		if !corrupted {
 			checksum, err = v.calculateColumnChecksum(columnInfos, rawColumns)
 			if err != nil {
 				log.Error("failed to calculate column-level checksum, after raw checksum verification passed", zap.Error(err))
@@ -699,19 +697,17 @@ func (v *checksumVerifier) verifyChecksum(
 		return 0, false, errors.Errorf("unknown checksum version %d", version)
 	}
 
-	if matched {
-		return checksum, true, nil
+	if corrupted {
+		log.Error("columns checksum mismatch",
+			zap.Uint32("checksum", checksum),
+			zap.Any("columnInfos", columnInfos),
+			zap.Any("rawColumns", rawColumns))
+		if v.integrity.ErrorHandle() {
+			return 0, true, cerror.ErrCorruptedDataMutation.
+				GenWithStackByArgs(v.changefeed.Namespace, v.changefeed.ID)
+		}
 	}
-
-	log.Error("columns checksum mismatch",
-		zap.Uint32("checksum", checksum),
-		zap.Any("columnInfos", columnInfos),
-		zap.Any("rawColumns", rawColumns))
-	if v.integrity.ErrorHandle() {
-		return 0, false, cerror.ErrCorruptedDataMutation.
-			GenWithStackByArgs(v.changefeed.Namespace, v.changefeed.ID)
-	}
-	return checksum, false, nil
+	return checksum, corrupted, nil
 }
 
 func (m *mounter) mountRowKVEntry(
@@ -721,7 +717,6 @@ func (m *mounter) mountRowKVEntry(
 		rawRow      model.RowChangedDatums
 		columnInfos []*timodel.ColumnInfo
 		err         error
-		matched     bool
 		checksum    *integrity.Checksum
 
 		checksumVersion int
@@ -748,37 +743,34 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifier.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, m.preDecoder, true)
+		preChecksum, corrupted, err = m.verifier.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, m.preDecoder, true)
 		if err != nil {
 			log.Error("verify the previous columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", preRawCols))
 			return nil, rawRow, errors.Trace(err)
 		}
-		if !matched {
-			corrupted = true
-		}
 	}
 
 	var (
-		cols            []*model.ColumnData
-		rawCols         []types.Datum
-		currentChecksum uint32
+		cols             []*model.ColumnData
+		rawCols          []types.Datum
+		currentChecksum  uint32
+		currentCorrupted bool
 	)
 	if row.RowExist {
 		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, m.tz)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
-
-		currentChecksum, matched, err = m.verifier.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, m.decoder, false)
+		currentChecksum, currentCorrupted, err = m.verifier.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, m.decoder, false)
 		if err != nil {
 			log.Error("verify the current columns checksum failed",
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", rawCols))
 			return nil, rawRow, errors.Trace(err)
 		}
-		corrupted = corrupted || !matched
+		corrupted = corrupted || currentCorrupted
 	}
 
 	var intRowID int64
