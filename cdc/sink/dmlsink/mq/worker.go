@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -64,13 +64,6 @@ type worker struct {
 
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
-
-	// metricMQWorkerSendMessageDuration tracks the time duration cost on send messages.
-	metricMQWorkerSendMessageDuration prometheus.Observer
-	// metricMQWorkerBatchSize tracks each batch's size.
-	metricMQWorkerBatchSize prometheus.Observer
-	// metricMQWorkerBatchDuration tracks the time duration cost on batch messages.
-	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 }
@@ -81,21 +74,16 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
-		changeFeedID:                      id,
-		protocol:                          protocol,
-		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
-		ticker:                            time.NewTicker(batchInterval),
-		encoderGroup:                      encoderGroup,
-		producer:                          producer,
-		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
-		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
-		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
-		statistics:                        statistics,
+		changeFeedID: id,
+		protocol:     protocol,
+		msgChan:      chann.NewAutoDrainChann[mqEvent](),
+		ticker:       time.NewTicker(batchInterval),
+		encoderGroup: encoderGroup,
+		producer:     producer,
+		statistics:   metrics.NewStatistics(id, sink.RowSink),
 	}
-
 	return w
 }
 
@@ -171,6 +159,13 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("protocol", w.protocol.String()),
 	)
 
+	metricBatchDuration := mq.WorkerBatchDuration.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	metricBatchSize := mq.WorkerBatchSize.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	defer func() {
+		mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+		mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	}()
+
 	msgsBuf := make([]mqEvent, batchSize)
 	for {
 		start := time.Now()
@@ -181,9 +176,8 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		if msgCount == 0 {
 			continue
 		}
-
-		w.metricMQWorkerBatchSize.Observe(float64(msgCount))
-		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
+		metricBatchSize.Observe(float64(msgCount))
+		metricBatchDuration.Observe(time.Since(start).Seconds())
 
 		msgs := msgsBuf[:msgCount]
 		// Group messages by its TopicPartitionKey before adding them to the encoder group.
@@ -270,14 +264,8 @@ func (w *worker) group(
 }
 
 func (w *worker) sendMessages(ctx context.Context) error {
-	ticker := time.NewTicker(15 * time.Second)
-	metric := codec.EncoderGroupOutputChanSizeGauge.
-		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-	defer func() {
-		ticker.Stop()
-		codec.EncoderGroupOutputChanSizeGauge.
-			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-	}()
+	metricSendMessageDuration := mq.WorkerSendMessageDuration.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	defer mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 
 	var err error
 	outCh := w.encoderGroup.Output()
@@ -285,8 +273,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-			metric.Set(float64(len(outCh)))
 		case future, ok := <-outCh:
 			if !ok {
 				log.Warn("MQ sink encoder's output channel closed",
@@ -312,7 +298,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				}); err != nil {
 					return err
 				}
-				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
+				metricSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
 		}
 	}
@@ -321,6 +307,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
+	w.statistics.Close()
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
