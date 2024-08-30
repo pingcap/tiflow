@@ -642,6 +642,10 @@ type ColumnData struct {
 	ApproximateBytes int `json:"-" msg:"-"`
 }
 
+func (c *ColumnData) String() string {
+	return fmt.Sprintf("ColumnID: %d, Value: %v", c.ColumnID, c.Value)
+}
+
 // RedoColumn stores Column change
 type RedoColumn struct {
 	// Fields from Column and can't be marshaled directly in Column.

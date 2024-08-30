@@ -85,8 +85,9 @@ type TableInfo struct {
 	// The following 3 fields, should only be used to decode datum from the raw value bytes, do not abuse those field.
 	// rowColInfos extend the model.ColumnInfo with some extra information
 	// it's the same length and order with the model.TableInfo.Columns
-	rowColInfos    []rowcodec.ColInfo
-	rowColFieldTps map[int64]*types.FieldType
+	rowColInfos         []rowcodec.ColInfo
+	rowColFieldTps      map[int64]*types.FieldType
+	rowColFieldTpsSlice []*types.FieldType
 	// only for new row format decoder
 	handleColID []int64
 
@@ -155,6 +156,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			VirtualGenCol: col.IsGenerated(),
 		}
 		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
+		ti.rowColFieldTpsSlice = append(ti.rowColFieldTpsSlice, ti.rowColInfos[i].Ft)
 	}
 
 	for _, idx := range ti.Indices {
@@ -364,6 +366,10 @@ func (ti *TableInfo) String() string {
 // GetRowColInfos returns all column infos for rowcodec
 func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
+}
+
+func (ti *TableInfo) GetFileSlice() []*types.FieldType {
+	return ti.rowColFieldTpsSlice
 }
 
 // GetColInfosForRowChangedEvent return column infos for non-virtual columns
