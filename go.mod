@@ -66,7 +66,7 @@ require (
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4
 	github.com/pingcap/tidb v1.1.0-beta.0.20240830190641-7b2719933838
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20221201110602-e307642d9fa5
+	github.com/pingcap/tidb/parser v0.0.0-20240830190641-7b2719933838
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
