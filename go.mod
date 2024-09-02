@@ -64,9 +64,9 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20240112060601-a0e3fbb1eeee
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4
-	github.com/pingcap/tidb v1.1.0-beta.0.20240604073126-607c846f4ca9
+	github.com/pingcap/tidb v1.1.0-beta.0.20240830190641-7b2719933838
 	github.com/pingcap/tidb-tools v7.0.1-0.20231228094724-d6c7fc83380a+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20240604073126-607c846f4ca9
+	github.com/pingcap/tidb/parser v0.0.0-20240830190641-7b2719933838
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -81,7 +81,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.4-0.20240510070224-92eaf4613ea5
+	github.com/tikv/client-go/v2 v2.0.4-0.20240827021516-18287765af05
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20230904040343-947701a32c05
 	github.com/tinylib/msgp v1.1.6
@@ -97,16 +97,16 @@ require (
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.11.0
 	go.uber.org/dig v1.13.0
-	go.uber.org/goleak v1.2.1
+	go.uber.org/goleak v1.3.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.26.0
-	golang.org/x/exp v0.0.0-20240531132922-fd00a4e0eefc
-	golang.org/x/net v0.25.0
+	go.uber.org/zap v1.27.0
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
+	golang.org/x/net v0.28.0
 	golang.org/x/oauth2 v0.2.0
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.20.0
-	golang.org/x/text v0.15.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.23.0
+	golang.org/x/text v0.17.0
 	golang.org/x/time v0.2.0
 	google.golang.org/genproto v0.0.0-20221202195650-67e5cbc046fd
 	google.golang.org/grpc v1.51.0
@@ -291,9 +291,9 @@ require (
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
-	golang.org/x/term v0.20.0 // indirect
-	golang.org/x/tools v0.21.0 // indirect
+	golang.org/x/crypto v0.26.0 // indirect
+	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/tools v0.24.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.103.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
