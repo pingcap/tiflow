@@ -96,23 +96,23 @@ func (m *DDLSink) asyncExecDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 }
 
-func (m *DDLSink) needWaitAsyncExecDone(ddl *model.DDLEvent) bool {
+func (m *DDLSink) needWaitAsyncExecDone(t timodel.ActionType) bool {
 	if !m.cfg.IsTiDB {
 		return false
 	}
-	switch ddl.Type {
+	switch t {
 	case timodel.ActionCreateTable, timodel.ActionCreateTables:
 		return false
 	case timodel.ActionCreateSchema:
 		return false
+	default:
+		return true
 	}
-
-	return true
 }
 
 // Should always wait for async ddl done before executing the next ddl.
 func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
-	if !m.needWaitAsyncExecDone(ddl) {
+	if !m.needWaitAsyncExecDone(ddl.Type) {
 		return
 	}
 

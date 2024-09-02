@@ -163,3 +163,21 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	require.True(t, time.Since(start) >= 10*time.Second)
 	sink.Close()
 }
+
+func TestNeedWaitAsyncExecDone(t *testing.T) {
+	sink := &DDLSink{
+		cfg: &pmysql.Config{
+			IsTiDB: false,
+		},
+	}
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+
+	sink.cfg.IsTiDB = true
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropIndex))
+
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTable))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTables))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateSchema))
+}
