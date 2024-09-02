@@ -15,6 +15,7 @@ package config
 
 import (
 	"github.com/pingcap/errors"
+	"time"
 )
 
 // DebugConfig represents config for ticdc unexposed feature configurations
@@ -59,4 +60,12 @@ type PullerConfig struct {
 	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
 	// LogRegionDetails determines whether logs Region details or not in puller and kv-client.
 	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
+}
+
+func NewDefaultPullerConfig() *PullerConfig {
+	return &PullerConfig{
+		EnableResolvedTsStuckDetection: false,
+		ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+		LogRegionDetails:               false,
+	}
 }
