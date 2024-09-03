@@ -223,7 +223,9 @@ func mergeConfig(
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
 	dest := &urlConfig{}
-	dest.SafeMode = replicaConfig.Sink.SafeMode
+	if replicaConfig.Sink != nil {
+		dest.SafeMode = replicaConfig.Sink.SafeMode
+	}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {
 		mConfig := replicaConfig.Sink.MySQLConfig
 		dest.WorkerCount = mConfig.WorkerCount
