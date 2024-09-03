@@ -1022,12 +1022,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
-
-	advanceTimeoutInSec := m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec
-	if advanceTimeoutInSec <= 0 {
-		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
-	}
-
+	
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoDMLMgr != nil {
