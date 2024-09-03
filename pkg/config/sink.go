@@ -142,6 +142,7 @@ type SinkConfig struct {
 
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
+	// Deprecated since v6.5.11, it takes no effect now.
 	AdvanceTimeoutInSec uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
 
