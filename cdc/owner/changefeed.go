@@ -924,8 +924,11 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	barrier *schedulepb.BarrierWithMinTs,
 ) error {
 	barrierTp, barrierTs := c.barriers.Min()
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
+	if barrierTp == noneBarrier {
+		return nil
+	}
 
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
