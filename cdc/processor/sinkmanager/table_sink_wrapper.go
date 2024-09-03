@@ -452,25 +452,6 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	return shouldClean
 }
 
-func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint64) {
-	t.getCheckpointTs()
-
-	t.tableSink.RLock()
-	defer t.tableSink.RUnlock()
-	t.tableSink.innerMu.Lock()
-	defer t.tableSink.innerMu.Unlock()
-
-	// What these conditions mean:
-	// 1. the table sink has been associated with a valid sink;
-	// 2. its checkpoint hasn't been advanced for a while;
-	version := t.tableSink.version
-	advanced := t.tableSink.advanced
-	if version > 0 && time.Since(advanced) > stuckCheck {
-		return true, version
-	}
-	return false, uint64(0)
-}
-
 // handleRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func handleRowChangedEvents(
