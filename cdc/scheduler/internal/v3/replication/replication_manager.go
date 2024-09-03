@@ -902,6 +902,8 @@ func (r *Manager) CleanMetrics() {
 	slowestTableStageCheckpointTsLagHistogramVec.Reset()
 	slowestTableStageResolvedTsLagHistogramVec.Reset()
 	slowestTableRegionGaugeVec.Reset()
+	slowestTablePullerResolvedTs.Reset()
+	slowestTablePullerResolvedTsLag.Reset()
 }
 
 // SetReplicationSetForTests is only used in tests.
