@@ -965,7 +965,7 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.GlobalBarrierTs)))
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
 
