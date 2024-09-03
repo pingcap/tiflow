@@ -22,10 +22,8 @@ import (
 type barrierType int
 
 const (
-	// noneBarrier denotes there is no barrier.
-	noneBarrier barrierType = iota
 	// syncPointBarrier denotes a barrier for snapshot replication.
-	syncPointBarrier
+	syncPointBarrier barrierType = iota
 	// finishBarrier denotes a barrier for changefeed finished.
 	finishBarrier
 )
