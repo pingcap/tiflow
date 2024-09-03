@@ -996,6 +996,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.B
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// MinTableBarrierTs is always the next barrier that blocking the global resolvedTs.
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
