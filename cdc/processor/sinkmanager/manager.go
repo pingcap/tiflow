@@ -1022,7 +1022,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
-	
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoDMLMgr != nil {
