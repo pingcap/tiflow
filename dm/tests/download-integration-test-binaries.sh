@@ -41,13 +41,13 @@ function download() {
 	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
-function get_sha1(){
+function get_sha1() {
 	local repo="$1"
-    local branch="$2"
+	local branch="$2"
 	file_server_url="http://fileserver.pingcap.net"
 	sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
 	if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
-		echo "Failed to get sha1 with repo ${repo} branch ${branch}: $sha1. use branch master to instead" >&2 
+		echo "Failed to get sha1 with repo ${repo} branch ${branch}: $sha1. use branch master to instead" >&2
 		branch=master
 		sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
 	fi
