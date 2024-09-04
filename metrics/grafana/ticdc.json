@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1725249856938,
+  "iteration": 1725343906113,
   "links": [],
   "panels": [
     {
@@ -3973,7 +3973,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-barrier",
+              "legendFormat": "{{namespace}}-{{changefeed}}-barrier-lag",
               "refId": "C"
             },
             {
@@ -3981,7 +3981,7 @@
               "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\"}) by (namespace, changefeed)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-puller",
+              "legendFormat": "{{namespace}}-{{changefeed}}-puller-lag",
               "refId": "A"
             }
           ],
@@ -5811,7 +5811,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 719,
@@ -5914,7 +5914,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 81
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 721,
@@ -6010,7 +6010,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 89
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 610,
@@ -6116,7 +6116,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 89
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 612,
@@ -6214,7 +6214,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 97
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 613,
@@ -6317,7 +6317,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 97
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 10040,
@@ -6428,7 +6428,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 105
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 614,
@@ -6526,7 +6526,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 105
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 611,
@@ -7190,7 +7190,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 95
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 653,
@@ -7298,7 +7298,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 95
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 628,
@@ -7401,7 +7401,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 102
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 627,
@@ -7504,7 +7504,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 102
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 630,
@@ -7607,7 +7607,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 109
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 629,
@@ -7710,7 +7710,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 109
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 631,
@@ -7811,7 +7811,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 116
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 626,
@@ -7912,7 +7912,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 116
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 709,
@@ -8010,7 +8010,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 123
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 710,
@@ -8108,7 +8108,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 123
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 711,
@@ -8214,7 +8214,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 130
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 712,
@@ -8321,7 +8321,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 130
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 741,
@@ -8365,7 +8365,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Claim Check Send Message Count / Second",
+          "title": "Claim Check Send Message Count / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8419,7 +8419,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 137
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 740,
@@ -8525,7 +8525,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 137
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 731,
@@ -8623,7 +8623,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 144
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 733,
@@ -8721,7 +8721,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 144
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 735,
@@ -8819,7 +8819,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 151
+            "y": 63
           },
           "hiddenSeries": false,
           "id": 739,
@@ -8917,7 +8917,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 151
+            "y": 63
           },
           "hiddenSeries": false,
           "id": 737,
@@ -9511,7 +9511,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9614,7 +9614,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9724,7 +9724,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -9837,7 +9837,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -9950,7 +9950,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10063,7 +10063,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10169,7 +10169,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": true,
           "renderer": "flot",
@@ -10279,7 +10279,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10391,7 +10391,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10504,7 +10504,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10611,7 +10611,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10730,7 +10730,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10854,7 +10854,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -15998,7 +15998,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 122
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 60,
@@ -16134,7 +16134,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 122
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 74,
@@ -16254,7 +16254,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 129
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 147,
@@ -16363,7 +16363,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 129
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 194,
@@ -16498,7 +16498,7 @@
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 136
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 152,
@@ -16643,7 +16643,7 @@
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 136
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 153,
@@ -16751,7 +16751,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 136
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 70,
@@ -16864,7 +16864,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 143
+            "y": 35
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -16941,7 +16941,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 143
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 72,
@@ -17056,7 +17056,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 143
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 140,
@@ -17182,7 +17182,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 150
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 78,
@@ -17302,7 +17302,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 150
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 76,
@@ -17415,7 +17415,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 150
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 139,
@@ -17525,7 +17525,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 157
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 143,
@@ -17662,7 +17662,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 157
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 145,
@@ -17793,7 +17793,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 164
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 141,
@@ -17907,7 +17907,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 164
+            "y": 56
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -17983,7 +17983,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 164
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 142,
@@ -21339,7 +21339,7 @@
       "type": "row"
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -21620,8 +21620,8 @@
     ]
   },
   "time": {
-    "from": "2024-09-02T05:46:52.158Z",
-    "to": "2024-09-02T07:23:11.918Z"
+    "from": "now-1h",
+    "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
