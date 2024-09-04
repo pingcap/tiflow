@@ -119,7 +119,7 @@ func NewDDLSink(
 		cfg:                        cfg,
 		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
-		needFormat:                 needFormatDDL(db, cfg.IsTiDB),
+		needFormat:                 needFormatDDL(db, cfg),
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -287,16 +287,19 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 }
 
 // needFormatDDL checks vector type support
-func needFormatDDL(db *sql.DB, isTiDB bool) bool {
+func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
+	if !cfg.HasVectorType {
+		return false
+	}
 	versionInfo, err := export.SelectVersion(db)
 	if err != nil {
-		log.Warn("fail to get version", zap.Error(err), zap.Bool("isTiDB", isTiDB))
+		log.Warn("fail to get version", zap.Error(err), zap.Bool("isTiDB", cfg.IsTiDB))
 		return false
 	}
 	serverInfo := version.ParseServerInfo(versionInfo)
 	version := semver.New(defaultSupportVectorVersion)
-	if !isTiDB || serverInfo.ServerVersion.LessThan(*version) {
-		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("supportVersion", version.String()), zap.Bool("isTiDB", isTiDB))
+	if !cfg.IsTiDB || serverInfo.ServerVersion.LessThan(*version) {
+		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("supportVersion", version.String()), zap.Bool("isTiDB", cfg.IsTiDB))
 		return true
 	}
 	return false

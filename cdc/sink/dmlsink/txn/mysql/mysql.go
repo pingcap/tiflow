@@ -339,7 +339,7 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(cols []*model.ColumnData, tableInfo *model.TableInfo) {
+func convertValue(cols []*model.ColumnData, tableInfo *model.TableInfo) {
 	for i, col := range cols {
 		if col == nil {
 			continue
@@ -349,7 +349,12 @@ func convertBinaryToString(cols []*model.ColumnData, tableInfo *model.TableInfo)
 			colValBytes, ok := col.Value.([]byte)
 			if ok {
 				cols[i].Value = string(colValBytes)
+				continue
 			}
+		}
+		switch v := col.Value.(type) {
+		case types.VectorFloat32:
+			cols[i].Value = v.String()
 		}
 	}
 }
@@ -368,8 +373,8 @@ func (s *mysqlBackend) groupRowsByType(
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range event.Event.Rows {
-		convertBinaryToString(row.Columns, tableInfo)
-		convertBinaryToString(row.PreColumns, tableInfo)
+		convertValue(row.Columns, tableInfo)
+		convertValue(row.PreColumns, tableInfo)
 
 		if row.IsInsert() {
 			insertRow = append(
@@ -468,15 +473,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 		}
 	}
 
-	// convert vector to string
-	for _, value := range values {
-		for i, val := range value {
-			switch v := val.(type) {
-			case types.VectorFloat32:
-				value[i] = v.String()
-			}
-		}
-	}
 	return
 }
 

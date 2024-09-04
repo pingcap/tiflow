@@ -77,6 +77,8 @@ const (
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
+
+	defaultHasVectorType = true
 )
 
 type urlConfig struct {
@@ -117,6 +119,7 @@ type Config struct {
 	// IsBDRModeSupported is true if the downstream is TiDB and write source is existed.
 	// write source exists when the downstream is TiDB and version is greater than or equal to v6.5.0.
 	IsWriteSourceExisted bool
+	HasVectorType        bool // HasVectorType is true if the data is vector
 
 	SourceID        uint64
 	BatchDMLEnable  bool
@@ -140,6 +143,7 @@ func NewConfig() *Config {
 		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
 		SourceID:               config.DefaultTiDBSourceID,
+		HasVectorType:          defaultHasVectorType,
 	}
 }
 

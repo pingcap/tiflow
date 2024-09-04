@@ -114,16 +114,14 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 		colValBytes, ok := col.Value.([]byte)
 		if ok {
 			args = append(args, string(colValBytes))
-		} else {
-			args = append(args, col.Value)
+			return args
 		}
-	} else {
-		// convert vector to string
-		if val, ok := col.Value.(types.VectorFloat32); ok {
-			col.Value = val.String()
-		}
-		args = append(args, col.Value)
 	}
+	switch v := col.Value.(type) {
+	case types.VectorFloat32:
+		col.Value = v.String()
+	}
+	args = append(args, col.Value)
 
 	return args
 }
