@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"go.uber.org/atomic"
 	"math/rand"
 	"sort"
 	"time"
@@ -132,7 +133,7 @@ type ddlManager struct {
 	ddlResolvedTs model.Ts
 
 	shouldSendAllBootstrapAtStart bool
-	bootstraped                   bool
+	bootstrapped                  atomic.Bool
 }
 
 func newDDLManager(
@@ -173,7 +174,7 @@ func newDDLManager(
 }
 
 func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error) {
-	if !m.shouldSendAllBootstrapAtStart || m.bootstraped {
+	if !m.shouldSendAllBootstrapAtStart || m.bootstrapped.Load() {
 		return true, nil
 	}
 	start := time.Now()
@@ -187,24 +188,26 @@ func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	log.Info("start to send bootstrap messages",
-		zap.Stringer("changefeed", m.changfeedID),
-		zap.Int("tables", len(tableInfo)))
 
-	for _, table := range tableInfo {
-		if table.TableInfo.IsView() {
-			continue
+	go func() {
+		log.Info("start to send bootstrap messages",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(tableInfo)))
+		for _, table := range tableInfo {
+			if table.TableInfo.IsView() {
+				continue
+			}
+			ddlEvent := &model.DDLEvent{
+				TableInfo:   table,
+				IsBootstrap: true,
+			}
+			err = m.ddlSink.emitBootstrap(ctx, ddlEvent)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
 		}
-		ddlEvent := &model.DDLEvent{
-			TableInfo:   table,
-			IsBootstrap: true,
-		}
-		err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-	}
-	m.bootstraped = true
+		m.bootstrapped.Store(true)
+	}()
 	return true, nil
 }
 
