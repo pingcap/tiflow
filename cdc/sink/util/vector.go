@@ -13,6 +13,17 @@
 
 package util
 
+import (
+	"encoding/json"
+	"log"
+	"reflect"
+	"strconv"
+	"unsafe"
+
+	"github.com/pingcap/tidb/pkg/types"
+	"go.uber.org/zap"
+)
+
 // CheckVectorIndexForColumnModify checks Vector Index constraints for MODIFY COLUMN.
 // func CheckVectorIndexForColumnModify(oldCol *table.Column, newCol *table.Column) error {
 // 	if oldCol.VectorIndex == nil && newCol.VectorIndex == nil {
@@ -35,3 +46,40 @@ package util
 // 	}
 // 	return nil
 // }
+
+func ParseVectorFromElement(values []float32) (types.VectorFloat32, error) {
+	dim := len(values)
+	if err := types.CheckVectorDimValid(dim); err != nil {
+		return types.ZeroVectorFloat32, err
+	}
+	vec := types.InitVectorFloat32(dim)
+	copy(vec.Elements(), values)
+	return vec, nil
+}
+
+func VectorElement2String(elements []interface{}) string {
+	buf := make([]byte, 0, 2+len(elements)*2)
+	buf = append(buf, '[')
+	for i, val := range elements {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		switch v := val.(type) {
+		case json.Number:
+			num, err := v.Float64()
+			if err != nil {
+				log.Panic("failed to decode val", zap.Any("val", val), zap.Error(err))
+			}
+			buf = strconv.AppendFloat(buf, num, 'f', -1, 32)
+		case float32:
+			buf = strconv.AppendFloat(buf, float64(v), 'f', -1, 32)
+		case float64:
+			buf = strconv.AppendFloat(buf, v, 'f', -1, 32)
+		default:
+			log.Panic("failed to decode val type", zap.Any("val", val), zap.Any("type", reflect.TypeOf(v)))
+		}
+	}
+	buf = append(buf, ']')
+	// buf is not used elsewhere, so it's safe to just cast to String
+	return unsafe.String(unsafe.SliceData(buf), len(buf))
+}
