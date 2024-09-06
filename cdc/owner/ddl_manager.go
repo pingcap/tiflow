@@ -173,9 +173,9 @@ func newDDLManager(
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode))
 
-	bootstrap := bootstrapNotStarted
-	if !shouldSendAllBootstrapAtStart {
-		bootstrap = bootstrapFinished
+	bootstrap := bootstrapFinished
+	if shouldSendAllBootstrapAtStart {
+		bootstrap = bootstrapNotStarted
 	}
 
 	return &ddlManager{
