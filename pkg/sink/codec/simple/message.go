@@ -638,6 +638,8 @@ func (a *avroMarshaller) encodeValue4Avro(
 		return v, "double"
 	case string:
 		return v, "string"
+	case tiTypes.VectorFloat32:
+		return v.String(), "string"
 	default:
 		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
@@ -714,6 +716,8 @@ func encodeValue(
 		} else {
 			result = string(v)
 		}
+	case tiTypes.VectorFloat32:
+		result = v.String()
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
