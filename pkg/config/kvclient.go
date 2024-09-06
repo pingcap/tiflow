@@ -38,6 +38,7 @@ type KVClientConfig struct {
 	RegionRetryDuration TomlDuration `toml:"region-retry-duration" json:"region-retry-duration"`
 }
 
+// NewDefaultKVClientConfig return the default kv client configuration
 func NewDefaultKVClientConfig() *KVClientConfig {
 	return &KVClientConfig{
 		EnableMultiplexing:   true,

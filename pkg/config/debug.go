@@ -63,6 +63,7 @@ type PullerConfig struct {
 	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
 }
 
+// NewDefaultPullerConfig return the default puller configuration
 func NewDefaultPullerConfig() *PullerConfig {
 	return &PullerConfig{
 		EnableResolvedTsStuckDetection: false,

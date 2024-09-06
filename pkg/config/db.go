@@ -55,6 +55,7 @@ type DBConfig struct {
 	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
 }
 
+// NewDefaultDBConfig return the default db configuration
 func NewDefaultDBConfig() *DBConfig {
 	return &DBConfig{
 		Count: 8,
