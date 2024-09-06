@@ -14,6 +14,8 @@
 package config
 
 import (
+	"time"
+
 	"github.com/pingcap/errors"
 )
 
@@ -59,4 +61,13 @@ type PullerConfig struct {
 	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
 	// LogRegionDetails determines whether logs Region details or not in puller and kv-client.
 	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
+}
+
+// NewDefaultPullerConfig return the default puller configuration
+func NewDefaultPullerConfig() *PullerConfig {
+	return &PullerConfig{
+		EnableResolvedTsStuckDetection: false,
+		ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+		LogRegionDetails:               false,
+	}
 }
