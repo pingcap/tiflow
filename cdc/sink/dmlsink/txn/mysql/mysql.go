@@ -344,9 +344,9 @@ func convertValue(cols []*model.ColumnData, tableInfo *model.TableInfo) {
 		if col == nil {
 			continue
 		}
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
 		switch v := col.Value.(type) {
 		case []byte:
+			colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
 			if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
 				cols[i].Value = string(v)
 			}
