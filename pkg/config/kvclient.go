@@ -14,8 +14,9 @@
 package config
 
 import (
-	"github.com/pingcap/tiflow/pkg/errors"
 	"time"
+
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // KVClientConfig represents config for kv client

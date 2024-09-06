@@ -14,8 +14,9 @@
 package config
 
 import (
-	"github.com/pingcap/errors"
 	"time"
+
+	"github.com/pingcap/errors"
 )
 
 // DebugConfig represents config for ticdc unexposed feature configurations
