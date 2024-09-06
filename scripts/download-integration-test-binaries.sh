@@ -18,7 +18,13 @@
 set -euo pipefail
 
 # Default values
-BRANCH=${1:-master}
+DEFAULT_BRANCH=${1:-master}
+
+TIDB_BRANCH=${TIDB_BRANCH:-$DEFAULT_BRANCH}
+TIKV_BRANCH=${TIKV_BRANCH:-$DEFAULT_BRANCH}
+PD_BRANCH=${PD_BRANCH:-$DEFAULT_BRANCH}
+TIFLASH_BRANCH=${TIFLASH_BRANCH:-$DEFAULT_BRANCH}
+
 COMMUNITY=${2:-false}
 VERSION=${3:-v8.1.0}
 OS=${4:-linux}
@@ -56,8 +62,8 @@ get_sha1() {
     local branch="$2"
     local sha1=$(curl -s "${FILE_SERVER_URL}/download/refs/pingcap/${repo}/${branch}/sha1")
     if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
-        echo "Failed to get sha1 for ${repo} branch ${branch}: $sha1. Using master branch instead" >&2
-        branch=master
+        echo "Failed to get sha1 for ${repo} branch ${branch}: $sha1. Using default branch ${DEFAULT_BRANCH} instead" >&2
+        branch=$DEFAULT_BRANCH
         sha1=$(curl -s "${FILE_SERVER_URL}/download/refs/pingcap/${repo}/${branch}/sha1")
     fi
     echo "$branch:$sha1"
@@ -119,10 +125,17 @@ download_binaries() {
     log_green "Downloading binaries..."
 
     # Get sha1 based on branch name
-    local tidb_sha1=$(get_sha1 "tidb" "$BRANCH" | cut -d':' -f2)
-    local tikv_sha1=$(get_sha1 "tikv" "$BRANCH" | cut -d':' -f2)
-    local pd_sha1=$(get_sha1 "pd" "$BRANCH" | cut -d':' -f2)
-    local tiflash_branch_sha1=$(get_sha1 "tiflash" "$BRANCH")
+    local tidb_branch_sha1=$(get_sha1 "tidb" "$TIDB_BRANCH")
+    local tikv_branch_sha1=$(get_sha1 "tikv" "$TIKV_BRANCH")
+    local pd_branch_sha1=$(get_sha1 "pd" "$PD_BRANCH")
+    local tiflash_branch_sha1=$(get_sha1 "tiflash" "$TIFLASH_BRANCH")
+
+    local tidb_branch=$(echo "$tidb_branch_sha1" | cut -d':' -f1)
+    local tidb_sha1=$(echo "$tidb_branch_sha1" | cut -d':' -f2)
+    local tikv_branch=$(echo "$tikv_branch_sha1" | cut -d':' -f1)
+    local tikv_sha1=$(echo "$tikv_branch_sha1" | cut -d':' -f2)
+    local pd_branch=$(echo "$pd_branch_sha1" | cut -d':' -f1)
+    local pd_sha1=$(echo "$pd_branch_sha1" | cut -d':' -f2)
     local tiflash_branch=$(echo "$tiflash_branch_sha1" | cut -d':' -f1)
     local tiflash_sha1=$(echo "$tiflash_branch_sha1" | cut -d':' -f2)
 
