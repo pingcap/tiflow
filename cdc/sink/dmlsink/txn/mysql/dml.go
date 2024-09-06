@@ -110,14 +110,12 @@ func prepareReplace(
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
 func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
-	if col.Charset != "" && col.Charset != charset.CharsetBin {
-		colValBytes, ok := col.Value.([]byte)
-		if ok {
-			args = append(args, string(colValBytes))
+	switch v := col.Value.(type) {
+	case []byte:
+		if col.Charset != "" && col.Charset != charset.CharsetBin {
+			args = append(args, string(v))
 			return args
 		}
-	}
-	switch v := col.Value.(type) {
 	case types.VectorFloat32:
 		col.Value = v.String()
 	}
