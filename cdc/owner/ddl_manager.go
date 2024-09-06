@@ -15,9 +15,9 @@ package owner
 
 import (
 	"context"
-	"go.uber.org/atomic"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -132,8 +132,24 @@ type ddlManager struct {
 	BDRMode       bool
 	ddlResolvedTs model.Ts
 
-	shouldSendAllBootstrapAtStart bool
-	bootstrapped                  atomic.Bool
+	bootstrap   bootstrapSate
+	reportError func(err error)
+}
+
+type bootstrapSate int32
+
+const (
+	bootstrapNotStarted bootstrapSate = iota
+	bootstrapInProgress
+	bootstrapFinished
+)
+
+func storeBootstrapState(addr *bootstrapSate, state bootstrapSate) {
+	atomic.StoreInt32((*int32)(addr), int32(state))
+}
+
+func loadBootstrapState(addr *bootstrapSate) bootstrapSate {
+	return bootstrapSate(atomic.LoadInt32((*int32)(addr)))
 }
 
 func newDDLManager(
@@ -148,6 +164,7 @@ func newDDLManager(
 	redoMetaManager redo.MetaManager,
 	bdrMode bool,
 	shouldSendAllBootstrapAtStart bool,
+	reportError func(err error),
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
@@ -156,44 +173,50 @@ func newDDLManager(
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode))
 
+	bootstrap := bootstrapNotStarted
+	if !shouldSendAllBootstrapAtStart {
+		bootstrap = bootstrapFinished
+	}
+
 	return &ddlManager{
-		changfeedID:                   changefeedID,
-		ddlSink:                       ddlSink,
-		filter:                        filter,
-		ddlPuller:                     ddlPuller,
-		schema:                        schema,
-		redoDDLManager:                redoManager,
-		redoMetaManager:               redoMetaManager,
-		startTs:                       startTs,
-		checkpointTs:                  checkpointTs,
-		ddlResolvedTs:                 startTs,
-		BDRMode:                       bdrMode,
-		pendingDDLs:                   make(map[model.TableName][]*model.DDLEvent),
-		shouldSendAllBootstrapAtStart: shouldSendAllBootstrapAtStart,
+		changfeedID:     changefeedID,
+		ddlSink:         ddlSink,
+		filter:          filter,
+		ddlPuller:       ddlPuller,
+		schema:          schema,
+		redoDDLManager:  redoManager,
+		redoMetaManager: redoMetaManager,
+		startTs:         startTs,
+		checkpointTs:    checkpointTs,
+		ddlResolvedTs:   startTs,
+		BDRMode:         bdrMode,
+		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		bootstrap:       bootstrap,
+		reportError:     reportError,
 	}
 }
 
-func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error) {
-	if !m.shouldSendAllBootstrapAtStart || m.bootstrapped.Load() {
-		return true, nil
-	}
-	start := time.Now()
-	defer func() {
-		log.Info("send bootstrap messages finished",
-			zap.Stringer("changefeed", m.changfeedID),
-			zap.Duration("cost", time.Since(start)))
-	}()
-	// Send bootstrap messages to downstream.
-	tableInfo, err := m.allTables(ctx)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
+func (m *ddlManager) isBootstrapped() bool {
+	return loadBootstrapState(&m.bootstrap) == bootstrapFinished
+}
 
+// return true if bootstrapped
+func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*model.TableInfo) bool {
+	bootstrap := loadBootstrapState(&m.bootstrap)
+	switch bootstrap {
+	case bootstrapFinished:
+		return true
+	case bootstrapInProgress:
+		return false
+	case bootstrapNotStarted:
+	}
+	storeBootstrapState(&m.bootstrap, bootstrapInProgress)
+	start := time.Now()
 	go func() {
 		log.Info("start to send bootstrap messages",
 			zap.Stringer("changefeed", m.changfeedID),
-			zap.Int("tables", len(tableInfo)))
-		for _, table := range tableInfo {
+			zap.Int("tables", len(currentTables)))
+		for _, table := range currentTables {
 			if table.TableInfo.IsView() {
 				continue
 			}
@@ -201,14 +224,23 @@ func (m *ddlManager) checkAndSendBootstrapMsgs(ctx context.Context) (bool, error
 				TableInfo:   table,
 				IsBootstrap: true,
 			}
-			err = m.ddlSink.emitBootstrap(ctx, ddlEvent)
+			err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
 			if err != nil {
-				return false, errors.Trace(err)
+				log.Error("send bootstrap message failed",
+					zap.Stringer("changefeed", m.changfeedID),
+					zap.Duration("duration", time.Since(start)),
+					zap.Error(err))
+				m.reportError(err)
+				return
 			}
 		}
-		m.bootstrapped.Store(true)
+		storeBootstrapState(&m.bootstrap, bootstrapFinished)
+		log.Info("send bootstrap messages finished",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)),
+			zap.Duration("cost", time.Since(start)))
 	}()
-	return true, nil
+	return m.isBootstrapped()
 }
 
 // tick the ddlHandler, it does the following things:
@@ -227,17 +259,15 @@ func (m *ddlManager) tick(
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
 
-	ok, err := m.checkAndSendBootstrapMsgs(ctx)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	if !ok {
-		return nil, nil, nil
-	}
-
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
+	}
+
+	// before bootstrap finished, cannot send any event.
+	ok := m.trySendBootstrap(ctx, currentTables)
+	if !ok {
+		return nil, nil, nil
 	}
 
 	if m.executingDDL == nil {
