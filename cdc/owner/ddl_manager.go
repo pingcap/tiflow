@@ -132,24 +132,24 @@ type ddlManager struct {
 	BDRMode       bool
 	ddlResolvedTs model.Ts
 
-	bootstrap   bootstrapSate
+	bootstrap   bootstrapState
 	reportError func(err error)
 }
 
-type bootstrapSate int32
+type bootstrapState int32
 
 const (
-	bootstrapNotStarted bootstrapSate = iota
+	bootstrapNotStarted bootstrapState = iota
 	bootstrapInProgress
 	bootstrapFinished
 )
 
-func storeBootstrapState(addr *bootstrapSate, state bootstrapSate) {
+func storeBootstrapState(addr *bootstrapState, state bootstrapState) {
 	atomic.StoreInt32((*int32)(addr), int32(state))
 }
 
-func loadBootstrapState(addr *bootstrapSate) bootstrapSate {
-	return bootstrapSate(atomic.LoadInt32((*int32)(addr)))
+func loadBootstrapState(addr *bootstrapState) bootstrapState {
+	return bootstrapState(atomic.LoadInt32((*int32)(addr)))
 }
 
 func newDDLManager(
