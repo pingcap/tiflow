@@ -132,8 +132,8 @@ type ddlManager struct {
 	BDRMode       bool
 	ddlResolvedTs model.Ts
 
-	bootstrap   bootstrapState
-	reportError func(err error)
+	bootstrapState bootstrapState
+	reportError    func(err error)
 }
 
 type bootstrapState int32
@@ -191,18 +191,18 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
-		bootstrap:       bootstrap,
+		bootstrapState:  bootstrap,
 		reportError:     reportError,
 	}
 }
 
 func (m *ddlManager) isBootstrapped() bool {
-	return loadBootstrapState(&m.bootstrap) == bootstrapFinished
+	return loadBootstrapState(&m.bootstrapState) == bootstrapFinished
 }
 
 // return true if bootstrapped
 func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*model.TableInfo) bool {
-	bootstrap := loadBootstrapState(&m.bootstrap)
+	bootstrap := loadBootstrapState(&m.bootstrapState)
 	switch bootstrap {
 	case bootstrapFinished:
 		return true
@@ -210,7 +210,7 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 		return false
 	case bootstrapNotStarted:
 	}
-	storeBootstrapState(&m.bootstrap, bootstrapInProgress)
+	storeBootstrapState(&m.bootstrapState, bootstrapInProgress)
 	start := time.Now()
 	go func() {
 		log.Info("start to send bootstrap messages",
@@ -236,7 +236,7 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 				return
 			}
 		}
-		storeBootstrapState(&m.bootstrap, bootstrapFinished)
+		storeBootstrapState(&m.bootstrapState, bootstrapFinished)
 		log.Info("send bootstrap messages finished",
 			zap.Stringer("changefeed", m.changfeedID),
 			zap.Int("tables", len(currentTables)),
