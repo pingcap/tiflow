@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-	config2 "github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -36,7 +36,7 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 	changefeedID := model.DefaultChangeFeedID("ddl-manager-test")
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
-	cfg := config2.GetDefaultReplicaConfig()
+	cfg := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
