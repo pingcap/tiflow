@@ -345,16 +345,13 @@ func convertValue(cols []*model.ColumnData, tableInfo *model.TableInfo) {
 			continue
 		}
 		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
-			colValBytes, ok := col.Value.([]byte)
-			if ok {
-				cols[i].Value = string(colValBytes)
-				continue
-			}
-		}
 		switch v := col.Value.(type) {
 		case types.VectorFloat32:
 			cols[i].Value = v.String()
+		case []byte:
+			if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
+				cols[i].Value = string(v)
+			}
 		}
 	}
 }
