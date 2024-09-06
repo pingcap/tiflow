@@ -592,6 +592,8 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		return types.NewFloat32Datum(value.(float32)), nil
 	case mysql.TypeDouble:
 		return types.NewFloat64Datum(value.(float64)), nil
+	case mysql.TypeTiDBVectorFloat32:
+		return types.NewVectorFloat32Datum(value.(types.VectorFloat32)), nil
 	default:
 		log.Panic("unexpected mysql type found", zap.Any("type", ft.GetType()))
 	}

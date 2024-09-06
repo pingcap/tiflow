@@ -126,7 +126,7 @@ func TestPrepareDML(t *testing.T) {
 			Name: "a3",
 			Type: mysql.TypeTiDBVectorFloat32,
 		},
-	}, [][]int{{}})
+	}, [][]int{{1, 2}})
 
 	testCases := []struct {
 		input    []*model.RowChangedEvent
@@ -220,10 +220,10 @@ func TestPrepareDML(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813518},
-				sqls:            []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
+				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:          [][]interface{}{{"[1,2,3,4,5]", "[1.1,-2,3.33,-4.12,-5]"}},
 				rowCount:        1,
-				approximateSize: 64,
+				approximateSize: 63,
 			},
 		},
 	}

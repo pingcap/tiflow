@@ -61,8 +61,6 @@ func NewSchemaTestHelperWithReplicaConfig(
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
-	session.SetSchemaLease(0)
-	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.NoError(t, err)
 	domain.SetStatsUpdating(true)

@@ -817,8 +817,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 		}, nil
 	case mysql.TypeTiDBVectorFloat32:
 		return avroSchema{
-			Type: "string",
-			// Type:       "array",
+			Type:       "string",
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	default:

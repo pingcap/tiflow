@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
@@ -88,7 +89,12 @@ func TestDMLE2E(t *testing.T) {
 			colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 			decoded, ok := decodedColumns[colName]
 			require.True(t, ok)
-			require.EqualValues(t, col.Value, decoded.Value)
+			switch v := col.Value.(type) {
+			case types.VectorFloat32:
+				require.EqualValues(t, v.String(), decoded.Value)
+			default:
+				require.EqualValues(t, v, decoded.Value)
+			}
 		}
 
 		err = encoder.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
@@ -256,7 +262,12 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 			colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 			decoded, ok := decodedColumns[colName]
 			require.True(t, ok)
-			require.EqualValues(t, col.Value, decoded.Value)
+			switch v := col.Value.(type) {
+			case types.VectorFloat32:
+				require.EqualValues(t, v.String(), decoded.Value)
+			default:
+				require.EqualValues(t, v, decoded.Value)
+			}
 		}
 	}
 }
@@ -667,7 +678,12 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 		decoded, ok := obtainedColumns[colName]
 		require.True(t, ok)
-		require.EqualValues(t, col.Value, decoded.Value)
+		switch v := col.Value.(type) {
+		case types.VectorFloat32:
+			require.EqualValues(t, v.String(), decoded.Value)
+		default:
+			require.EqualValues(t, v, decoded.Value)
+		}
 	}
 }
 
@@ -722,7 +738,12 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 				colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 				decoded, ok := decodedColumns[colName]
 				require.True(t, ok)
-				require.EqualValues(t, col.Value, decoded.Value)
+				switch v := col.Value.(type) {
+				case types.VectorFloat32:
+					require.EqualValues(t, v.String(), decoded.Value)
+				default:
+					require.EqualValues(t, v, decoded.Value)
+				}
 			}
 
 			_, hasNext, _ = decoder.HasNext()
