@@ -216,7 +216,7 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 		log.Info("start to send bootstrap messages",
 			zap.Stringer("changefeed", m.changfeedID),
 			zap.Int("tables", len(currentTables)))
-		for _, table := range currentTables {
+		for idx, table := range currentTables {
 			if table.TableInfo.IsView() {
 				continue
 			}
@@ -228,6 +228,8 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 			if err != nil {
 				log.Error("send bootstrap message failed",
 					zap.Stringer("changefeed", m.changfeedID),
+					zap.Int("tables", len(currentTables)),
+					zap.Int("emitted", idx+1),
 					zap.Duration("duration", time.Since(start)),
 					zap.Error(err))
 				m.reportError(err)
