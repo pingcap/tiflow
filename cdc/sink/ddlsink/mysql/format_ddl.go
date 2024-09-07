@@ -29,13 +29,15 @@ type visiter struct{}
 func (f *visiter) Enter(n ast.Node) (node ast.Node, skipChildren bool) {
 	switch v := n.(type) {
 	case *ast.ColumnDef:
-		switch v.Tp.GetType() {
-		case mysql.TypeTiDBVectorFloat32:
-			v.Tp.SetType(mysql.TypeLongBlob)
-			v.Tp.SetCharset("")
-			v.Tp.SetCollate("")
-			v.Tp.SetFlen(-1)
-			v.Options = []*ast.ColumnOption{} // clear COMMENT
+		if v.Tp != nil {
+			switch v.Tp.GetType() {
+			case mysql.TypeTiDBVectorFloat32:
+				v.Tp.SetType(mysql.TypeLongBlob)
+				v.Tp.SetCharset("")
+				v.Tp.SetCollate("")
+				v.Tp.SetFlen(-1)
+				v.Options = []*ast.ColumnOption{} // clear COMMENT
+			}
 		}
 	}
 	return n, false

@@ -209,8 +209,10 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	// Convert vector type to string type for unsupport database
 	if m.needFormat {
-		ddl.Query = formatQuery(ddl.Query)
-		log.Warn("format ddl query", zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
+		if newQuery := formatQuery(ddl.Query); newQuery != ddl.Query {
+			log.Warn("format ddl query", zap.String("newQuery", newQuery), zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
+			ddl.Query = newQuery
+		}
 	}
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
@@ -299,7 +301,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	serverInfo := version.ParseServerInfo(versionInfo)
 	version := semver.New(defaultSupportVectorVersion)
 	if !cfg.IsTiDB || serverInfo.ServerVersion.LessThan(*version) {
-		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("supportVersion", version.String()), zap.Bool("isTiDB", cfg.IsTiDB))
+		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("version", serverInfo.ServerVersion.String()), zap.String("supportVersion", defaultSupportVectorVersion), zap.Bool("isTiDB", cfg.IsTiDB))
 		return true
 	}
 	return false
