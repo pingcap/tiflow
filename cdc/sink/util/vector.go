@@ -15,11 +15,11 @@ package util
 
 import (
 	"encoding/json"
-	"log"
 	"reflect"
 	"strconv"
 	"unsafe"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/types"
 	"go.uber.org/zap"
 )
@@ -36,7 +36,7 @@ import (
 // 		return errors.Errorf("currently HNSW index can not be removed")
 // 	}
 // 	if oldCol.FieldType.GetFlen() != newCol.FieldType.GetFlen() {
-// 		return errors.New("cannot modify vector column's dimention when HNSW index is defined")
+// 		return errors.New("cannot modify vector column's dimension when HNSW index is defined")
 // 	}
 // 	if oldCol.FieldType.GetType() != newCol.FieldType.GetType() {
 // 		return errors.New("cannot modify column data type when HNSW index is defined")
@@ -47,6 +47,7 @@ import (
 // 	return nil
 // }
 
+// ParseVectorFromElement parse element to VectorFloat32
 func ParseVectorFromElement(values []float32) (types.VectorFloat32, error) {
 	dim := len(values)
 	if err := types.CheckVectorDimValid(dim); err != nil {
@@ -57,6 +58,7 @@ func ParseVectorFromElement(values []float32) (types.VectorFloat32, error) {
 	return vec, nil
 }
 
+// VectorElement2String parse elements to string
 func VectorElement2String(elements []interface{}) string {
 	buf := make([]byte, 0, 2+len(elements)*2)
 	buf = append(buf, '[')

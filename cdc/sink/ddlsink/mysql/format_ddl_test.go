@@ -26,7 +26,7 @@ import (
 
 func TestFormatQuery(t *testing.T) {
 	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` VECTOR(5));"
-	expectSql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
+	expectSQL := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -39,5 +39,5 @@ func TestFormatQuery(t *testing.T) {
 	if err = stmt.Restore(restoreCtx); err != nil {
 		log.Error("format query restore failed", zap.Error(err))
 	}
-	require.Equal(t, buf.String(), expectSql)
+	require.Equal(t, buf.String(), expectSQL)
 }
