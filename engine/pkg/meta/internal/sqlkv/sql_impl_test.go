@@ -58,6 +58,9 @@ func mockGetDBConn(t *testing.T, table string) (*sql.DB, sqlmock.Sqlmock) {
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
 			AddRow("5.7.35-log"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
+		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC,SCHEMA_NAME limit 1")).WillReturnRows(
+		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` longblob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
@@ -145,8 +148,8 @@ func TestGet(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND "+
-					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT 1")).
-					WithArgs(fakeJob, []byte("key0")).
+					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT ?")).
+					WithArgs(fakeJob, []byte("key0"), 1).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}))
 			},
 		},
@@ -167,8 +170,8 @@ func TestGet(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND "+
-					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT 1")).
-					WithArgs(fakeJob, []byte("key0")).
+					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT ?")).
+					WithArgs(fakeJob, []byte("key0"), 1).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}).AddRow("key0", "value0"))
 			},
 		},
@@ -430,8 +433,8 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	cli.Put(ctx, "key0", "value0")
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `meta_kvs` WHERE job_id = ? AND "+
-		"meta_key = ? ORDER BY `meta_kvs`.`seq_id` LIMIT 1")).
-		WithArgs("", []byte("key1")).
+		"meta_key = ? ORDER BY `meta_kvs`.`seq_id` LIMIT ?")).
+		WithArgs("", []byte("key1"), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"key", "value"}))
 	cli.Get(ctx, "key1")
 
