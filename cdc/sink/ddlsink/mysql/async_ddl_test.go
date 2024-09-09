@@ -56,8 +56,14 @@ func TestWaitAsynExecDone(t *testing.T) {
 
 		// Case 1: there is a running add index job
 		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "sbtest0")).WillReturnRows(
-			sqlmock.NewRows([]string{"JOB_ID", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "STATE", "QUERY"}).
-				AddRow("1", "add index", "running", "1", "1", "running", "Create index idx1 on test.sbtest0(a)"),
+			sqlmock.NewRows([]string{
+				"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID",
+				"ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE",
+			}).AddRow(
+				1, "test", "sbtest0", "add index", "write reorganization", 1, 1, 0, time.Now(), nil, time.Now(), "running",
+			).AddRow(
+				2, "test", "sbtest0", "add index", "write reorganization", 1, 1, 0, time.Now(), time.Now(), time.Now(), "queueing",
+			),
 		)
 		// Case 2: there is no running add index job
 		// Case 3: no permission to query ddl_jobs, TiDB will return empty result
@@ -175,4 +181,22 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	require.True(t, time.Since(start) < ddlExecutionTime)
 	require.True(t, time.Since(start) >= 10*time.Second)
 	sink.Close()
+}
+
+func TestNeedWaitAsyncExecDone(t *testing.T) {
+	sink := &DDLSink{
+		cfg: &pmysql.Config{
+			IsTiDB: false,
+		},
+	}
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+
+	sink.cfg.IsTiDB = true
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropIndex))
+
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTable))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTables))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateSchema))
 }
