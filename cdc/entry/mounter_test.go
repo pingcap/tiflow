@@ -269,6 +269,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// we can update the tidb config here
 	})
+	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
 	defer domain.Close()
