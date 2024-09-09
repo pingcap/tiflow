@@ -1011,6 +1011,11 @@ error = '''
 fail to create changefeed because target-ts %d is earlier than start-ts %d
 '''
 
+["CDC:ErrTiDBUnexpectedJobMeta"]
+error = '''
+unexpected `job_meta` from tidb
+'''
+
 ["CDC:ErrTiKVEventFeed"]
 error = '''
 tikv event feed failed
