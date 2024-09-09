@@ -87,6 +87,7 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
+	metricKvCongestedCounter          = eventFeedErrorCounter.WithLabelValues("KvCongested")
 )
 
 type eventError struct {
@@ -695,6 +696,11 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		}
 		if innerErr.GetServerIsBusy() != nil {
 			metricKvIsBusyCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
+			return nil
+		}
+		if innerErr.GetCongested() != nil {
+			metricKvCongestedCounter.Inc()
 			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
 			return nil
 		}
