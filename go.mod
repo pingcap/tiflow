@@ -398,7 +398,7 @@ require (
 )
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
-replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
+replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1.0
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
@@ -410,7 +410,9 @@ replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
 replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
 
-replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
+replace gorm.io/driver/mysql v1.5.7 => gorm.io/driver/mysql v1.3.3
+
+replace gorm.io/gorm v1.25.11 => gorm.io/gorm v1.24.5
 
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
 // Please remove these dependencies.
