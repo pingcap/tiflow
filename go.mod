@@ -418,4 +418,4 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
-replace github.com/pingcap/kvproto => github.com/3AceShowHand/kvproto v0.0.0-20240909074257-ec56a00a7838
+replace github.com/pingcap/kvproto => github.com/3AceShowHand/kvproto v0.0.0-20240909081737-efbd27794683
