@@ -694,13 +694,13 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 			return nil
 		}
-		if innerErr.GetServerIsBusy() != nil {
-			metricKvIsBusyCounter.Inc()
-			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
-			return nil
-		}
 		if innerErr.GetCongested() != nil {
 			metricKvCongestedCounter.Inc()
+			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
+			return nil
+		}
+		if innerErr.GetServerIsBusy() != nil {
+			metricKvIsBusyCounter.Inc()
 			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
 			return nil
 		}
