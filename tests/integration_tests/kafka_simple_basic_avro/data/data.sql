@@ -231,7 +231,7 @@ alter table tp_time add column c_timestamp2 timestamp default now();
 insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
 values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
 
-delete from tp_time where id in (2, 3, 4);
+delete from tp_time where id in (1, 2, 3, 4, 5);
 
 alter table tp_time alter column c_timestamp2 drop default;
 
