@@ -15,9 +15,9 @@ package debezium
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/hack"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
@@ -38,6 +39,14 @@ type dbzCodec struct {
 	config    *common.Config
 	clusterID string
 	nowFunc   func() time.Time
+}
+
+func newDebeziumJSONCodec(c *common.Config, clusterID string) codec.Format {
+	return &dbzCodec{
+		config:    c,
+		clusterID: clusterID,
+		nowFunc:   time.Now,
+	}
 }
 
 func (c *dbzCodec) writeDebeziumFieldValues(
@@ -516,12 +525,16 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
-func (c *dbzCodec) EncodeRowChangedEvent(
-	e *model.RowChangedEvent,
-	dest io.Writer,
-) error {
-	jWriter := util.BorrowJSONWriter(dest)
-	defer util.ReturnJSONWriter(jWriter)
+// EncodeKey encode debezium json format message key
+func (c *dbzCodec) EncodeKey(_ context.Context, _ string, _ *model.RowChangedEvent) ([]byte, error) {
+	// Debezium message key are currently not supported.
+	return nil, nil
+}
+
+// EncodeValue encode debezium json format message value
+func (c *dbzCodec) EncodeValue(_ context.Context, _ string, e *model.RowChangedEvent) ([]byte, error) {
+	valueBuf := bytes.Buffer{}
+	jWriter := util.BorrowJSONWriter(&valueBuf)
 
 	commitTime := oracle.GetTimeFromTS(e.CommitTs)
 
@@ -787,5 +800,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 		}
 	})
 
-	return err
+	util.ReturnJSONWriter(jWriter)
+
+	return valueBuf.Bytes(), err
 }

@@ -30,6 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const defaultChangeFeedId = "default"
+
 func TestDMLEventE2E(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	codecConfig.EnableTiDBExtension = true
@@ -87,7 +89,7 @@ func TestDDLEventE2E(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.AvroEnableWatermark = true
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
+	encoder := NewAvroEncoder(model.DefaultNamespace, defaultChangeFeedId, nil, codecConfig)
 
 	ddl, _, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	message, err := encoder.EncodeDDLEvent(ddl)
@@ -121,7 +123,7 @@ func TestResolvedE2E(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.AvroEnableWatermark = true
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
+	encoder := NewAvroEncoder(model.DefaultNamespace, defaultChangeFeedId, nil, codecConfig)
 
 	resolvedTs := uint64(1591943372224)
 	message, err := encoder.EncodeCheckpointEvent(resolvedTs)
@@ -160,13 +162,15 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 
 	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	topic := "default"
-	bin, err := encoder.encodeValue(ctx, "default", event)
+	bin, err := encoder.codec.EncodeValue(ctx, "default", event)
 	require.NoError(t, err)
 
 	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+	schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+	require.NoError(t, err)
+	avroValueCodec, err := schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroValueCodec.NativeFromBinary(data)
@@ -200,13 +204,15 @@ func TestAvroEncode(t *testing.T) {
 
 	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	topic := "default"
-	bin, err := encoder.encodeKey(ctx, topic, event)
+	bin, err := encoder.codec.EncodeKey(ctx, topic, event)
 	require.NoError(t, err)
 
 	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+	schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+	require.NoError(t, err)
+	avroKeyCodec, err := schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroKeyCodec.NativeFromBinary(data)
@@ -219,13 +225,13 @@ func TestAvroEncode(t *testing.T) {
 	}
 	require.Equal(t, int32(127), res.(map[string]interface{})["tu1"])
 
-	bin, err = encoder.encodeValue(ctx, topic, event)
+	bin, err = encoder.codec.EncodeValue(ctx, topic, event)
 	require.NoError(t, err)
 
 	cid, data, err = extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+	avroValueCodec, err := schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err = avroValueCodec.NativeFromBinary(data)
@@ -334,6 +340,21 @@ func TestGetAvroNamespace(t *testing.T) {
 		t,
 		"N_amespace.S_chema",
 		getAvroNamespace("N-amespace", "S.chema"),
+	)
+}
+
+func TestGetDebeziumAvroNamespace(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(
+		t,
+		"normalNamespace.normalSchema",
+		getDebeziumAvroNamespace("normalNamespace.normalSchema"),
+	)
+	require.Equal(
+		t,
+		"avro_test_topic.test.t",
+		getDebeziumAvroNamespace("avro-test-topic.test.t"),
 	)
 }
 

@@ -32,8 +32,8 @@ func getTestingContext() context.Context {
 }
 
 func TestSchemaRegistry(t *testing.T) {
-	startHTTPInterceptForTestingRegistry()
-	defer stopHTTPInterceptForTestingRegistry()
+	StartHTTPInterceptForTestingRegistry()
+	defer StopHTTPInterceptForTestingRegistry()
 
 	ctx := getTestingContext()
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
@@ -96,8 +96,8 @@ func TestSchemaRegistry(t *testing.T) {
 }
 
 func TestSchemaRegistryBad(t *testing.T) {
-	startHTTPInterceptForTestingRegistry()
-	defer stopHTTPInterceptForTestingRegistry()
+	StartHTTPInterceptForTestingRegistry()
+	defer StopHTTPInterceptForTestingRegistry()
 
 	ctx := getTestingContext()
 	_, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:808", nil)
@@ -108,8 +108,8 @@ func TestSchemaRegistryBad(t *testing.T) {
 }
 
 func TestSchemaRegistryIdempotent(t *testing.T) {
-	startHTTPInterceptForTestingRegistry()
-	defer stopHTTPInterceptForTestingRegistry()
+	StartHTTPInterceptForTestingRegistry()
+	defer StopHTTPInterceptForTestingRegistry()
 
 	ctx := getTestingContext()
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
@@ -153,8 +153,8 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 }
 
 func TestGetCachedOrRegister(t *testing.T) {
-	startHTTPInterceptForTestingRegistry()
-	defer stopHTTPInterceptForTestingRegistry()
+	StartHTTPInterceptForTestingRegistry()
+	defer StopHTTPInterceptForTestingRegistry()
 
 	ctx := getTestingContext()
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
@@ -252,8 +252,8 @@ func TestGetCachedOrRegister(t *testing.T) {
 }
 
 func TestHTTPRetry(t *testing.T) {
-	startHTTPInterceptForTestingRegistry()
-	defer stopHTTPInterceptForTestingRegistry()
+	StartHTTPInterceptForTestingRegistry()
+	defer StopHTTPInterceptForTestingRegistry()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
