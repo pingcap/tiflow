@@ -51,8 +51,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
-	statistics := metrics.NewStatistics(ctx, model.DefaultChangeFeedID("dml-worker-test"),
-		sink.TxnSink)
+	statistics := metrics.NewStatistics(model.DefaultChangeFeedID("dml-worker-test"), sink.TxnSink)
 	pdlock := pdutil.NewMonotonicClock(clock.New())
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
 		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), pdlock, statistics)
