@@ -98,6 +98,8 @@ type mockDDLSink struct {
 	syncPoint    model.Ts
 	syncPointHis []model.Ts
 
+	bootstrapError bool
+
 	wg sync.WaitGroup
 }
 
@@ -146,16 +148,15 @@ func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo
 	return m.mu.checkpointTs, m.mu.currentTables
 }
 
-func (m *mockDDLSink) close(ctx context.Context) error {
+func (m *mockDDLSink) close(_ context.Context) error {
 	m.wg.Wait()
 	return nil
 }
 
-func (m *mockDDLSink) Barrier(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockDDLSink) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
+func (m *mockDDLSink) emitBootstrap(_ context.Context, bootstrap *model.DDLEvent) error {
+	if m.bootstrapError {
+		return errors.New("emit bootstrap error")
+	}
 	if m.recordDDLHistory {
 		m.ddlHistory = append(m.ddlHistory, bootstrap)
 	}
@@ -196,7 +197,33 @@ func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
+<<<<<<< HEAD
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
+=======
+func newMockDDLSink(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
+	return &mockDDLSink{
+		resetDDLDone:     true,
+		recordDDLHistory: false,
+	}
+}
+
+func newMockDDLSinkWithBootstrapError(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
+	return &mockDDLSink{
+		resetDDLDone:     true,
+		recordDDLHistory: false,
+		bootstrapError:   true,
+	}
+}
+
+func newMockPuller(_ context.Context, _ *upstream.Upstream, startTs uint64, _ model.ChangeFeedID, schemaStorage entry.SchemaStorage, _ filter.Filter) puller.DDLPuller {
+	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage}
+}
+
+func createChangefeed4Test(globalVars *vars.GlobalVars,
+	changefeedInfo *model.ChangeFeedInfo,
+	newMockDDLSink func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink,
+	t *testing.T,
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 ) (
 	*changefeed, map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
 ) {
@@ -217,6 +244,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 	tester.MustApplyPatches()
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
 		// new ddl puller
+<<<<<<< HEAD
 		func(ctx context.Context,
 			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
@@ -227,13 +255,11 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
 		},
+=======
+		newMockPuller,
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 		// new ddl ddlSink
-		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
-			return &mockDDLSink{
-				resetDDLDone:     true,
-				recordDDLHistory: false,
-			}
-		},
+		newMockDDLSink,
 		// new scheduler
 		func(
 			ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
@@ -262,9 +288,16 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 }
 
 func TestPreCheck(t *testing.T) {
+<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	cf.Tick(ctx, captures)
+=======
+	globalvars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	_, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, newMockDDLSink, t)
+	state.CheckCaptureAlive(globalvars.CaptureInfo.ID)
+	preflightCheck(state, captures)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	tester.MustApplyPatches()
 	require.NotNil(t, cf.state.Status)
 
@@ -282,8 +315,14 @@ func TestPreCheck(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
+<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, captures)
@@ -297,8 +336,14 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestChangefeedHandleError(t *testing.T) {
+<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, captures)
@@ -316,6 +361,38 @@ func TestChangefeedHandleError(t *testing.T) {
 	require.Equal(t, cf.state.Info.Error.Message, "fake error")
 }
 
+func TestTrySendBootstrapMeetError(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	_ = helper.DDL2Event("create table test.t(id int primary key, b int)")
+
+	ctx := context.Background()
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSinkWithBootstrapError, t)
+	cf.upstream.KVStorage = helper.Storage()
+	defer cf.Close(ctx)
+
+	// pre check
+	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
+
+	// initialize
+	state.Info.Config.Sink.Protocol = util.AddressOf("simple")
+	state.Info.Config.Sink.SendAllBootstrapAtStart = util.AddressOf(true)
+	cf.Tick(ctx, state.Info, state.Status, captures)
+	tester.MustApplyPatches()
+
+	require.Eventually(t, func() bool {
+		cf.Tick(ctx, state.Info, state.Status, captures)
+		tester.MustApplyPatches()
+		if state.Info.Error != nil {
+			return state.Info.State == model.StatePending
+		}
+		return false
+	}, 5*time.Second, 100*time.Millisecond)
+}
+
 func TestExecDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -325,10 +402,17 @@ func TestExecDDL(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
+<<<<<<< HEAD
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	changefeedInfo.StartTs = startTs
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
@@ -407,10 +491,17 @@ func TestEmitCheckpointTs(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
+<<<<<<< HEAD
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	changefeedInfo.StartTs = startTs
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	cf.upstream.KVStorage = helper.Storage()
 
 	defer cf.Close(ctx)
@@ -469,8 +560,13 @@ func TestSyncPoint(t *testing.T) {
 	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
 	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
 	// SyncPoint option is only available for MySQL compatible database.
+<<<<<<< HEAD
 	ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	changefeedInfo.SinkURI = "mysql://"
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	defer cf.Close(ctx)
 
 	// pre check
@@ -498,9 +594,16 @@ func TestSyncPoint(t *testing.T) {
 }
 
 func TestFinished(t *testing.T) {
+<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	globalvars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	changefeedInfo.TargetTs = changefeedInfo.StartTs + 1000
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	defer cf.Close(ctx)
 
 	// pre check
@@ -573,7 +676,12 @@ func testChangefeedReleaseResource(
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
+<<<<<<< HEAD
 	cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	var err error
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 
 	// pre check
 	cf.Tick(ctx, captures)
@@ -615,7 +723,11 @@ func TestBarrierAdvance(t *testing.T) {
 		}
 		ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 
+<<<<<<< HEAD
 		cf, captures, tester := createChangefeed4Test(ctx, t)
+=======
+		cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+>>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 		defer cf.Close(ctx)
 
 		// The changefeed load the info from etcd.
