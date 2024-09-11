@@ -134,6 +134,39 @@ values ('2022-02-22', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', 
 update tp_time set c_year = '2022' where c_year = '2020';
 update tp_time set c_date = '2022-02-22' where c_datetime = '2020-02-20 02:20:20';
 
+<<<<<<< HEAD
+=======
+update tp_time set c_datetime = "2024-07-04 15:31";
+
+alter table tp_time add column c_timestamp2 timestamp default current_timestamp;
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
+alter table tp_time modify column c_timestamp2 timestamp default "2024-07-04 15:00:00";
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
+update tp_time set c_date = "2024-07-04", c_datetime = "2024-07-04 15:00:00", c_timestamp = "2024-07-04 12:00:00", c_time = "15:23:45", c_year = "2024" where id = 1;
+
+alter table tp_time drop column c_timestamp2;
+
+alter table tp_time add column c_timestamp2 timestamp default now();
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
+delete from tp_time where id in (1, 2, 3, 4, 5);
+
+alter table tp_time alter column c_timestamp2 drop default;
+
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year, c_timestamp2)
+values ('2024-03-09', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021', "2024-03-09 18:00:00");
+
+update tp_time set id = 2 where id = 7;
+
+>>>>>>> c826978d42 (test(ticdc): fix data inconsistence on integration_tests (#11584))
 -- text
 create table tp_text
 (
