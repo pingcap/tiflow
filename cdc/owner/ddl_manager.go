@@ -195,17 +195,12 @@ func newDDLManager(
 		checkpointTs:    checkpointTs,
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
-<<<<<<< HEAD
 		// use the passed sinkType after we support get resolvedTs from sink
-		sinkType:                      model.DB,
-		tableCheckpoint:               make(map[model.TableName]model.Ts),
-		pendingDDLs:                   make(map[model.TableName][]*model.DDLEvent),
-		shouldSendAllBootstrapAtStart: shouldSendAllBootstrapAtStart,
-=======
+		sinkType:        model.DB,
+		tableCheckpoint: make(map[model.TableName]model.Ts),
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
 		bootstrapState:  bootstrap,
 		reportError:     reportError,
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	}
 }
 

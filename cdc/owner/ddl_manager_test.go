@@ -25,12 +25,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-<<<<<<< HEAD
-	config2 "github.com/pingcap/tiflow/pkg/config"
+	config "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -56,14 +52,7 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 		schema,
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
-<<<<<<< HEAD
-		model.DB, false, false)
-=======
-		false,
-		shouldSendAllBootstrapAtStart,
-		func(err error) {},
-	)
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
+		model.DB, false, shouldSendAllBootstrapAtStart, func(err error) {})
 	return res
 }
 
@@ -176,13 +165,8 @@ func TestGetSnapshotTs(t *testing.T) {
 func TestExecRenameTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
-<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
-=======
-	ctx := context.Background()
 	dm := createDDLManagerForTest(t, false)
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
@@ -281,14 +265,8 @@ func TestExecRenameTablesDDL(t *testing.T) {
 func TestExecDropTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
-<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
-=======
-
-	ctx := context.Background()
 	dm := createDDLManagerForTest(t, false)
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
@@ -351,14 +329,8 @@ func TestExecDropTablesDDL(t *testing.T) {
 func TestExecDropViewsDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
-<<<<<<< HEAD
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
-=======
-
-	ctx := context.Background()
 	dm := createDDLManagerForTest(t, false)
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {

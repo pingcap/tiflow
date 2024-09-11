@@ -391,7 +391,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	// bootstrap not finished yet, cannot send any event.
 	if !c.ddlManager.isBootstrapped() {
-		return 0, 0, nil
+		return nil
 	}
 
 	err = c.handleBarrier(ctx, barrier)
@@ -689,16 +689,11 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-<<<<<<< HEAD
 		downstreamType,
 		util.GetOrZero(info.Config.BDRMode),
-		info.Config.Sink.ShouldSendAllBootstrapAtStart())
-=======
-		util.GetOrZero(cfInfo.Config.BDRMode),
-		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
-		c.Throw(ctx),
+		info.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		ctx.Throw,
 	)
->>>>>>> 2e3aadede7 (changefeed(ticdc): send bootstrap message asynchronously to prevent block other changefeeds (#11573))
 
 	// create scheduler
 	cfg := *c.cfg
