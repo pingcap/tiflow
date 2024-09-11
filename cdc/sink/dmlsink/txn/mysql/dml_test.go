@@ -18,7 +18,9 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -708,6 +710,23 @@ func TestMapReplace(t *testing.T) {
 				1, "你好", "世界", []byte("你好,世界"),
 				[]byte("你好,世界"),
 			},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1.0,-2,0.3,-4.4,55]")),
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+				},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ",
+			expectedArgs:  []interface{}{"[1,-2,0.3,-4.4,55]", "[1,2,3,4,5]"},
 		},
 	}
 	for _, tc := range testCases {
