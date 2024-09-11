@@ -250,6 +250,37 @@ func TestPrepareUpdate(t *testing.T) {
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, "世界", 1, "你好"},
 		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1.0,-2,0.33,-4.4,55]")),
+				},
+			},
+			cols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+				},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
+			expectedArgs: []interface{}{1, "[1,2,3,4,5]", 1},
+		},
 	}
 	for _, tc := range testCases {
 		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
