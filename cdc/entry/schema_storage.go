@@ -254,7 +254,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	if job.BinlogInfo.DBInfo != nil {
 		log.Info("schemaStorage: update snapshot by the DDL job",
 			zap.Int64("dbID", job.BinlogInfo.DBInfo.ID),
-			zap.String("name", job.BinlogInfo.DBInfo.Name.O.Name.O))
+			zap.String("name", job.BinlogInfo.DBInfo.Name.O))
 	}
 	return nil
 }
