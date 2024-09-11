@@ -396,11 +396,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		// we only use multiTableInfos and Querys when we generate job event
 		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
 		if strings.Count(job.Query, ";") != len(job.BinlogInfo.MultipleTableInfos) {
-			log.Panic("the number of queries in `Job.Query` is not equal to "+
+			log.Error("the number of queries in `Job.Query` is not equal to "+
 				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
 				zap.String("Job.Query", job.Query),
 				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
 				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
 		}
 
 		var newMultiTableInfos []*timodel.TableInfo
