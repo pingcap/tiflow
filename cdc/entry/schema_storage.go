@@ -242,6 +242,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
 		zap.String("query", job.Query),
+		zap.String("type", job.Type.String()),
 		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 		zap.Any("binLogInfo", job.BinlogInfo),
 		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
