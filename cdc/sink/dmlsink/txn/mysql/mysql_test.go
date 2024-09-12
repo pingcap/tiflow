@@ -121,7 +121,8 @@ func TestPrepareDML(t *testing.T) {
 	tableInfoVector := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{
 		nil, {
 			Name: "a1",
-			Type: mysql.TypeTiDBVectorFloat32,
+			Type: mysql.TypeLong,
+			Flag: model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 		}, {
 			Name: "a3",
 			Type: mysql.TypeTiDBVectorFloat32,
@@ -208,8 +209,8 @@ func TestPrepareDML(t *testing.T) {
 						[]*model.Column{
 							nil, {
 								Name:  "a1",
-								Type:  mysql.TypeTiDBVectorFloat32,
-								Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+								Type:  mysql.TypeLong,
+								Value: 1,
 							}, {
 								Name:  "a3",
 								Type:  mysql.TypeTiDBVectorFloat32,
@@ -221,7 +222,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813518},
 				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
-				values:          [][]interface{}{{"[1,2,3,4,5]", "[1.1,-2,3.33,-4.12,-5]"}},
+				values:          [][]interface{}{{1, "[1.1,-2,3.33,-4.12,-5]"}},
 				rowCount:        1,
 				approximateSize: 63,
 			},

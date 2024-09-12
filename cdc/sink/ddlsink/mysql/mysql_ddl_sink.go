@@ -291,6 +291,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 // needFormatDDL checks vector type support
 func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	if !cfg.HasVectorType {
+		log.Warn("please set `has-vector-type` to be true if data is vector", zap.Any("hasVectorType", cfg.HasVectorType))
 		return false
 	}
 	versionInfo, err := export.SelectVersion(db)

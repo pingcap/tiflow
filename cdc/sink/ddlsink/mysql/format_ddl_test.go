@@ -17,27 +17,31 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestFormatQuery(t *testing.T) {
 	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` VECTOR(5));"
-	expectSQL := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
+	expectSQL := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT);"
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("format query parse one stmt failed", zap.Error(err))
-	}
+	require.NoError(t, err)
 	stmt.Accept(&visiter{})
 
 	buf := new(bytes.Buffer)
 	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, buf)
-	if err = stmt.Restore(restoreCtx); err != nil {
-		log.Error("format query restore failed", zap.Error(err))
-	}
+	err = stmt.Restore(restoreCtx)
+	require.NoError(t, err)
 	require.Equal(t, buf.String(), expectSQL)
+}
+
+func BenchmarkFormatQuery(b *testing.B) {
+	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT);"
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		formatQuery(sql)
+	}
 }

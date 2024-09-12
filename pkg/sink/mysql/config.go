@@ -78,7 +78,7 @@ const (
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
 
-	defaultHasVectorType = true
+	defaultHasVectorType = false
 )
 
 type urlConfig struct {
@@ -98,6 +98,7 @@ type urlConfig struct {
 	EnableBatchDML               *bool   `form:"batch-dml-enable"`
 	EnableMultiStatement         *bool   `form:"multi-stmt-enable"`
 	EnableCachePreparedStatement *bool   `form:"cache-prep-stmts"`
+	HasVectorType                *bool   `form:"has-vector-type"`
 }
 
 // Config is the configs for MySQL backend.
@@ -201,6 +202,7 @@ func (c *Config) Apply(
 	}
 
 	getBatchDMLEnable(urlParameter, &c.BatchDMLEnable)
+	getHasVectorType(urlParameter, &c.HasVectorType)
 	getMultiStmtEnable(urlParameter, &c.MultiStmtEnable)
 	getCachePrepStmts(urlParameter, &c.CachePrepStmts)
 	c.ForceReplicate = replicaConfig.ForceReplicate
@@ -447,6 +449,12 @@ func getDuration(s *string, target *string) error {
 func getBatchDMLEnable(values *urlConfig, batchDMLEnable *bool) {
 	if values.EnableBatchDML != nil {
 		*batchDMLEnable = *values.EnableBatchDML
+	}
+}
+
+func getHasVectorType(values *urlConfig, hasVectorType *bool) {
+	if values.HasVectorType != nil {
+		*hasVectorType = *values.HasVectorType
 	}
 }
 
