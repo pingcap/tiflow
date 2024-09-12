@@ -291,7 +291,8 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 // needFormatDDL checks vector type support
 func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	if !cfg.HasVectorType {
-		log.Warn("please set `has-vector-type` to be true if data is vector", zap.Any("hasVectorType", cfg.HasVectorType))
+		log.Warn("please set `has-vector-type` to be true if a column is vector type when the downstream is not TiDB or TiDB version less than specify version",
+			zap.Any("hasVectorType", cfg.HasVectorType), zap.Any("supportVectorVersion", defaultSupportVectorVersion))
 		return false
 	}
 	versionInfo, err := export.SelectVersion(db)
@@ -302,7 +303,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	serverInfo := version.ParseServerInfo(versionInfo)
 	version := semver.New(defaultSupportVectorVersion)
 	if !cfg.IsTiDB || serverInfo.ServerVersion.LessThan(*version) {
-		log.Error("downstream unsupport vector type. we convert it to longtext", zap.String("version", serverInfo.ServerVersion.String()), zap.String("supportVersion", defaultSupportVectorVersion), zap.Bool("isTiDB", cfg.IsTiDB))
+		log.Error("downstream unsupport vector type. it will be converted to longtext", zap.String("version", serverInfo.ServerVersion.String()), zap.String("supportVectorVersion", defaultSupportVectorVersion), zap.Bool("isTiDB", cfg.IsTiDB))
 		return true
 	}
 	return false
