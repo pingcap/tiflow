@@ -18,31 +18,24 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGenKeyListCaseInSensitive(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 
-	columns := []*model.Column{
-		{
-			Value:     "XyZ",
-			Type:      mysql.TypeVarchar,
-			Collation: "utf8_unicode_ci",
-		},
-	}
+	helper.DDL2Event("create table t1(name varchar(255) primary key, )")
 
-	first := genKeyList(columns, 0, []int{0}, 1)
+	row := helper.DML2Event("insert into t1 values (1, 'XyZ')", "test", "t1")
 
-	columns = []*model.Column{
-		{
-			Value:     "xYZ",
-			Type:      mysql.TypeVarchar,
-			Collation: "utf8_unicode_ci",
-		},
-	}
-	second := genKeyList(columns, 0, []int{0}, 1)
+	first := genRowKeys(row)
+
+	row2 := helper.DML2Event("insert into t1 values (2, 'XyZ')", "test", "t1")
+
+	second := genRowKeys(row2)
 
 	require.Equal(t, first, second)
 }
