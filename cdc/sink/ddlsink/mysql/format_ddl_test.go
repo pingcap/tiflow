@@ -23,8 +23,8 @@ import (
 )
 
 func TestFormatQuery(t *testing.T) {
-	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` VECTOR(5));"
-	expectSQL := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT);"
+	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` VECTOR(5))"
+	expectSQL := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestFormatQuery(t *testing.T) {
 }
 
 func BenchmarkFormatQuery(b *testing.B) {
-	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT);"
+	sql := "CREATE TABLE `test` (`id` INT PRIMARY KEY,`data` LONGTEXT)"
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
