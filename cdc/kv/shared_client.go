@@ -696,7 +696,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		}
 		if innerErr.GetCongested() != nil {
 			metricKvCongestedCounter.Inc()
-			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
+			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
 			return nil
 		}
 		if innerErr.GetServerIsBusy() != nil {
@@ -706,7 +706,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			// TODO(qupeng): It's better to add a new machanism to deregister one region.
+			// TODO(qupeng): It's better to add a new mechanism to deregister one region.
 			return errors.New("duplicate request")
 		}
 		if compatibility := innerErr.GetCompatibility(); compatibility != nil {
