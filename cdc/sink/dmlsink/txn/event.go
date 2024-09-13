@@ -108,7 +108,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.TableInfo.IndexColumnsOffset {
-			key := genKeyList(row.GetColumns(), iIdx, idxCol, row.PhysicalTableID)
+			key := genKeyList(row.Columns, row.TableInfo, iIdx, idxCol, row.PhysicalTableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -117,7 +117,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	}
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.TableInfo.IndexColumnsOffset {
-			key := genKeyList(row.GetPreColumns(), iIdx, idxCol, row.PhysicalTableID)
+			key := genKeyList(row.PreColumns, row.TableInfo, iIdx, idxCol, row.PhysicalTableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -136,19 +136,21 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 }
 
 func genKeyList(
-	columns []*model.Column, iIdx int, colIdx []int, tableID int64,
+	columns []*model.ColumnData, tb *model.TableInfo, iIdx int, colIdx []int, tableID int64,
 ) []byte {
 	var key []byte
 	for _, i := range colIdx {
+		colInfo := model.GetColumnInfo(columns[i], tb)
+		colFlag := model.GetColumnFlag(columns[i], tb)
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
 		// Because such as insert can't specify the generated value.
-		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
+		if columns[i] == nil || columns[i].Value == nil || colFlag.IsGeneratedColumn() {
 			return nil
 		}
 
 		val := model.ColumnValueString(columns[i].Value)
-		if columnNeeds2LowerCase(columns[i].Type, columns[i].Collation) {
+		if columnNeeds2LowerCase(colInfo.GetType(), colInfo.GetCollate()) {
 			val = strings.ToLower(val)
 		}
 

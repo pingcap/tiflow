@@ -1282,3 +1282,14 @@ type TopicPartitionKey struct {
 	PartitionKey   string
 	TotalPartition int32
 }
+
+// GetColumnFlag returns column flag.
+func GetColumnFlag(column *ColumnData, tb *TableInfo) ColumnFlagType {
+	return *tb.ColumnsFlag[column.ColumnID]
+}
+
+// GetColumnInfo returns column info.
+func GetColumnInfo(column *ColumnData, tb *TableInfo) *model.ColumnInfo {
+	offset := tb.columnsOffset[column.ColumnID]
+	return tb.Columns[offset]
+}
