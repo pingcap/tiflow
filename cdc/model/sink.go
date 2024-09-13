@@ -1294,8 +1294,8 @@ type TopicPartitionKey struct {
 }
 
 // GetColumnFlag returns column flag.
-func GetColumnFlag(column *ColumnData, tb *TableInfo) ColumnFlagType {
-	return *tb.ColumnsFlag[column.ColumnID]
+func GetColumnFlag(column *ColumnData, tb *TableInfo) *ColumnFlagType {
+	return tb.ColumnsFlag[column.ColumnID]
 }
 
 // GetColumnInfo returns column info.
