@@ -128,6 +128,10 @@ func (c *consumer) Consume(ctx context.Context) {
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
 		if !needCommit {
+			log.Info("need not commit message",
+				zap.String("topicPartition", msg.String()),
+				zap.Any("value", msg.Value),
+			)			
 			continue
 		}
 
