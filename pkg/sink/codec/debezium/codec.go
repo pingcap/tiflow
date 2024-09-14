@@ -23,12 +23,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/hack"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -557,7 +559,6 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 			// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 			jWriter.WriteNullField("transaction")
-
 			if e.IsInsert() {
 				// op: Mandatory string that describes the type of operation that caused the connector to generate the event.
 				// Valid values are:
@@ -787,5 +788,253 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 		}
 	})
 
+	return err
+}
+
+// EncodeDDLEvent implement the DDLEventBatchEncoder interface
+func (c *dbzCodec) EncodeDDLEvent(
+	e *model.DDLEvent,
+	dest io.Writer,
+) error {
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(jWriter)
+	var changeType string
+	commitTime := oracle.GetTimeFromTS(e.CommitTs)
+	switch e.Type {
+	case timodel.ActionCreateSchema,
+		timodel.ActionCreateTable,
+		timodel.ActionCreatePlacementPolicy,
+		timodel.ActionCreateView,
+		timodel.ActionCreateSequence:
+		changeType = "CREATE"
+	case timodel.ActionAlterTableAttributes,
+		timodel.ActionAlterTablePartitionAttributes,
+		timodel.ActionAlterPlacementPolicy,
+		timodel.ActionAlterTablePartitionPlacement,
+		timodel.ActionModifySchemaDefaultPlacement,
+		timodel.ActionAlterTablePlacement,
+		timodel.ActionAlterCacheTable,
+		timodel.ActionModifyColumn,
+		timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue,
+		timodel.ActionModifyTableComment,
+		timodel.ActionModifyTableCharsetAndCollate,
+		timodel.ActionModifySchemaCharsetAndCollate,
+		timodel.ActionAlterSequence,
+		timodel.ActionAlterIndexVisibility,
+		timodel.ActionAlterCheckConstraint:
+		changeType = "ALTER"
+	case timodel.ActionDropSchema,
+		timodel.ActionDropTable,
+		timodel.ActionDropPlacementPolicy,
+		timodel.ActionDropColumn,
+		timodel.ActionDropIndex,
+		timodel.ActionDropForeignKey,
+		timodel.ActionDropView,
+		timodel.ActionDropTablePartition,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionDropSequence,
+		timodel.ActionDropCheckConstraint:
+		changeType = "DROP"
+	default:
+		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type)
+	}
+	var err error
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			jWriter.WriteObjectField("source", func() {
+				jWriter.WriteStringField("version", "2.4.0.Final")
+				jWriter.WriteStringField("connector", "TiCDC")
+				jWriter.WriteStringField("name", c.clusterID)
+				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
+				jWriter.WriteStringField("snapshot", "false")
+				if e.TableInfo == nil {
+					jWriter.WriteStringField("db", "")
+					jWriter.WriteStringField("table", "")
+				} else {
+					jWriter.WriteStringField("db", e.TableInfo.GetSchemaName())
+					jWriter.WriteStringField("table", e.TableInfo.GetTableName())
+				}
+				jWriter.WriteInt64Field("server_id", 0)
+				jWriter.WriteNullField("gtid")
+				jWriter.WriteStringField("file", "")
+				jWriter.WriteInt64Field("pos", 0)
+				jWriter.WriteInt64Field("row", 0)
+				jWriter.WriteInt64Field("thread", 0)
+				jWriter.WriteNullField("query")
+
+				// The followings are TiDB extended fields
+				jWriter.WriteUint64Field("commit_ts", e.CommitTs)
+				jWriter.WriteStringField("cluster_id", c.clusterID)
+				jWriter.WriteAnyField("type", e.Type)
+				jWriter.WriteStringField("collate", e.Collate)
+				jWriter.WriteStringField("charset", e.Charset)
+			})
+
+			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+			jWriter.WriteNullField("transaction")
+
+			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
+			if e.Type == timodel.ActionDropTable {
+				jWriter.WriteStringField("databaseName", e.PreTableInfo.GetSchemaName())
+			} else {
+				jWriter.WriteStringField("databaseName", e.TableInfo.GetSchemaName())
+			}
+			jWriter.WriteNullField("schemaName")
+			jWriter.WriteStringField("ddl", e.Query)
+			if e.Type != timodel.ActionDropTable {
+				jWriter.WriteArrayField("tableChanges", func() {
+					jWriter.WriteObjectElement(func() {
+						// Describes the kind of change. The value is one of the following:
+						// CREATE: Table created.
+						// ALTER: Table modified.
+						// DROP: Table deleted.
+						jWriter.WriteStringField("type", changeType)
+						// In the case of a table rename, this identifier is a concatenation of <old>,<new> table names.
+						if e.Type == timodel.ActionRenameTable {
+							jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\",\"%s\".\"%s\"",
+								e.PreTableInfo.GetSchemaName(),
+								e.PreTableInfo.GetTableName(),
+								e.TableInfo.GetSchemaName(),
+								e.TableInfo.GetTableName()))
+						} else {
+							jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\"",
+								e.TableInfo.GetSchemaName(),
+								e.TableInfo.GetTableName()))
+						}
+						jWriter.WriteObjectField("table", func() {
+							jWriter.WriteStringField("defaultCharsetName", e.Charset)
+							jWriter.WriteArrayField("primaryKeyColumnNames", func() {
+								for _, pk := range e.TableInfo.GetPrimaryKeyColumnNames() {
+									jWriter.WriteStringElement(pk)
+								}
+							})
+							jWriter.WriteArrayField("columns", func() {
+								for pos, col := range e.TableInfo.Columns {
+									jWriter.WriteObjectElement(func() {
+										flag := col.GetFlag()
+										jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
+										tp := types.TypeToStr(col.GetType(), col.GetCharset())
+
+										jWriter.WriteStringField("name", col.Name.O)
+										jWriter.WriteIntField("jdbcType", int(jdbcType))
+										jWriter.WriteNullField("nativeType")
+										jWriter.WriteStringField("typeName", strings.ToUpper(tp))
+										jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
+										if col.GetCharset() == "" {
+											jWriter.WriteNullField("charsetName")
+										} else {
+											jWriter.WriteStringField("charsetName", col.GetCharset())
+										}
+										if col.FieldType.GetFlen() == 0 {
+											jWriter.WriteNullField("length")
+										} else {
+											jWriter.WriteIntField("length", col.FieldType.GetFlen())
+										}
+										jWriter.WriteNullField("scale")
+										jWriter.WriteIntField("position", pos+1)
+										jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
+										jWriter.WriteBoolField("autoIncremented", mysql.HasAutoIncrementFlag(flag))
+										jWriter.WriteBoolField("generated", col.IsGenerated())
+									})
+								}
+							})
+							// Custom attribute metadata for each table change.
+							// jWriter.WriteArrayField("attributes", func() {
+							// 	jWriter.WriteObjectElement(func() {
+							// 		jWriter.WriteStringField("collation", e.Collate)
+							// 	})
+							// })
+						})
+					})
+				})
+			}
+		})
+
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteStringField("name", "io.debezium.connector.mysql.SchemaChangeKey")
+				jWriter.WriteIntField("version", 1)
+				jWriter.WriteArrayField("fields", func() {
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "string")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("field", "databaseName")
+					})
+				})
+
+			})
+		}
+	})
+	return err
+}
+
+func (c *dbzCodec) EncodeCheckpointEvent(
+	ts uint64,
+	dest io.Writer,
+) error {
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(jWriter)
+	commitTime := oracle.GetTimeFromTS(ts)
+	var err error
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			jWriter.WriteObjectField("source", func() {
+				jWriter.WriteStringField("version", "2.4.0.Final")
+				jWriter.WriteStringField("connector", "TiCDC")
+				jWriter.WriteStringField("name", c.clusterID)
+				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
+				jWriter.WriteStringField("snapshot", "false")
+				jWriter.WriteStringField("db", "")
+				jWriter.WriteStringField("table", "")
+				jWriter.WriteInt64Field("server_id", 0)
+				jWriter.WriteNullField("gtid")
+				jWriter.WriteStringField("file", "")
+				jWriter.WriteInt64Field("pos", 0)
+				jWriter.WriteInt64Field("row", 0)
+				jWriter.WriteInt64Field("thread", 0)
+				jWriter.WriteNullField("query")
+
+				// The followings are TiDB extended fields
+				jWriter.WriteUint64Field("commit_ts", ts)
+				jWriter.WriteStringField("cluster_id", c.clusterID)
+			})
+			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+			jWriter.WriteNullField("transaction")
+			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
+			// jWriter.WriteArrayField("tableChanges", func() {
+			// 	jWriter.WriteObjectElement(func() {
+			// 		// In the case of a table rename, this identifier is a concatenation of <old>,<new> table names.
+			// 		jWriter.WriteObjectField("table", func() {
+			// 			// Custom attribute metadata for each table change.
+			// 			jWriter.WriteArrayField("attributes", func() {
+			// 				jWriter.WriteObjectElement(func() {
+			// 					jWriter.WriteUint64Field("commit_ts", ts)
+			// 				})
+			// 			})
+			// 		})
+			// 	})
+			// })
+		})
+
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteStringField("name", "io.debezium.connector.mysql.SchemaChangeKey")
+				jWriter.WriteIntField("version", 1)
+				jWriter.WriteArrayField("fields", func() {
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "string")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("field", "databaseName")
+					})
+				})
+
+			})
+		}
+	})
 	return err
 }

@@ -18,11 +18,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"go.uber.org/zap"
 )
 
 // BatchEncoder encodes message into Debezium format.
@@ -35,8 +37,23 @@ type BatchEncoder struct {
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	// Currently ignored. Debezium MySQL Connector does not emit such event.
-	return nil, nil
+	// Schema Change Events are currently not supported.
+	valueBuf := bytes.Buffer{}
+	err := d.codec.EncodeCheckpointEvent(ts, &valueBuf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	value, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		valueBuf.Bytes(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	result := common.NewResolvedMsg(config.ProtocolDebezium, nil, value, ts)
+
+	return result, nil
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -80,7 +97,26 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 // DDL message unresolved tso
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	// Schema Change Events are currently not supported.
-	return nil, nil
+	valueBuf := bytes.Buffer{}
+	err := d.codec.EncodeDDLEvent(e, &valueBuf)
+	if err != nil {
+		if errors.ErrDDLUnsupportType.Equal(err) {
+			log.Warn("encode ddl event failed, just ignored", zap.Error(err))
+			return nil, nil
+		}
+		return nil, errors.Trace(err)
+	}
+	value, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		valueBuf.Bytes(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	result := common.NewDDLMsg(config.ProtocolDebezium, nil, value, e)
+
+	return result, nil
 }
 
 // Build implements the RowEventEncoder interface

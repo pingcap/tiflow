@@ -112,10 +112,13 @@ func runTestCase(testCasePath string) bool {
 	resetDB(dbTiDB)
 
 	statementKindsToWaitCDCRecord := map[string]bool{
-		"Delete":  true,
-		"Insert":  true,
-		"Replace": true,
-		"Update":  true,
+		"Delete":      true,
+		"Insert":      true,
+		"Replace":     true,
+		"Update":      true,
+		"AlterTable":  true,
+		"CreateTable": true,
+		"DropTable":   true,
 	}
 
 	hasError := false
@@ -211,9 +214,9 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 }
 
 var ignoredRecordPaths = map[string]bool{
-	`{map[string]any}["schema"]`:                             true,
-	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
-	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
+	// `{map[string]any}["schema"]`:                             true,
+	// `{map[string]any}["payload"].(map[string]any)["source"]`: true,
+	// `{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 }
 
 var headingColor = color.New(color.FgHiWhite, color.Bold)

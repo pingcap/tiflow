@@ -54,6 +54,10 @@ var (
 		"cannot find mysql.tidb_ddl_job schema",
 		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
 	)
+	ErrDDLUnsupportType = errors.Normalize(
+		"unsupport ddl type %s",
+		errors.RFCCodeText("CDC:ErrDDLUnsupportType"),
+	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
 		errors.RFCCodeText("CDC:ErrGRPCDialFailed"),
