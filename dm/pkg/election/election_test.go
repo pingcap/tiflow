@@ -451,7 +451,8 @@ func (t *testElectionSuite) TestElectionSucceedButReturnError(c *C) {
 	c.Assert(leaderID, Equals, e1.ID())
 	c.Assert(leaderAddr, Equals, addr1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr", `return(1)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr", `return()`), IsNil)
+	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr")
 
 	// start e2
