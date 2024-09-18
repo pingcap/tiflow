@@ -166,7 +166,6 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, fmt.Errorf("Failed to parse CDC record of %s (msg=%s): %w", kind, m.Value, err)
 		}
 
-		// Ignore Checkpoint events in the TiCDC's output
 		if kind == KindTiDB {
 			payload, ok := obj["payload"].(map[string]any)
 			if !ok {
@@ -174,7 +173,12 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			}
 			_, ok1 := payload["op"]
 			_, ok2 := payload["ddl"]
+			// Ignore Checkpoint events in the TiCDC's output
 			if !ok1 && !ok2 {
+				continue
+			}
+			// Only handle DDL received from partition-0 should be enough.
+			if ok2 && m.Partition != 0 {
 				continue
 			}
 		}
