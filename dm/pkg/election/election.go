@@ -264,10 +264,10 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 			e.l.Debug("begin to campaign", zap.Stringer("current member", e.info))
 
 			err2 := elec.Campaign(ctx2, e.infoStr)
-			failpoint.Inject("mockCapaignSucceedButReturnErr", func(val failpoint.Value) {
+			failpoint.Inject("mockCapaignSucceedButReturnErr", func() {
 				if err2 == nil {
 					err2 = errors.New("mock campaign succeed but return error")
-					time.Sleep(time.Second * time.Duration(val.(int)))
+					time.Sleep(time.Second)
 				}
 			})
 			if err2 != nil {
