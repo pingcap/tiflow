@@ -883,73 +883,74 @@ func (c *dbzCodec) EncodeDDLEvent(
 			}
 			jWriter.WriteNullField("schemaName")
 			jWriter.WriteStringField("ddl", e.Query)
-			if e.Type != timodel.ActionDropTable {
-				jWriter.WriteArrayField("tableChanges", func() {
-					jWriter.WriteObjectElement(func() {
-						// Describes the kind of change. The value is one of the following:
-						// CREATE: Table created.
-						// ALTER: Table modified.
-						// DROP: Table deleted.
-						jWriter.WriteStringField("type", changeType)
-						// In the case of a table rename, this identifier is a concatenation of <old>,<new> table names.
-						if e.Type == timodel.ActionRenameTable {
-							jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\",\"%s\".\"%s\"",
-								e.PreTableInfo.GetSchemaName(),
-								e.PreTableInfo.GetTableName(),
-								e.TableInfo.GetSchemaName(),
-								e.TableInfo.GetTableName()))
-						} else {
-							jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\"",
-								e.TableInfo.GetSchemaName(),
-								e.TableInfo.GetTableName()))
-						}
-						jWriter.WriteObjectField("table", func() {
-							jWriter.WriteStringField("defaultCharsetName", e.Charset)
-							jWriter.WriteArrayField("primaryKeyColumnNames", func() {
-								for _, pk := range e.TableInfo.GetPrimaryKeyColumnNames() {
-									jWriter.WriteStringElement(pk)
-								}
-							})
-							jWriter.WriteArrayField("columns", func() {
-								for pos, col := range e.TableInfo.Columns {
-									jWriter.WriteObjectElement(func() {
-										flag := col.GetFlag()
-										jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
-										tp := types.TypeToStr(col.GetType(), col.GetCharset())
-
-										jWriter.WriteStringField("name", col.Name.O)
-										jWriter.WriteIntField("jdbcType", int(jdbcType))
-										jWriter.WriteNullField("nativeType")
-										jWriter.WriteStringField("typeName", strings.ToUpper(tp))
-										jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
-										if col.GetCharset() == "" {
-											jWriter.WriteNullField("charsetName")
-										} else {
-											jWriter.WriteStringField("charsetName", col.GetCharset())
-										}
-										if col.FieldType.GetFlen() == 0 {
-											jWriter.WriteNullField("length")
-										} else {
-											jWriter.WriteIntField("length", col.FieldType.GetFlen())
-										}
-										jWriter.WriteNullField("scale")
-										jWriter.WriteIntField("position", pos+1)
-										jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
-										jWriter.WriteBoolField("autoIncremented", mysql.HasAutoIncrementFlag(flag))
-										jWriter.WriteBoolField("generated", col.IsGenerated())
-									})
-								}
-							})
-							// Custom attribute metadata for each table change.
-							// jWriter.WriteArrayField("attributes", func() {
-							// 	jWriter.WriteObjectElement(func() {
-							// 		jWriter.WriteStringField("collation", e.Collate)
-							// 	})
-							// })
+			jWriter.WriteArrayField("tableChanges", func() {
+				jWriter.WriteObjectElement(func() {
+					// Describes the kind of change. The value is one of the following:
+					// CREATE: Table created.
+					// ALTER: Table modified.
+					// DROP: Table deleted.
+					jWriter.WriteStringField("type", changeType)
+					// In the case of a table rename, this identifier is a concatenation of <old>,<new> table names.
+					if e.Type == timodel.ActionRenameTable {
+						jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\",\"%s\".\"%s\"",
+							e.PreTableInfo.GetSchemaName(),
+							e.PreTableInfo.GetTableName(),
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
+					} else {
+						jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\"",
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
+					}
+					if e.TableInfo.TableName.Table == "" {
+						return
+					}
+					jWriter.WriteObjectField("table", func() {
+						jWriter.WriteStringField("defaultCharsetName", e.Charset)
+						jWriter.WriteArrayField("primaryKeyColumnNames", func() {
+							for _, pk := range e.TableInfo.GetPrimaryKeyColumnNames() {
+								jWriter.WriteStringElement(pk)
+							}
 						})
+						jWriter.WriteArrayField("columns", func() {
+							for pos, col := range e.TableInfo.Columns {
+								jWriter.WriteObjectElement(func() {
+									flag := col.GetFlag()
+									jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
+									tp := types.TypeToStr(col.GetType(), col.GetCharset())
+
+									jWriter.WriteStringField("name", col.Name.O)
+									jWriter.WriteIntField("jdbcType", int(jdbcType))
+									jWriter.WriteNullField("nativeType")
+									jWriter.WriteStringField("typeName", strings.ToUpper(tp))
+									jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
+									if col.GetCharset() == "" {
+										jWriter.WriteNullField("charsetName")
+									} else {
+										jWriter.WriteStringField("charsetName", col.GetCharset())
+									}
+									if col.FieldType.GetFlen() == 0 {
+										jWriter.WriteNullField("length")
+									} else {
+										jWriter.WriteIntField("length", col.FieldType.GetFlen())
+									}
+									jWriter.WriteNullField("scale")
+									jWriter.WriteIntField("position", pos+1)
+									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
+									jWriter.WriteBoolField("autoIncremented", mysql.HasAutoIncrementFlag(flag))
+									jWriter.WriteBoolField("generated", col.IsGenerated())
+								})
+							}
+						})
+						// Custom attribute metadata for each table change.
+						// jWriter.WriteArrayField("attributes", func() {
+						// 	jWriter.WriteObjectElement(func() {
+						// 		jWriter.WriteStringField("collation", e.Collate)
+						// 	})
+						// })
 					})
 				})
-			}
+			})
 		})
 
 		if !c.config.DebeziumDisableSchema {

@@ -94,9 +94,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the RowEventEncoder interface
-// DDL message unresolved tso
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
-	// Schema Change Events are currently not supported.
 	valueBuf := bytes.Buffer{}
 	err := d.codec.EncodeDDLEvent(e, &valueBuf)
 	if err != nil {
