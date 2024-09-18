@@ -412,3 +412,91 @@ func (t *testElectionSuite) TestElectionDeleteKey(c *C) {
 	c.Assert(err, IsNil)
 	wg.Wait()
 }
+
+func (t *testElectionSuite) TestElectionSucceedButReturnError(c *C) {
+	var (
+		timeout    = 5 * time.Second
+		sessionTTL = 60
+		key        = "unit-test/election-succeed-but-return-error"
+		ID1        = "member1"
+		ID2        = "member2"
+		addr1      = "127.0.0.1:1"
+		addr2      = "127.0.0.1:2"
+	)
+	cli, err := etcdutil.CreateClient([]string{t.endPoint}, nil)
+	c.Assert(err, IsNil)
+	defer cli.Close()
+	ctx0, cancel0 := context.WithCancel(context.Background())
+	defer cancel0()
+	_, err = cli.Delete(ctx0, key, clientv3.WithPrefix())
+	c.Assert(err, IsNil)
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+
+	e1, err := NewElection(ctx1, cli, sessionTTL, key, ID1, addr1, t.notifyBlockTime)
+	c.Assert(err, IsNil)
+	defer e1.Close()
+
+	// e1 should become the leader
+	select {
+	case leader := <-e1.LeaderNotify():
+		c.Assert(leader.ID, Equals, ID1)
+	case <-time.After(timeout):
+		c.Fatal("leader campaign timeout")
+	}
+	c.Assert(e1.IsLeader(), IsTrue)
+	_, leaderID, leaderAddr, err := e1.LeaderInfo(ctx1)
+	c.Assert(err, IsNil)
+	c.Assert(leaderID, Equals, e1.ID())
+	c.Assert(leaderAddr, Equals, addr1)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr", `return(1)`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr")
+
+	// start e2
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	e2, err := NewElection(ctx2, cli, sessionTTL, key, ID2, addr2, t.notifyBlockTime)
+	c.Assert(err, IsNil)
+	defer e2.Close()
+	select {
+	case leader := <-e2.leaderCh:
+		c.Assert(leader.ID, Equals, ID1)
+	case <-time.After(timeout):
+		c.Fatal("leader campaign timeout")
+	}
+	// but the leader should still be e1
+	_, leaderID, leaderAddr, err = e2.LeaderInfo(ctx2)
+	c.Assert(err, IsNil)
+	c.Assert(leaderID, Equals, e1.ID())
+	c.Assert(leaderAddr, Equals, addr1)
+	c.Assert(e2.IsLeader(), IsFalse)
+
+	e1.Close() // stop the campaign for e1
+	c.Assert(e1.IsLeader(), IsFalse)
+
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel3()
+	deleted, err := e2.ClearSessionIfNeeded(ctx3, ID1)
+	c.Assert(err, IsNil)
+	c.Assert(deleted, IsFalse)
+
+	// e2 should become the leader
+	select {
+	case leader := <-e2.LeaderNotify():
+		c.Assert(leader.ID, Equals, ID2)
+	case <-time.After(timeout):
+		c.Fatal("leader campaign timeout")
+	}
+
+	// the leader retired after deleted the key
+	select {
+	case err2 := <-e2.ErrorNotify():
+		c.Fatalf("delete the leader key should not get an error, %v", err2)
+	case leader := <-e2.LeaderNotify():
+		c.Assert(leader, IsNil)
+	case <-time.After(timeout):
+		c.Fatal("leader retire timeout")
+	}
+}
