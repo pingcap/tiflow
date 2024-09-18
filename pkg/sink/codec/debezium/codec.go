@@ -518,6 +518,7 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
+// EncodeRowChangedEvent encode RowChangedEvent into debezium change event
 func (c *dbzCodec) EncodeRowChangedEvent(
 	e *model.RowChangedEvent,
 	dest io.Writer,
@@ -791,7 +792,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 	return err
 }
 
-// EncodeDDLEvent implement the DDLEventBatchEncoder interface
+// EncodeDDLEvent encode DDLEvent into debezium change event
 func (c *dbzCodec) EncodeDDLEvent(
 	e *model.DDLEvent,
 	dest io.Writer,
@@ -964,13 +965,13 @@ func (c *dbzCodec) EncodeDDLEvent(
 						jWriter.WriteStringField("field", "databaseName")
 					})
 				})
-
 			})
 		}
 	})
 	return err
 }
 
+// EncodeCheckpointEvent encode checkpointTs into debezium change event
 func (c *dbzCodec) EncodeCheckpointEvent(
 	ts uint64,
 	dest io.Writer,
@@ -1032,7 +1033,6 @@ func (c *dbzCodec) EncodeCheckpointEvent(
 						jWriter.WriteStringField("field", "databaseName")
 					})
 				})
-
 			})
 		}
 	})

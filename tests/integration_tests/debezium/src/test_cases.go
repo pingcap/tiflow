@@ -166,13 +166,15 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, fmt.Errorf("Failed to parse CDC record of %s (msg=%s): %w", kind, m.Value, err)
 		}
 
-		// Ignore DDL events in the Debezium's output
-		if kind == KindMySQL {
-			schema, ok := obj["schema"]
+		// Ignore Checkpoint events in the TiCDC's output
+		if kind == KindTiDB {
+			payload, ok := obj["payload"].(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("Unexpected CDC record of %s: schema field not exist in %s", kind, m.Value)
+				return nil, fmt.Errorf("Unexpected CDC record of %s: payload field not exist in %s", kind, m.Value)
 			}
-			if schema.(map[string]any)["name"] == "io.debezium.connector.mysql.SchemaChangeValue" {
+			_, ok1 := payload["op"]
+			_, ok2 := payload["ddl"]
+			if !ok1 && !ok2 {
 				continue
 			}
 		}
@@ -214,9 +216,9 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 }
 
 var ignoredRecordPaths = map[string]bool{
-	// `{map[string]any}["schema"]`:                             true,
-	// `{map[string]any}["payload"].(map[string]any)["source"]`: true,
-	// `{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
+	`{map[string]any}["schema"]`:                             true,
+	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
+	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 }
 
 var headingColor = color.New(color.FgHiWhite, color.Bold)
