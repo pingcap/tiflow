@@ -2,14 +2,14 @@ version: "2"
 services:
   zookeeper:
     restart: always
-    image: quay.io/debezium/zookeeper:2.4
+    image: quay.io/debezium/zookeeper:2.7
     ports:
       - 2181:2181
       - 2888:2888
       - 3888:3888
   kafka:
     restart: always
-    image: quay.io/debezium/kafka:2.4
+    image: quay.io/debezium/kafka:2.7
     ports:
       - 9092:9092
       - 9094:9094
@@ -33,7 +33,7 @@ services:
       - MYSQL_PASSWORD=mysqlpw
   connect:
     restart: always
-    image: quay.io/debezium/connect:2.4
+    image: quay.io/debezium/connect:2.7.2.Final
     ports:
       - 8083:8083
     depends_on:

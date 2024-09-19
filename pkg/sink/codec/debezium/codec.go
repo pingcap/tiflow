@@ -890,7 +890,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 								jWriter.WriteObjectElement(func() {
 									flag := col.GetFlag()
 									jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
-									tp := types.TypeToStr(col.GetType(), col.GetCharset())
+									tp := col.FieldType.String()
 
 									jWriter.WriteStringField("name", col.Name.O)
 									jWriter.WriteIntField("jdbcType", int(jdbcType))

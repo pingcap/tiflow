@@ -168,24 +168,24 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, fmt.Errorf("Failed to parse CDC record of %s (msg=%s): %w", kind, m.Value, err)
 		}
 
+		payload, ok := obj["payload"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("Unexpected CDC record of %s: payload field not exist in %s", kind, m.Value)
+		}
 		if kind == KindTiDB {
-			payload, ok := obj["payload"].(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("Unexpected CDC record of %s: payload field not exist in %s", kind, m.Value)
-			}
 			_, ok1 := payload["op"]
 			_, ok2 := payload["ddl"]
 			// Ignore Checkpoint events in the TiCDC's output
 			if !ok1 && !ok2 {
 				continue
 			}
-			if ok2 {
+			if ok2 && m.Partition != 0 {
 				// Only handle DDL received from partition-0 should be enough.
-				if m.Partition != 0 {
-					continue
-				}
-				payload["ddl"] = normalizeSQL(payload["ddl"].(string))
+				continue
 			}
+		}
+		if ddl, ok := payload["ddl"]; ok {
+			payload["ddl"] = normalizeSQL(ddl.(string))
 		}
 
 		return obj, nil
