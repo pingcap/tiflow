@@ -581,7 +581,7 @@ func TestDDLEvent(t *testing.T) {
 		CommitTs:     1,
 		TableInfo:    tableInfo,
 		PreTableInfo: preTableInfo,
-		Type:         timodel.ActionCreateSchema,
+		Type:         timodel.ActionNone,
 	}
 	buf := bytes.NewBuffer(nil)
 	err := codec.EncodeDDLEvent(e, buf)
@@ -623,7 +623,6 @@ func TestDDLEvent(t *testing.T) {
 				"charset": ""
 			},
 			"ts_ms": 1701326309000,
-			"transaction": null,
 			"databaseName": "test", 
       		"schemaName": null,
     		"ddl": "RENAME TABLE test.table1 to test.table2", 
@@ -706,7 +705,6 @@ func TestDDLEvent(t *testing.T) {
 				"charset": ""
 			},
 			"ts_ms": 1701326309000,
-			"transaction": null,
 			"databaseName": "test", 
       		"schemaName": null,
     		"ddl": "CREATE TABLE test.table1", 
@@ -774,7 +772,6 @@ func TestDDLEvent(t *testing.T) {
 				"charset": ""
 			},
 			"ts_ms": 1701326309000,
-			"transaction": null,
 			"databaseName": "test", 
       		"schemaName": null,
     		"ddl": "DROP TABLE test.table2"
@@ -816,7 +813,6 @@ func TestCheckPointEvent(t *testing.T) {
 				"cluster_id": "test-cluster"
 			},
 			"ts_ms": 1701326309000,
-			"transaction": null
 		},
 		"schema": {
 			"type": "struct",

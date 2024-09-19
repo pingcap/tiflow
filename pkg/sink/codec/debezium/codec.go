@@ -823,6 +823,19 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionModifySchemaCharsetAndCollate,
 		timodel.ActionAlterSequence,
 		timodel.ActionAlterIndexVisibility,
+		timodel.ActionRenameTable,
+		timodel.ActionAddIndex,
+		timodel.ActionRenameIndex,
+		timodel.ActionShardRowID,
+		timodel.ActionAddPrimaryKey,
+		// timodel.ActionLockTable,
+		// timodel.ActionUnlockTable,
+		// timodel.ActionRepairTable,
+		// timodel.ActionSetTiFlashReplica,
+		// timodel.ActionUpdateTiFlashReplicaStatus,
+		// timodel.ActionModifyTableAutoIdCache,
+		// timodel.ActionRebaseAutoRandomBase,
+		// timodel.ActionExchangeTablePartition,
 		timodel.ActionAlterCheckConstraint:
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
@@ -871,7 +884,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 				jWriter.WriteStringField("collate", e.Collate)
 				jWriter.WriteStringField("charset", e.Charset)
 			})
-
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 
 			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
@@ -882,6 +894,10 @@ func (c *dbzCodec) EncodeDDLEvent(
 			}
 			jWriter.WriteNullField("schemaName")
 			jWriter.WriteStringField("ddl", e.Query)
+			// return early if there is no table
+			if e.TableInfo.GetTableName() == "" {
+				return
+			}
 			jWriter.WriteArrayField("tableChanges", func() {
 				jWriter.WriteObjectElement(func() {
 					// Describes the kind of change. The value is one of the following:
@@ -901,9 +917,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 							e.TableInfo.GetSchemaName(),
 							e.TableInfo.GetTableName()))
 					}
-					if e.TableInfo.TableName.Table == "" {
-						return
-					}
 					jWriter.WriteObjectField("table", func() {
 						jWriter.WriteStringField("defaultCharsetName", e.TableInfo.Charset)
 						jWriter.WriteArrayField("primaryKeyColumnNames", func() {
@@ -916,7 +929,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 								jWriter.WriteObjectElement(func() {
 									flag := col.GetFlag()
 									jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
-									tp := col.FieldType.String()
+									tp := col.FieldType.InfoSchemaStr()
 
 									jWriter.WriteStringField("name", col.Name.O)
 									jWriter.WriteIntField("jdbcType", int(jdbcType))
@@ -933,7 +946,11 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteStringField("typeName", strings.ToUpper(tp))
 									jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
 									jWriter.WriteStringField("charsetName", col.GetCharset())
-									jWriter.WriteIntField("length", col.FieldType.GetFlen())
+									if col.FieldType.GetFlen() == 0 {
+										jWriter.WriteNullField("length")
+									} else {
+										jWriter.WriteIntField("length", col.FieldType.GetFlen())
+									}
 									jWriter.WriteNullField("scale")
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
@@ -1004,7 +1021,7 @@ func (c *dbzCodec) EncodeCheckpointEvent(
 				jWriter.WriteStringField("cluster_id", c.clusterID)
 			})
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
-			jWriter.WriteNullField("transaction")
+
 			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
 			// jWriter.WriteArrayField("tableChanges", func() {
 			// 	jWriter.WriteObjectElement(func() {
