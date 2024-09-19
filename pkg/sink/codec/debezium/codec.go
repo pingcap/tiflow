@@ -895,35 +895,24 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteStringField("name", col.Name.O)
 									jWriter.WriteIntField("jdbcType", int(jdbcType))
 									jWriter.WriteNullField("nativeType")
-									if col.Comment == "" {
-										jWriter.WriteNullField("comment")
-									} else {
-										jWriter.WriteStringField("comment", col.Comment)
-									}
-									if col.DefaultValue != nil {
-										jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
-									} else {
-										jWriter.WriteNullField("defaultValueExpression")
-									}
-									jWriter.WriteNullField("enumValues")
+									// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-property-include-schema-comments
+									// jWriter.WriteStringField("comment", col.Comment)
+
+									// if col.DefaultValue != nil {
+									// 	jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
+									// } else {
+									// 	jWriter.WriteNullField("defaultValueExpression")
+									// }
 
 									jWriter.WriteStringField("typeName", strings.ToUpper(tp))
 									jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
-									if col.GetCharset() != "" && col.FieldType.IsVarLengthType() {
-										jWriter.WriteStringField("charsetName", col.GetCharset())
-									} else {
-										jWriter.WriteNullField("charsetName")
-									}
-									if col.FieldType.IsVarLengthType() {
-										jWriter.WriteIntField("length", col.FieldType.GetFlen())
-									} else {
-										jWriter.WriteNullField("length")
-									}
+									jWriter.WriteStringField("charsetName", col.GetCharset())
+									jWriter.WriteIntField("length", col.FieldType.GetFlen())
 									jWriter.WriteNullField("scale")
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
 									jWriter.WriteBoolField("autoIncremented", mysql.HasAutoIncrementFlag(flag))
-									jWriter.WriteBoolField("generated", col.IsVirtualGenerated())
+									jWriter.WriteBoolField("generated", col.IsGenerated())
 								})
 							}
 						})
