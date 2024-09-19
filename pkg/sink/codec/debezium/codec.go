@@ -873,7 +873,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 			})
 
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
-			jWriter.WriteNullField("transaction")
 
 			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
 			if e.Type == timodel.ActionDropTable {
@@ -906,7 +905,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 						return
 					}
 					jWriter.WriteObjectField("table", func() {
-						jWriter.WriteStringField("defaultCharsetName", e.Charset)
+						jWriter.WriteStringField("defaultCharsetName", e.TableInfo.Charset)
 						jWriter.WriteArrayField("primaryKeyColumnNames", func() {
 							for _, pk := range e.TableInfo.GetPrimaryKeyColumnNames() {
 								jWriter.WriteStringElement(pk)
@@ -922,23 +921,35 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteStringField("name", col.Name.O)
 									jWriter.WriteIntField("jdbcType", int(jdbcType))
 									jWriter.WriteNullField("nativeType")
+									if col.Comment == "" {
+										jWriter.WriteNullField("comment")
+									} else {
+										jWriter.WriteStringField("comment", col.Comment)
+									}
+									if col.DefaultValue != nil {
+										jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
+									} else {
+										jWriter.WriteNullField("defaultValueExpression")
+									}
+									jWriter.WriteNullField("enumValues")
+
 									jWriter.WriteStringField("typeName", strings.ToUpper(tp))
 									jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
-									if col.GetCharset() == "" {
-										jWriter.WriteNullField("charsetName")
-									} else {
+									if col.GetCharset() != "" && col.FieldType.IsVarLengthType() {
 										jWriter.WriteStringField("charsetName", col.GetCharset())
-									}
-									if col.FieldType.GetFlen() == 0 {
-										jWriter.WriteNullField("length")
 									} else {
+										jWriter.WriteNullField("charsetName")
+									}
+									if col.FieldType.IsVarLengthType() {
 										jWriter.WriteIntField("length", col.FieldType.GetFlen())
+									} else {
+										jWriter.WriteNullField("length")
 									}
 									jWriter.WriteNullField("scale")
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
 									jWriter.WriteBoolField("autoIncremented", mysql.HasAutoIncrementFlag(flag))
-									jWriter.WriteBoolField("generated", col.IsGenerated())
+									jWriter.WriteBoolField("generated", col.IsVirtualGenerated())
 								})
 							}
 						})

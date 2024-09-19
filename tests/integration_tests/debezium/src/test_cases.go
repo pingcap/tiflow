@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -177,9 +179,12 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			if !ok1 && !ok2 {
 				continue
 			}
-			// Only handle DDL received from partition-0 should be enough.
-			if ok2 && m.Partition != 0 {
-				continue
+			if ok2 {
+				// Only handle DDL received from partition-0 should be enough.
+				if m.Partition != 0 {
+					continue
+				}
+				payload["ddl"] = normalizeSQL(payload["ddl"].(string))
 			}
 		}
 
@@ -231,6 +236,18 @@ func printObj(obj any) {
 	v, _ := json.MarshalIndent(obj, "", "  ")
 	quick.Highlight(os.Stdout, string(v), "json", "terminal16m", "vs")
 	fmt.Println()
+}
+
+func normalizeSQL(sql string) string {
+	p := parser.New()
+	stmt, err := p.ParseOneStmt(sql, "", "")
+	buf := new(bytes.Buffer)
+	if err != nil {
+		panic(fmt.Sprintf("parse sql failed %s", err))
+	}
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, buf)
+	stmt.Restore(restoreCtx)
+	return buf.String()
 }
 
 func runSingleQuery(query string, waitCDCRows bool) bool {
