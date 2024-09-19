@@ -67,7 +67,7 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
-	github.com/pingcap/kvproto v0.0.0-20240620063548-118a4cab53e4
+	github.com/pingcap/kvproto v0.0.0-20240911085438-1a933d30690a
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
 	github.com/pingcap/tidb v1.1.0-beta.0.20240722024203-504960d51b2a
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7

@@ -488,15 +488,17 @@ func columnDatas2Columns(cols []*ColumnData, tableInfo *TableInfo) []*Column {
 		return nil
 	}
 	columns := make([]*Column, len(cols))
+	nilColumnNum := 0
 	for i, colData := range cols {
 		if colData == nil {
-			log.Warn("meet nil column data, should not happened in production env",
-				zap.Any("cols", cols),
-				zap.Any("tableInfo", tableInfo))
+			nilColumnNum++
 			continue
 		}
 		columns[i] = columnData2Column(colData, tableInfo)
 	}
+	log.Debug("meet nil column data",
+		zap.Any("nilColumnNum", nilColumnNum),
+		zap.Any("tableInfo", tableInfo))
 	return columns
 }
 
