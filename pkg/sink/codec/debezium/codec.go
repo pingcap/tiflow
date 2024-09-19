@@ -801,18 +801,41 @@ func (c *dbzCodec) EncodeDDLEvent(
 	defer util.ReturnJSONWriter(jWriter)
 	var changeType string
 	commitTime := oracle.GetTimeFromTS(e.CommitTs)
-
-	// Debezium support table created/modified/deleted
 	switch e.Type {
-	case timodel.ActionCreateTable:
+	case timodel.ActionCreateSchema,
+		timodel.ActionCreateTable,
+		timodel.ActionCreatePlacementPolicy,
+		timodel.ActionCreateView,
+		timodel.ActionCreateSequence:
 		changeType = "CREATE"
 	case timodel.ActionAlterTableAttributes,
+		timodel.ActionAlterTablePartitionAttributes,
+		timodel.ActionAlterPlacementPolicy,
+		timodel.ActionAlterTablePartitionPlacement,
+		timodel.ActionModifySchemaDefaultPlacement,
+		timodel.ActionAlterTablePlacement,
+		timodel.ActionAlterCacheTable,
 		timodel.ActionModifyColumn,
-		timodel.ActionAlterTablePlacement:
+		timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue,
+		timodel.ActionModifyTableComment,
+		timodel.ActionModifyTableCharsetAndCollate,
+		timodel.ActionModifySchemaCharsetAndCollate,
+		timodel.ActionAlterSequence,
+		timodel.ActionAlterIndexVisibility,
+		timodel.ActionAlterCheckConstraint:
 		changeType = "ALTER"
-	case timodel.ActionDropTable,
+	case timodel.ActionDropSchema,
+		timodel.ActionDropTable,
+		timodel.ActionDropPlacementPolicy,
 		timodel.ActionDropColumn,
-		timodel.ActionDropForeignKey:
+		timodel.ActionDropIndex,
+		timodel.ActionDropForeignKey,
+		timodel.ActionDropView,
+		timodel.ActionDropTablePartition,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionDropSequence,
+		timodel.ActionDropCheckConstraint:
 		changeType = "DROP"
 	default:
 		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type)
@@ -877,6 +900,9 @@ func (c *dbzCodec) EncodeDDLEvent(
 						jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\"",
 							e.TableInfo.GetSchemaName(),
 							e.TableInfo.GetTableName()))
+					}
+					if e.TableInfo.TableName.Table == "" {
+						return
 					}
 					jWriter.WriteObjectField("table", func() {
 						jWriter.WriteStringField("defaultCharsetName", e.TableInfo.Charset)
@@ -978,6 +1004,7 @@ func (c *dbzCodec) EncodeCheckpointEvent(
 				jWriter.WriteStringField("cluster_id", c.clusterID)
 			})
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+			jWriter.WriteNullField("transaction")
 			// see https://debezium.io/documentation/reference/2.7/connectors/mysql.html#mysql-schema-change-topic
 			// jWriter.WriteArrayField("tableChanges", func() {
 			// 	jWriter.WriteObjectElement(func() {

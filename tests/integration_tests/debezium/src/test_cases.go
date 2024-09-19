@@ -118,8 +118,8 @@ func runTestCase(testCasePath string) bool {
 		"Insert":      true,
 		"Replace":     true,
 		"Update":      true,
-		"AlterTable":  true,
 		"CreateTable": true,
+		"AlterTable":  true,
 		"DropTable":   true,
 	}
 
@@ -133,7 +133,6 @@ func runTestCase(testCasePath string) bool {
 		if v, ok := statementKindsToWaitCDCRecord[statementKind]; v && ok {
 			waitCDCRows = true
 		}
-
 		if runSingleQuery(query, waitCDCRows) {
 			nPassed++
 		} else {
