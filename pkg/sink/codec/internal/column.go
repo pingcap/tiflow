@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -34,9 +35,9 @@ type Column struct {
 }
 
 // FromRowChangeColumn converts from a row changed column to a codec column.
-func (c *Column) FromRowChangeColumn(col *model.Column) {
-	c.Type = col.Type
-	c.Flag = col.Flag
+func (c *Column) FromRowChangeColumn(col *model.ColumnData, flag *model.ColumnFlagType, info *pmodel.ColumnInfo) {
+	c.Type = info.GetType()
+	c.Flag = *flag
 	if c.Flag.IsHandleKey() {
 		whereHandle := true
 		c.WhereHandle = &whereHandle
@@ -45,7 +46,7 @@ func (c *Column) FromRowChangeColumn(col *model.Column) {
 		c.Value = nil
 		return
 	}
-	switch col.Type {
+	switch c.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		var str string
 		switch col.Value.(type) {

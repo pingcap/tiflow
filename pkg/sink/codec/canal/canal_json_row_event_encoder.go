@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
@@ -32,7 +33,8 @@ import (
 )
 
 func fillColumns(
-	columns []*model.Column,
+	columns []*model.ColumnData,
+    tb *model.TableInfo,
 	onlyOutputUpdatedColumn bool,
 	onlyHandleKeyColumn bool,
 	newColumnMap map[string]*model.Column,
@@ -227,17 +229,19 @@ func newJSONMessageForDML(
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := fillColumns(
-			e.GetColumns(),
+			e.Columns,
+            e.TableInfo,
 			false, onlyHandleKey, nil, out, builder,
 		); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
-		var newColsMap map[string]*model.Column
+		var newColsMap map[string]*model.ColumnData
 		if config.OnlyOutputUpdatedColumns {
-			newColsMap = make(map[string]*model.Column, len(e.Columns))
-			for _, col := range e.GetColumns() {
-				newColsMap[col.Name] = col
+			newColsMap = make(map[string]*model.ColumnData, len(e.Columns))
+			for _, col := range e.Columns {
+                name := model.GetColumnInfo(col, tb).Name.O
+				newColsMap[name] = col
 			}
 		}
 		out.RawString(",\"old\":")
@@ -549,13 +553,15 @@ func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
 	return newJSONRowEventEncoder(b.config, b.claimCheck)
 }
 
-func shouldIgnoreColumn(col *model.Column,
-	newColumnMap map[string]*model.Column,
+func shouldIgnoreColumn(
+    col *model.ColumnData,
+    info *pmodel.ColumnInfo,
+	newColumnMap map[string]*model.ColumnData,
 ) bool {
-	newCol, ok := newColumnMap[col.Name]
+	newCol, ok := newColumnMap[info.Name.O]
 	if ok && newCol != nil {
 		// sql type is not equal
-		if newCol.Type != col.Type {
+		if newCol.Type != info.GetType() {
 			return false
 		}
 		// value equal
