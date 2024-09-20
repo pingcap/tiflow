@@ -145,8 +145,8 @@ func TestGet(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND "+
-					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT 1")).
-					WithArgs(fakeJob, []byte("key0")).
+					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT ?")).
+					WithArgs(fakeJob, []byte("key0"), 1).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}))
 			},
 		},
@@ -167,8 +167,8 @@ func TestGet(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND "+
-					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT 1")).
-					WithArgs(fakeJob, []byte("key0")).
+					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT ?")).
+					WithArgs(fakeJob, []byte("key0"), 1).
 					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}).AddRow("key0", "value0"))
 			},
 		},
@@ -430,8 +430,8 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	cli.Put(ctx, "key0", "value0")
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `meta_kvs` WHERE job_id = ? AND "+
-		"meta_key = ? ORDER BY `meta_kvs`.`seq_id` LIMIT 1")).
-		WithArgs("", []byte("key1")).
+		"meta_key = ? ORDER BY `meta_kvs`.`seq_id` LIMIT ?")).
+		WithArgs("", []byte("key1"), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"key", "value"}))
 	cli.Get(ctx, "key1")
 

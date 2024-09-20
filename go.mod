@@ -69,9 +69,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20240911085438-1a933d30690a
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240919143333-249e88cd5a58
+	github.com/pingcap/tidb v1.1.0-beta.0.20240920050217-adbc0034ffb4
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240919143333-249e88cd5a58
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20240920050217-adbc0034ffb4
 	github.com/prometheus/client_golang v1.20.2
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -417,5 +417,3 @@ replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace github.com/pingcap/tidb => github.com/D3Hunter/tidb v1.1.0-beta.0.20240919161146-ee03a94e8533
