@@ -91,8 +91,8 @@ func TestGenEpoch(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE `logic_epoches` SET `epoch`=epoch + ?,`updated_at`=? WHERE job_id = ?")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `logic_epoches` WHERE job_id = ? ORDER BY `logic_epoches`.`seq_id` LIMIT 1")).
-		WithArgs("fakeJob").
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `logic_epoches` WHERE job_id = ? ORDER BY `logic_epoches`.`seq_id` LIMIT ?")).
+		WithArgs("fakeJob", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"seq_id", "created_at", "updated_at", "job_id", "epoch"}).
 			AddRow(1, createdAt, updatedAt, "fakeJob", 11))
 	mock.ExpectCommit()

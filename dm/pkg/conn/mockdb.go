@@ -147,6 +147,10 @@ func NewCluster() (*Cluster, error) {
 	}
 	cluster.Storage = storage
 
+<<<<<<< HEAD
+=======
+	session.SetSchemaLease(time.Second)
+>>>>>>> 592a62f8a3 (*: upgrade tidb dependency to latest master (#11605))
 	session.DisableStats4Test()
 	dom, err := session.BootstrapSession(storage)
 	if err != nil {

@@ -19,7 +19,8 @@ import (
 	"fmt"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -67,7 +68,7 @@ func newFakeDDLEvent(
 	}
 	info.TableInfo = &timodel.TableInfo{
 		ID:   tableID,
-		Name: timodel.NewCIStr(tableName),
+		Name: pmodel.NewCIStr(tableName),
 	}
 	return &model.DDLEvent{
 		TableInfo: info,
@@ -170,7 +171,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []timodel.CIStr
+	var newTableNames, oldSchemaNames []pmodel.CIStr
 
 	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
 		mockDDLSink.ddlDone = false
@@ -212,20 +213,24 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	require.Len(t, oldSchemaIDs, 2)
 	require.Len(t, oldTableIDs, 2)
 	newSchemaIDs = []int64{oldSchemaIDs[1], oldSchemaIDs[0]}
-	oldSchemaNames = []timodel.CIStr{
-		timodel.NewCIStr("test1"),
-		timodel.NewCIStr("test2"),
+	oldSchemaNames = []pmodel.CIStr{
+		pmodel.NewCIStr("test1"),
+		pmodel.NewCIStr("test2"),
 	}
-	newTableNames = []timodel.CIStr{
-		timodel.NewCIStr("tb20"),
-		timodel.NewCIStr("tb10"),
+	newTableNames = []pmodel.CIStr{
+		pmodel.NewCIStr("tb20"),
+		pmodel.NewCIStr("tb10"),
+	}
+	oldTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("oldtb20"),
+		pmodel.NewCIStr("oldtb10"),
 	}
 	require.Len(t, newSchemaIDs, 2)
 	require.Len(t, oldSchemaNames, 2)
 	require.Len(t, newTableNames, 2)
 	args := []interface{}{
 		oldSchemaIDs, newSchemaIDs, newTableNames,
-		oldTableIDs, oldSchemaNames,
+		oldTableIDs, oldSchemaNames, oldTableNames,
 	}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
@@ -234,6 +239,8 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	job.RawArgs = rawArgs
+	// TODO REMOVE IT AFTER use args v2 decoder function
+	job.Version = timodel.JobVersion1
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false

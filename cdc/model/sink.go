@@ -23,7 +23,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -811,7 +812,7 @@ func BuildTiDBTableInfoImpl(
 	columnIDAllocator ColumnIDAllocator,
 ) *model.TableInfo {
 	ret := &model.TableInfo{}
-	ret.Name = model.NewCIStr(tableName)
+	ret.Name = pmodel.NewCIStr(tableName)
 
 	hasPrimaryKeyColumn := false
 	for i, col := range columns {
@@ -822,7 +823,7 @@ func BuildTiDBTableInfoImpl(
 		if col == nil {
 			// actually, col should never be nil according to `datum2Column` and `WrapTableInfo` in prod env
 			// we mock it as generated column just for test
-			columnInfo.Name = model.NewCIStr("omitted")
+			columnInfo.Name = pmodel.NewCIStr("omitted")
 			columnInfo.GeneratedExprString = "pass_generated_check"
 			columnInfo.GeneratedStored = false
 			ret.Columns = append(ret.Columns, columnInfo)
@@ -830,7 +831,7 @@ func BuildTiDBTableInfoImpl(
 		}
 		// add a mock id to identify columns inside cdc
 		columnInfo.ID = columnIDAllocator.GetColumnID(col.Name)
-		columnInfo.Name = model.NewCIStr(col.Name)
+		columnInfo.Name = pmodel.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
 
 		if col.Collation != "" {
@@ -901,7 +902,7 @@ func BuildTiDBTableInfoImpl(
 	nextMockIndexID := minIndexID + 1
 	for i, colOffsets := range indexColumns {
 		indexInfo := &model.IndexInfo{
-			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
+			Name:  pmodel.NewCIStr(fmt.Sprintf("idx_%d", i)),
 			State: model.StatePublic,
 		}
 		firstCol := columns[colOffsets[0]]

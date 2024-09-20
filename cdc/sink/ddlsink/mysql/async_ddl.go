@@ -20,16 +20,26 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+	"github.com/pingcap/tidb/dumpling/export"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+>>>>>>> 592a62f8a3 (*: upgrade tidb dependency to latest master (#11605))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
 var checkRunningAddIndexSQL = `
+<<<<<<< HEAD
 SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
 FROM information_schema.ddl_jobs
 WHERE DB_NAME = "%s" 
+=======
+ADMIN SHOW DDL JOBS 1
+WHERE DB_NAME = "%s"
+>>>>>>> 592a62f8a3 (*: upgrade tidb dependency to latest master (#11605))
     AND TABLE_NAME = "%s"
     AND JOB_TYPE LIKE "add index%%"
     AND (STATE = "running" OR STATE = "queueing")

@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timeta "github.com/pingcap/tidb/pkg/meta"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -1085,7 +1086,7 @@ func (s *snapshot) alterPartitioning(job *timodel.Job) error {
 
 func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []*timodel.CIStr
+	var newTableNames, oldSchemaNames []*pmodel.CIStr
 	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
 	if err != nil {
 		return errors.Trace(err)

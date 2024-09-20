@@ -24,9 +24,13 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+>>>>>>> 592a62f8a3 (*: upgrade tidb dependency to latest master (#11605))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"

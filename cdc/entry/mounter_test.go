@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/tidb/pkg/executor"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
@@ -269,6 +269,10 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// we can update the tidb config here
 	})
+<<<<<<< HEAD
+=======
+	session.SetSchemaLease(time.Second)
+>>>>>>> 592a62f8a3 (*: upgrade tidb dependency to latest master (#11605))
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
