@@ -1,4 +1,4 @@
-module tiflow
+module github.com/pingcap/tiflow
 
 go 1.23
 
