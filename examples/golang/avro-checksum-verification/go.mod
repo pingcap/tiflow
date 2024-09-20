@@ -1,7 +1,6 @@
 module avro-checksum-sample
 
-go 1.21
-
+go 1.23
 require (
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
