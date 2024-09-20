@@ -32,9 +32,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -881,8 +882,8 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	}
 	createStmt := createNode.(*ast.CreateTableStmt)
 	createStmt.IfNotExists = true
-	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
+	createStmt.Table.Schema = pmodel.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = pmodel.NewCIStr(sourceTable.Name)
 
 	// schema tracker sets non-clustered index, so can't handle auto_random.
 	for _, col := range createStmt.Cols {

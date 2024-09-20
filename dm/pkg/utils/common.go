@@ -19,10 +19,10 @@ import (
 	"strings"
 	"sync"
 
-	exprctx "github.com/pingcap/tidb/pkg/expression/context"
-	"github.com/pingcap/tidb/pkg/expression/contextsession"
+	"github.com/pingcap/tidb/pkg/expression/exprctx"
+	"github.com/pingcap/tidb/pkg/expression/sessionexpr"
 	infoschema "github.com/pingcap/tidb/pkg/infoschema/context"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/table"
@@ -214,7 +214,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
-	sessionCtx.exprctx = contextsession.NewSessionExprContext(&sessionCtx)
+	sessionCtx.exprctx = sessionexpr.NewExprContext(&sessionCtx)
 	return &sessionCtx
 }
 
