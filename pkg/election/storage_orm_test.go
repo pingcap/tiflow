@@ -34,7 +34,7 @@ func newORMStorageAndMock(t *testing.T) (*ORMStorage, sqlmock.Sqlmock) {
 	db, err := ormUtil.NewGormDB(backendDB, "mysql")
 	require.NoError(t, err)
 	// seems new version of GORM doesn't need this
-	//mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
+	// mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
 	//	"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
 	//	sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec("CREATE TABLE `test` (`id` int(10) unsigned AUTO_INCREMENT,`leader_id` text NOT NULL," +

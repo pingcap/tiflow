@@ -443,7 +443,7 @@ func TestHandleRenameTables(t *testing.T) {
 	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
-	var job = &timodel.Job{
+	job := &timodel.Job{
 		Version: timodel.JobVersion1,
 		Type:    timodel.ActionRenameTables,
 		RawArgs: rawArgs,
