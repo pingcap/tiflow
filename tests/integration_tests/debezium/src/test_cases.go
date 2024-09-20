@@ -133,6 +133,7 @@ func runTestCase(testCasePath string) bool {
 		if v, ok := statementKindsToWaitCDCRecord[statementKind]; v && ok {
 			waitCDCRows = true
 		}
+		fmt.Printf("case %s exec sql %s kind: %s\n", testCasePath, query, statementKind)
 		if runSingleQuery(query, waitCDCRows) {
 			nPassed++
 		} else {
