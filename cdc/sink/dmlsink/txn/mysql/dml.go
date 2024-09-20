@@ -24,18 +24,19 @@ import (
 // prepareUpdate builds a parametrics UPDATE statement as following
 // sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {} LIMIT 1`
 // `WHERE` conditions come from `preCols` and SET clause targets come from `cols`.
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
+func prepareUpdate(quoteTable string, preCols, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols)+len(preCols))
 	for _, col := range cols {
-		if col == nil || col.Flag.IsGeneratedColumn() {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, col.Name)
-		args = appendQueryArgs(args, col)
+		columnNames = append(columnNames, colx.GetName())
+		args = appendQueryArgs(args, colx)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -49,7 +50,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	}
 
 	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols, forceReplicate)
+	colNames, wargs := whereSlice(preCols, tb, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -73,7 +74,8 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 // sql: `REPLACE INTO `test`.`t` VALUES (?,?,?)`
 func prepareReplace(
 	quoteTable string,
-	cols []*model.Column,
+	cols []*model.ColumnData,
+	tb *model.TableInfo,
 	appendPlaceHolder bool,
 	translateToInsert bool,
 ) (string, []interface{}) {
@@ -81,11 +83,12 @@ func prepareReplace(
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
 	for _, col := range cols {
-		if col == nil || col.Flag.IsGeneratedColumn() {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, col.Name)
-		args = appendQueryArgs(args, col)
+		columnNames = append(columnNames, colx.GetName())
+		args = appendQueryArgs(args, colx)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -108,8 +111,9 @@ func prepareReplace(
 // representation. Because if we use the byte array respresentation, the go-sql-driver
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
-func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
-	if col.Charset != "" && col.Charset != charset.CharsetBin {
+func appendQueryArgs(args []interface{}, col model.ColumnDataX) []interface{} {
+	cst := col.GetCharset()
+	if cst != "" && cst != charset.CharsetBin {
 		colValBytes, ok := col.Value.([]byte)
 		if ok {
 			args = append(args, string(colValBytes))
@@ -125,11 +129,11 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 
 // prepareDelete builds a parametric DELETE statement as following
 // sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ? LIMIT 1`
-func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols, forceReplicate)
+	colNames, wargs := whereSlice(cols, tb, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -152,24 +156,30 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 
 // whereSlice builds a parametric WHERE clause as following
 // sql: `WHERE {} = ? AND {} > ?`
-func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
-	// Try to use unique key values when available
-	for _, col := range cols {
-		if col == nil || !col.Flag.IsHandleKey() {
-			continue
-		}
-		colNames = append(colNames, col.Name)
-		args = appendQueryArgs(args, col)
-	}
-	// if no explicit row id but force replicate, use all key-values in where condition
+func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (colNames []string, args []interface{}) {
+	// If no explicit row id but force replicate, use all key-values in where condition.
 	if len(colNames) == 0 && forceReplicate {
 		colNames = make([]string, 0, len(cols))
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
-			colNames = append(colNames, col.Name)
-			args = appendQueryArgs(args, col)
+			colx := model.GetColumnDataX(col, tb)
+			if colx.ColumnData == nil {
+				continue
+			}
+			colNames = append(colNames, colx.GetName())
+			args = appendQueryArgs(args, colx)
+		}
+	} else { // Try to use unique key values when available.
+		for _, col := range cols {
+			colx := model.GetColumnDataX(col, tb)
+			if colx.ColumnData == nil || !colx.GetFlag().IsHandleKey() {
+				continue
+			}
+			colNames = append(colNames, colx.GetName())
+			args = appendQueryArgs(args, colx)
 		}
 	}
+
 	return
 }
 

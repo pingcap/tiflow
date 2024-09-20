@@ -49,7 +49,7 @@ type BatchEncoder struct {
 }
 
 type avroEncodeInput struct {
-	columns  []*model.Column
+	columns  []model.ColumnDataX
 	colInfos []rowcodec.ColInfo
 }
 

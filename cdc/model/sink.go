@@ -94,8 +94,8 @@ func (b *ColumnFlagType) UnsetIsBinary() {
 }
 
 // IsBinary shows whether BinaryFlag is set
-func (b *ColumnFlagType) IsBinary() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+func (b ColumnFlagType) IsBinary() bool {
+	return (util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
 // SetIsHandleKey sets HandleKey
@@ -109,8 +109,8 @@ func (b *ColumnFlagType) UnsetIsHandleKey() {
 }
 
 // IsHandleKey shows whether HandleKey is set
-func (b *ColumnFlagType) IsHandleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
+func (b ColumnFlagType) IsHandleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
 // SetIsGeneratedColumn sets GeneratedColumn
@@ -124,8 +124,8 @@ func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
 }
 
 // IsGeneratedColumn shows whether GeneratedColumn is set
-func (b *ColumnFlagType) IsGeneratedColumn() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
+func (b ColumnFlagType) IsGeneratedColumn() bool {
+	return (util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
 // SetIsPrimaryKey sets PrimaryKeyFlag
@@ -139,8 +139,8 @@ func (b *ColumnFlagType) UnsetIsPrimaryKey() {
 }
 
 // IsPrimaryKey shows whether PrimaryKeyFlag is set
-func (b *ColumnFlagType) IsPrimaryKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
+func (b ColumnFlagType) IsPrimaryKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
 }
 
 // SetIsUniqueKey sets UniqueKeyFlag
@@ -555,8 +555,8 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
-	pkeyCols := make([]*Column, 0)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]ColumnDataX, []rowcodec.ColInfo) {
+	pkeyCols := make([]ColumnDataX, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
 	var cols []*ColumnData
@@ -570,7 +570,7 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range cols {
 		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-			pkeyCols = append(pkeyCols, columnData2Column(col, tableInfo))
+			pkeyCols = append(pkeyCols, GetColumnDataX(col, tableInfo))
 			pkeyColInfos = append(pkeyColInfos, colInfos[i])
 		}
 	}
@@ -1293,4 +1293,47 @@ type TopicPartitionKey struct {
 	Partition      int32
 	PartitionKey   string
 	TotalPartition int32
+}
+
+type ColumnDataX struct {
+	*ColumnData
+	flag *ColumnFlagType
+	info *model.ColumnInfo
+}
+
+func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
+	x := ColumnDataX{ColumnData: col}
+	if x.ColumnData != nil {
+		x.flag = tb.ColumnsFlag[col.ColumnID]
+		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
+	}
+	return x
+}
+
+func (x ColumnDataX) GetName() string {
+	return x.info.Name.O
+}
+
+func (x ColumnDataX) GetType() byte {
+	return x.info.GetType()
+}
+
+func (x ColumnDataX) GetCharset() string {
+	return x.info.GetCharset()
+}
+
+func (x ColumnDataX) GetCollation() string {
+	return x.info.GetCollate()
+}
+
+func (x ColumnDataX) GetFlag() ColumnFlagType {
+	return *x.flag
+}
+
+func (x ColumnDataX) GetDefaultValue() interface{} {
+	return GetColumnDefaultValue(x.info)
+}
+
+func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
+	return x.info
 }
