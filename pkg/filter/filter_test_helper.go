@@ -15,6 +15,7 @@ package filter
 
 import (
 	"testing"
+	"time"
 
 	ticonfig "github.com/pingcap/tidb/pkg/config"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
@@ -46,7 +47,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
-	session.SetSchemaLease(0)
+	session.SetSchemaLease(time.Millisecond)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
