@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -603,7 +603,7 @@ func (r *RealOnlinePlugin) CheckRegex(stmt ast.StmtNode, schema string, flavor c
 	}
 	onlineDDLMatched := allTable
 	tableRecords := make([]*filter.Table, 2)
-	schemaName := model.NewCIStr(schema) // fill schema name
+	schemaName := pmodel.NewCIStr(schema) // fill schema name
 
 	// Online DDL sql example: RENAME TABLE `test`.`t1` TO `test`.`_t1_old`, `test`.`_t1_new` TO `test`.`t1`
 	// We should parse two rename DDL from this DDL:
