@@ -223,12 +223,16 @@ func TestExecRenameTablesDDL(t *testing.T) {
 		pmodel.NewCIStr("tb20"),
 		pmodel.NewCIStr("tb10"),
 	}
+	oldTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("oldtb20"),
+		pmodel.NewCIStr("oldtb10"),
+	}
 	require.Len(t, newSchemaIDs, 2)
 	require.Len(t, oldSchemaNames, 2)
 	require.Len(t, newTableNames, 2)
 	args := []interface{}{
 		oldSchemaIDs, newSchemaIDs, newTableNames,
-		oldTableIDs, oldSchemaNames,
+		oldTableIDs, oldSchemaNames, oldTableNames,
 	}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
@@ -237,6 +241,8 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	job.RawArgs = rawArgs
+	// TODO REMOVE IT AFTER use args v2 decoder function
+	job.Version = timodel.JobVersion1
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false

@@ -438,11 +438,13 @@ func TestHandleRenameTables(t *testing.T) {
 	newSchemaIDs := []int64{2, 1}
 	oldTableIDs := []int64{11, 12}
 	newTableNames := []pmodel.CIStr{pmodel.NewCIStr("x"), pmodel.NewCIStr("y")}
+	oldTableNames := []pmodel.CIStr{pmodel.NewCIStr("oldx"), pmodel.NewCIStr("oldy")}
 	oldSchemaNames := []pmodel.CIStr{pmodel.NewCIStr("db_1"), pmodel.NewCIStr("db_2")}
-	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames}
+	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
-	var job *timodel.Job = &timodel.Job{
+	var job = &timodel.Job{
+		Version: timodel.JobVersion1,
 		Type:    timodel.ActionRenameTables,
 		RawArgs: rawArgs,
 		BinlogInfo: &timodel.HistoryInfo{
@@ -675,7 +677,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Millisecond)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -710,7 +712,7 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Millisecond)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -861,7 +863,7 @@ func TestSchemaStorage(t *testing.T) {
 		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 			conf.AlterPrimaryKey = true
 		})
-		session.SetSchemaLease(time.Millisecond)
+		session.SetSchemaLease(time.Second)
 		session.DisableStats4Test()
 		domain, err := session.BootstrapSession(store)
 		require.Nil(t, err)
@@ -954,7 +956,7 @@ func TestHandleKey(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Millisecond)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)

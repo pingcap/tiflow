@@ -198,7 +198,8 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
-
+		// TODO REMOVE IT AFTER use args v2 decoder function
+		job.Version = timodel.JobVersion1
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -209,6 +210,8 @@ func TestHandleRenameTable(t *testing.T) {
 	{
 		_ = helper.DDL2Job("create table test1.t6(id int primary key)")
 		job := helper.DDL2Job("rename table test1.t2 to test1.t22, test1.t6 to test1.t66")
+		// TODO REMOVE IT AFTER use args v2 decoder function
+		job.Version = timodel.JobVersion1
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.Error(t, err)
 		require.True(t, skip)
@@ -240,6 +243,8 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test2.t1 to test2.t11, test2.t2 to test2.t22, test2.t3 to test2.t33")
+		// TODO REMOVE IT AFTER use args v2 decoder function
+		job.Version = timodel.JobVersion1
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
 		require.True(t, skip)
@@ -264,6 +269,8 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table Test3.t1 to Test3.t11, Test3.t2 to Test3.t22")
+		// TODO REMOVE IT AFTER use args v2 decoder function
+		job.Version = timodel.JobVersion1
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -336,6 +343,8 @@ func TestHandleRenameTable(t *testing.T) {
 		// but now it will throw an error since schema ignore1 are not in schemaStorage
 		// ref: https://github.com/pingcap/tiflow/issues/9488
 		job = helper.DDL2Job("rename table test1.t202308081 to ignore1.ignore1, test1.t202308082 to ignore1.dongmen")
+		// TODO REMOVE IT AFTER use args v2 decoder function
+		job.Version = timodel.JobVersion1
 		_, err = ddlJobPullerImpl.handleJob(job)
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "ErrSnapshotSchemaNotFound")
