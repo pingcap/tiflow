@@ -54,14 +54,12 @@ func init() {
 	config.StoreGlobalServerConfig(serverConfig)
 }
 
-func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
+func newMySQLBackendWithoutDB() *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
-		statistics: metrics.NewStatistics(ctx,
-			model.DefaultChangeFeedID("test"),
-			sink.TxnSink),
-		cfg: cfg,
+		statistics: metrics.NewStatistics(model.DefaultChangeFeedID("test"), sink.TxnSink),
+		cfg:        cfg,
 	}
 }
 
@@ -72,9 +70,7 @@ func newMySQLBackend(
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.IDBConnectionFactory,
 ) (*mysqlBackend, error) {
-	ctx1, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx1, changefeedID, sink.TxnSink)
-	cancel() // Cancel background goroutines in returned metrics.Statistics.
+	statistics := metrics.NewStatistics(changefeedID, sink.TxnSink)
 	raw := sinkURI.Query()
 	raw.Set("batch-dml-enable", "true")
 	sinkURI.RawQuery = raw.Encode()
@@ -229,9 +225,7 @@ func TestPrepareDML(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	for _, tc := range testCases {
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &dmlsink.TxnCallbackableEvent{
@@ -1126,9 +1120,8 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		},
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+
+	ms := newMySQLBackendWithoutDB()
 	ms.cfg.SafeMode = false
 	for _, tc := range testCases {
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
@@ -1508,9 +1501,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	ms.cfg.BatchDMLEnable = true
 	ms.cfg.SafeMode = false
 	for _, tc := range testCases {
@@ -1526,8 +1517,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 }
 
 func TestGroupRowsByType(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	tableInfoWithoutPK := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{{
 		Name: "a1",
 		Type: mysql.TypeLong,
@@ -1701,8 +1691,7 @@ func TestGroupRowsByType(t *testing.T) {
 }
 
 func TestBackendGenUpdateSQL(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
+	ms := newMySQLBackendWithoutDB()
 	table := &model.TableName{Schema: "db", Table: "tb1"}
 
 	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"

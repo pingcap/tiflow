@@ -150,7 +150,7 @@ function download_binaries() {
 	tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
 
 	download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
-	tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
+	tar -xz --wildcards -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
 
 	download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
 	tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/

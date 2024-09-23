@@ -87,7 +87,11 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 	m.wg.Add(1)
 	go func() {
 		timer := time.NewTicker(3 * time.Second)
-		defer timer.Stop()
+		defer func() {
+			timer.Stop()
+			MemoryQuota.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp)
+			MemoryQuota.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp)
+		}()
 		for {
 			select {
 			case <-timer.C:
