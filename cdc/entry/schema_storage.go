@@ -24,7 +24,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -478,7 +479,7 @@ func (s *schemaStorage) buildRenameEvents(
 ) ([]*model.DDLEvent, error) {
 	var (
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-		newTableNames, oldSchemaNames           []*timodel.CIStr
+		newTableNames, oldSchemaNames           []*pmodel.CIStr
 		ddlEvents                               []*model.DDLEvent
 	)
 	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,

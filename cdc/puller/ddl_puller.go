@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -395,6 +396,15 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	case timodel.ActionCreateTables:
 		// we only use multiTableInfos and Querys when we generate job event
 		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		if strings.Count(job.Query, ";") != len(job.BinlogInfo.MultipleTableInfos) {
+			log.Error("the number of queries in `Job.Query` is not equal to "+
+				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.String("Job.Query", job.Query),
+				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
+				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
+		}
+
 		var newMultiTableInfos []*timodel.TableInfo
 		var newQuerys []string
 
@@ -407,13 +417,13 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				continue
 			}
 			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
-			newQuerys = append(newQuerys, querys[index])
+			newQuerys = append(newQuerys, querys[index]+";")
 		}
 
 		skip = len(newMultiTableInfos) == 0
 
 		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
-		job.Query = strings.Join(newQuerys, ";")
+		job.Query = strings.Join(newQuerys, "")
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
@@ -523,7 +533,7 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
 	var (
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-		newTableNames, oldSchemaNames           []*timodel.CIStr
+		newTableNames, oldSchemaNames           []*pmodel.CIStr
 	)
 
 	err = job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
@@ -534,7 +544,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 
 	var (
 		remainOldSchemaIDs, remainNewSchemaIDs, remainOldTableIDs []int64
-		remainNewTableNames, remainOldSchemaNames                 []*timodel.CIStr
+		remainNewTableNames, remainOldSchemaNames                 []*pmodel.CIStr
 	)
 
 	multiTableInfos := job.BinlogInfo.MultipleTableInfos

@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/kv"
 	timeta "github.com/pingcap/tidb/pkg/meta"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
@@ -61,6 +62,7 @@ func NewSchemaTestHelperWithReplicaConfig(
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.NoError(t, err)
@@ -133,13 +135,13 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	for i := 0; i < tableNum; i++ {
 		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
 	}
-	newTableNames := make([]timodel.CIStr, tableNum)
+	newTableNames := make([]pmodel.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
 		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
 	}
-	oldSchemaNames := make([]timodel.CIStr, tableNum)
+	oldSchemaNames := make([]pmodel.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = timodel.NewCIStr(schema)
+		oldSchemaNames[i] = pmodel.NewCIStr(schema)
 	}
 	newSchemaIDs := oldSchemaIDs
 
@@ -240,13 +242,13 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 		for i := 0; i < tableNum; i++ {
 			oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
 		}
-		newTableNames := make([]timodel.CIStr, tableNum)
+		newTableNames := make([]pmodel.CIStr, tableNum)
 		for i := 0; i < tableNum; i++ {
 			newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
 		}
-		oldSchemaNames := make([]timodel.CIStr, tableNum)
+		oldSchemaNames := make([]pmodel.CIStr, tableNum)
 		for i := 0; i < tableNum; i++ {
-			oldSchemaNames[i] = timodel.NewCIStr(schema)
+			oldSchemaNames[i] = pmodel.NewCIStr(schema)
 		}
 		newSchemaIDs := oldSchemaIDs
 

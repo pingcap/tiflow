@@ -147,6 +147,7 @@ func NewCluster() (*Cluster, error) {
 	}
 	cluster.Storage = storage
 
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	dom, err := session.BootstrapSession(storage)
 	if err != nil {

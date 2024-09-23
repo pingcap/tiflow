@@ -108,10 +108,7 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
-	if err != nil {
-		return nil, err
-	}
+	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {

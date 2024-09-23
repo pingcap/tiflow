@@ -22,7 +22,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	tiTypes "github.com/pingcap/tidb/pkg/types"
@@ -162,7 +163,7 @@ func newTiColumnInfo(
 ) *timodel.ColumnInfo {
 	col := new(timodel.ColumnInfo)
 	col.ID = colID
-	col.Name = timodel.NewCIStr(column.Name)
+	col.Name = pmodel.NewCIStr(column.Name)
 
 	col.FieldType = *types.NewFieldType(types.StrToType(column.DataType.MySQLType))
 	col.SetCharset(column.DataType.Charset)
@@ -256,14 +257,14 @@ func newTiIndexInfo(indexSchema *IndexSchema, columns []*timodel.ColumnInfo, ind
 			}
 		}
 		indexColumns[i] = &timodel.IndexColumn{
-			Name:   timodel.NewCIStr(col),
+			Name:   pmodel.NewCIStr(col),
 			Offset: offset,
 		}
 	}
 
 	return &timodel.IndexInfo{
 		ID:      indexID,
-		Name:    timodel.NewCIStr(indexSchema.Name),
+		Name:    pmodel.NewCIStr(indexSchema.Name),
 		Columns: indexColumns,
 		Unique:  indexSchema.Unique,
 		Primary: indexSchema.Primary,
@@ -339,7 +340,7 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		schemaVersion = m.Version
 
 		tidbTableInfo.ID = m.TableID
-		tidbTableInfo.Name = timodel.NewCIStr(m.Table)
+		tidbTableInfo.Name = pmodel.NewCIStr(m.Table)
 		tidbTableInfo.UpdateTS = m.Version
 
 		nextMockID := int64(100)
