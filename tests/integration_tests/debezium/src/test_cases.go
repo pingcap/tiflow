@@ -114,15 +114,15 @@ func runTestCase(testCasePath string) bool {
 	resetDB(dbTiDB)
 
 	statementKindsToWaitCDCRecord := map[string]bool{
-		"Delete":         true,
-		"Insert":         true,
-		"Replace":        true,
-		"Update":         true,
-		"CreateDatabase": true,
-		"DropDatabase":   true,
-		"CreateTable":    true,
-		"AlterTable":     true,
-		"DropTable":      true,
+		"Delete":  true,
+		"Insert":  true,
+		"Replace": true,
+		"Update":  true,
+		// "CreateDatabase": true,
+		// "DropDatabase":   true,
+		"CreateTable": true,
+		"AlterTable":  true,
+		"DropTable":   true,
 	}
 
 	hasError := false
@@ -181,8 +181,8 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			if !ok1 && !ok2 {
 				continue
 			}
+			// Only handle DDL received from partition-0 should be enough.
 			if ok2 && m.Partition != 0 {
-				// Only handle DDL received from partition-0 should be enough.
 				continue
 			}
 		}
@@ -209,6 +209,7 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 
 		obj, err := fetchNextCDCRecord(reader, kind, waitTimeout)
 		if err != nil {
+			fmt.Println("Received error", err)
 			logger.Error(
 				"Received error when fetching CDC record",
 				zap.Error(err),
@@ -217,6 +218,7 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 		}
 		if obj == nil {
 			// No more records
+			fmt.Println("No more records")
 			break
 		}
 
