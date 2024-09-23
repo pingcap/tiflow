@@ -672,8 +672,6 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
-
-	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -708,7 +706,6 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -859,7 +856,6 @@ func TestSchemaStorage(t *testing.T) {
 		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 			conf.AlterPrimaryKey = true
 		})
-		session.SetSchemaLease(0)
 		session.DisableStats4Test()
 		domain, err := session.BootstrapSession(store)
 		require.Nil(t, err)
@@ -952,7 +948,6 @@ func TestHandleKey(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)

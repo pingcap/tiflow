@@ -24,6 +24,7 @@ import (
 	mm "github.com/pingcap/tidb/pkg/parser/model"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -109,6 +110,8 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 		} else {
 			result = string(v)
 		}
+	case types.VectorFloat32:
+		result = v.String()
 	default:
 		result = fmt.Sprintf("%v", v)
 	}

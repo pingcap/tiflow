@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -626,6 +627,19 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 				Ft:            types.NewFieldType(mysql.TypeYear),
 			},
 			int64(1970),
+			config.BinaryEncodingBase64,
+		},
+	},
+	{
+		{
+			model.Column{Name: "vectorfloat32", Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")), Type: mysql.TypeTiDBVectorFloat32},
+			rowcodec.ColInfo{
+				ID:            37,
+				IsPKHandle:    false,
+				VirtualGenCol: false,
+				Ft:            types.NewFieldType(mysql.TypeTiDBVectorFloat32),
+			},
+			"[1,2,3,4,5]",
 			config.BinaryEncodingBase64,
 		},
 	},

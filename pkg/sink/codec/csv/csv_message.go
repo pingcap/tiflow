@@ -362,6 +362,11 @@ func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.F
 			return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed, err)
 		}
 		return setVar.Name, nil
+	case mysql.TypeTiDBVectorFloat32:
+		if vec, ok := col.Value.(types.VectorFloat32); ok {
+			return vec.String(), nil
+		}
+		return nil, cerror.ErrCSVEncodeFailed
 	default:
 		return col.Value, nil
 	}
@@ -440,7 +445,6 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, tableI
 	if err != nil {
 		return nil, err
 	}
-
 	return e, nil
 }
 

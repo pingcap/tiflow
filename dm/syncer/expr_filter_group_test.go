@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/errors"
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
 	context2 "github.com/pingcap/tidb/pkg/expression/context"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -440,7 +441,7 @@ create table t (
 	require.NoError(t, err)
 	require.Len(t, exprs, 1)
 	expr := exprs[0]
-	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues))
+	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues, errors.RedactLogDisable))
 
 	// skip nothing
 	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)

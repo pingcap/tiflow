@@ -108,26 +108,41 @@ function download_community_binaries() {
 	chmod a+x third_bin/*
 }
 
+function get_sha1() {
+	local repo="$1"
+	local branch="$2"
+	file_server_url="http://fileserver.pingcap.net"
+	sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
+		echo "Failed to get sha1 with repo ${repo} branch ${branch}: $sha1. use branch master to instead" >&2
+		branch=master
+		sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	fi
+	echo "$branch:$sha1"
+}
+
 function download_binaries() {
 	color-green "Download binaries..."
 	# PingCAP file server URL.
 	file_server_url="http://fileserver.pingcap.net"
 
 	# Get sha1 based on branch name.
-	tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-	tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
-	pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
-	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+	tidb_sha1=$(get_sha1 "tidb" "$branch" | cut -d':' -f2)
+	tikv_sha1=$(get_sha1 "tikv" "$branch" | cut -d':' -f2)
+	pd_sha1=$(get_sha1 "pd" "$branch" | cut -d':' -f2)
+	tiflash_branch_sha1=$(get_sha1 "tiflash" "$branch")
+	tiflash_branch=$(echo "$tiflash_branch_sha1" | cut -d':' -f1)
+	tiflash_sha1=$(echo "$tiflash_branch_sha1" | cut -d':' -f2)
 
 	# All download links.
 	tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
 	tikv_download_url="${file_server_url}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
 	pd_download_url="${file_server_url}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-	tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
+	tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
 	minio_download_url="${file_server_url}/download/minio.tar.gz"
 	go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 	etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-79f1fd1e_linux-amd64.tar.gz"
+	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-a129f096_linux-amd64.tar.gz"
 	jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 	schema_registry_url="${file_server_url}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 

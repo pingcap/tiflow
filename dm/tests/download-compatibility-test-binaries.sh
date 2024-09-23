@@ -41,6 +41,19 @@ function download() {
 	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
+function get_sha1() {
+	local repo="$1"
+	local branch="$2"
+	file_server_url="http://fileserver.pingcap.net"
+	sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
+		echo "Failed to get sha1 with repo ${repo} branch ${branch}: $sha1. use branch master to instead" >&2
+		branch=master
+		sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	fi
+	echo $sha1
+}
+
 # Specify the download branch.
 branch=$1
 
@@ -48,7 +61,7 @@ branch=$1
 file_server_url="http://fileserver.pingcap.net"
 
 # Get sha1 based on branch name.
-tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
+tidb_sha1=$(get_sha1 "tidb" "$branch")
 
 # All download links.
 tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"

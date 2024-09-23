@@ -35,10 +35,11 @@ func TestInsert(t *testing.T) {
 		name varchar(32),
 		tiny tinyint,
 		comment text,
-		bb blob)`
+		bb blob,
+		vec vector(5))`
 	_ = helper.DDL2Event(sql)
 
-	event := helper.DML2Event(`insert into test.t values(1, "Bob", 127, "测试", "测试blob")`, "test", "t")
+	event := helper.DML2Event(`insert into test.t values(1, "Bob", 127, "测试", "测试blob", '[1,2,3,4,5]')`, "test", "t")
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := newCanalEntryBuilder(codecConfig)
@@ -97,6 +98,13 @@ func TestInsert(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "测试blob", s)
 			require.Equal(t, "blob", col.GetMysqlType())
+		case "vec":
+			require.Equal(t, int32(internal.JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.NoError(t, err)
+			require.Equal(t, "[1,2,3,4,5]", col.GetValue())
+			require.Equal(t, "vector", col.GetMysqlType())
 		}
 	}
 }
