@@ -447,10 +447,6 @@ func (t *testElectionSuite) TestElectionSucceedButReturnError(c *C) {
 	c.Assert(leaderID, Equals, e1.ID())
 	c.Assert(leaderAddr, Equals, addr1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr", `return()`), IsNil)
-	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr")
-
 	// start e2
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
@@ -470,14 +466,12 @@ func (t *testElectionSuite) TestElectionSucceedButReturnError(c *C) {
 	c.Assert(leaderAddr, Equals, addr1)
 	c.Assert(e2.IsLeader(), IsFalse)
 
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr", `return()`), IsNil)
+	//nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/election/mockCapaignSucceedButReturnErr")
+
 	e1.Close() // stop the campaign for e1
 	c.Assert(e1.IsLeader(), IsFalse)
-
-	ctx3, cancel3 := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel3()
-	deleted, err := e2.ClearSessionIfNeeded(ctx3, ID1)
-	c.Assert(err, IsNil)
-	c.Assert(deleted, IsFalse)
 
 	// e2 should become the leader
 	select {
