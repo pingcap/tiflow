@@ -114,13 +114,15 @@ func runTestCase(testCasePath string) bool {
 	resetDB(dbTiDB)
 
 	statementKindsToWaitCDCRecord := map[string]bool{
-		"Delete":      true,
-		"Insert":      true,
-		"Replace":     true,
-		"Update":      true,
-		"CreateTable": true,
-		"AlterTable":  true,
-		"DropTable":   true,
+		"Delete":         true,
+		"Insert":         true,
+		"Replace":        true,
+		"Update":         true,
+		"CreateDatabase": true,
+		"DropDatabase":   true,
+		"CreateTable":    true,
+		"AlterTable":     true,
+		"DropTable":      true,
 	}
 
 	hasError := false
