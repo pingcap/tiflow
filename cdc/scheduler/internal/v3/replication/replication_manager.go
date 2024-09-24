@@ -790,7 +790,6 @@ func (r *Manager) CollectMetrics(currentPDTime time.Time) {
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
 
 		// Slow table latency metrics.
-		// phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
 		for stage, checkpoint := range table.Stats.StageCheckpoints {
 			// Checkpoint ts
 			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
