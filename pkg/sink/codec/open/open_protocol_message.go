@@ -140,7 +140,7 @@ func rowChangeToMsg(
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
-		value.Delete = rowChangeColumns2CodecColumns(e.Columns, e.TableInfo, onlyHandleKeyColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, e.TableInfo, onlyHandleKeyColumns)
 		if onlyHandleKeyColumns && len(value.Delete) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
 		}
@@ -201,17 +201,13 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 func rowChangeColumns2CodecColumns(cols []*model.ColumnData, tb *model.TableInfo, onlyHandleKeyColumns bool) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
-		if col == nil {
-			continue
-		}
-        flag := model.GetColumnFlag(col, tb)
-		if onlyHandleKeyColumns && !flag.IsHandleKey() {
-			continue
-		}
-        colInfo := model.GetColumnInfo(col, tb)
+        colx := model.GetColumnDataX(col, tb)
+        if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
+            continue
+        }
 		c := internal.Column{}
-		c.FromRowChangeColumn(col, flag, colInfo)
-		jsonCols[colInfo.Name.O] = c
+		c.FromRowChangeColumn(colx)
+		jsonCols[colx.GetName()] = c
 	}
 	if len(jsonCols) == 0 {
 		return nil

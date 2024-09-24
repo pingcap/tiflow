@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -29,18 +28,17 @@ import (
 type Column struct {
 	Type byte `json:"t"`
 	// Deprecated: please use Flag instead.
-	WhereHandle *bool                `json:"h,omitempty"`
+	WhereHandle bool                 `json:"h,omitempty"`
 	Flag        model.ColumnFlagType `json:"f"`
 	Value       any                  `json:"v"`
 }
 
 // FromRowChangeColumn converts from a row changed column to a codec column.
-func (c *Column) FromRowChangeColumn(col *model.ColumnData, flag *model.ColumnFlagType, info *pmodel.ColumnInfo) {
-	c.Type = info.GetType()
-	c.Flag = *flag
+func (c *Column) FromRowChangeColumn(col model.ColumnDataX) {
+	c.Type = col.GetType()
+	c.Flag = col.GetFlag()
 	if c.Flag.IsHandleKey() {
-		whereHandle := true
-		c.WhereHandle = &whereHandle
+		c.WhereHandle = true
 	}
 	if col.Value == nil {
 		c.Value = nil

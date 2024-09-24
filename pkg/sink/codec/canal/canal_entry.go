@@ -22,7 +22,6 @@ import (
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/tidb/pkg/parser/model"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -117,22 +116,22 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.ColumnInfo, updated bool) (*canal.Column, error) {
-	mysqlType := utils.GetMySQLType(columnInfo, b.config.ContentCompatible)
-	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
+func (b *canalEntryBuilder) buildColumn(c model.ColumnDataX, updated bool) (*canal.Column, error) {
+	mysqlType := utils.GetMySQLType(c.GetColumnInfo(), b.config.ContentCompatible)
+	javaType, err := getJavaSQLType(c.Value, c.GetType(), c.GetFlag())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err := b.formatValue(c.Value, c.Flag.IsBinary())
+	value, err := b.formatValue(c.Value, c.GetFlag().IsBinary())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	canalColumn := &canal.Column{
 		SqlType:       int32(javaType),
-		Name:          c.Name,
-		IsKey:         c.Flag.IsPrimaryKey(),
+		Name:          c.GetName(),
+		IsKey:         c.GetFlag().IsPrimaryKey(),
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
 		Value:         value,
@@ -144,17 +143,13 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.Col
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
-	colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
-	for idx, column := range e.GetColumns() {
-		if column == nil {
+	for _, col := range e.Columns {
+		column := model.GetColumnDataX(col, e.TableInfo)
+		if column.ColumnData == nil {
 			continue
 		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
-		if !ok {
-			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", colInfos[idx].ID)
-		}
-		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
+
+		c, err := b.buildColumn(column, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -163,19 +158,13 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 
 	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
-	for idx, column := range e.GetPreColumns() {
-		if column == nil {
+	for _, col := range e.PreColumns {
+		column := model.GetColumnDataX(col, e.TableInfo)
+		if column.ColumnData == nil || onlyHandleKeyColumns && !column.GetFlag().IsHandleKey() {
 			continue
 		}
-		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
-			continue
-		}
-		columnInfo, ok := e.TableInfo.GetColumnInfo(colInfos[idx].ID)
-		if !ok {
-			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-				"column info not found for column id: %d", colInfos[idx].ID)
-		}
-		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
+
+		c, err := b.buildColumn(column, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

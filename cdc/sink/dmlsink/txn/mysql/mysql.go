@@ -597,12 +597,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// INSERT(not in safe mode)
 			// or REPLACE(in safe mode) SQL.
 			if len(row.Columns) != 0 {
-				query, args = prepareReplace(
-					quoteTable,
-					row.Columns,
-					row.TableInfo,
-					true, /* appendPlaceHolder */
-					translateToInsert)
+				query, args = prepareReplace(quoteTable, row.Columns, row.TableInfo, true, translateToInsert)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

@@ -100,22 +100,20 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	return keys
 }
 
-func genKeyList(
-	columns []*model.ColumnData, tb *model.TableInfo, iIdx int, colIdx []int, tableID int64,
-) []byte {
+func genKeyList(columns []*model.ColumnData, tb *model.TableInfo, iIdx int, colIdx []int, tableID int64) []byte {
 	var key []byte
 	for _, i := range colIdx {
-		colInfo := model.GetColumnInfo(columns[i], tb)
-		colFlag := model.GetColumnFlag(columns[i], tb)
+		col := model.GetColumnDataX(columns[i], tb)
+
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
 		// Because such as insert can't specify the generated value.
-		if columns[i] == nil || columns[i].Value == nil || colFlag.IsGeneratedColumn() {
+		if col.ColumnData == nil || col.Value == nil || col.GetFlag().IsGeneratedColumn() {
 			return nil
 		}
 
-		val := model.ColumnValueString(columns[i].Value)
-		if columnNeeds2LowerCase(colInfo.GetType(), colInfo.GetCollate()) {
+		val := model.ColumnValueString(col.Value)
+		if columnNeeds2LowerCase(col.GetType(), col.GetCollation()) {
 			val = strings.ToLower(val)
 		}
 

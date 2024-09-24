@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -32,13 +31,12 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.ColumnData, tb *mod
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols)+len(preCols))
 	for _, col := range cols {
-		colInfo := model.GetColumnInfo(col, tb)
-		colFlag := model.GetColumnFlag(col, tb)
-		if col == nil || colFlag.IsGeneratedColumn() {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, colInfo.Name.O)
-		args = appendQueryArgs(args, col, colInfo)
+		columnNames = append(columnNames, colx.GetName())
+		args = appendQueryArgs(args, colx)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -85,13 +83,12 @@ func prepareReplace(
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
 	for _, col := range cols {
-		colInfo := model.GetColumnInfo(col, tb)
-		colFlag := model.GetColumnFlag(col, tb)
-		if col == nil || colFlag.IsGeneratedColumn() {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, colInfo.Name.O)
-		args = appendQueryArgs(args, col, colInfo)
+		columnNames = append(columnNames, colx.GetName())
+		args = appendQueryArgs(args, colx)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -114,8 +111,8 @@ func prepareReplace(
 // representation. Because if we use the byte array respresentation, the go-sql-driver
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
-func appendQueryArgs(args []interface{}, col *model.ColumnData, colInfo *pmodel.ColumnInfo) []interface{} {
-	cst := colInfo.GetCharset()
+func appendQueryArgs(args []interface{}, col model.ColumnDataX) []interface{} {
+	cst := col.GetCharset()
 	if cst != "" && cst != charset.CharsetBin {
 		colValBytes, ok := col.Value.([]byte)
 		if ok {
@@ -165,27 +162,24 @@ func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bo
 		colNames = make([]string, 0, len(cols))
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
-			if col == nil {
+			colx := model.GetColumnDataX(col, tb)
+			if colx.ColumnData == nil {
 				continue
 			}
-			colInfo := model.GetColumnInfo(col, tb)
-			colNames = append(colNames, colInfo.Name.O)
-			args = appendQueryArgs(args, col, colInfo)
+			colNames = append(colNames, colx.GetName())
+			args = appendQueryArgs(args, colx)
 		}
 	} else { // Try to use unique key values when available.
 		for _, col := range cols {
-			if col == nil {
+			colx := model.GetColumnDataX(col, tb)
+			if colx.ColumnData == nil || !colx.GetFlag().IsHandleKey() {
 				continue
 			}
-			colFlag := model.GetColumnFlag(col, tb)
-			colInfo := model.GetColumnInfo(col, tb)
-			if !colFlag.IsHandleKey() {
-				continue
-			}
-			colNames = append(colNames, colInfo.Name.O)
-			args = appendQueryArgs(args, col, colInfo)
+			colNames = append(colNames, colx.GetName())
+			args = appendQueryArgs(args, colx)
 		}
 	}
+
 	return
 }
 

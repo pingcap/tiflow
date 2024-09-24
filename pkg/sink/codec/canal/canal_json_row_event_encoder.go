@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
@@ -34,10 +33,10 @@ import (
 
 func fillColumns(
 	columns []*model.ColumnData,
-    tb *model.TableInfo,
+	tb *model.TableInfo,
 	onlyOutputUpdatedColumn bool,
 	onlyHandleKeyColumn bool,
-	newColumnMap map[string]*model.Column,
+	newColumnMap map[string]model.ColumnDataX,
 	out *jwriter.Writer,
 	builder *canalEntryBuilder,
 ) error {
@@ -49,12 +48,13 @@ func fillColumns(
 	out.RawByte('{')
 	isFirst := true
 	for _, col := range columns {
-		if col != nil {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData != nil {
 			// column equal, do not output it
-			if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
+			if onlyOutputUpdatedColumn && shouldIgnoreColumn(colx, newColumnMap) {
 				continue
 			}
-			if onlyHandleKeyColumn && !col.Flag.IsHandleKey() {
+			if onlyHandleKeyColumn && !colx.GetFlag().IsHandleKey() {
 				continue
 			}
 			if isFirst {
@@ -62,11 +62,11 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
+			value, err := builder.formatValue(colx.Value, colx.GetFlag().IsBinary())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
-			out.String(col.Name)
+			out.String(colx.GetName())
 			out.RawByte(':')
 			if col.Value == nil {
 				out.RawString("null")
@@ -219,43 +219,30 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(
-			e.GetPreColumns(),
-			false, onlyHandleKey, nil, out, builder,
-		); err != nil {
+		if err := fillColumns(e.PreColumns, e.TableInfo, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(
-			e.Columns,
-            e.TableInfo,
-			false, onlyHandleKey, nil, out, builder,
-		); err != nil {
+		if err := fillColumns(e.Columns, e.TableInfo, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
-		var newColsMap map[string]*model.ColumnData
+		var newColsMap map[string]model.ColumnDataX
 		if config.OnlyOutputUpdatedColumns {
-			newColsMap = make(map[string]*model.ColumnData, len(e.Columns))
+			newColsMap = make(map[string]model.ColumnDataX, len(e.Columns))
 			for _, col := range e.Columns {
-                name := model.GetColumnInfo(col, tb).Name.O
-				newColsMap[name] = col
+				colx := model.GetColumnDataX(col, e.TableInfo)
+				newColsMap[colx.GetName()] = colx
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(
-			e.GetPreColumns(),
-			config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
-		); err != nil {
+		if err := fillColumns(e.PreColumns, e.TableInfo, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(
-			e.GetColumns(),
-			false, onlyHandleKey, nil, out, builder,
-		); err != nil {
+		if err := fillColumns(e.Columns, e.TableInfo, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else {
@@ -553,15 +540,11 @@ func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
 	return newJSONRowEventEncoder(b.config, b.claimCheck)
 }
 
-func shouldIgnoreColumn(
-    col *model.ColumnData,
-    info *pmodel.ColumnInfo,
-	newColumnMap map[string]*model.ColumnData,
-) bool {
-	newCol, ok := newColumnMap[info.Name.O]
-	if ok && newCol != nil {
+func shouldIgnoreColumn(col model.ColumnDataX, newColumnMap map[string]model.ColumnDataX) bool {
+	newCol, ok := newColumnMap[col.GetName()]
+	if ok && newCol.ColumnData != nil {
 		// sql type is not equal
-		if newCol.Type != info.GetType() {
+		if newCol.GetType() != col.GetType() {
 			return false
 		}
 		// value equal
