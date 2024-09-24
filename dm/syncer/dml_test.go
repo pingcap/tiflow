@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/sessionctx"

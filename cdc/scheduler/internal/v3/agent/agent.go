@@ -214,7 +214,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 
 	outboundMessages = append(outboundMessages, responses...)
 
-	if err := a.sendMsgs(ctx, outboundMessages); err != nil {
+	if err = a.sendMsgs(ctx, outboundMessages); err != nil {
 		return nil, errors.Trace(err)
 	}
 

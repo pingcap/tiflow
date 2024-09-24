@@ -16,8 +16,9 @@ package model
 import (
 	"testing"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/stretchr/testify/require"
@@ -34,22 +35,22 @@ func TestHandleKeyPriority(t *testing.T) {
 	tbl := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name:      timodel.CIStr{O: "a"},
+				Name:      pmodel.CIStr{O: "a"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "b"},
+				Name:      pmodel.CIStr{O: "b"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "c"},
+				Name:      pmodel.CIStr{O: "c"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "d"},
+				Name:      pmodel.CIStr{O: "d"},
 				FieldType: parser_types.FieldType{
 					// test not null unique index
 					// Flag: mysql.NotNullFlag,
@@ -57,7 +58,7 @@ func TestHandleKeyPriority(t *testing.T) {
 				State: timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "e"},
+				Name:      pmodel.CIStr{O: "e"},
 				FieldType: *ftNull,
 				State:     timodel.StatePublic,
 				// test virtual generated column is not treated as unique key
@@ -68,52 +69,52 @@ func TestHandleKeyPriority(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID: 10,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "a,b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "a"}, Offset: 0},
-					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+					{Name: pmodel.CIStr{O: "a"}, Offset: 0},
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 9,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "c",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "c"}, Offset: 2},
+					{Name: pmodel.CIStr{O: "c"}, Offset: 2},
 				},
 				Unique: true,
 			},
 			{
 				ID: 8,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 7,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "d",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "d"}, Offset: 3},
+					{Name: pmodel.CIStr{O: "d"}, Offset: 3},
 				},
 				Unique: true,
 			},
 			{
 				ID: 6,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "e",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "e"}, Offset: 4},
+					{Name: pmodel.CIStr{O: "e"}, Offset: 4},
 				},
 				Unique: true,
 			},
@@ -140,23 +141,23 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 
 	tbl := timodel.TableInfo{
 		ID:   1071,
-		Name: timodel.CIStr{O: "t1"},
+		Name: pmodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
 			{
 				ID:        0,
-				Name:      timodel.CIStr{O: "a"},
+				Name:      pmodel.CIStr{O: "a"},
 				FieldType: *ftNotNullBinCharset,
 				State:     timodel.StatePublic,
 			},
 			{
 				ID:        1,
-				Name:      timodel.CIStr{O: "b"},
+				Name:      pmodel.CIStr{O: "b"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
 				ID:        2,
-				Name:      timodel.CIStr{O: "c"},
+				Name:      pmodel.CIStr{O: "c"},
 				FieldType: *ftNull,
 				State:     timodel.StatePublic,
 			},
@@ -164,11 +165,11 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID: 0,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "c",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "c"}, Offset: 2},
+					{Name: pmodel.CIStr{O: "c"}, Offset: 2},
 				},
 				Unique: true,
 			},
@@ -204,11 +205,11 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	require.True(t, info.IsEligible(false))
 	tbl = timodel.TableInfo{
 		ID:   1073,
-		Name: timodel.CIStr{O: "t2"},
+		Name: pmodel.CIStr{O: "t2"},
 		Columns: []*timodel.ColumnInfo{
 			{
 				ID:        0,
-				Name:      timodel.CIStr{O: "a"},
+				Name:      pmodel.CIStr{O: "a"},
 				FieldType: parser_types.FieldType{},
 				State:     timodel.StatePublic,
 			},
@@ -216,9 +217,9 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID:   0,
-				Name: timodel.CIStr{O: "a"},
+				Name: pmodel.CIStr{O: "a"},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "a"}, Offset: 0},
+					{Name: pmodel.CIStr{O: "a"}, Offset: 0},
 				},
 				Unique: true,
 			},
@@ -250,11 +251,11 @@ func TestTableInfoClone(t *testing.T) {
 	ft.SetFlag(mysql.NotNullFlag)
 	tbl := timodel.TableInfo{
 		ID:   1071,
-		Name: timodel.CIStr{O: "t1"},
+		Name: pmodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
 			{
 				ID:        0,
-				Name:      timodel.CIStr{O: "c"},
+				Name:      pmodel.CIStr{O: "c"},
 				FieldType: *ft,
 				State:     timodel.StatePublic,
 			},
@@ -262,11 +263,11 @@ func TestTableInfoClone(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID: 0,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "c",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "c"}, Offset: 0},
+					{Name: pmodel.CIStr{O: "c"}, Offset: 0},
 				},
 				Unique: true,
 			},
@@ -294,12 +295,12 @@ func TestIndexByName(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
-					Name: timodel.CIStr{
+					Name: pmodel.CIStr{
 						O: "idx1",
 					},
 					Columns: []*timodel.IndexColumn{
 						{
-							Name: timodel.CIStr{
+							Name: pmodel.CIStr{
 								O: "col1",
 							},
 						},
@@ -325,19 +326,19 @@ func TestColumnsByNames(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Columns: []*timodel.ColumnInfo{
 				{
-					Name: timodel.CIStr{
+					Name: pmodel.CIStr{
 						O: "col2",
 					},
 					Offset: 1,
 				},
 				{
-					Name: timodel.CIStr{
+					Name: pmodel.CIStr{
 						O: "col1",
 					},
 					Offset: 0,
 				},
 				{
-					Name: timodel.CIStr{
+					Name: pmodel.CIStr{
 						O: "col3",
 					},
 					Offset: 2,
@@ -518,24 +519,24 @@ func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
 	tableInfo := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name:      timodel.CIStr{O: "a"},
+				Name:      pmodel.CIStr{O: "a"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "b"},
+				Name:      pmodel.CIStr{O: "b"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:                timodel.CIStr{O: "c"},
+				Name:                pmodel.CIStr{O: "c"},
 				FieldType:           *ftNull,
 				State:               timodel.StatePublic,
 				GeneratedExprString: "as d",
 				GeneratedStored:     false,
 			},
 			{
-				Name:      timodel.CIStr{O: "d"},
+				Name:      pmodel.CIStr{O: "d"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
@@ -543,42 +544,42 @@ func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID: 10,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "a,b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "a"}, Offset: 0},
-					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+					{Name: pmodel.CIStr{O: "a"}, Offset: 0},
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 9,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "c",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "c"}, Offset: 2},
+					{Name: pmodel.CIStr{O: "c"}, Offset: 2},
 				},
 				Unique: true,
 			},
 			{
 				ID: 8,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 7,
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "d",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "d"}, Offset: 3},
+					{Name: pmodel.CIStr{O: "d"}, Offset: 3},
 				},
 				Unique: true,
 			},

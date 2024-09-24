@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.5.11"
+      "version": "7.5.17"
     },
     {
       "type": "panel",
@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1724397907953,
+  "iteration": 1725343906113,
   "links": [],
   "panels": [
     {
@@ -188,7 +188,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -291,7 +291,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -396,7 +396,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -501,7 +501,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -603,7 +603,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -709,7 +709,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -836,7 +836,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -847,21 +847,12 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\",namespace=\"$namespace\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
+              "expr": "sum(rate(ticdc_sink_batch_row_count_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{namespace}}-{{changefeed}}",
               "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "sum (rate(ticdc_sink_ddl_exec_duration_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-ddl",
-              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -947,7 +938,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1063,7 +1054,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1170,7 +1161,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1278,7 +1269,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1387,7 +1378,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1495,7 +1486,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1602,7 +1593,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1710,7 +1701,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1815,7 +1806,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -1921,7 +1912,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2029,7 +2020,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2133,7 +2124,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2256,7 +2247,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -2377,7 +2368,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2492,7 +2483,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2601,7 +2592,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2781,7 +2772,7 @@
           "options": {
             "showHeader": true
           },
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "targets": [
             {
               "expr": "rate(ticdc_owner_ownership_counter{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[240s])",
@@ -2850,7 +2841,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2966,7 +2957,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3071,7 +3062,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3170,7 +3161,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3320,7 +3311,7 @@
           "options": {
             "showHeader": true
           },
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "targets": [
             {
               "exemplar": true,
@@ -3334,7 +3325,7 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Changefeed table count",
+          "title": "Capture table count",
           "transformations": [
             {
               "id": "reduce",
@@ -3398,7 +3389,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -3424,7 +3415,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Capture tables count",
+          "title": "changefeed tables count",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -3500,7 +3491,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3611,7 +3602,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3737,7 +3728,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3864,7 +3855,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3967,7 +3958,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3982,7 +3973,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{namespace}}-{{changefeed}}-barrier",
+              "legendFormat": "{{namespace}}-{{changefeed}}-barrier-lag",
               "refId": "C"
             },
             {
@@ -3990,7 +3981,7 @@
               "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\"}) by (namespace, changefeed)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-puller",
+              "legendFormat": "{{namespace}}-{{changefeed}}-puller-lag",
               "refId": "A"
             }
           ],
@@ -4078,7 +4069,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4177,7 +4168,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4459,7 +4450,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4580,7 +4571,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4665,7 +4656,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -4680,7 +4671,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4797,7 +4788,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4820,7 +4811,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Puller output events/s",
+          "title": "Puller output events / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4902,7 +4893,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5005,7 +4996,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5028,7 +5019,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sorter output events/s",
+          "title": "Sorter output events / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -5108,7 +5099,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5211,7 +5202,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5234,7 +5225,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Mounter output events/s",
+          "title": "Mounter output events / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -5314,7 +5305,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5417,7 +5408,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5440,7 +5431,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Table sink output events/s",
+          "title": "Table sink output events / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -5520,7 +5511,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5624,7 +5615,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5647,7 +5638,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink flush rows/s",
+          "title": "Sink flush rows / s",
           "tooltip": {
             "shared": true,
             "sort": 2,
@@ -5728,7 +5719,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5840,7 +5831,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5943,7 +5934,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6027,7 +6018,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6041,7 +6032,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6131,9 +6122,9 @@
           "id": 612,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6147,7 +6138,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6231,7 +6222,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6245,7 +6236,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6334,7 +6325,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6348,7 +6339,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6445,7 +6436,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6459,7 +6450,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6543,7 +6534,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -6557,7 +6548,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6678,7 +6669,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6800,7 +6791,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6906,7 +6897,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7003,7 +6994,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7100,7 +7091,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7221,7 +7212,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7331,7 +7322,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7354,7 +7345,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Outgoing Bytes",
+          "title": "Kafka Outgoing Bytes / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7434,7 +7425,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7457,7 +7448,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Inflight Requests",
+          "title": "Kafka Inflight Requests / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7537,7 +7528,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7640,7 +7631,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7663,7 +7654,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Request Rate",
+          "title": "Kafka Request Rate / s",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7743,7 +7734,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7844,7 +7835,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7943,7 +7934,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7954,10 +7945,10 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-{{index}}",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
               "refId": "A"
             }
           ],
@@ -7965,7 +7956,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "encoder group input channel size",
+          "title": "Encoder group input channel size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8041,7 +8032,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8052,7 +8043,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace, changefeed, instance)",
+              "expr": "sum(ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace, changefeed, instance)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
@@ -8063,7 +8054,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "encoder group output channel size",
+          "title": "Encoder group output channel size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8139,7 +8130,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8245,7 +8236,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8319,7 +8310,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Kafka-Go Writer batch messages internally before send to the Kafka cluster.",
+          "description": "MQ worker send large message to the external storage, this metrics record the message count",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -8331,6 +8322,210 @@
             "w": 12,
             "x": 12,
             "y": 42
+          },
+          "hiddenSeries": false,
+          "id": 741,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.17",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Claim Check Send Message Count / s",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "MQ worker send large message to the external storage, this metric record the time cost on send every message.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 49
+          },
+          "hiddenSeries": false,
+          "id": 740,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.17",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_mq_claim_check_send_message_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_duration_sum[1m])) by (namespace, changefeed, instance) / sum(rate(ticdc_sink_mq_claim_check_send_message_duration_count[1m])) by (namespace, changefeed, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-avg",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Claim Check Send Message Duration Percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 2,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Kafka-Go Writer batch messages internally before send to the Kafka cluster.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 731,
@@ -8352,7 +8547,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8428,7 +8623,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 733,
@@ -8450,7 +8645,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8526,7 +8721,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 735,
@@ -8548,7 +8743,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8624,7 +8819,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 63
           },
           "hiddenSeries": false,
           "id": 739,
@@ -8646,7 +8841,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8722,7 +8917,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 63
           },
           "hiddenSeries": false,
           "id": 737,
@@ -8744,7 +8939,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8767,210 +8962,6 @@
           "timeRegions": [],
           "timeShift": null,
           "title": "Error Count (Kafka-Go Only)",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "MQ worker send large message to the external storage, this metric record the time cost on send every message.",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 64
-          },
-          "hiddenSeries": false,
-          "id": 740,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_mq_claim_check_send_message_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P999",
-              "queryType": "randomWalk",
-              "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "rate(ticdc_sink_mq_claim_check_send_message_duration_sum[30s]) / rate(ticdc_sink_mq_claim_check_send_message_duration_count[30s])",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-avg",
-              "refId": "B"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Claim Check Send Message Duration Percentile",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 2,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "MQ worker send large message to the external storage, this metrics record the message count",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 64
-          },
-          "hiddenSeries": false,
-          "id": 741,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_mq_claim_check_send_message_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
-              "refId": "B"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Claim Check Send Message Count / Second",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -9520,7 +9511,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9623,7 +9614,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9733,7 +9724,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -9846,7 +9837,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -9959,7 +9950,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10072,7 +10063,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10178,7 +10169,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": true,
           "renderer": "flot",
@@ -10288,7 +10279,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10400,7 +10391,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10513,7 +10504,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -10620,7 +10611,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10739,7 +10730,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10863,7 +10854,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -11661,7 +11652,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11756,7 +11747,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11865,7 +11856,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12046,7 +12037,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12138,7 +12129,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "CPU usage of LevelDB sorter",
+          "description": "The count and duration of write delay",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -12154,12 +12145,11 @@
             "y": 17
           },
           "hiddenSeries": false,
-          "id": 286,
+          "id": 275,
           "legend": {
-            "alignAsTable": true,
+            "alignAsTable": false,
             "avg": false,
             "current": true,
-            "hideEmpty": true,
             "max": true,
             "min": false,
             "rightSide": false,
@@ -12176,13 +12166,13 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
           "seriesOverrides": [
             {
-              "alias": "/.*sorter-[0-9]+/",
+              "alias": "/.*count.*/",
               "yaxis": 2
             }
           ],
@@ -12191,18 +12181,30 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\", name=~\"sorter.*\"}[1m])) by (name, instance)",
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_db_write_delay_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (instance)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{name}}",
+              "legendFormat": "{{instance}}-duration",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_db_write_delay_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-count",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "CPU usage",
+          "title": "Write delay",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -12218,7 +12220,7 @@
           },
           "yaxes": [
             {
-              "format": "percentunit",
+              "format": "dtdurations",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -12226,10 +12228,10 @@
               "show": true
             },
             {
-              "format": "percentunit",
+              "format": "short",
               "label": null,
               "logBase": 1,
-              "max": "1.2",
+              "max": null,
               "min": null,
               "show": true
             }
@@ -12362,7 +12364,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12424,122 +12426,88 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
+          "cards": {
+            "cardPadding": 0,
+            "cardRound": 0
+          },
+          "color": {
+            "cardColor": "#FF9830",
+            "colorScale": "linear",
+            "colorScheme": "interpolateSpectral",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The count and duration of write delay",
+          "description": "The time of sorter compact",
           "fieldConfig": {
-            "defaults": {
-              "links": []
-            },
+            "defaults": {},
             "overrides": []
           },
-          "fill": 1,
-          "fillGradient": 0,
           "gridPos": {
             "h": 6,
             "w": 8,
             "x": 16,
             "y": 23
           },
-          "hiddenSeries": false,
-          "id": 275,
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 285,
           "legend": {
-            "alignAsTable": false,
+            "alignAsTable": true,
             "avg": false,
             "current": true,
             "max": true,
             "min": false,
-            "rightSide": false,
+            "rightSide": true,
             "show": true,
+            "sort": "current",
+            "sortDesc": true,
             "total": false,
             "values": true
           },
-          "lines": true,
-          "linewidth": 1,
           "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "paceLength": 10,
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [
-            {
-              "alias": "/.*count.*/",
-              "yaxis": 2
-            }
-          ],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
+          "maxPerRow": 3,
+          "repeatDirection": "h",
+          "reverseYBuckets": false,
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_db_write_delay_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (instance)",
-              "format": "time_series",
+              "expr": "sum(rate(ticdc_sorter_db_compact_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
               "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-duration",
+              "intervalFactor": 2,
+              "legendFormat": "{{le}}",
               "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_db_write_delay_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-count",
-              "refId": "B"
             }
           ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Write delay",
+          "title": "Compact duration",
           "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
             "show": true,
-            "values": []
+            "showHistogram": true
           },
-          "yaxes": [
-            {
-              "format": "dtdurations",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          "tooltipDecimals": 1,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 1,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "upper",
+          "yBucketNumber": null,
+          "yBucketSize": null
         },
         {
           "cards": {
@@ -12710,90 +12678,6 @@
           "yBucketSize": null
         },
         {
-          "cards": {
-            "cardPadding": 0,
-            "cardRound": 0
-          },
-          "color": {
-            "cardColor": "#FF9830",
-            "colorScale": "linear",
-            "colorScheme": "interpolateSpectral",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The time of sorter iterator read",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 8,
-            "x": 16,
-            "y": 29
-          },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 281,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "links": [],
-          "maxPerRow": 3,
-          "repeatDirection": "h",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_sorter_db_iter_read_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\", call=\"release\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "intervalFactor": 2,
-              "legendFormat": "{{le}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Read duration - Release",
-          "tooltip": {
-            "show": true,
-            "showHistogram": true
-          },
-          "tooltipDecimals": 1,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "xBucketNumber": null,
-          "xBucketSize": null,
-          "yAxis": {
-            "decimals": 1,
-            "format": "s",
-            "logBase": 1,
-            "max": null,
-            "min": null,
-            "show": true,
-            "splitFactor": null
-          },
-          "yBucketBound": "upper",
-          "yBucketNumber": null,
-          "yBucketSize": null
-        },
-        {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
@@ -12832,7 +12716,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12932,7 +12816,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12992,190 +12876,6 @@
             "align": false,
             "alignLevel": null
           }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 6,
-            "w": 8,
-            "x": 16,
-            "y": 35
-          },
-          "hiddenSeries": false,
-          "id": 287,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_sorter_db_iter_read_duration_seconds_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\", call=\"release\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-sorter",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Read OPS - Release",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "percentunit",
-              "label": null,
-              "logBase": 10,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "cards": {
-            "cardPadding": 0,
-            "cardRound": 0
-          },
-          "color": {
-            "cardColor": "#FF9830",
-            "colorScale": "linear",
-            "colorScheme": "interpolateSpectral",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The time of sorter compact",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 8,
-            "x": 0,
-            "y": 41
-          },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 285,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "links": [],
-          "maxPerRow": 3,
-          "repeatDirection": "h",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_sorter_db_compact_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "intervalFactor": 2,
-              "legendFormat": "{{le}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Compact duration",
-          "tooltip": {
-            "show": true,
-            "showHistogram": true
-          },
-          "tooltipDecimals": 1,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "xBucketNumber": null,
-          "xBucketSize": null,
-          "yAxis": {
-            "decimals": 1,
-            "format": "s",
-            "logBase": 1,
-            "max": null,
-            "min": null,
-            "show": true,
-            "splitFactor": null
-          },
-          "yBucketBound": "upper",
-          "yBucketNumber": null,
-          "yBucketSize": null
         }
       ],
       "title": "DB",
@@ -13211,7 +12911,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 120
           },
           "hiddenSeries": false,
           "id": 15,
@@ -13236,7 +12936,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13341,7 +13041,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 120
           },
           "hiddenSeries": false,
           "id": 29,
@@ -13367,7 +13067,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13446,7 +13146,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 127
           },
           "hiddenSeries": false,
           "id": 28,
@@ -13472,7 +13172,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13568,7 +13268,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 127
           },
           "hiddenSeries": false,
           "id": 31,
@@ -13594,7 +13294,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13683,7 +13383,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 26
+            "y": 134
           },
           "hiddenSeries": false,
           "id": 188,
@@ -13709,7 +13409,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13787,7 +13487,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 26
+            "y": 134
           },
           "hiddenSeries": false,
           "id": 17,
@@ -13811,7 +13511,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13890,7 +13590,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 141
           },
           "hiddenSeries": false,
           "id": 177,
@@ -13916,7 +13616,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -13994,7 +13694,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 33
+            "y": 141
           },
           "hiddenSeries": false,
           "id": 459,
@@ -14022,7 +13722,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -14106,7 +13806,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 148
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -14183,7 +13883,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 148
           },
           "hiddenSeries": false,
           "id": 251,
@@ -14209,7 +13909,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -14287,7 +13987,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 155
           },
           "hiddenSeries": false,
           "id": 453,
@@ -14315,7 +14015,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -14395,7 +14095,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 155
           },
           "hiddenSeries": false,
           "id": 460,
@@ -14423,7 +14123,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -14504,7 +14204,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 162
           },
           "hiddenSeries": false,
           "id": 5,
@@ -14528,7 +14228,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -14607,7 +14307,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 162
           },
           "hiddenSeries": false,
           "id": 252,
@@ -14633,7 +14333,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -14717,7 +14417,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 61
+            "y": 169
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -14799,7 +14499,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 61
+            "y": 169
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -14874,7 +14574,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 68
+            "y": 176
           },
           "hiddenSeries": false,
           "id": 53,
@@ -14899,7 +14599,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -14988,7 +14688,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 68
+            "y": 176
           },
           "hiddenSeries": false,
           "id": 106,
@@ -15013,7 +14713,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15100,7 +14800,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 75
+            "y": 183
           },
           "hiddenSeries": false,
           "id": 707,
@@ -15122,7 +14822,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15198,7 +14898,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 75
+            "y": 183
           },
           "hiddenSeries": false,
           "id": 10039,
@@ -15220,7 +14920,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15310,7 +15010,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 13
+            "y": 121
           },
           "hiddenSeries": false,
           "id": 289,
@@ -15335,7 +15035,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15412,7 +15112,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 13
+            "y": 121
           },
           "hiddenSeries": false,
           "id": 114,
@@ -15437,7 +15137,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15534,7 +15234,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 128
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -15602,7 +15302,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 128
           },
           "hiddenSeries": false,
           "id": 264,
@@ -15622,7 +15322,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15714,7 +15414,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 27
+            "y": 135
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -15784,7 +15484,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 27
+            "y": 135
           },
           "hiddenSeries": false,
           "id": 258,
@@ -15804,7 +15504,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -15899,7 +15599,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 34
+            "y": 142
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -15965,7 +15665,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 34
+            "y": 142
           },
           "hiddenSeries": false,
           "id": 260,
@@ -15985,7 +15685,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -16072,7 +15772,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 149
           },
           "hiddenSeries": false,
           "id": 291,
@@ -16099,7 +15799,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16180,7 +15880,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 149
           },
           "hiddenSeries": false,
           "id": 290,
@@ -16205,7 +15905,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16325,7 +16025,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16463,7 +16163,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16483,9 +16183,11 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(rate(tikv_cdc_grpc_message_sent_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[30s])) by (instance, type)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-{{type}}",
               "refId": "A",
@@ -16580,7 +16282,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16688,7 +16390,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -16709,67 +16411,28 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "A",
-              "step": 10
-            },
-            {
-              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "cdc-{{instance}}",
-              "refId": "B",
-              "step": 10
-            },
-            {
+              "exemplar": true,
               "expr": "(avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
-              "format": "time_series",
               "hide": false,
-              "intervalFactor": 2,
+              "interval": "",
               "legendFormat": "tikv-{{instance}}",
-              "refId": "C",
-              "step": 10
+              "refId": "A"
             },
             {
+              "exemplar": true,
               "expr": "sum(tikv_cdc_sink_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
               "hide": false,
-              "intervalFactor": 2,
+              "interval": "",
               "legendFormat": "sink-{{instance}}",
-              "refId": "D",
-              "step": 10
+              "refId": "B"
             },
             {
+              "exemplar": true,
               "expr": "sum(tikv_cdc_old_value_cache_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
               "hide": false,
-              "intervalFactor": 2,
+              "interval": "",
               "legendFormat": "old-value-{{instance}}",
-              "refId": "E",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_sink_memory_capacity{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "sink-cap-{{instance}}",
-              "refId": "F",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "old-value-cap-{{instance}}",
-              "refId": "G",
-              "step": 10
+              "refId": "C"
             }
           ],
           "thresholds": [],
@@ -16862,7 +16525,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -16885,10 +16548,12 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "scalar(max(pd_cluster_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-min-resolved-lag",
               "refId": "A",
@@ -16904,9 +16569,11 @@
               "step": 10
             },
             {
-              "expr": "avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "exemplar": true,
+              "expr": "sum(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-min-resolved-ts",
               "refId": "C",
@@ -17003,7 +16670,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -17014,7 +16681,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "avg(tikv_cdc_min_resolved_ts_region{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_min_resolved_ts_region{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -17028,7 +16695,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Min resolved Region",
+          "title": "Min resolved Region ID",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -17113,7 +16780,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17123,8 +16790,10 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p9999",
               "refId": "A"
@@ -17229,7 +16898,7 @@
               "refId": "A"
             }
           ],
-          "title": "Initial scan duration",
+          "title": "Incremental scan duration",
           "tooltip": {
             "show": true,
             "showHistogram": true
@@ -17301,7 +16970,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17311,18 +16980,28 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p9999",
+              "legendFormat": "p9999-{{instance}}",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance) / sum(rate(tikv_cdc_scan_duration_seconds_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "avg-{{instance}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Initial scan duration percentile",
+          "title": "Incremental scan duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -17406,7 +17085,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17421,17 +17100,21 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"ongoing\"}) by (type, instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}",
               "refId": "A"
             },
             {
-              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"total\"}) by (instance) - sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=~\"abort|finish\"}) by (instance)",
+              "exemplar": true,
+              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"total\"}) by (instance) - sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=~\"abort|finish|ongoing\"}) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-pending",
               "refId": "B"
@@ -17441,7 +17124,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Initial scan tasks status",
+          "title": "Incremental scan tasks count",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -17526,7 +17209,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17536,9 +17219,11 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "avg(tikv_cdc_captured_region_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "tikv-{{instance}}-total",
               "refId": "A",
@@ -17646,7 +17331,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17656,9 +17341,11 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(rate(tikv_cdc_scan_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "tikv-{{instance}}",
               "refId": "A",
@@ -17669,7 +17356,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "CDC scan speed",
+          "title": "Incremental scan speed / s",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -17738,7 +17425,7 @@
             "current": true,
             "hideEmpty": true,
             "hideZero": true,
-            "max": true,
+            "max": false,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -17757,7 +17444,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -17767,9 +17454,11 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "sum(tikv_cdc_scan_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "tikv-{{instance}}",
               "refId": "A",
@@ -17780,7 +17469,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "CDC total scan bytes",
+          "title": "Incremental scan total bytes",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -17865,7 +17554,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -18002,7 +17691,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
@@ -18133,7 +17822,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -18323,7 +18012,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.17",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -19830,8 +19519,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20016,8 +19705,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [],
@@ -20123,8 +19812,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20245,8 +19934,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.163:8300",
-              "value": "10.2.6.163:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -21650,7 +21339,7 @@
       "type": "row"
     }
   ],
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -21962,5 +21651,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 59
+  "version": 61
 }

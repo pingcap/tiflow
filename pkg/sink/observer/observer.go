@@ -92,10 +92,7 @@ func NewObserver(
 		db.SetMaxIdleConns(2)
 		db.SetMaxOpenConns(2)
 
-		isTiDB, err := pmysql.CheckIsTiDB(ctx, db)
-		if err != nil {
-			return nil, err
-		}
+		isTiDB := pmysql.CheckIsTiDB(ctx, db)
 		if isTiDB {
 			return NewTiDBObserver(db), nil
 		}

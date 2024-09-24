@@ -13,50 +13,64 @@
 # limitations under the License.
 
 # download-integration-test-binaries.sh will
-# * download all the binaries you need for integration testing
+# * download all the binaries needed for integration testing
 
-set -o errexit
-set -o pipefail
+set -euo pipefail
 
-# Specify which branch to be utilized for executing the test, which is
-# exclusively accessible when obtaining binaries from
-# http://fileserver.pingcap.net.
-branch=${1:-master}
-# Specify whether to download the community version of binaries, the following
-# four arguments are applicable only when utilizing the community version of
-# binaries.
-community=${2:-false}
-# Specify which version of the community binaries that will be utilized.
-ver=${3:-v8.1.0}
-# Specify which os that will be used to pack the binaries.
-os=${4:-linux}
-# Specify which architecture that will be used to pack the binaries.
-arch=${5:-amd64}
+# Default values
+DEFAULT_BRANCH=${1:-master}
 
-set -o nounset
+TIDB_BRANCH=${TIDB_BRANCH:-$DEFAULT_BRANCH}
+TIKV_BRANCH=${TIKV_BRANCH:-$DEFAULT_BRANCH}
+PD_BRANCH=${PD_BRANCH:-$DEFAULT_BRANCH}
+TIFLASH_BRANCH=${TIFLASH_BRANCH:-$DEFAULT_BRANCH}
 
-# See https://misc.flogisoft.com/bash/tip_colors_and_formatting.
-color-green() { # Green
-	echo -e "\x1B[1;32m${*}\x1B[0m"
+COMMUNITY=${2:-false}
+VERSION=${3:-v8.1.0}
+OS=${4:-linux}
+ARCH=${5:-amd64}
+
+# Constants
+FILE_SERVER_URL="http://fileserver.pingcap.net"
+TMP_DIR="tmp"
+THIRD_BIN_DIR="third_bin"
+BIN_DIR="bin"
+
+# ANSI color codes
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Functions
+log_green() {
+	echo -e "${GREEN}$1${NC}"
 }
 
-function download() {
+download_file() {
 	local url=$1
 	local file_name=$2
 	local file_path=$3
 	if [[ -f "${file_path}" ]]; then
-		echo "file ${file_name} already exists, skip download"
+		echo "File ${file_name} already exists, skipping download"
 		return
 	fi
-	echo ">>>"
-	echo "download ${file_name} from ${url}"
+	echo ">>> Downloading ${file_name} from ${url}"
 	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
-# download_community_version will try to download required binaries from the
-# public accessible community version
-function download_community_binaries() {
-	local dist="${ver}-${os}-${arch}"
+get_sha1() {
+	local repo="$1"
+	local branch="$2"
+	local sha1=$(curl -s "${FILE_SERVER_URL}/download/refs/pingcap/${repo}/${branch}/sha1")
+	if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
+		echo "Failed to get sha1 for ${repo} branch ${branch}: $sha1. Using default branch ${DEFAULT_BRANCH} instead" >&2
+		branch=$DEFAULT_BRANCH
+		sha1=$(curl -s "${FILE_SERVER_URL}/download/refs/pingcap/${repo}/${branch}/sha1")
+	fi
+	echo "$branch:$sha1"
+}
+
+download_community_binaries() {
+	local dist="${VERSION}-${OS}-${ARCH}"
 	local tidb_file_name="tidb-community-server-$dist"
 	local tidb_tar_name="${tidb_file_name}.tar.gz"
 	local tidb_url="https://download.pingcap.org/$tidb_tar_name"
@@ -64,121 +78,151 @@ function download_community_binaries() {
 	local toolkit_tar_name="${toolkit_file_name}.tar.gz"
 	local toolkit_url="https://download.pingcap.org/$toolkit_tar_name"
 
-	color-green "Download community binaries..."
-	download "$tidb_url" "$tidb_tar_name" "tmp/$tidb_tar_name"
-	download "$toolkit_url" "$toolkit_tar_name" "tmp/$toolkit_tar_name"
-	# extract the tidb community version binaries
-	tar -xz -C tmp -f tmp/$tidb_tar_name
-	# extract the pd server
-	tar -xz -C third_bin -f tmp/$tidb_file_name/pd-${dist}.tar.gz
-	# extract the tikv server
-	tar -xz -C third_bin -f tmp/$tidb_file_name/tikv-${dist}.tar.gz
-	# extract the tidb server
-	tar -xz -C third_bin -f tmp/$tidb_file_name/tidb-${dist}.tar.gz
-	# extract the tiflash
-	tar -xz -C third_bin -f tmp/$tidb_file_name/tiflash-${dist}.tar.gz &&
-		mv third_bin/tiflash third_bin/_tiflash &&
-		mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
-	# extract the pd-ctl
-	tar -xz -C third_bin pd-ctl -f tmp/$tidb_file_name/ctl-${dist}.tar.gz
-	# extract the toolkit community version binaries, get the etcdctl and
-	# the sync_diff_inspector
-	tar -xz -C third_bin \
-		$toolkit_file_name/etcdctl $toolkit_file_name/sync_diff_inspector \
-		-f tmp/$toolkit_tar_name &&
-		mv third_bin/$toolkit_file_name/* third_bin &&
-		rm -rf third_bin/$toolkit_file_name
+	log_green "Downloading community binaries..."
+	download_file "$tidb_url" "$tidb_tar_name" "${TMP_DIR}/$tidb_tar_name"
+	download_file "$toolkit_url" "$toolkit_tar_name" "${TMP_DIR}/$toolkit_tar_name"
 
-	# ycsb
-	local ycsb_file_name="go-ycsb-${os}-${arch}"
+	# Extract binaries
+	tar -xz -C ${TMP_DIR} -f ${TMP_DIR}/$tidb_tar_name
+	tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$tidb_file_name/pd-${dist}.tar.gz
+	tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$tidb_file_name/tikv-${dist}.tar.gz
+	tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$tidb_file_name/tidb-${dist}.tar.gz
+	tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$tidb_file_name/tiflash-${dist}.tar.gz
+	mv ${THIRD_BIN_DIR}/tiflash ${THIRD_BIN_DIR}/_tiflash
+	mv ${THIRD_BIN_DIR}/_tiflash/* ${THIRD_BIN_DIR} && rm -rf ${THIRD_BIN_DIR}/_tiflash
+	tar -xz -C ${THIRD_BIN_DIR} pd-ctl -f ${TMP_DIR}/$tidb_file_name/ctl-${dist}.tar.gz
+	tar -xz -C ${THIRD_BIN_DIR} $toolkit_file_name/etcdctl $toolkit_file_name/sync_diff_inspector -f ${TMP_DIR}/$toolkit_tar_name
+	mv ${THIRD_BIN_DIR}/$toolkit_file_name/* ${THIRD_BIN_DIR} && rm -rf ${THIRD_BIN_DIR}/$toolkit_file_name
+
+	# Download additional tools
+	download_ycsb
+	download_minio
+	download_jq
+
+	chmod a+x ${THIRD_BIN_DIR}/*
+}
+
+download_ycsb() {
+	local ycsb_file_name="go-ycsb-${OS}-${ARCH}"
 	local ycsb_tar_name="${ycsb_file_name}.tar.gz"
 	local ycsb_url="https://github.com/pingcap/go-ycsb/releases/download/v1.0.0/${ycsb_tar_name}"
-	wget -O "tmp/$ycsb_tar_name" "$ycsb_url"
-	tar -xz -C third_bin -f tmp/$ycsb_tar_name
-
-	# minio
-	local minio_url="https://dl.min.io/server/minio/release/${os}-${arch}/minio"
-	download "$minio_url" "minio" "third_bin/minio"
-
-	# jq
-	local os_name=$([ "$os" == "darwin" ] && echo -n "macos" || echo -n "$os")
-	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_name}-${arch}"
-	wget -O third_bin/jq "$jq_url"
-
-	chmod a+x third_bin/*
+	wget -O "${TMP_DIR}/$ycsb_tar_name" "$ycsb_url"
+	tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$ycsb_tar_name
 }
 
-function download_binaries() {
-	color-green "Download binaries..."
-	# PingCAP file server URL.
-	file_server_url="http://fileserver.pingcap.net"
-
-	# Get sha1 based on branch name.
-	tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-	tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
-	pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
-	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
-
-	# All download links.
-	tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-	tikv_download_url="${file_server_url}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-	pd_download_url="${file_server_url}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-	tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
-	minio_download_url="${file_server_url}/download/minio.tar.gz"
-	go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
-	etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-79f1fd1e_linux-amd64.tar.gz"
-	jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
-	schema_registry_url="${file_server_url}/download/builds/pingcap/cdc/schema-registry.tar.gz"
-
-	download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
-	tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
-
-	download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
-	tar -xz --wildcards -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
-
-	download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
-	tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
-
-	download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
-	tar -xz -C third_bin -f tmp/tiflash.tar.gz
-	mv third_bin/tiflash third_bin/_tiflash
-	mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
-
-	download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
-	tar -xz -C third_bin -f tmp/minio.tar.gz
-
-	download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
-	download "$jq_download_url" "jq" "third_bin/jq"
-	download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
-	tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
-	mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
-
-	download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
-	tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
-
-	download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
-	tar -xz -C third_bin -f tmp/schema-registry.tar.gz
-	mv third_bin/schema-registry third_bin/_schema_registry
-	mv third_bin/_schema_registry/* third_bin && rm -rf third_bin/_schema_registry
-
-	chmod a+x third_bin/*
+download_minio() {
+	local minio_url="https://dl.min.io/server/minio/release/${OS}-${ARCH}/minio"
+	download_file "$minio_url" "minio" "${THIRD_BIN_DIR}/minio"
 }
 
-# Some temporary dir.
-rm -rf tmp
-rm -rf third_bin
+download_jq() {
+	local os_name=$([ "$OS" == "darwin" ] && echo -n "macos" || echo -n "$OS")
+	local jq_url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-${os_name}-${ARCH}"
+	wget -O ${THIRD_BIN_DIR}/jq "$jq_url"
+}
 
-mkdir -p third_bin
-mkdir -p tmp
-mkdir -p bin
+download_binaries() {
+	log_green "Downloading binaries..."
 
-[ $community == true ] && download_community_binaries || download_binaries
+	# Get sha1 based on branch name
+	local tidb_branch_sha1=$(get_sha1 "tidb" "$TIDB_BRANCH")
+	local tikv_branch_sha1=$(get_sha1 "tikv" "$TIKV_BRANCH")
+	local pd_branch_sha1=$(get_sha1 "pd" "$PD_BRANCH")
+	local tiflash_branch_sha1=$(get_sha1 "tiflash" "$TIFLASH_BRANCH")
 
-# Copy it to the bin directory in the root directory.
-rm -rf tmp
-rm -rf bin/bin
-mv third_bin/* ./bin
-rm -rf third_bin
+	local tidb_branch=$(echo "$tidb_branch_sha1" | cut -d':' -f1)
+	local tidb_sha1=$(echo "$tidb_branch_sha1" | cut -d':' -f2)
+	local tikv_branch=$(echo "$tikv_branch_sha1" | cut -d':' -f1)
+	local tikv_sha1=$(echo "$tikv_branch_sha1" | cut -d':' -f2)
+	local pd_branch=$(echo "$pd_branch_sha1" | cut -d':' -f1)
+	local pd_sha1=$(echo "$pd_branch_sha1" | cut -d':' -f2)
+	local tiflash_branch=$(echo "$tiflash_branch_sha1" | cut -d':' -f1)
+	local tiflash_sha1=$(echo "$tiflash_branch_sha1" | cut -d':' -f2)
 
-color-green "Download SUCCESS"
+	# Define download URLs
+	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
+	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
+	local minio_download_url="${FILE_SERVER_URL}/download/minio.tar.gz"
+	local go_ycsb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
+	local etcd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
+	local sync_diff_inspector_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/sync_diff_inspector_hash-79f1fd1e_linux-amd64.tar.gz"
+	local jq_download_url="${FILE_SERVER_URL}/download/builds/pingcap/test/jq-1.6/jq-linux64"
+	local schema_registry_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/schema-registry.tar.gz"
+
+	# Download and extract binaries
+	download_and_extract "$tidb_download_url" "tidb-server.tar.gz" "bin/tidb-server"
+	download_and_extract "$pd_download_url" "pd-server.tar.gz" "bin/*"
+	download_and_extract "$tikv_download_url" "tikv-server.tar.gz" "bin/tikv-server"
+	download_and_extract "$tiflash_download_url" "tiflash.tar.gz"
+	download_and_extract "$minio_download_url" "minio.tar.gz"
+	download_and_extract "$etcd_download_url" "etcd.tar.gz" "etcd-v3.4.7-linux-amd64/etcdctl"
+	download_and_extract "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz"
+	download_and_extract "$schema_registry_url" "schema-registry.tar.gz"
+
+	download_file "$go_ycsb_download_url" "go-ycsb" "${THIRD_BIN_DIR}/go-ycsb"
+	download_file "$jq_download_url" "jq" "${THIRD_BIN_DIR}/jq"
+
+	chmod a+x ${THIRD_BIN_DIR}/*
+}
+
+download_and_extract() {
+	local url=$1
+	local file_name=$2
+	local extract_path=${3:-""}
+
+	download_file "$url" "$file_name" "${TMP_DIR}/$file_name"
+	if [ -n "$extract_path" ]; then
+		tar -xz -C ${THIRD_BIN_DIR} $extract_path -f ${TMP_DIR}/$file_name
+	else
+		tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$file_name
+	fi
+
+	# Move extracted files if necessary
+	case $file_name in
+	"tidb-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tidb-server ${THIRD_BIN_DIR}/ ;;
+	"pd-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/* ${THIRD_BIN_DIR}/ ;;
+	"tikv-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tikv-server ${THIRD_BIN_DIR}/ ;;
+	"tiflash.tar.gz")
+		mv ${THIRD_BIN_DIR}/tiflash ${THIRD_BIN_DIR}/_tiflash
+		mv ${THIRD_BIN_DIR}/_tiflash/* ${THIRD_BIN_DIR}/ && rm -rf ${THIRD_BIN_DIR}/_tiflash
+		;;
+	"etcd.tar.gz")
+		mv ${THIRD_BIN_DIR}/etcd-v3.4.7-linux-amd64/etcdctl ${THIRD_BIN_DIR}/
+		rm -rf ${THIRD_BIN_DIR}/etcd-v3.4.7-linux-amd64
+		;;
+	"schema-registry.tar.gz")
+		mv ${THIRD_BIN_DIR}/schema-registry ${THIRD_BIN_DIR}/_schema_registry
+		mv ${THIRD_BIN_DIR}/_schema_registry/* ${THIRD_BIN_DIR}/ && rm -rf ${THIRD_BIN_DIR}/_schema_registry
+		;;
+	esac
+}
+
+# Main execution
+cleanup() {
+	rm -rf ${TMP_DIR} ${THIRD_BIN_DIR}
+}
+
+setup() {
+	cleanup
+	mkdir -p ${THIRD_BIN_DIR} ${TMP_DIR} ${BIN_DIR}
+}
+
+main() {
+	setup
+
+	if [ "$COMMUNITY" = true ]; then
+		download_community_binaries
+	else
+		download_binaries
+	fi
+
+	# Move binaries to final location
+	mv ${THIRD_BIN_DIR}/* ./${BIN_DIR}
+
+	cleanup
+	log_green "Download SUCCESS"
+}
+
+main

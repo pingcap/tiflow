@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"

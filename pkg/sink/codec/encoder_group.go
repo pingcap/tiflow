@@ -15,7 +15,6 @@ package codec
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -56,8 +55,7 @@ type encoderGroup struct {
 	inputCh []chan *future
 	index   uint64
 
-	outputCh chan *future
-
+	outputCh        chan *future
 	bootstrapWorker *bootstrapWorker
 }
 
@@ -115,6 +113,9 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 			return g.runEncoder(ctx, idx)
 		})
 	}
+	eg.Go(func() error {
+		return g.collectMetrics(ctx)
+	})
 
 	if g.bootstrapWorker != nil {
 		eg.Go(func() error {
@@ -125,19 +126,37 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 	return eg.Wait()
 }
 
+func (g *encoderGroup) collectMetrics(ctx context.Context) error {
+	ticker := time.NewTicker(defaultMetricInterval)
+	inputChSize := encoderGroupInputChanSizeGauge.WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+	outputChSize := encoderGroupOutputChanSizeGauge.WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+	defer func() {
+		ticker.Stop()
+		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+		encoderGroupOutputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			var total int
+			for _, ch := range g.inputCh {
+				total += len(ch)
+			}
+			inputChSize.Set(float64(total))
+			outputChSize.Set(float64(len(g.outputCh)))
+		}
+	}
+}
+
 func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	encoder := g.builder.Build()
 	inputCh := g.inputCh[idx]
-	metric := encoderGroupInputChanSizeGauge.
-		WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID, strconv.Itoa(idx))
-	ticker := time.NewTicker(defaultMetricInterval)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
-			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
 			for _, event := range future.events {
 				err := encoder.AppendRowChangedEvent(ctx, future.Key.Topic, event.Event, event.Callback)
@@ -186,7 +205,6 @@ func (g *encoderGroup) Output() <-chan *future {
 }
 
 func (g *encoderGroup) cleanMetrics() {
-	encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
 	g.builder.CleanMetrics()
 	common.CleanMetrics(g.changefeedID)
 }

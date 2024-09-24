@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timeta "github.com/pingcap/tidb/pkg/meta"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -1084,28 +1084,27 @@ func (s *snapshot) alterPartitioning(job *timodel.Job) error {
 }
 
 func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
-	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []*timodel.CIStr
-	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
+	args, err := timodel.GetRenameTablesArgs(job)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(job.BinlogInfo.MultipleTableInfos) < len(newTableNames) {
+	if len(job.BinlogInfo.MultipleTableInfos) < len(args.RenameTableInfos) {
 		return cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 	// NOTE: should handle failures in halfway better.
-	for _, tableID := range oldTableIDs {
-		if err := s.dropTable(tableID, currentTs); err != nil {
+	for _, info := range args.RenameTableInfos {
+		if err := s.dropTable(info.TableID, currentTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
-		newSchema, ok := s.schemaByID(newSchemaIDs[i])
+		info := args.RenameTableInfos[i]
+		newSchema, ok := s.schemaByID(info.NewSchemaID)
 		if !ok {
-			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
+			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(info.NewSchemaID)
 		}
 		newSchemaName := newSchema.Name.O
-		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
+		tbInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 		err = s.createTable(tbInfo, currentTs)
 		if err != nil {
 			return errors.Trace(err)

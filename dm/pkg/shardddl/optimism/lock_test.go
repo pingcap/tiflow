@@ -20,9 +20,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"

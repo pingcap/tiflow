@@ -15,7 +15,7 @@ package entry
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/kv"
 	timeta "github.com/pingcap/tidb/pkg/meta"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
@@ -61,7 +62,7 @@ func NewSchemaTestHelperWithReplicaConfig(
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
-	session.SetSchemaLease(0)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.NoError(t, err)
@@ -120,37 +121,27 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 		return res
 	}
 
-	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
+	// the RawArgs field in job fetched from tidb snapshot meta is cleared out after the job is done,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	// we assume the old schema name is same as the new schema name here.
 	// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
 	schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
 	tableNum := len(res.BinlogInfo.MultipleTableInfos)
-	oldSchemaIDs := make([]int64, tableNum)
+	args := &timodel.RenameTablesArgs{
+		RenameTableInfos: make([]*timodel.RenameTableArgs, 0, tableNum),
+	}
 	for i := 0; i < tableNum; i++ {
-		oldSchemaIDs[i] = res.SchemaID
+		args.RenameTableInfos = append(args.RenameTableInfos, &timodel.RenameTableArgs{
+			OldSchemaID:   res.SchemaID,
+			NewSchemaID:   res.SchemaID,
+			TableID:       res.BinlogInfo.MultipleTableInfos[i].ID,
+			NewTableName:  res.BinlogInfo.MultipleTableInfos[i].Name,
+			OldSchemaName: pmodel.NewCIStr(schema),
+			OldTableName:  pmodel.NewCIStr(fmt.Sprintf("old_%d", i)),
+		})
 	}
-	oldTableIDs := make([]int64, tableNum)
-	for i := 0; i < tableNum; i++ {
-		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
-	}
-	newTableNames := make([]timodel.CIStr, tableNum)
-	for i := 0; i < tableNum; i++ {
-		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
-	}
-	oldSchemaNames := make([]timodel.CIStr, tableNum)
-	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = timodel.NewCIStr(schema)
-	}
-	newSchemaIDs := oldSchemaIDs
-
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs,
-		newTableNames, oldTableIDs, oldSchemaNames,
-	}
-	rawArgs, err := json.Marshal(args)
+	res, err = GetNewJobWithArgs(res, args)
 	require.NoError(s.t, err)
-	res.RawArgs = rawArgs
 	return res
 }
 
@@ -233,31 +224,21 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 		// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
 		schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
 		tableNum := len(res.BinlogInfo.MultipleTableInfos)
-		oldSchemaIDs := make([]int64, tableNum)
+		args := &timodel.RenameTablesArgs{
+			RenameTableInfos: make([]*timodel.RenameTableArgs, 0, tableNum),
+		}
 		for i := 0; i < tableNum; i++ {
-			oldSchemaIDs[i] = res.SchemaID
+			args.RenameTableInfos = append(args.RenameTableInfos, &timodel.RenameTableArgs{
+				OldSchemaID:   res.SchemaID,
+				NewSchemaID:   res.SchemaID,
+				NewTableName:  res.BinlogInfo.MultipleTableInfos[i].Name,
+				TableID:       res.BinlogInfo.MultipleTableInfos[i].ID,
+				OldSchemaName: pmodel.NewCIStr(schema),
+				OldTableName:  pmodel.NewCIStr("old" + res.BinlogInfo.MultipleTableInfos[i].Name.L),
+			})
 		}
-		oldTableIDs := make([]int64, tableNum)
-		for i := 0; i < tableNum; i++ {
-			oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
-		}
-		newTableNames := make([]timodel.CIStr, tableNum)
-		for i := 0; i < tableNum; i++ {
-			newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
-		}
-		oldSchemaNames := make([]timodel.CIStr, tableNum)
-		for i := 0; i < tableNum; i++ {
-			oldSchemaNames[i] = timodel.NewCIStr(schema)
-		}
-		newSchemaIDs := oldSchemaIDs
-
-		args := []interface{}{
-			oldSchemaIDs, newSchemaIDs,
-			newTableNames, oldTableIDs, oldSchemaNames,
-		}
-		rawArgs, err := json.Marshal(args)
+		res, err = GetNewJobWithArgs(res, args)
 		require.NoError(s.t, err)
-		res.RawArgs = rawArgs
 	}
 
 	err = s.schemaStorage.HandleDDLJob(res)

@@ -23,7 +23,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -91,10 +91,7 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
-	if err != nil {
-		return nil, err
-	}
+	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {
@@ -109,7 +106,7 @@ func NewDDLSink(
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
-		statistics:                 metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		statistics:                 metrics.NewStatistics(changefeedID, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
 	}
 

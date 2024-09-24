@@ -64,10 +64,7 @@ func newMySQLSyncPointStore(
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, syncDB)
-	if err != nil {
-		return nil, err
-	}
+	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, syncDB)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, syncDB)
 	if err != nil {

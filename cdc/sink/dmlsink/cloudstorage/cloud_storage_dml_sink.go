@@ -150,7 +150,7 @@ func NewDMLSink(ctx context.Context,
 		outputRawChangeEvent: replicaConfig.Sink.CloudStorageConfig.GetOutputRawChangeEvent(),
 		encodingWorkers:      make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:              make([]*dmlWorker, cfg.WorkerCount),
-		statistics:           metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
+		statistics:           metrics.NewStatistics(changefeedID, sink.TxnSink),
 		cancel:               wgCancel,
 		dead:                 make(chan struct{}),
 	}

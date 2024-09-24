@@ -429,6 +429,10 @@ func (c *changefeed) tick(ctx context.Context,
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
+	// bootstrap not finished yet, cannot send any event.
+	if !c.ddlManager.isBootstrapped() {
+		return 0, 0, nil
+	}
 
 	err = c.handleBarrier(ctx, cfInfo, cfStatus, barrier)
 	if err != nil {
@@ -718,6 +722,7 @@ LOOP2:
 		c.redoMetaMgr,
 		util.GetOrZero(cfInfo.Config.BDRMode),
 		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		c.Throw(ctx),
 	)
 
 	// create scheduler
@@ -927,8 +932,6 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	barrier *schedulepb.BarrierWithMinTs,
 ) error {
 	barrierTp, barrierTs := c.barriers.Min()
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
-
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
@@ -970,6 +973,8 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// MinTableBarrierTs is always the next barrier that blocking the global resolvedTs.
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
 

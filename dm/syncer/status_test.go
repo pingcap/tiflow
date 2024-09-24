@@ -18,7 +18,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
