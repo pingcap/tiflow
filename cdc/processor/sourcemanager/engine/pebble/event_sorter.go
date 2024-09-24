@@ -319,17 +319,20 @@ func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span,
 // Next implements sorter.EventIterator.
 func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, err error) {
 	valid := s.iter != nil && s.iter.Valid()
-	var value []byte
-	for valid {
-		nextStart := time.Now()
-		value = s.iter.Value()
-		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
+	// We need to decide whether the current event is the last event in this transactions
+	// If the current event is the last one, we need to set txnFinished
+	// Thus, we need to fetch the next event and compare the commitTs and startTs with it
+	for valid {
 		event = &model.PolymorphicEvent{}
-		if _, err = s.serde.Unmarshal(event, value); err != nil {
+		if _, err = s.serde.Unmarshal(event, s.iter.Value()); err != nil {
 			return
 		}
+
+		nextStart := time.Now()
 		valid = s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		if s.headItem != nil {
 			break
 		}
