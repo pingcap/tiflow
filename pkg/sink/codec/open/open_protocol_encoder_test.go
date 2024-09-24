@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
@@ -420,7 +421,12 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 		colName := insertEvent.TableInfo.ForceGetColumnName(column.ColumnID)
 		decodedColumn, ok := decodedColumns[colName]
 		require.True(t, ok)
-		require.Equal(t, column.Value, decodedColumn.Value, colName)
+		switch v := column.Value.(type) {
+		case types.VectorFloat32:
+			require.Equal(t, v.String(), decodedColumn.Value, colName)
+		default:
+			require.Equal(t, v, decodedColumn.Value, colName)
+		}
 	}
 }
 

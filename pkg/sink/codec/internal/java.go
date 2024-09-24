@@ -143,6 +143,9 @@ func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	case mysql.TypeJSON:
 		return JavaSQLTypeVARCHAR
 
+	case mysql.TypeTiDBVectorFloat32:
+		return JavaSQLTypeVARCHAR
+
 	default:
 		return JavaSQLTypeVARCHAR
 	}
