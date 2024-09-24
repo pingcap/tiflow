@@ -429,6 +429,10 @@ func (c *changefeed) tick(ctx context.Context,
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
+	// bootstrap not finished yet, cannot send any event.
+	if !c.ddlManager.isBootstrapped() {
+		return 0, 0, nil
+	}
 
 	err = c.handleBarrier(ctx, cfInfo, cfStatus, barrier)
 	if err != nil {
@@ -718,6 +722,7 @@ LOOP2:
 		c.redoMetaMgr,
 		util.GetOrZero(cfInfo.Config.BDRMode),
 		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		c.Throw(ctx),
 	)
 
 	// create scheduler

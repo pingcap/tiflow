@@ -13,7 +13,11 @@
 
 package config
 
-import "github.com/pingcap/tiflow/pkg/errors"
+import (
+	"math"
+
+	"github.com/pingcap/tiflow/pkg/errors"
+)
 
 // DBConfig represents db sorter config.
 type DBConfig struct {
@@ -49,6 +53,21 @@ type DBConfig struct {
 	//
 	// The default value is 16, which is based on a performance test on 4K tables.
 	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
+}
+
+// NewDefaultDBConfig return the default db configuration
+func NewDefaultDBConfig() *DBConfig {
+	return &DBConfig{
+		Count: 8,
+		// Following configs are optimized for write/read throughput.
+		// Users should not change them.
+		MaxOpenFiles:        10000,
+		BlockSize:           65536,
+		WriterBufferSize:    8388608,
+		Compression:         "snappy",
+		WriteL0PauseTrigger: math.MaxInt32,
+		CompactionL0Trigger: 16, // Based on a performance test on 4K tables.
+	}
 }
 
 // ValidateAndAdjust validates and adjusts the db configuration
