@@ -1295,12 +1295,14 @@ type TopicPartitionKey struct {
 	TotalPartition int32
 }
 
+// ColumnDataX is like ColumnData, but contains more informations.
 type ColumnDataX struct {
 	*ColumnData
 	flag *ColumnFlagType
 	info *model.ColumnInfo
 }
 
+// GetColumnDataX encapsures ColumnData to ColumnDataX.
 func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
 	x := ColumnDataX{ColumnData: col}
 	if x.ColumnData != nil {
@@ -1310,38 +1312,37 @@ func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
 	return x
 }
 
-func TransColumnDataX(cols []*ColumnData, tb *TableInfo) []ColumnDataX {
-	colxs := make([]ColumnDataX, 0, len(cols))
-	for _, col := range cols {
-		colxs = append(colxs, GetColumnDataX(col, tb))
-	}
-	return colxs
-}
-
+// GetName returns name.
 func (x ColumnDataX) GetName() string {
 	return x.info.Name.O
 }
 
+// GetType returns type.
 func (x ColumnDataX) GetType() byte {
 	return x.info.GetType()
 }
 
+// GetCharset returns charset.
 func (x ColumnDataX) GetCharset() string {
 	return x.info.GetCharset()
 }
 
+// GetCollation returns collation.
 func (x ColumnDataX) GetCollation() string {
 	return x.info.GetCollate()
 }
 
+// GetFlag returns flag.
 func (x ColumnDataX) GetFlag() ColumnFlagType {
 	return *x.flag
 }
 
+// GetDefaultValue return default value.
 func (x ColumnDataX) GetDefaultValue() interface{} {
 	return GetColumnDefaultValue(x.info)
 }
 
+// GetColumnInfo returns column info.
 func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
 	return x.info
 }
