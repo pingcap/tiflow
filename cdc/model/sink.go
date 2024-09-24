@@ -1348,8 +1348,8 @@ func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
 	return x.info
 }
 
-// Column2ColumnDataForTest is for tests.
-func Column2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+// Columns2ColumnDataForTest is for tests.
+func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 	info := &TableInfo{
 		TableInfo: &model.TableInfo{
 			Columns: make([]*model.ColumnInfo, len(columns)),
@@ -1377,4 +1377,10 @@ func Column2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 	}
 
 	return colDatas, info
+}
+
+// Column2ColumnDataXForTest is for tests.
+func Column2ColumnDataXForTest(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnDataForTest([]*Column{column})
+	return GetColumnDataX(datas[0], info)
 }

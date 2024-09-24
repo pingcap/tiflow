@@ -25,7 +25,7 @@ import (
 func TestGenKeyListCaseInSensitive(t *testing.T) {
 	t.Parallel()
 
-	columns, tb := model.Column2ColumnDataForTest([]*model.Column{
+	columns, tb := model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "XyZ",
 			Type:      mysql.TypeVarchar,
@@ -35,7 +35,7 @@ func TestGenKeyListCaseInSensitive(t *testing.T) {
 
 	first := genKeyList(columns, tb, 0, []int{0}, 1)
 
-	columns, tb = model.Column2ColumnDataForTest([]*model.Column{
+	columns, tb = model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "xYZ",
 			Type:      mysql.TypeVarchar,
