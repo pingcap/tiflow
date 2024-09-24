@@ -15,7 +15,6 @@ package entry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
@@ -328,26 +327,31 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	// rename test.t1 and test.t2
 	job = helper.DDL2Job(
 		"rename table test1.t1 to test1.t10, test1.t2 to test1.t20")
-	oldSchemaIDs := []int64{schemaID, schemaID}
-	oldTableIDs := []int64{t1TableID, t2TableID}
-	newSchemaIDs := oldSchemaIDs
-	oldSchemaNames := []pmodel.CIStr{
-		pmodel.NewCIStr("test1"),
-		pmodel.NewCIStr("test1"),
+	args := &timodel.RenameTablesArgs{
+		RenameTableInfos: []*timodel.RenameTableArgs{
+			{
+				OldSchemaID:   schemaID,
+				NewSchemaID:   schemaID,
+				NewTableName:  pmodel.NewCIStr("t10"),
+				TableID:       t1TableID,
+				OldSchemaName: pmodel.NewCIStr("test1"),
+				OldTableName:  pmodel.NewCIStr("oldt10"),
+			},
+			{
+				OldSchemaID:   schemaID,
+				NewSchemaID:   schemaID,
+				NewTableName:  pmodel.NewCIStr("t20"),
+				TableID:       t2TableID,
+				OldSchemaName: pmodel.NewCIStr("test1"),
+				OldTableName:  pmodel.NewCIStr("oldt20"),
+			},
+		},
 	}
-	newTableNames := []pmodel.CIStr{
-		pmodel.NewCIStr("t10"),
-		pmodel.NewCIStr("t20"),
-	}
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs,
-		newTableNames, oldTableIDs, oldSchemaNames,
-	}
-	rawArgs, err := json.Marshal(args)
-	require.Nil(t, err)
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
-	job.RawArgs = rawArgs
+	bakJob, err := GetNewJobWithArgs(job, args)
+	require.Nil(t, err)
+	job.RawArgs = bakJob.RawArgs
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
