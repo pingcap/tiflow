@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"

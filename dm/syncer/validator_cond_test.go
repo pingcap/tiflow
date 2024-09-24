@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/stretchr/testify/require"

@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/dumpling/export"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -34,7 +34,7 @@ const timeout = 5 * time.Second
 // FROM information_schema.ddl_jobs
 var checkRunningAddIndexSQL = `
 ADMIN SHOW DDL JOBS 1
-WHERE DB_NAME = "%s" 
+WHERE DB_NAME = "%s"
     AND TABLE_NAME = "%s"
     AND JOB_TYPE LIKE "add index%%"
     AND (STATE = "running" OR STATE = "queueing");

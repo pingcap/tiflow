@@ -19,8 +19,9 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -113,7 +114,7 @@ func (t *TableCol) ToTiColumnInfo(colID int64) (*timodel.ColumnInfo, error) {
 	}
 
 	col.ID = colID
-	col.Name = timodel.NewCIStr(t.Name)
+	col.Name = pmodel.NewCIStr(t.Name)
 	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(t.Tp, " UNSIGNED")))
 	col.FieldType = *types.NewFieldType(tp)
 	if strings.Contains(t.Tp, "UNSIGNED") {
@@ -251,7 +252,7 @@ func (t *TableDefinition) FromTableInfo(
 // ToTableInfo converts from TableDefinition to DDLEvent.
 func (t *TableDefinition) ToTableInfo() (*model.TableInfo, error) {
 	tidbTableInfo := &timodel.TableInfo{
-		Name: timodel.NewCIStr(t.Table),
+		Name: pmodel.NewCIStr(t.Table),
 	}
 	nextMockID := int64(100) // 100 is an arbitrary number
 	for _, col := range t.Columns {

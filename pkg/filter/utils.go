@@ -16,7 +16,7 @@ package filter
 import (
 	"fmt"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"

@@ -16,7 +16,7 @@ package dispatcher
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
