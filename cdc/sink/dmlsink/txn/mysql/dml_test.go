@@ -250,7 +250,9 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		preDatas, info := model.Column2ColumnDataForTest(tc.preCols)
+		datas, _ := model.Column2ColumnDataForTest(tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, preDatas, datas, info, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -392,7 +394,8 @@ func TestPrepareDelete(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		preDatas, info := model.Column2ColumnDataForTest(tc.preCols)
+		query, args := prepareDelete(tc.quoteTable, preDatas, info, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -601,9 +604,10 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "你好", 100},
 		},
 	}
-	for _, tc := range testCases {
-		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
-		require.Equal(t, tc.expectedColNames, colNames)
+	for i, tc := range testCases {
+		datas, info := model.Column2ColumnDataForTest(tc.cols)
+		colNames, args := whereSlice(datas, info, tc.forceReplicate)
+		require.Equal(t, tc.expectedColNames, colNames, "case %d fails", i)
 		require.Equal(t, tc.expectedArgs, args)
 	}
 }
@@ -713,7 +717,8 @@ func TestMapReplace(t *testing.T) {
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
 		for i := 0; i < 10; i++ {
-			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
+			datas, info := model.Column2ColumnDataForTest(tc.cols)
+			query, args := prepareReplace(tc.quoteTable, datas, info, false, false)
 			require.Equal(t, tc.expectedQuery, query)
 			require.Equal(t, tc.expectedArgs, args)
 		}

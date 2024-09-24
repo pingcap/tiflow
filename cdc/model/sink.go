@@ -1347,3 +1347,34 @@ func (x ColumnDataX) GetDefaultValue() interface{} {
 func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
 	return x.info
 }
+
+// Column2ColumnDataForTest is for tests.
+func Column2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+	info := &TableInfo{
+		TableInfo: &model.TableInfo{
+			Columns: make([]*model.ColumnInfo, len(columns)),
+		},
+		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
+		columnsOffset: make(map[int64]int),
+	}
+	colDatas := make([]*ColumnData, 0, len(columns))
+
+	for i, column := range columns {
+		var columnID int64 = int64(i)
+		info.columnsOffset[columnID] = i
+
+		info.Columns[i] = &model.ColumnInfo{}
+		info.Columns[i].Name.O = column.Name
+		info.Columns[i].SetType(column.Type)
+		info.Columns[i].SetCharset(column.Charset)
+		info.Columns[i].SetCollate(column.Collation)
+		info.Columns[i].DefaultValue = column.Default
+
+		info.ColumnsFlag[columnID] = new(ColumnFlagType)
+		*info.ColumnsFlag[columnID] = column.Flag
+
+		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
+	}
+
+	return colDatas, info
+}

@@ -157,29 +157,25 @@ func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableI
 // whereSlice builds a parametric WHERE clause as following
 // sql: `WHERE {} = ? AND {} > ?`
 func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (colNames []string, args []interface{}) {
-	// If no explicit row id but force replicate, use all key-values in where condition.
+	// Try to use unique key values when available
+	for _, col := range cols {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || !colx.GetFlag().IsHandleKey() {
+			continue
+		}
+		colNames = append(colNames, colx.GetName())
+		args = appendQueryArgs(args, colx)
+	}
+	// if no explicit row id but force replicate, use all key-values in where condition
 	if len(colNames) == 0 && forceReplicate {
 		colNames = make([]string, 0, len(cols))
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
 			colx := model.GetColumnDataX(col, tb)
-			if colx.ColumnData == nil {
-				continue
-			}
-			colNames = append(colNames, colx.GetName())
-			args = appendQueryArgs(args, colx)
-		}
-	} else { // Try to use unique key values when available.
-		for _, col := range cols {
-			colx := model.GetColumnDataX(col, tb)
-			if colx.ColumnData == nil || !colx.GetFlag().IsHandleKey() {
-				continue
-			}
 			colNames = append(colNames, colx.GetName())
 			args = appendQueryArgs(args, colx)
 		}
 	}
-
 	return
 }
 
