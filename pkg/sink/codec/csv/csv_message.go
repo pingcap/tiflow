@@ -317,15 +317,15 @@ func fromCsvValToColValue(csvConfig *common.Config, csvVal any, ft types.FieldTy
 }
 
 // fromColValToCsvVal converts column from TiDB type to csv type.
-func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.FieldType) (any, error) {
+func fromColValToCsvVal(csvConfig *common.Config, col model.ColumnDataX, ft *types.FieldType) (any, error) {
 	if col.Value == nil {
 		return nil, nil
 	}
 
-	switch col.Type {
+	switch col.GetType() {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		if col.Flag.IsBinary() {
+		if col.GetFlag().IsBinary() {
 			if v, ok := col.Value.([]byte); ok {
 				switch csvConfig.BinaryEncodingMethod {
 				case config.BinaryEncodingBase64:
@@ -385,7 +385,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetPreColumns(), e.TableInfo)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.TableInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +393,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 		if e.PreColumns == nil {
 			// This is a insert operation.
 			csvMsg.opType = operationInsert
-			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetColumns(), e.TableInfo)
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.TableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -406,12 +406,12 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 						fmt.Errorf("the column length of preColumns %d doesn't equal to that of columns %d",
 							len(e.PreColumns), len(e.Columns)))
 				}
-				csvMsg.preColumns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetPreColumns(), e.TableInfo)
+				csvMsg.preColumns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.TableInfo)
 				if err != nil {
 					return nil, err
 				}
 			}
-			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.GetColumns(), e.TableInfo)
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.TableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -444,7 +444,7 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, tableI
 	return e, nil
 }
 
-func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column, tableInfo *model.TableInfo) ([]any, error) {
+func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.ColumnData, tableInfo *model.TableInfo) ([]any, error) {
 	var csvColumns []any
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, column := range cols {
@@ -454,7 +454,7 @@ func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column,
 			continue
 		}
 
-		converted, err := fromColValToCsvVal(csvConfig, column, colInfos[i].Ft)
+		converted, err := fromColValToCsvVal(csvConfig, model.GetColumnDataX(column, tableInfo), colInfos[i].Ft)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

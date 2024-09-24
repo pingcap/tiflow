@@ -154,13 +154,13 @@ func (b *ColumnFlagType) UnsetIsUniqueKey() {
 }
 
 // IsUniqueKey shows whether UniqueKeyFlag is set
-func (b *ColumnFlagType) IsUniqueKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
+func (b ColumnFlagType) IsUniqueKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
 }
 
 // IsMultipleKey shows whether MultipleKeyFlag is set
-func (b *ColumnFlagType) IsMultipleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
+func (b ColumnFlagType) IsMultipleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
 }
 
 // SetIsMultipleKey sets MultipleKeyFlag
@@ -174,8 +174,8 @@ func (b *ColumnFlagType) UnsetIsMultipleKey() {
 }
 
 // IsNullable shows whether NullableFlag is set
-func (b *ColumnFlagType) IsNullable() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(NullableFlag))
+func (b ColumnFlagType) IsNullable() bool {
+	return (util.Flag)(b).HasAll(util.Flag(NullableFlag))
 }
 
 // SetIsNullable sets NullableFlag
@@ -189,8 +189,8 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 }
 
 // IsUnsigned shows whether UnsignedFlag is set
-func (b *ColumnFlagType) IsUnsigned() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
+func (b ColumnFlagType) IsUnsigned() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
 }
 
 // SetIsUnsigned sets UnsignedFlag
@@ -555,8 +555,8 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]ColumnDataX, []rowcodec.ColInfo) {
-	pkeyCols := make([]ColumnDataX, 0)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
 	var cols []*ColumnData
@@ -570,7 +570,7 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]ColumnDataX, []rowcodec.ColInfo
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range cols {
 		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-			pkeyCols = append(pkeyCols, GetColumnDataX(col, tableInfo))
+			pkeyCols = append(pkeyCols, columnData2Column(col, tableInfo))
 			pkeyColInfos = append(pkeyColInfos, colInfos[i])
 		}
 	}
@@ -1308,6 +1308,14 @@ func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
 		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
 	}
 	return x
+}
+
+func TransColumnDataX(cols []*ColumnData, tb *TableInfo) []ColumnDataX {
+	colxs := make([]ColumnDataX, 0, len(cols))
+	for _, col := range cols {
+		colxs = append(colxs, GetColumnDataX(col, tb))
+	}
+	return colxs
 }
 
 func (x ColumnDataX) GetName() string {
