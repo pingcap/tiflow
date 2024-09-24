@@ -226,6 +226,11 @@ error = '''
 cannot find mysql.tidb_ddl_job schema
 '''
 
+["CDC:ErrDDLUnsupportType"]
+error = '''
+unsupport ddl type %s
+'''
+
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
