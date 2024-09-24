@@ -773,7 +773,7 @@ func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
 }
 
 // CollectMetrics collects metrics.
-func (r *Manager) CollectMetrics() {
+func (r *Manager) CollectMetrics(currentPDTime time.Time) {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.spans.Len()))
@@ -867,8 +867,7 @@ func (r *Manager) CollectMetrics() {
 			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
 			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
 
-			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
-			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
+			lag := float64(currentPDTime.Sub(oracle.GetTimeFromTS(pullerCkpt.ResolvedTs)))
 			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
 		}
 	}
