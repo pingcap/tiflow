@@ -389,7 +389,8 @@ func (s *SharedClient) setTableStopped(rt *subscribedTable) {
 	log.Info("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Int64("tableID", rt.span.TableID))
 
 	// Set stopped to true so we can stop handling region events from the table.
 	// Then send a special singleRegionInfo to regionRouter to deregister the table
@@ -406,7 +407,8 @@ func (s *SharedClient) onTableDrained(rt *subscribedTable) {
 	log.Info("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Int64("tableID", rt.span.TableID))
 
 	s.totalSpans.Lock()
 	defer s.totalSpans.Unlock()
@@ -693,6 +695,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Stringer("error", innerErr))
 
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
@@ -737,6 +741,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Stringer("error", innerErr))
 		metricFeedUnknownErrorCounter.Inc()
 		s.scheduleRegionRequest(ctx, errInfo.regionInfo)
@@ -757,6 +763,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Error(err))
 		return err
 	}
@@ -833,7 +841,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
-		slowInitializeRegion := 0
+		var slowInitializeRegionCount int
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.IterAll(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
@@ -843,20 +851,23 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Any("subscriptionID", subscriptionID),
+						zap.Int64("tableID", rt.span.TableID),
 						zap.Any("slowRegion", attr.SlowestRegion))
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
-				slowInitializeRegion += 1
+				slowInitializeRegionCount += 1
 				log.Info("event feed initializes a region too slow",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("slowRegion", attr.SlowestRegion))
 			} else if currTime.Sub(ckptTime) > 10*time.Minute {
 				log.Info("event feed finds a uninitialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.UnLockedRanges) > 0 {
@@ -864,11 +875,12 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("holes", attr.UnLockedRanges))
 			}
 		}
 		s.totalSpans.RUnlock()
-		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegion))
+		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegionCount))
 	}
 }
 

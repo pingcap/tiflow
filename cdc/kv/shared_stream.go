@@ -469,14 +469,19 @@ func (s *requestedStream) sendRegionChangeEvents(
 		state := s.getState(subscriptionID, regionID)
 		switch x := event.Event.(type) {
 		case *cdcpb.Event_Error:
-			s.logRegionDetails("event feed receives a region error",
+			fields := []zap.Field{
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
 				zap.Uint64("streamID", s.streamID),
 				zap.Any("subscriptionID", subscriptionID),
 				zap.Uint64("regionID", event.RegionId),
 				zap.Bool("stateIsNil", state == nil),
-				zap.Any("error", x.Error))
+				zap.Any("error", x.Error),
+			}
+			if state != nil {
+				fields = append(fields, zap.Int64("tableID", state.region.span.TableID))
+			}
+			s.logRegionDetails("event feed receives a region error", fields...)
 		}
 
 		if state != nil {
