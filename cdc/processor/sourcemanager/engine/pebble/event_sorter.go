@@ -324,8 +324,8 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	// If the current event is the last one, we need to set txnFinished
 	// Thus, we need to fetch the next event and compare the commitTs and startTs with it
 	for valid {
-		nextEvent := &model.PolymorphicEvent{}
-		if _, err = s.serde.Unmarshal(nextEvent, s.iter.Value()); err != nil {
+		event = &model.PolymorphicEvent{}
+		if _, err = s.serde.Unmarshal(event, s.iter.Value()); err != nil {
 			return
 		}
 
