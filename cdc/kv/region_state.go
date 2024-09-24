@@ -45,7 +45,7 @@ type regionInfo struct {
 	lockedRangeState *regionlock.LockedRangeState
 }
 
-func (s regionInfo) isStoped() bool {
+func (s regionInfo) isStopped() bool {
 	// lockedRange only nil when the region's subscribedTable is stopped.
 	return s.lockedRangeState == nil
 }

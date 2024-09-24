@@ -288,13 +288,14 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
-
 	s.rangeTaskCh.In() <- rangeTask{span: span, subscribedTable: rt}
 	log.Info("event feed subscribes table success",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.String("span", rt.span.String()))
+		zap.Int64("tableID", rt.span.TableID),
+		zap.Any("startKey", rt.span.StartKey),
+		zap.Any("endKey", rt.span.EndKey))
 }
 
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.
@@ -306,13 +307,19 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 	s.totalSpans.Unlock()
 	if rt != nil {
 		s.setTableStopped(rt)
+		log.Info("event feed unsubscribes table",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", rt.subscriptionID),
+			zap.Int64("tableID", rt.span.TableID),
+			zap.Any("startKey", rt.span.StartKey),
+			zap.Any("endKey", rt.span.EndKey))
+		return
 	}
-
-	log.Info("event feed unsubscribes table",
+	log.Warn("event feed unsubscribes table, but not found",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.Bool("exists", rt != nil))
+		zap.Any("subscriptionID", subID))
 }
 
 // ResolveLock is a function. If outsider subscribers find a span resolved timestamp is
@@ -418,7 +425,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case region := <-s.regionCh.Out():
-			if region.isStoped() {
+			if region.isStopped() {
 				for _, rs := range s.stores {
 					s.broadcastRequest(rs, region)
 				}
@@ -440,7 +447,10 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("streamID", stream.streamID),
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
+				zap.Int64("tableID", region.span.TableID),
 				zap.Uint64("regionID", region.verID.GetID()),
+				zap.Any("startKey", region.span.StartKey),
+				zap.Any("endKey", region.span.EndKey),
 				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
@@ -554,7 +564,9 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Any("span", nextSpan),
+				zap.Int64("tableID", nextSpan.TableID),
+				zap.Any("startKey", nextSpan.StartKey),
+				zap.Any("endKey", nextSpan.EndKey),
 				zap.Error(err))
 			backoffBeforeLoad = true
 			continue
@@ -572,7 +584,9 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Any("span", nextSpan))
+				zap.Int64("tableID", nextSpan.TableID),
+				zap.Any("startKey", nextSpan.StartKey),
+				zap.Any("endKey", nextSpan.EndKey))
 			backoffBeforeLoad = true
 			continue
 		}
@@ -590,7 +604,10 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				log.Panic("event feed check spans intersect shouldn't fail",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Any("subscriptionID", subscribedTable.subscriptionID))
+					zap.Any("subscriptionID", subscribedTable.subscriptionID),
+					zap.Int64("tableID", nextSpan.TableID),
+					zap.Any("startKey", nextSpan.StartKey),
+					zap.Any("endKey", nextSpan.EndKey))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
