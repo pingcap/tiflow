@@ -477,16 +477,13 @@ func (c *changefeed) tick(ctx context.Context,
 		}
 	}
 
-	pdTime := c.upstream.PDClock.CurrentTime()
-	currentTs := oracle.GetPhysical(pdTime)
-
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if watermark.CheckpointTs == scheduler.CheckpointCannotProceed {
 		if c.latestStatus != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
-			c.updateMetrics(currentTs)
+			c.updateMetrics()
 		}
 		return 0, nil
 	}
@@ -523,7 +520,7 @@ func (c *changefeed) tick(ctx context.Context,
 	})
 
 	c.latestStatus.CheckpointTs = watermark.CheckpointTs
-	c.updateMetrics(currentTs)
+	c.updateMetrics()
 	c.tickDownstreamObserver(ctx)
 
 	return barrier.MinTableBarrierTs, nil
@@ -966,7 +963,10 @@ func (c *changefeed) handleBarrier(ctx context.Context, barrier *schedulepb.Barr
 	return nil
 }
 
-func (c *changefeed) updateMetrics(currentTs int64) {
+func (c *changefeed) updateMetrics() {
+	pdTime := c.upstream.PDClock.CurrentTime()
+	currentTs := oracle.GetPhysical(pdTime)
+
 	checkpointTs := c.latestStatus.CheckpointTs
 	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
