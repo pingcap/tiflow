@@ -293,9 +293,7 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.Int64("tableID", rt.span.TableID),
-		zap.Any("startKey", rt.span.StartKey),
-		zap.Any("endKey", rt.span.EndKey))
+		zap.String("span", rt.span.String()))
 }
 
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.
@@ -311,9 +309,7 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", rt.subscriptionID),
-			zap.Int64("tableID", rt.span.TableID),
-			zap.Any("startKey", rt.span.StartKey),
-			zap.Any("endKey", rt.span.EndKey))
+			zap.String("span", rt.span.String()))
 		return
 	}
 	log.Warn("event feed unsubscribes table, but not found",
@@ -449,10 +445,8 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("streamID", stream.streamID),
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
-				zap.Int64("tableID", region.span.TableID),
 				zap.Uint64("regionID", region.verID.GetID()),
-				zap.Any("startKey", region.span.StartKey),
-				zap.Any("endKey", region.span.EndKey),
+				zap.String("span", region.span.String()),
 				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
@@ -566,9 +560,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Int64("tableID", nextSpan.TableID),
-				zap.Any("startKey", nextSpan.StartKey),
-				zap.Any("endKey", nextSpan.EndKey),
+				zap.String("span", nextSpan.String()),
 				zap.Error(err))
 			backoffBeforeLoad = true
 			continue
@@ -586,9 +578,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Int64("tableID", nextSpan.TableID),
-				zap.Any("startKey", nextSpan.StartKey),
-				zap.Any("endKey", nextSpan.EndKey))
+				zap.String("span", nextSpan.String()))
 			backoffBeforeLoad = true
 			continue
 		}
@@ -607,9 +597,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscribedTable.subscriptionID),
-					zap.Int64("tableID", nextSpan.TableID),
-					zap.Any("startKey", nextSpan.StartKey),
-					zap.Any("endKey", nextSpan.EndKey))
+					zap.String("span", nextSpan.String()))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
