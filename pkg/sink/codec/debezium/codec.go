@@ -246,7 +246,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.data.TiDBVectorFloat32")
-			writer.WriteStringField("field", col.Name)
+			writer.WriteStringField("field", col.GetName())
 		})
 	default:
 		log.Warn(
@@ -512,7 +512,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 
 	case mysql.TypeTiDBVectorFloat32:
 		v := col.Value.(types.VectorFloat32).String()
-		writer.WriteStringField(col.Name, v)
+		writer.WriteStringField(col.GetName(), v)
 		return nil
 
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
