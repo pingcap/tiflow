@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -60,6 +61,8 @@ func (c *Column) FromRowChangeColumn(col model.ColumnDataX) {
 			str = str[1 : len(str)-1]
 		}
 		c.Value = str
+	case mysql.TypeTiDBVectorFloat32:
+		c.Value = col.Value.(types.VectorFloat32).String()
 	default:
 		c.Value = col.Value
 	}
@@ -97,8 +100,8 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 				zap.Any("col", c), zap.Error(err))
 		}
 		col.Value = uint64(val)
+	case mysql.TypeTiDBVectorFloat32:
 	default:
-		col.Value = c.Value
 	}
 	return col
 }

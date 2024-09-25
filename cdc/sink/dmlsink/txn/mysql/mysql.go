@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -335,17 +336,19 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(cols []*model.ColumnData, tableInfo *model.TableInfo) {
+func convertValue(cols []*model.ColumnData, tableInfo *model.TableInfo) {
 	for i, col := range cols {
 		if col == nil {
 			continue
 		}
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
-			colValBytes, ok := col.Value.([]byte)
-			if ok {
-				cols[i].Value = string(colValBytes)
+		switch v := col.Value.(type) {
+		case []byte:
+			colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+			if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
+				cols[i].Value = string(v)
 			}
+		case types.VectorFloat32:
+			cols[i].Value = v.String()
 		}
 	}
 }
@@ -364,8 +367,8 @@ func (s *mysqlBackend) groupRowsByType(
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range event.Event.Rows {
-		convertBinaryToString(row.Columns, tableInfo)
-		convertBinaryToString(row.PreColumns, tableInfo)
+		convertValue(row.Columns, tableInfo)
+		convertValue(row.PreColumns, tableInfo)
 
 		if row.IsInsert() {
 			insertRow = append(

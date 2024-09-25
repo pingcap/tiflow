@@ -1682,4 +1682,13 @@ func TestFormatColVal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, float32(0), value)
 	require.NotZero(t, warn)
+
+	vector, _ := types.ParseVectorFloat32("[1,2,3,4,5]")
+	ftTypeVector := types.NewFieldType(mysql.TypeTiDBVectorFloat32)
+	col = &timodel.ColumnInfo{FieldType: *ftTypeVector}
+	datum.SetVectorFloat32(vector)
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, vector, value)
+	require.Zero(t, warn)
 }

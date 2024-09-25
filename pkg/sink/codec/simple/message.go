@@ -403,7 +403,7 @@ func buildRowChangedEvent(
 		err := common.VerifyChecksum(result, db)
 		if err != nil || msg.Checksum.Corrupted {
 			log.Warn("consumer detect checksum corrupted",
-				zap.String("schema", msg.Schema), zap.String("table", msg.Table))
+				zap.String("schema", msg.Schema), zap.String("table", msg.Table), zap.Error(err))
 			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("checksum corrupted")
 
 		}
@@ -639,6 +639,8 @@ func (a *avroMarshaller) encodeValue4Avro(
 		return v, "double"
 	case string:
 		return v, "string"
+	case tiTypes.VectorFloat32:
+		return v.String(), "string"
 	default:
 		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
@@ -651,7 +653,6 @@ func encodeValue(
 	if value == nil {
 		return nil
 	}
-
 	var err error
 	switch ft.GetType() {
 	case mysql.TypeBit:
@@ -715,6 +716,8 @@ func encodeValue(
 		} else {
 			result = string(v)
 		}
+	case tiTypes.VectorFloat32:
+		result = v.String()
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
@@ -755,7 +758,18 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 		case int64:
 			value = uint64(v)
 		}
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
+		switch v := value.(type) {
+		case string:
+			if mysql.HasUnsignedFlag(fieldType.GetFlag()) {
+				value, err = strconv.ParseUint(v, 10, 64)
+			} else {
+				value, err = strconv.ParseInt(v, 10, 64)
+			}
+		default:
+			value = v
+		}
+	case mysql.TypeYear:
 		switch v := value.(type) {
 		case string:
 			value, err = strconv.ParseInt(v, 10, 64)
@@ -765,9 +779,10 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 	case mysql.TypeLonglong:
 		switch v := value.(type) {
 		case string:
-			value, err = strconv.ParseInt(v, 10, 64)
-			if err != nil {
+			if mysql.HasUnsignedFlag(fieldType.GetFlag()) {
 				value, err = strconv.ParseUint(v, 10, 64)
+			} else {
+				value, err = strconv.ParseInt(v, 10, 64)
 			}
 		case map[string]interface{}:
 			value = uint64(v["value"].(int64))
@@ -777,7 +792,9 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 	case mysql.TypeFloat:
 		switch v := value.(type) {
 		case string:
-			value, err = strconv.ParseFloat(v, 32)
+			var val float64
+			val, err = strconv.ParseFloat(v, 32)
+			value = float32(val)
 		default:
 			value = v
 		}

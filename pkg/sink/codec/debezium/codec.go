@@ -241,6 +241,13 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("field", col.GetName())
 		})
 
+	case mysql.TypeTiDBVectorFloat32:
+		writer.WriteObjectElement(func() {
+			writer.WriteStringField("type", "string")
+			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
+			writer.WriteStringField("name", "io.debezium.data.TiDBVectorFloat32")
+			writer.WriteStringField("field", col.Name)
+		})
 	default:
 		log.Warn(
 			"meet unsupported field type",
@@ -502,6 +509,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteInt64Field(col.GetName(), int64(v))
 			return nil
 		}
+
+	case mysql.TypeTiDBVectorFloat32:
+		v := col.Value.(types.VectorFloat32).String()
+		writer.WriteStringField(col.Name, v)
+		return nil
 
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
