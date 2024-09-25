@@ -488,7 +488,7 @@ kafka send message failed
 
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
-invalid topic expression
+invalid topic expression: %s 
 '''
 
 ["CDC:ErrLeaseExpired"]
