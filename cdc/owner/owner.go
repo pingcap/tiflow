@@ -340,18 +340,6 @@ func updateStatus(changefeed *orchestrator.ChangefeedReactorState,
 		})
 }
 
-// shouldHandleChangefeed returns whether the owner should handle the changefeed.
-func (o *ownerImpl) shouldHandleChangefeed(_ *orchestrator.ChangefeedReactorState) bool {
-	return true
-}
-
-// getChangefeedCaptures returns the captures to run the changefeed.
-func (o *ownerImpl) getChangefeedCaptures(
-	globalStates *orchestrator.GlobalReactorState,
-) map[model.CaptureID]*model.CaptureInfo {
-	return globalStates.Captures
-}
-
 // EnqueueJob enqueues an admin job into an internal queue,
 // and the Owner will handle the job in the next tick
 // `done` must be buffered to prevent blocking owner.
