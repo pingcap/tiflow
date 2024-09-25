@@ -25,24 +25,24 @@ import (
 func TestGenKeyListCaseInSensitive(t *testing.T) {
 	t.Parallel()
 
-	columns := []*model.Column{
+	columns, tb := model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "XyZ",
 			Type:      mysql.TypeVarchar,
 			Collation: "utf8_unicode_ci",
 		},
-	}
+	})
 
-	first := genKeyList(columns, 0, []int{0}, 1)
+	first := genKeyList(columns, tb, 0, []int{0}, 1)
 
-	columns = []*model.Column{
+	columns, tb = model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "xYZ",
 			Type:      mysql.TypeVarchar,
 			Collation: "utf8_unicode_ci",
 		},
-	}
-	second := genKeyList(columns, 0, []int{0}, 1)
+	})
+	second := genKeyList(columns, tb, 0, []int{0}, 1)
 
 	require.Equal(t, first, second)
 }

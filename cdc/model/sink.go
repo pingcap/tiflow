@@ -95,8 +95,8 @@ func (b *ColumnFlagType) UnsetIsBinary() {
 }
 
 // IsBinary shows whether BinaryFlag is set
-func (b *ColumnFlagType) IsBinary() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+func (b ColumnFlagType) IsBinary() bool {
+	return (util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
 // SetIsHandleKey sets HandleKey
@@ -110,8 +110,8 @@ func (b *ColumnFlagType) UnsetIsHandleKey() {
 }
 
 // IsHandleKey shows whether HandleKey is set
-func (b *ColumnFlagType) IsHandleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
+func (b ColumnFlagType) IsHandleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
 // SetIsGeneratedColumn sets GeneratedColumn
@@ -125,8 +125,8 @@ func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
 }
 
 // IsGeneratedColumn shows whether GeneratedColumn is set
-func (b *ColumnFlagType) IsGeneratedColumn() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
+func (b ColumnFlagType) IsGeneratedColumn() bool {
+	return (util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
 // SetIsPrimaryKey sets PrimaryKeyFlag
@@ -140,8 +140,8 @@ func (b *ColumnFlagType) UnsetIsPrimaryKey() {
 }
 
 // IsPrimaryKey shows whether PrimaryKeyFlag is set
-func (b *ColumnFlagType) IsPrimaryKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
+func (b ColumnFlagType) IsPrimaryKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
 }
 
 // SetIsUniqueKey sets UniqueKeyFlag
@@ -155,13 +155,13 @@ func (b *ColumnFlagType) UnsetIsUniqueKey() {
 }
 
 // IsUniqueKey shows whether UniqueKeyFlag is set
-func (b *ColumnFlagType) IsUniqueKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
+func (b ColumnFlagType) IsUniqueKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
 }
 
 // IsMultipleKey shows whether MultipleKeyFlag is set
-func (b *ColumnFlagType) IsMultipleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
+func (b ColumnFlagType) IsMultipleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
 }
 
 // SetIsMultipleKey sets MultipleKeyFlag
@@ -175,8 +175,8 @@ func (b *ColumnFlagType) UnsetIsMultipleKey() {
 }
 
 // IsNullable shows whether NullableFlag is set
-func (b *ColumnFlagType) IsNullable() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(NullableFlag))
+func (b ColumnFlagType) IsNullable() bool {
+	return (util.Flag)(b).HasAll(util.Flag(NullableFlag))
 }
 
 // SetIsNullable sets NullableFlag
@@ -190,8 +190,8 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 }
 
 // IsUnsigned shows whether UnsignedFlag is set
-func (b *ColumnFlagType) IsUnsigned() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
+func (b ColumnFlagType) IsUnsigned() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
 }
 
 // SetIsUnsigned sets UnsignedFlag
@@ -1294,4 +1294,95 @@ type TopicPartitionKey struct {
 	Partition      int32
 	PartitionKey   string
 	TotalPartition int32
+}
+
+// ColumnDataX is like ColumnData, but contains more informations.
+//
+//msgp:ignore RowChangedEvent
+type ColumnDataX struct {
+	*ColumnData
+	flag *ColumnFlagType
+	info *model.ColumnInfo
+}
+
+// GetColumnDataX encapsures ColumnData to ColumnDataX.
+func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
+	x := ColumnDataX{ColumnData: col}
+	if x.ColumnData != nil {
+		x.flag = tb.ColumnsFlag[col.ColumnID]
+		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
+	}
+	return x
+}
+
+// GetName returns name.
+func (x ColumnDataX) GetName() string {
+	return x.info.Name.O
+}
+
+// GetType returns type.
+func (x ColumnDataX) GetType() byte {
+	return x.info.GetType()
+}
+
+// GetCharset returns charset.
+func (x ColumnDataX) GetCharset() string {
+	return x.info.GetCharset()
+}
+
+// GetCollation returns collation.
+func (x ColumnDataX) GetCollation() string {
+	return x.info.GetCollate()
+}
+
+// GetFlag returns flag.
+func (x ColumnDataX) GetFlag() ColumnFlagType {
+	return *x.flag
+}
+
+// GetDefaultValue return default value.
+func (x ColumnDataX) GetDefaultValue() interface{} {
+	return GetColumnDefaultValue(x.info)
+}
+
+// GetColumnInfo returns column info.
+func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
+	return x.info
+}
+
+// Columns2ColumnDataForTest is for tests.
+func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+	info := &TableInfo{
+		TableInfo: &model.TableInfo{
+			Columns: make([]*model.ColumnInfo, len(columns)),
+		},
+		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
+		columnsOffset: make(map[int64]int),
+	}
+	colDatas := make([]*ColumnData, 0, len(columns))
+
+	for i, column := range columns {
+		var columnID int64 = int64(i)
+		info.columnsOffset[columnID] = i
+
+		info.Columns[i] = &model.ColumnInfo{}
+		info.Columns[i].Name.O = column.Name
+		info.Columns[i].SetType(column.Type)
+		info.Columns[i].SetCharset(column.Charset)
+		info.Columns[i].SetCollate(column.Collation)
+		info.Columns[i].DefaultValue = column.Default
+
+		info.ColumnsFlag[columnID] = new(ColumnFlagType)
+		*info.ColumnsFlag[columnID] = column.Flag
+
+		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
+	}
+
+	return colDatas, info
+}
+
+// Column2ColumnDataXForTest is for tests.
+func Column2ColumnDataXForTest(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnDataForTest([]*Column{column})
+	return GetColumnDataX(datas[0], info)
 }

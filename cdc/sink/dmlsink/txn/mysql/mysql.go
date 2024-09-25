@@ -574,8 +574,9 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(
 					quoteTable,
-					row.GetPreColumns(),
-					row.GetColumns(),
+					row.PreColumns,
+					row.Columns,
+					row.TableInfo,
 					s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
@@ -587,7 +588,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 			// Delete Event
 			if len(row.PreColumns) != 0 {
-				query, args = prepareDelete(quoteTable, row.GetPreColumns(), s.cfg.ForceReplicate)
+				query, args = prepareDelete(quoteTable, row.PreColumns, row.TableInfo, s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -599,11 +600,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// INSERT(not in safe mode)
 			// or REPLACE(in safe mode) SQL.
 			if len(row.Columns) != 0 {
-				query, args = prepareReplace(
-					quoteTable,
-					row.GetColumns(),
-					true, /* appendPlaceHolder */
-					translateToInsert)
+				query, args = prepareReplace(quoteTable, row.Columns, row.TableInfo, true, translateToInsert)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
