@@ -599,13 +599,13 @@ func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
 }
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
-func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
+func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	if p.initialized.Load() {
 		return nil
 	}
 	// Here we use a separated context for sub-components, so we can custom the
 	// order of stopping all sub-components when closing the processor.
-	prcCtx := context.Background()
+	ctx := context.Background()
 
 	var tz *time.Location
 	// todo: get the timezone from the global config or the changefeed config?
@@ -622,21 +622,21 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	if err = p.initDDLHandler(prcCtx); err != nil {
+	if err = p.initDDLHandler(ctx); err != nil {
 		return err
 	}
 	p.ddlHandler.name = "ddlHandler"
 	p.ddlHandler.changefeedID = p.changefeedID
-	p.ddlHandler.spawn(prcCtx)
+	p.ddlHandler.spawn(ctx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		cfConfig.Mounter.WorkerNum,
 		p.filter, tz, p.changefeedID, cfConfig.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
-	p.mg.spawn(prcCtx)
+	p.mg.spawn(ctx)
 
-	sourceID, err := pdutil.GetSourceID(prcCtx, p.upstream.PDClient)
+	sourceID, err := pdutil.GetSourceID(ctx, p.upstream.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -646,7 +646,7 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 	p.redo.r = redo.NewDMLManager(p.changefeedID, cfConfig.Consistent)
 	p.redo.name = "RedoManager"
 	p.redo.changefeedID = p.changefeedID
-	p.redo.spawn(prcCtx)
+	p.redo.spawn(ctx)
 
 	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
 	log.Info("Processor creates sort engine",
@@ -668,18 +668,18 @@ func (p *processor) lazyInitImpl(etcdCtx context.Context) (err error) {
 		isMysqlBackend)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
-	p.sourceManager.spawn(prcCtx)
+	p.sourceManager.spawn(ctx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
-	p.sinkManager.spawn(prcCtx)
+	p.sinkManager.spawn(ctx)
 
 	// Bind them so that sourceManager can notify sinkManager.r.
 	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
 	if err != nil {
 		return err
 	}
