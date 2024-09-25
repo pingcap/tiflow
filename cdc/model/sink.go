@@ -1297,6 +1297,8 @@ type TopicPartitionKey struct {
 }
 
 // ColumnDataX is like ColumnData, but contains more informations.
+//
+//msgp:ignore RowChangedEvent
 type ColumnDataX struct {
 	*ColumnData
 	flag *ColumnFlagType
