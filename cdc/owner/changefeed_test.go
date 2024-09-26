@@ -307,7 +307,7 @@ func TestInitialize(t *testing.T) {
 
 	// initialize
 	globalvars.EtcdClient = &etcd.CDCEtcdClientImpl{}
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, changefeedInfo.StartTs)
 }
@@ -323,12 +323,12 @@ func TestChangefeedHandleError(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 
 	cf.errCh <- errors.New("fake error")
 	// handle error
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, changefeedInfo.StartTs)
 	require.Equal(t, state.Info.Error.Message, "fake error")
@@ -353,11 +353,11 @@ func TestTrySendBootstrapMeetError(t *testing.T) {
 	// initialize
 	state.Info.Config.Sink.Protocol = util.AddressOf("simple")
 	state.Info.Config.Sink.SendAllBootstrapAtStart = util.AddressOf(true)
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 
 	require.Eventually(t, func() bool {
-		cf.Tick(ctx, state, captures)
+		cf.Tick(ctx, state.Info, state.Status, captures)
 		tester.MustApplyPatches()
 		if state.Info.Error != nil {
 			return state.Info.State == model.StatePending
@@ -382,9 +382,11 @@ func TestExecDDL(t *testing.T) {
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickTwoTime := func() {
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	// pre check and initialize
@@ -466,11 +468,14 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	// pre check and initialize
@@ -534,7 +539,7 @@ func TestSyncPoint(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
@@ -543,7 +548,8 @@ func TestSyncPoint(t *testing.T) {
 	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 	// tick 20 times
 	for i := 0; i <= 20; i++ {
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	for i := 1; i < len(mockDDLSink.syncPointHis); i++ {
@@ -566,14 +572,15 @@ func TestFinished(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs += 2000
 	// tick many times to make sure the change feed is stopped
 	for i := 0; i <= 10; i++ {
-		cf.Tick(ctx, state, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	fmt.Println("checkpoint ts", state.Status.CheckpointTs)
@@ -636,7 +643,7 @@ func testChangefeedReleaseResource(
 	tester.MustApplyPatches()
 
 	// initialize
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, cf.initialized.Load(), expectedInitialized)
 
@@ -654,7 +661,7 @@ func testChangefeedReleaseResource(
 	})
 	cf.isReleased = false
 	// changefeed tick will release resources
-	cf.Tick(ctx, state, captures)
+	cf.Tick(ctx, state.Info, state.Status, captures)
 	require.Nil(t, err)
 	cancel()
 
@@ -688,7 +695,7 @@ func TestBarrierAdvance(t *testing.T) {
 			MinTableBarrierTs: state.Info.StartTs + 5,
 		}
 		// Do the preflightCheck and initialize the changefeed.
-		cf.Tick(ctx, state, captures)
+		cf.Tick(ctx, state.Info, state.Status, captures)
 		tester.MustApplyPatches()
 		if i == 1 {
 			cf.ddlManager.ddlResolvedTs += 10
@@ -697,7 +704,7 @@ func TestBarrierAdvance(t *testing.T) {
 
 		require.Nil(t, err)
 
-		err = cf.handleBarrier(ctx, barrier)
+		err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 		require.Nil(t, err)
 
 		if i == 0 {
@@ -714,7 +721,7 @@ func TestBarrierAdvance(t *testing.T) {
 
 		// Need more 1 tick to advance barrier if sync-point is enabled.
 		if i == 1 {
-			err = cf.handleBarrier(ctx, barrier)
+			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 			require.Nil(t, err)
 			require.Equal(t, state.Info.StartTs+10, barrier.GlobalBarrierTs)
 
@@ -722,7 +729,7 @@ func TestBarrierAdvance(t *testing.T) {
 			cf.ddlManager.ddlResolvedTs += 1000000000000
 			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10)
 			require.Nil(t, err)
-			err = cf.handleBarrier(ctx, barrier)
+			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 
 			require.Nil(t, err)
 			require.Less(t, state.Status.CheckpointTs+10, barrier.GlobalBarrierTs)

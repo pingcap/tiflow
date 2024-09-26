@@ -167,7 +167,7 @@ func NewOwner(
 }
 
 // Tick implements the Reactor interface
-func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
@@ -188,7 +188,7 @@ func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs(ctx)
+	o.handleJobs(stdCtx)
 
 	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
@@ -199,9 +199,10 @@ func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState
 	// initializing.
 	//
 	// See more gc doc.
-	if err = o.updateGCSafepoint(ctx, state); err != nil {
+	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	// Tick all changefeeds.
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
@@ -227,7 +228,8 @@ func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState
 		if !preflightCheck(changefeedState, o.captures) {
 			continue
 		}
-		cfReactor.Tick(ctx, changefeedState, o.captures)
+		checkpointTs, minTableBarrierTs := cfReactor.Tick(stdCtx, changefeedState.Info, changefeedState.Status, o.captures)
+		updateStatus(changefeedState, checkpointTs, minTableBarrierTs)
 	}
 	o.changefeedTicked = true
 
@@ -237,7 +239,7 @@ func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			reactor.Close(ctx)
+			reactor.Close(stdCtx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
@@ -245,12 +247,12 @@ func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, reactor := range o.changefeeds {
-			reactor.Close(ctx)
+			reactor.Close(stdCtx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 
-	if err = o.upstreamManager.Tick(ctx, state); err != nil {
+	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
 		return state, errors.Trace(err)
 	}
 	return state, nil
@@ -316,9 +318,8 @@ func preflightCheck(changefeed *orchestrator.ChangefeedReactorState,
 }
 
 func updateStatus(changefeed *orchestrator.ChangefeedReactorState,
-	minTableBarrierTs model.Ts,
+	checkpointTs, minTableBarrierTs model.Ts,
 ) {
-	checkpointTs := changefeed.Status.CheckpointTs
 	if checkpointTs == 0 || minTableBarrierTs == 0 {
 		return
 	}

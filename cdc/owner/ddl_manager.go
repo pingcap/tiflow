@@ -332,7 +332,7 @@ func (m *ddlManager) tick(
 	ddlRts := m.ddlPuller.ResolvedTs()
 	m.schema.AdvanceResolvedTs(ddlRts)
 	if m.redoDDLManager.Enabled() {
-		err = m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
+		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -368,7 +368,7 @@ func (m *ddlManager) tick(
 					m.cleanCache(cleanMsg)
 				}
 			}
-			err = m.executeDDL(ctx)
+			err := m.executeDDL(ctx)
 			if err != nil {
 				return nil, nil, err
 			}

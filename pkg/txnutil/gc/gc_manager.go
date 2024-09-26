@@ -76,7 +76,6 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	}
 	m.lastUpdatedTime = time.Now()
 
-	// todo: this may block the owner for a period time, cause the lag increase.
 	actual, err := SetServiceGCSafepoint(
 		ctx, m.pdClient, m.gcServiceID, m.gcTTL, checkpointTs)
 	if err != nil {

@@ -459,8 +459,8 @@ func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 
 	if m.state.GetChangefeedStatus() != nil {
 		currTime := m.upstream.PDClock.CurrentTime()
-		checkpoint := m.state.GetChangefeedStatus().CheckpointTs
-		m.lastWarningReportCheckpointTs = checkpoint
+		ckptTime := oracle.GetTimeFromTS(m.state.GetChangefeedStatus().CheckpointTs)
+		m.lastWarningReportCheckpointTs = m.state.GetChangefeedStatus().CheckpointTs
 
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		if checkpointTsStuck {
@@ -469,8 +469,8 @@ func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 				zap.String("namespace", m.state.GetID().Namespace),
 				zap.String("changefeed", m.state.GetID().ID),
 				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
-				zap.Uint64("checkpointTs", checkpoint),
-				zap.Duration("checkpointTime", currTime.Sub(oracle.GetTimeFromTS(checkpoint))),
+				zap.Uint64("checkpointTs", m.state.GetChangefeedStatus().CheckpointTs),
+				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
 			m.HandleError(&model.RunningError{
