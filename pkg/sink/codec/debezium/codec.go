@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/hack"
@@ -801,6 +802,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 	defer util.ReturnJSONWriter(jWriter)
 	var changeType string
 	commitTime := oracle.GetTimeFromTS(e.CommitTs)
+
 	switch e.Type {
 	case timodel.ActionCreateSchema,
 		timodel.ActionCreateTable,
@@ -894,11 +896,11 @@ func (c *dbzCodec) EncodeDDLEvent(
 			}
 			jWriter.WriteNullField("schemaName")
 			jWriter.WriteStringField("ddl", e.Query)
-			// return early if there is no table
-			if e.TableInfo.GetTableName() == "" {
-				return
-			}
 			jWriter.WriteArrayField("tableChanges", func() {
+				// return early if there is no table info
+				if e.TableInfo.GetTableName() == "" {
+					return
+				}
 				jWriter.WriteObjectElement(func() {
 					// Describes the kind of change. The value is one of the following:
 					// CREATE: Table created.
@@ -929,28 +931,42 @@ func (c *dbzCodec) EncodeDDLEvent(
 								jWriter.WriteObjectElement(func() {
 									flag := col.GetFlag()
 									jdbcType := internal.MySQLType2JavaType(col.GetType(), mysql.HasBinaryFlag(flag))
-									tp := col.FieldType.InfoSchemaStr()
+									expression, name := getExpressionAndName(col.FieldType)
 
 									jWriter.WriteStringField("name", col.Name.O)
 									jWriter.WriteIntField("jdbcType", int(jdbcType))
 									jWriter.WriteNullField("nativeType")
 									// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-property-include-schema-comments
-									// jWriter.WriteStringField("comment", col.Comment)
-
-									// if col.DefaultValue != nil {
-									// 	jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
-									// } else {
-									// 	jWriter.WriteNullField("defaultValueExpression")
-									// }
-
-									jWriter.WriteStringField("typeName", strings.ToUpper(tp))
-									jWriter.WriteStringField("typeExpression", strings.ToUpper(tp))
-									jWriter.WriteStringField("charsetName", col.GetCharset())
-									if col.FieldType.GetFlen() == 0 {
-										jWriter.WriteNullField("length")
+									if col.Comment != "" {
+										jWriter.WriteStringField("comment", col.Comment)
 									} else {
-										jWriter.WriteIntField("length", col.FieldType.GetFlen())
+										jWriter.WriteNullField("comment")
 									}
+
+									if col.DefaultValue != nil {
+										jWriter.WriteAnyField("defaultValueExpression", col.OriginDefaultValue)
+									} else {
+										jWriter.WriteNullField("defaultValueExpression")
+									}
+									jWriter.WriteNullField("enumValues")
+
+									jWriter.WriteStringField("typeName", name)
+									jWriter.WriteStringField("typeExpression", expression)
+
+									charsetName := getCharset(col.FieldType)
+									if charsetName != "" {
+										jWriter.WriteStringField("charsetName", charsetName)
+									} else {
+										jWriter.WriteNullField("charsetName")
+									}
+
+									length := getLen(col.FieldType)
+									if length != -1 {
+										jWriter.WriteIntField("length", length)
+									} else {
+										jWriter.WriteNullField("length")
+									}
+
 									jWriter.WriteNullField("scale")
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
@@ -959,6 +975,12 @@ func (c *dbzCodec) EncodeDDLEvent(
 								})
 							}
 						})
+						if e.TableInfo.Comment != "" {
+							jWriter.WriteStringField("comment", e.TableInfo.Comment)
+						} else {
+							jWriter.WriteNullField("comment")
+						}
+
 						// Custom attribute metadata for each table change.
 						// jWriter.WriteArrayField("attributes", func() {
 						// 	jWriter.WriteObjectElement(func() {
@@ -1055,4 +1077,92 @@ func (c *dbzCodec) EncodeCheckpointEvent(
 		}
 	})
 	return err
+}
+
+func getCharset(ft types.FieldType) string {
+	switch ft.GetType() {
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeNewDecimal:
+		return ft.GetCharset()
+	}
+	return ""
+}
+
+func getLen(ft types.FieldType) int {
+	switch ft.GetType() {
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeNewDecimal:
+		return ft.GetDecimal()
+	case mysql.TypeDouble, mysql.TypeFloat, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString,
+		mysql.TypeVarString, mysql.TypeYear, mysql.TypeTiDBVectorFloat32:
+		return ft.GetFlen()
+	}
+	return -1
+}
+
+func getSuffix(ft types.FieldType) string {
+	suffix := ""
+	decimal := ft.GetDecimal()
+	flen := ft.GetFlen()
+	elems := ft.GetElems()
+	defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
+	isDecimalNotDefault := decimal != defaultDecimal && decimal != 0 && decimal != -1
+
+	// displayFlen and displayDecimal are flen and decimal values with `-1` substituted with default value.
+	displayFlen, displayDecimal := flen, decimal
+	if displayFlen == -1 {
+		displayFlen = defaultFlen
+	}
+	if displayDecimal == -1 {
+		displayDecimal = defaultDecimal
+	}
+
+	switch ft.GetType() {
+	case mysql.TypeEnum, mysql.TypeSet:
+		// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
+		es := make([]string, 0, len(elems))
+		for _, e := range elems {
+			e = format.OutputFormat(e)
+			es = append(es, e)
+		}
+		suffix = fmt.Sprintf("('%s')", strings.Join(es, "','"))
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
+		// if isDecimalNotDefault {
+		// 	suffix = fmt.Sprintf("(%d)", displayDecimal)
+		// }
+	case mysql.TypeDouble, mysql.TypeFloat:
+		// 1. flen Not Default, decimal Not Default -> Valid
+		// 2. flen Not Default, decimal Default (-1) -> Invalid
+		// 3. flen Default, decimal Not Default -> Valid
+		// 4. flen Default, decimal Default -> Valid (hide)
+		if isDecimalNotDefault {
+			suffix = fmt.Sprintf("(%d,%d)", displayFlen, displayDecimal)
+		}
+	case mysql.TypeNewDecimal:
+		suffix = fmt.Sprintf("(%d,%d)", displayFlen, displayDecimal)
+	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		suffix = fmt.Sprintf("(%d)", displayFlen)
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
+	case mysql.TypeYear:
+		suffix = fmt.Sprintf("(%d)", flen)
+	case mysql.TypeTiDBVectorFloat32:
+		if flen != -1 {
+			suffix = fmt.Sprintf("(%d)", flen)
+		}
+	case mysql.TypeNull:
+		suffix = "(0)"
+	}
+	return suffix
+}
+
+func getExpressionAndName(ft types.FieldType) (string, string) {
+	prefix := strings.ToUpper(types.TypeToStr(ft.GetType(), ft.GetCharset()))
+	cs := prefix + getSuffix(ft)
+	suf := ""
+	flag := ft.GetFlag()
+
+	if mysql.HasZerofillFlag(flag) {
+		suf = "UNSIGNED ZEROFILL"
+	} else if mysql.HasUnsignedFlag(flag) {
+		suf = "UNSIGNED"
+	}
+	return cs + suf, prefix + suf
 }

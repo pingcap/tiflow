@@ -114,15 +114,15 @@ func runTestCase(testCasePath string) bool {
 	resetDB(dbTiDB)
 
 	statementKindsToWaitCDCRecord := map[string]bool{
-		"Delete":  true,
-		"Insert":  true,
-		"Replace": true,
-		"Update":  true,
-		// "CreateDatabase": true,
-		// "DropDatabase":   true,
-		"CreateTable": true,
-		"AlterTable":  true,
-		"DropTable":   true,
+		"Delete":         true,
+		"Insert":         true,
+		"Replace":        true,
+		"Update":         true,
+		"CreateDatabase": true,
+		"DropDatabase":   true,
+		"CreateTable":    true,
+		"AlterTable":     true,
+		"DropTable":      true,
 	}
 
 	hasError := false
@@ -151,7 +151,6 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		m, err := reader.FetchMessage(ctx)
-		cancel()
 
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -160,9 +159,10 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, fmt.Errorf("Failed to read CDC record of %s: %w", kind, err)
 		}
 
-		if err = reader.CommitMessages(ctx, m); err != nil {
+		if err = reader.CommitMessages(context.Background(), m); err != nil {
 			return nil, fmt.Errorf("Failed to commit CDC record of %s: %w", kind, err)
 		}
+		cancel()
 
 		if len(m.Value) == 0 {
 			continue
@@ -221,7 +221,6 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 		}
 		if obj == nil {
 			// No more records
-			fmt.Println("No more records", kind, obj, err)
 			break
 		}
 
@@ -232,10 +231,10 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 }
 
 var ignoredRecordPaths = map[string]bool{
-	`{map[string]any}["schema"]`:                                   true,
-	`{map[string]any}["payload"].(map[string]any)["source"]`:       true,
-	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:        true,
-	`{map[string]any}["payload"].(map[string]any)["tableChanges"]`: true,
+	`{map[string]any}["schema"]`:                             true,
+	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
+	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
+	// `{map[string]any}["payload"].(map[string]any)["tableChanges"]`: true,
 }
 
 var headingColor = color.New(color.FgHiWhite, color.Bold)
@@ -294,10 +293,12 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 		wg.Add(2)
 		go func() {
 			objsDebezium = fetchAllCDCRecords(readerDebezium, KindMySQL)
+			fmt.Println("reade Debezium done", time.Now())
 			wg.Done()
 		}()
 		go func() {
 			objsTiCDC = fetchAllCDCRecords(readerTiCDC, KindTiDB)
+			fmt.Println("reade TiCDC done", time.Now())
 			wg.Done()
 		}()
 		wg.Wait()
