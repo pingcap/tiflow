@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -51,7 +52,7 @@ type FeedStateManager interface {
 	// Tick is the main logic of the FeedStateManager, it will be called periodically
 	// resolvedTs is the resolvedTs of the changefeed
 	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
-	Tick(resolvedTs model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
+	Tick(resolvedTs model.Ts, state *orchestrator.ChangefeedReactorState) (adminJobPending bool)
 	// HandleError is called an error occurs in Changefeed.Tick
 	HandleError(errs ...*model.RunningError)
 	// HandleWarning is called a warning occurs in Changefeed.Tick
@@ -141,8 +142,9 @@ func (m *feedStateManager) resetErrRetry() {
 }
 
 func (m *feedStateManager) Tick(resolvedTs model.Ts,
-	status *model.ChangeFeedStatus, info *model.ChangeFeedInfo,
+	state *orchestrator.ChangefeedReactorState,
 ) (adminJobPending bool) {
+	status := state.Status
 	m.checkAndInitLastRetryCheckpointTs(status)
 
 	if status != nil {
@@ -181,7 +183,7 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts,
 		return
 	}
 
-	switch info.State {
+	switch state.Info.State {
 	case model.StateUnInitialized:
 		m.patchState(model.StateNormal)
 		return

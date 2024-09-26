@@ -106,7 +106,6 @@ type Owner interface {
 
 type ownerImpl struct {
 	changefeeds     map[model.ChangeFeedID]*changefeed
-	captures        map[model.CaptureID]*model.CaptureInfo
 	upstreamManager *upstream.Manager
 	ownerJobQueue   struct {
 		sync.Mutex
@@ -167,7 +166,7 @@ func NewOwner(
 }
 
 // Tick implements the Reactor interface
-func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *ownerImpl) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
@@ -181,16 +180,16 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		return state, nil
 	}
 
-	o.captures = state.Captures
 	o.updateMetrics()
 
+	captures := state.Captures
 	// handleJobs() should be called before clusterVersionConsistent(), because
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs(stdCtx)
+	o.handleJobs(ctx, captures)
 
-	if !o.clusterVersionConsistent(o.captures) {
+	if !o.clusterVersionConsistent(captures) {
 		return state, nil
 	}
 
@@ -199,7 +198,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// initializing.
 	//
 	// See more gc doc.
-	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
+	if err = o.updateGCSafepoint(ctx, state); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -225,11 +224,10 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		changefeedState.CheckCaptureAlive(o.globalVars.CaptureInfo.ID)
-		if !preflightCheck(changefeedState, o.captures) {
+		if !preflightCheck(changefeedState, captures) {
 			continue
 		}
-		checkpointTs, minTableBarrierTs := cfReactor.Tick(stdCtx, changefeedState.Info, changefeedState.Status, o.captures)
-		updateStatus(changefeedState, checkpointTs, minTableBarrierTs)
+		cfReactor.Tick(ctx, changefeedState, captures)
 	}
 	o.changefeedTicked = true
 
@@ -239,7 +237,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			reactor.Close(stdCtx)
+			reactor.Close(ctx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
@@ -247,12 +245,12 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, reactor := range o.changefeeds {
-			reactor.Close(stdCtx)
+			reactor.Close(ctx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 
-	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
+	if err := o.upstreamManager.Tick(ctx, state); err != nil {
 		return state, errors.Trace(err)
 	}
 	return state, nil
@@ -583,7 +581,7 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 	close(done)
 }
 
-func (o *ownerImpl) handleJobs(ctx context.Context) {
+func (o *ownerImpl) handleJobs(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -611,7 +609,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 				cfReactor.scheduler.Rebalance()
 			}
 		case ownerJobTypeQuery:
-			job.done <- o.handleQueries(job.query)
+			job.done <- o.handleQueries(job.query, captures)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
@@ -619,7 +617,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 	}
 }
 
-func (o *ownerImpl) handleQueries(query *Query) error {
+func (o *ownerImpl) handleQueries(query *Query, captures map[model.CaptureID]*model.CaptureInfo) error {
 	switch query.Tp {
 	case QueryAllChangeFeedSCheckpointTs:
 		ret := make(map[model.ChangeFeedID]uint64)
@@ -734,7 +732,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		query.Data = ret
 	case QueryCaptures:
 		var ret []*model.CaptureInfo
-		for _, captureInfo := range o.captures {
+		for _, captureInfo := range captures {
 			ret = append(ret, &model.CaptureInfo{
 				ID:            captureInfo.ID,
 				AdvertiseAddr: captureInfo.AdvertiseAddr,
@@ -743,7 +741,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		query.Data = o.isHealthy()
+		query.Data = o.isHealthy(captures)
 	case QueryOwner:
 		_, exist := o.changefeeds[query.ChangeFeedID]
 		query.Data = exist
@@ -754,14 +752,14 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 	return nil
 }
 
-func (o *ownerImpl) isHealthy() bool {
+func (o *ownerImpl) isHealthy(captures map[model.CaptureID]*model.CaptureInfo) bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
 		log.Warn("owner is not healthy since changefeeds are not ticked")
 		return false
 	}
-	if !o.clusterVersionConsistent(o.captures) {
+	if !o.clusterVersionConsistent(captures) {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {

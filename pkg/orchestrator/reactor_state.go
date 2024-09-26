@@ -205,6 +205,10 @@ func NewChangefeedReactorState(clusterID string,
 	}
 }
 
+func (s *ChangefeedReactorState) Checkpoint() model.Ts {
+	return s.Info.GetCheckpointTs(s.Status)
+}
+
 // GetID returns the changefeed ID.
 func (s *ChangefeedReactorState) GetID() model.ChangeFeedID {
 	return s.ID
