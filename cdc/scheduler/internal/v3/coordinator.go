@@ -449,7 +449,7 @@ func (c *coordinator) maybeCollectMetrics() {
 	}
 	c.lastCollectTime = now
 
-	pdTime := time.Now()
+	pdTime := now
 	// only nil in unit test
 	if c.pdClock != nil {
 		pdTime = c.pdClock.CurrentTime()
