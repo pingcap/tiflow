@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -23,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"

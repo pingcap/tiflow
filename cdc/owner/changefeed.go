@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"math"
 	"strings"
 	"sync"
@@ -37,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
