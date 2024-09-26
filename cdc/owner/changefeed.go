@@ -308,7 +308,6 @@ func (c *changefeed) Tick(ctx context.Context,
 		log.Error("changefeed tick failed", zap.Error(err))
 		c.handleErr(ctx, err)
 	}
-	//return checkpointTs, minTableBarrierTs
 	updateStatus(state, checkpointTs, minTableBarrierTs)
 }
 
