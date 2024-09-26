@@ -483,6 +483,7 @@ func (o *ownerImpl) updateMetrics() {
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
+	// todo: move this to each changefeed individually ?
 	for cfID, cf := range o.changefeeds {
 		if cf.latestInfo != nil {
 			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).

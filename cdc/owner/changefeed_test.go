@@ -148,7 +148,7 @@ func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo
 	return m.mu.checkpointTs, m.mu.currentTables
 }
 
-func (m *mockDDLSink) close(_ context.Context) error {
+func (m *mockDDLSink) close() error {
 	m.wg.Wait()
 	return nil
 }

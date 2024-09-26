@@ -789,11 +789,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.wg.Wait()
 
 	if c.ddlSink != nil {
-		canceledCtx, cancel := context.WithCancel(context.Background())
-		cancel()
-		// TODO(dongmen): remove ctx from func ddlSink.close(), it is useless.
-		// We don't need to wait ddlSink Close, pass a canceled context is ok
-		if err := c.ddlSink.close(canceledCtx); err != nil {
+		if err := c.ddlSink.close(); err != nil {
 			log.Warn("owner close ddlSink failed",
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
