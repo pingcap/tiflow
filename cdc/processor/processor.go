@@ -16,7 +16,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"io"
 	"net/url"
 	"strconv"
@@ -41,6 +40,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink"
