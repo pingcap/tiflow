@@ -1055,7 +1055,7 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.waitSubroutines()
-	// NOTE: It's unnecceary to close table sinks before clear sink factory.
+	// NOTE: It's unnecessary to close table sinks before clear sink factory.
 	m.clearSinkFactory()
 
 	log.Info("Closed sink manager",

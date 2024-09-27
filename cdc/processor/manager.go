@@ -111,7 +111,7 @@ func NewManager(
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (m *managerImpl) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*orchestrator.GlobalReactorState)
 	m.handleCommand()
 
@@ -159,7 +159,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		if createTaskPosition(changefeedState, p.captureInfo) {
 			continue
 		}
-		err, warning := p.Tick(stdCtx, changefeedState)
+		err, warning := p.Tick(ctx, changefeedState)
 		if warning != nil {
 			patchProcessorWarning(p.captureInfo, changefeedState, warning)
 		}
@@ -179,7 +179,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 	}
 
-	if err = m.upstreamManager.Tick(stdCtx, globalState); err != nil {
+	if err = m.upstreamManager.Tick(ctx, globalState); err != nil {
 		return state, errors.Trace(err)
 	}
 	return state, nil
