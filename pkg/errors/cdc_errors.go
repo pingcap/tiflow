@@ -55,7 +55,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
 	)
 	ErrDDLUnsupportType = errors.Normalize(
-		"unsupport ddl type %s",
+		"unsupport ddl type %s, query %s",
 		errors.RFCCodeText("CDC:ErrDDLUnsupportType"),
 	)
 	ErrGRPCDialFailed = errors.Normalize(

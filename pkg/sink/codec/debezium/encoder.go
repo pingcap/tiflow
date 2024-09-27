@@ -37,7 +37,7 @@ type BatchEncoder struct {
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	// Schema Change Events are currently not supported.
+	return nil, nil
 	valueBuf := bytes.Buffer{}
 	err := d.codec.EncodeCheckpointEvent(ts, &valueBuf)
 	if err != nil {
@@ -52,8 +52,37 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 		return nil, err
 	}
 	result := common.NewResolvedMsg(config.ProtocolDebezium, nil, value, ts)
-
 	return result, nil
+}
+
+func (d *BatchEncoder) encodeKey(e *model.RowChangedEvent) ([]byte, error) {
+	keyBuf := bytes.Buffer{}
+	err := d.codec.EncodeKey(e, &keyBuf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// TODO: Use a streaming compression is better.
+	key, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		keyBuf.Bytes(),
+	)
+	return key, err
+}
+
+func (d *BatchEncoder) encodeValue(e *model.RowChangedEvent) ([]byte, error) {
+	valueBuf := bytes.Buffer{}
+	err := d.codec.EncodeValue(e, &valueBuf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// TODO: Use a streaming compression is better.
+	value, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		valueBuf.Bytes(),
+	)
+	return value, err
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -63,22 +92,17 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	valueBuf := bytes.Buffer{}
-	err := d.codec.EncodeRowChangedEvent(e, &valueBuf)
-	if err != nil {
+	var key []byte
+	var value []byte
+	var err error
+	if key, err = d.encodeKey(e); err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: Use a streaming compression is better.
-	value, err := common.Compress(
-		d.config.ChangefeedID,
-		d.config.LargeMessageHandle.LargeMessageHandleCompression,
-		valueBuf.Bytes(),
-	)
-	if err != nil {
+	if value, err = d.encodeValue(e); err != nil {
 		return errors.Trace(err)
 	}
 	m := &common.Message{
-		Key:      nil,
+		Key:      key,
 		Value:    value,
 		Ts:       e.CommitTs,
 		Schema:   e.TableInfo.GetSchemaNamePtr(),
@@ -96,13 +120,22 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 // EncodeDDLEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	valueBuf := bytes.Buffer{}
-	err := d.codec.EncodeDDLEvent(e, &valueBuf)
+	keyMap := bytes.Buffer{}
+	err := d.codec.EncodeDDLEvent(e, &keyMap, &valueBuf)
 	if err != nil {
 		if errors.ErrDDLUnsupportType.Equal(err) {
 			log.Warn("encode ddl event failed, just ignored", zap.Error(err))
 			return nil, nil
 		}
 		return nil, errors.Trace(err)
+	}
+	key, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		keyMap.Bytes(),
+	)
+	if err != nil {
+		return nil, err
 	}
 	value, err := common.Compress(
 		d.config.ChangefeedID,
@@ -112,7 +145,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	if err != nil {
 		return nil, err
 	}
-	result := common.NewDDLMsg(config.ProtocolDebezium, nil, value, e)
+	result := common.NewDDLMsg(config.ProtocolDebezium, key, value, e)
 
 	return result, nil
 }

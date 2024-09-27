@@ -28,6 +28,281 @@ import (
 	"github.com/thanhpk/randstr"
 )
 
+func TestDDLEvent(t *testing.T) {
+	codec := &dbzCodec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test-cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+
+	query := "RENAME TABLE test.table1 to test.table2"
+	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
+		Name: "id",
+		Type: mysql.TypeLong,
+		Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
+	}}, [][]int{{0}})
+	preTableInfo := model.BuildTableInfo("test", "table2", []*model.Column{{
+		Name: "id",
+		Type: mysql.TypeLong,
+		Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
+	}}, [][]int{{0}})
+	e := &model.DDLEvent{
+		CommitTs:     1,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Type:         timodel.ActionNone,
+	}
+	keyBuf := bytes.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeDDLEvent(e, keyBuf, buf)
+	require.ErrorIs(t, err, cerror.ErrDDLUnsupportType)
+
+	e = &model.DDLEvent{
+		CommitTs:     1,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Query:        query,
+		Type:         timodel.ActionRenameTable,
+	}
+	keyBuf.Reset()
+	buf.Reset()
+	codec.config.DebeziumDisableSchema = false
+	err = codec.EncodeDDLEvent(e, keyBuf, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test-cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "test",
+				"table": "table1",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 1,
+				"cluster_id": "test-cluster",
+				"type": 14,
+				"collate": "",
+				"charset": ""
+			},
+			"ts_ms": 1701326309000,
+			"databaseName": "test", 
+      		"schemaName": null,
+    		"ddl": "RENAME TABLE test.table1 to test.table2", 
+      		"tableChanges": [
+				{
+					"type": "ALTER", 
+					"id": "\"test\".\"table2\",\"test\".\"table1\"", 
+					"table": {    
+						"defaultCharsetName": "",
+						"primaryKeyColumnNames": ["id"],
+						"columns": [
+						    {
+								"name": "id",
+								"jdbcType": 4,
+								"nativeType": null,
+								"typeName": "INT",
+								"typeExpression": "INT",
+								"charsetName": "utf8mb4",
+								"length": null,
+								"scale": null,
+								"position": 1,
+								"optional": false,
+								"autoIncremented": false,
+								"generated": false
+							}
+						]
+					}
+				}
+			]
+		},
+		"schema": {
+			"type": "struct",
+			"fields": [
+			{
+				"type": "string",
+				"optional": false,
+				"field": "databaseName"
+			}
+			],
+			"optional": false,
+			"name": "io.debezium.connector.mysql.SchemaChangeKey",
+			"version": 1
+		}
+	}`, buf.String())
+
+	codec.config.DebeziumDisableSchema = true
+
+	query = "CREATE TABLE test.table1"
+	e = &model.DDLEvent{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Query:     query,
+		Type:      timodel.ActionCreateTable,
+	}
+	keyBuf.Reset()
+	buf.Reset()
+	err = codec.EncodeDDLEvent(e, keyBuf, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test-cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "test",
+				"table": "table1",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 1,
+				"cluster_id": "test-cluster",
+				"type": 3,
+				"collate": "",
+				"charset": ""
+			},
+			"ts_ms": 1701326309000,
+			"databaseName": "test", 
+      		"schemaName": null,
+    		"ddl": "CREATE TABLE test.table1", 
+      		"tableChanges": [
+				{
+					"type": "CREATE", 
+					"id": "\"test\".\"table1\"", 
+					"table": {    
+						"defaultCharsetName": "",
+						"primaryKeyColumnNames": ["id"],
+						"columns": [
+						    {
+								"name": "id",
+								"jdbcType": 4,
+								"nativeType": null,
+								"typeName": "INT",
+								"typeExpression": "INT",
+								"charsetName": "utf8mb4",
+								"length": null,
+								"scale": null,
+								"position": 1,
+								"optional": false,
+								"autoIncremented": false,
+								"generated": false
+							}
+						]
+					}
+				}
+			]
+		}
+	}`, buf.String())
+
+	query = "DROP TABLE test.table2"
+	e = &model.DDLEvent{
+		CommitTs:     1,
+		PreTableInfo: preTableInfo,
+		Query:        query,
+		Type:         timodel.ActionDropTable,
+	}
+	keyBuf.Reset()
+	buf.Reset()
+	err = codec.EncodeDDLEvent(e, keyBuf, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test-cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "",
+				"table": "",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 1,
+				"cluster_id": "test-cluster",
+				"type": 4,
+				"collate": "",
+				"charset": ""
+			},
+			"ts_ms": 1701326309000,
+			"databaseName": "test", 
+      		"schemaName": null,
+    		"ddl": "DROP TABLE test.table2"
+		}
+	}`, buf.String())
+}
+
+func TestCheckPointEvent(t *testing.T) {
+	codec := &dbzCodec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test-cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+	codec.config.DebeziumDisableSchema = false
+
+	var ts uint64 = 3
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeCheckpointEvent(ts, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test-cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "",
+				"table": "",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 3,
+				"cluster_id": "test-cluster"
+			},
+			"ts_ms": 1701326309000,
+		},
+		"schema": {
+			"type": "struct",
+			"fields": [
+			{
+				"type": "string",
+				"optional": false,
+				"field": "databaseName"
+			}
+			],
+			"optional": false,
+			"name": "io.debezium.connector.mysql.SchemaChangeKey",
+			"version": 1
+		}
+	}`, buf.String())
+}
+
 func TestEncodeInsert(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
@@ -40,8 +315,8 @@ func TestEncodeInsert(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -52,7 +327,17 @@ func TestEncodeInsert(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -87,8 +372,30 @@ func TestEncodeInsert(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -203,8 +510,8 @@ func TestEncodeUpdate(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -219,7 +526,18 @@ func TestEncodeUpdate(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -256,8 +574,31 @@ func TestEncodeUpdate(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -362,8 +703,20 @@ func TestEncodeUpdate(t *testing.T) {
 
 	codec.config.DebeziumOutputOldValue = false
 	codec.config.DebeziumDisableSchema = true
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -407,8 +760,8 @@ func TestEncodeDelete(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -419,7 +772,18 @@ func TestEncodeDelete(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -454,8 +818,32 @@ func TestEncodeDelete(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -559,277 +947,6 @@ func TestEncodeDelete(t *testing.T) {
 	`, buf.String())
 }
 
-func TestDDLEvent(t *testing.T) {
-	codec := &dbzCodec{
-		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
-		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
-	}
-
-	query := "RENAME TABLE test.table1 to test.table2"
-	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
-		Name: "id",
-		Type: mysql.TypeLong,
-		Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
-	}}, [][]int{{0}})
-	preTableInfo := model.BuildTableInfo("test", "table2", []*model.Column{{
-		Name: "id",
-		Type: mysql.TypeLong,
-		Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
-	}}, [][]int{{0}})
-	e := &model.DDLEvent{
-		CommitTs:     1,
-		TableInfo:    tableInfo,
-		PreTableInfo: preTableInfo,
-		Type:         timodel.ActionNone,
-	}
-	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeDDLEvent(e, buf)
-	require.ErrorIs(t, err, cerror.ErrDDLUnsupportType)
-
-	e = &model.DDLEvent{
-		CommitTs:     1,
-		TableInfo:    tableInfo,
-		PreTableInfo: preTableInfo,
-		Query:        query,
-		Type:         timodel.ActionRenameTable,
-	}
-	buf.Reset()
-	codec.config.DebeziumDisableSchema = false
-	err = codec.EncodeDDLEvent(e, buf)
-	require.Nil(t, err)
-	require.JSONEq(t, `
-	{
-		"payload": {
-			"source": {
-				"version": "2.4.0.Final",
-				"connector": "TiCDC",
-				"name": "test-cluster",
-				"ts_ms": 0,
-				"snapshot": "false",
-				"db": "test",
-				"table": "table1",
-				"server_id": 0,
-				"gtid": null,
-				"file": "",
-				"pos": 0,
-				"row": 0,
-				"thread": 0,
-				"query": null,
-				"commit_ts": 1,
-				"cluster_id": "test-cluster",
-				"type": 14,
-				"collate": "",
-				"charset": ""
-			},
-			"ts_ms": 1701326309000,
-			"databaseName": "test", 
-      		"schemaName": null,
-    		"ddl": "RENAME TABLE test.table1 to test.table2", 
-      		"tableChanges": [
-				{
-					"type": "ALTER", 
-					"id": "\"test\".\"table2\",\"test\".\"table1\"", 
-					"table": {    
-						"defaultCharsetName": "",
-						"primaryKeyColumnNames": ["id"],
-						"columns": [
-						    {
-								"name": "id",
-								"jdbcType": 4,
-								"nativeType": null,
-								"typeName": "INT",
-								"typeExpression": "INT",
-								"charsetName": "utf8mb4",
-								"length": null,
-								"scale": null,
-								"position": 1,
-								"optional": false,
-								"autoIncremented": false,
-								"generated": false
-							}
-						]
-					}
-				}
-			]
-		},
-		"schema": {
-			"type": "struct",
-			"fields": [
-			{
-				"type": "string",
-				"optional": false,
-				"field": "databaseName"
-			}
-			],
-			"optional": false,
-			"name": "io.debezium.connector.mysql.SchemaChangeKey",
-			"version": 1
-		}
-	}`, buf.String())
-
-	codec.config.DebeziumDisableSchema = true
-
-	query = "CREATE TABLE test.table1"
-	e = &model.DDLEvent{
-		CommitTs:  1,
-		TableInfo: tableInfo,
-		Query:     query,
-		Type:      timodel.ActionCreateTable,
-	}
-	buf.Reset()
-	err = codec.EncodeDDLEvent(e, buf)
-	require.Nil(t, err)
-	require.JSONEq(t, `
-	{
-		"payload": {
-			"source": {
-				"version": "2.4.0.Final",
-				"connector": "TiCDC",
-				"name": "test-cluster",
-				"ts_ms": 0,
-				"snapshot": "false",
-				"db": "test",
-				"table": "table1",
-				"server_id": 0,
-				"gtid": null,
-				"file": "",
-				"pos": 0,
-				"row": 0,
-				"thread": 0,
-				"query": null,
-				"commit_ts": 1,
-				"cluster_id": "test-cluster",
-				"type": 3,
-				"collate": "",
-				"charset": ""
-			},
-			"ts_ms": 1701326309000,
-			"databaseName": "test", 
-      		"schemaName": null,
-    		"ddl": "CREATE TABLE test.table1", 
-      		"tableChanges": [
-				{
-					"type": "CREATE", 
-					"id": "\"test\".\"table1\"", 
-					"table": {    
-						"defaultCharsetName": "",
-						"primaryKeyColumnNames": ["id"],
-						"columns": [
-						    {
-								"name": "id",
-								"jdbcType": 4,
-								"nativeType": null,
-								"typeName": "INT",
-								"typeExpression": "INT",
-								"charsetName": "utf8mb4",
-								"length": null,
-								"scale": null,
-								"position": 1,
-								"optional": false,
-								"autoIncremented": false,
-								"generated": false
-							}
-						]
-					}
-				}
-			]
-		}
-	}`, buf.String())
-
-	query = "DROP TABLE test.table2"
-	e = &model.DDLEvent{
-		CommitTs:     1,
-		PreTableInfo: preTableInfo,
-		Query:        query,
-		Type:         timodel.ActionDropTable,
-	}
-	buf.Reset()
-	err = codec.EncodeDDLEvent(e, buf)
-	require.Nil(t, err)
-	require.JSONEq(t, `
-	{
-		"payload": {
-			"source": {
-				"version": "2.4.0.Final",
-				"connector": "TiCDC",
-				"name": "test-cluster",
-				"ts_ms": 0,
-				"snapshot": "false",
-				"db": "",
-				"table": "",
-				"server_id": 0,
-				"gtid": null,
-				"file": "",
-				"pos": 0,
-				"row": 0,
-				"thread": 0,
-				"query": null,
-				"commit_ts": 1,
-				"cluster_id": "test-cluster",
-				"type": 4,
-				"collate": "",
-				"charset": ""
-			},
-			"ts_ms": 1701326309000,
-			"databaseName": "test", 
-      		"schemaName": null,
-    		"ddl": "DROP TABLE test.table2"
-		}
-	}`, buf.String())
-}
-
-func TestCheckPointEvent(t *testing.T) {
-	codec := &dbzCodec{
-		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
-		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
-	}
-	codec.config.DebeziumDisableSchema = false
-
-	var ts uint64 = 3
-	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeCheckpointEvent(ts, buf)
-	require.Nil(t, err)
-	require.JSONEq(t, `
-	{
-		"payload": {
-			"source": {
-				"version": "2.4.0.Final",
-				"connector": "TiCDC",
-				"name": "test-cluster",
-				"ts_ms": 0,
-				"snapshot": "false",
-				"db": "",
-				"table": "",
-				"server_id": 0,
-				"gtid": null,
-				"file": "",
-				"pos": 0,
-				"row": 0,
-				"thread": 0,
-				"query": null,
-				"commit_ts": 3,
-				"cluster_id": "test-cluster"
-			},
-			"ts_ms": 1701326309000,
-		},
-		"schema": {
-			"type": "struct",
-			"fields": [
-			{
-				"type": "string",
-				"optional": false,
-				"field": "databaseName"
-			}
-			],
-			"optional": false,
-			"name": "io.debezium.connector.mysql.SchemaChangeKey",
-			"version": 1
-		}
-	}`, buf.String())
-}
-
 func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
@@ -851,12 +968,15 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }
 
@@ -881,12 +1001,15 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }
 
@@ -912,11 +1035,14 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }
