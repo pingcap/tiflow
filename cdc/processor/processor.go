@@ -16,6 +16,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"io"
 	"net/url"
 	"strconv"
@@ -65,7 +66,7 @@ type Processor interface {
 	//
 	// It can be called in etcd ticks, so it should never be blocked.
 	// Tick Returns: error and warnings. error will be propagated to the owner, and warnings will be record.
-	Tick(context.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
+	Tick(context.Context, *orchestrator.ChangefeedReactorState) (error, error)
 
 	// Close closes the processor.
 	Close() error
@@ -497,7 +498,7 @@ func isProcessorIgnorableError(err error) bool {
 // It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(
 	ctx context.Context,
-	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
+	state *orchestrator.ChangefeedReactorState,
 ) (error, error) {
 	if !p.initialized.Load() {
 		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, p.globalVars.ChangefeedThreadPool)
@@ -509,8 +510,8 @@ func (p *processor) Tick(
 		}
 	}
 
-	p.latestInfo = info
-	p.latestStatus = status
+	p.latestInfo = state.Info
+	p.latestStatus = state.Status
 
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {

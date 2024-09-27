@@ -492,7 +492,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 }
 
 // Active return true if the changefeed is ready to be processed
-func (s *ChangefeedReactorState) Active(captureID model.CaptureID) bool {
+func (s *ChangefeedReactorState) Active() bool {
 	return s.Info != nil && s.Status != nil && s.Status.AdminJobType == model.AdminNone
 }
 
