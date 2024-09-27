@@ -205,6 +205,7 @@ func NewChangefeedReactorState(clusterID string,
 	}
 }
 
+// Checkpoint return the current checkpoint ts.
 func (s *ChangefeedReactorState) Checkpoint() model.Ts {
 	return s.Info.GetCheckpointTs(s.Status)
 }
