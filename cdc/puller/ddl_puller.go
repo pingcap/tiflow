@@ -343,7 +343,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("table", job.TableName),
 				zap.String("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Any("tableInfo", job.BinlogInfo.TableInfo))
 		}
 		if err != nil {
 			log.Warn("handle ddl job failed",
