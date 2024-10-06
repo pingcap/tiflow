@@ -396,6 +396,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	case timodel.ActionCreateTables:
 		// we only use multiTableInfos and Querys when we generate job event
 		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		log.Info("receive create tables ddl job",
+			zap.String("Query", job.Query))
 		var newMultiTableInfos []*timodel.TableInfo
 		var newQuerys []string
 
