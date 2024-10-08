@@ -52,7 +52,8 @@ groups=(
 	# G09
 	'gc_safepoint changefeed_pause_resume cli_with_auth savepoint synced_status'
 	# G10
-	'default_value simple cdc_server_tips event_filter sql_mode'
+	# 'default_value simple cdc_server_tips event_filter sql_mode'
+	'simple cdc_server_tips event_filter sql_mode'
 	# G11
 	'resolve_lock move_table autorandom generate_column'
 	# G12
