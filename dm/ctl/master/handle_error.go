@@ -122,7 +122,6 @@ func sendHandleErrorRequest(cmd *cobra.Command, request *pb.HandleErrorRequest) 
 		request,
 		&resp,
 	)
-
 	if err != nil {
 		return err
 	}
