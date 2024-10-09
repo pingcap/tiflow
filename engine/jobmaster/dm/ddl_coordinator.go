@@ -574,7 +574,6 @@ func (g *shardGroup) allTableSmaller(tp tableType) bool {
 		err    error
 	)
 	joined, err = g.joinTables(tp)
-
 	if err != nil {
 		return false
 	}

@@ -133,7 +133,6 @@ func (c *WorkerCreator) CreateWorker(
 	err = executorClient.DispatchTask(ctx, dispatchArgs, func() {
 		c.hook.BeforeStartingWorker(workerID, executorID, epoch)
 	})
-
 	if err != nil {
 		c.logger.Info("DispatchTask failed",
 			zap.Error(err))
