@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.21
+go 1.23
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -415,3 +415,6 @@ replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
+
+// tls10server=1
+godebug tlsrsakex=1

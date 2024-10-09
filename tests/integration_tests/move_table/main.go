@@ -79,7 +79,6 @@ func main() {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(20), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-
 	if err != nil {
 		log.Fatal("Fail to get captures", zap.Error(err))
 	}
