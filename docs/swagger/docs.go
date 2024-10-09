@@ -1684,6 +1684,9 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim-check-raw-value": {
+                    "type": "boolean"
+                },
                 "claim-check-storage-uri": {
                     "type": "string"
                 },
@@ -1860,7 +1863,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "advance-timeout-in-sec": {
-                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.\nDeprecated since v8.1.1",
                     "type": "integer"
                 },
                 "cloud-storage-config": {
@@ -1947,6 +1950,10 @@ var doc = `{
                 "schema-registry": {
                     "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
+                },
+                "send-all-bootstrap-at-start": {
+                    "description": "SendAllBootstrapAtStart determines whether to send all tables bootstrap message at changefeed start.",
+                    "type": "boolean"
                 },
                 "send-bootstrap-in-msg-count": {
                     "description": "SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.",
@@ -2815,6 +2822,9 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim_check_raw_value": {
+                    "type": "boolean"
+                },
                 "claim_check_storage_uri": {
                     "type": "string"
                 },
@@ -3217,6 +3227,9 @@ var doc = `{
                 },
                 "schema_registry": {
                     "type": "string"
+                },
+                "send-all-bootstrap-at-start": {
+                    "type": "boolean"
                 },
                 "send_bootstrap_in_msg_count": {
                     "type": "integer"
