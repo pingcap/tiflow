@@ -446,7 +446,13 @@ func (c *coordinator) maybeCollectMetrics() {
 	}
 	c.lastCollectTime = now
 
+	pdTime := now
+	// only nil in unit test
+	if c.pdClock != nil {
+		pdTime = c.pdClock.CurrentTime()
+	}
+
 	c.schedulerM.CollectMetrics()
-	c.replicationM.CollectMetrics()
+	c.replicationM.CollectMetrics(pdTime)
 	c.captureM.CollectMetrics()
 }
