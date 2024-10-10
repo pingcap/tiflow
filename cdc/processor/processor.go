@@ -466,13 +466,19 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 	}
 }
 
+<<<<<<< HEAD
 func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
 	now := p.upstream.PDClock.CurrentTime()
+=======
+func (p *processor) getStatsFromSourceManagerAndSinkManager(
+	span tablepb.Span, sinkStats sinkmanager.TableStats,
+) tablepb.Stats {
+	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
+>>>>>>> 1b026f6b75 (cordinator(ticdc): Fix Puller Resolved TS Lag Calculation and Deprecate current_ts Field in Stats (#11624))
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
-		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
 		BarrierTs:   sinkStats.BarrierTs,
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
