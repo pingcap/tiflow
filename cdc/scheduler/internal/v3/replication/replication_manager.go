@@ -773,7 +773,7 @@ func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
 }
 
 // CollectMetrics collects metrics.
-func (r *Manager) CollectMetrics() {
+func (r *Manager) CollectMetrics(currentPDTime time.Time) {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.spans.Len()))
@@ -790,13 +790,12 @@ func (r *Manager) CollectMetrics() {
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
 
 		// Slow table latency metrics.
-		phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
 		for stage, checkpoint := range table.Stats.StageCheckpoints {
 			// Checkpoint ts
 			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
 			slowestTableStageCheckpointTsGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
-			checkpointLag := float64(phyCurrentTs-phyCkpTs) / 1e3
+			checkpointLag := currentPDTime.Sub(oracle.GetTimeFromTS(checkpoint.CheckpointTs)).Seconds()
 			slowestTableStageCheckpointTsLagGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
 			slowestTableStageCheckpointTsLagHistogramVec.
@@ -805,7 +804,7 @@ func (r *Manager) CollectMetrics() {
 			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
 			slowestTableStageResolvedTsGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
-			resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
+			resolvedTsLag := currentPDTime.Sub(oracle.GetTimeFromTS(checkpoint.ResolvedTs)).Seconds()
 			slowestTableStageResolvedTsLagGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
 			slowestTableStageResolvedTsLagHistogramVec.
@@ -816,7 +815,7 @@ func (r *Manager) CollectMetrics() {
 		phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
 		slowestTableStageResolvedTsGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
-		barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
+		barrierTsLag := currentPDTime.Sub(oracle.GetTimeFromTS(table.Stats.BarrierTs)).Seconds()
 		slowestTableStageResolvedTsLagGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
 		slowestTableStageResolvedTsLagHistogramVec.
@@ -867,8 +866,7 @@ func (r *Manager) CollectMetrics() {
 			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
 			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
 
-			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
-			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
+			lag := currentPDTime.Sub(oracle.GetTimeFromTS(pullerCkpt.ResolvedTs)).Seconds()
 			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
 		}
 	}
