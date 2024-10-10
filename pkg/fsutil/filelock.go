@@ -79,7 +79,6 @@ func (fl *FileLock) IsLocked() (bool, error) {
 		return true, nil
 	} else if err != nil {
 		return false, errors.Trace(err)
-	} else {
-		return false, nil
 	}
+	return false, nil
 }

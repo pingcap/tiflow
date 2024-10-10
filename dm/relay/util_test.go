@@ -20,47 +20,47 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-var _ = Suite(&testUtilSuite{})
+var _ = check.Suite(&testUtilSuite{})
 
 type testUtilSuite struct{}
 
-func (t *testUtilSuite) TestIsNewServer(c *C) {
+func (t *testUtilSuite) TestIsNewServer(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	mockDB := conn.InitMockDB(c)
 	baseDB, err := conn.GetUpstreamDB(getDBConfigForTest())
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	flavor := gmysql.MySQLFlavor
 	// no prevUUID, is new server.
 	isNew, err := isNewServer(ctx, "", baseDB, flavor)
-	c.Assert(err, IsNil)
-	c.Assert(isNew, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(isNew, check.IsTrue)
 
 	// different server
 	mockGetServerUUID(mockDB)
 	isNew, err = isNewServer(ctx, "not-exists-uuid.000001", baseDB, flavor)
-	c.Assert(err, IsNil)
-	c.Assert(isNew, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(isNew, check.IsTrue)
 
 	// the same server
 	mockGetServerUUID(mockDB)
 	currUUID, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), baseDB, flavor)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	mockGetServerUUID(mockDB)
 	isNew, err = isNewServer(ctx, fmt.Sprintf("%s.000001", currUUID), baseDB, flavor)
-	c.Assert(err, IsNil)
-	c.Assert(isNew, IsFalse)
-	c.Assert(mockDB.ExpectationsWereMet(), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(isNew, check.IsFalse)
+	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
 }
 
 func mockGetServerUUID(mockDB sqlmock.Sqlmock) {
@@ -76,7 +76,7 @@ func mockGetRandomServerID(mockDB sqlmock.Sqlmock) {
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("server_id", "1"))
 }
 
-func (t *testUtilSuite) TestGetNextUUID(c *C) {
+func (t *testUtilSuite) TestGetNextUUID(c *check.C) {
 	UUIDs := []string{
 		"b60868af-5a6f-11e9-9ea3-0242ac160006.000001",
 		"7acfedb5-3008-4fa2-9776-6bac42b025fe.000002",
@@ -129,16 +129,16 @@ func (t *testUtilSuite) TestGetNextUUID(c *C) {
 	for _, cs := range cases {
 		nu, nus, err := getNextRelaySubDir(cs.currUUID, cs.UUIDs)
 		if len(cs.errMsgReg) > 0 {
-			c.Assert(err, ErrorMatches, cs.errMsgReg)
+			c.Assert(err, check.ErrorMatches, cs.errMsgReg)
 		} else {
-			c.Assert(err, IsNil)
+			c.Assert(err, check.IsNil)
 		}
-		c.Assert(nu, Equals, cs.nextUUID)
-		c.Assert(nus, Equals, cs.nextUUIDSuffix)
+		c.Assert(nu, check.Equals, cs.nextUUID)
+		c.Assert(nus, check.Equals, cs.nextUUIDSuffix)
 	}
 }
 
-func (t *testUtilSuite) TestIsIgnorableParseError(c *C) {
+func (t *testUtilSuite) TestIsIgnorableParseError(c *check.C) {
 	cases := []struct {
 		err       error
 		ignorable bool
@@ -166,6 +166,6 @@ func (t *testUtilSuite) TestIsIgnorableParseError(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(isIgnorableParseError(cs.err), Equals, cs.ignorable)
+		c.Assert(isIgnorableParseError(cs.err), check.Equals, cs.ignorable)
 	}
 }

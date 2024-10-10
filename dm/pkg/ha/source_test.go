@@ -21,7 +21,7 @@ import (
 	"path"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -82,97 +82,97 @@ func TestHA(t *testing.T) {
 
 	etcdTestCli = mockCluster.RandClient()
 
-	TestingT(t)
+	check.TestingT(t)
 }
 
 // clear keys in etcd test cluster.
-func clearTestInfoOperation(c *C) {
-	c.Assert(ClearTestInfoOperation(etcdTestCli), IsNil)
+func clearTestInfoOperation(c *check.C) {
+	c.Assert(ClearTestInfoOperation(etcdTestCli), check.IsNil)
 }
 
 type testForEtcd struct{}
 
-var _ = Suite(&testForEtcd{})
+var _ = check.Suite(&testForEtcd{})
 
-func (t *testForEtcd) SetUpTest(c *C) {
+func (t *testForEtcd) SetUpTest(c *check.C) {
 	createTestFixture(c)
 }
 
-func createTestFixture(c *C) {
+func createTestFixture(c *check.C) {
 	dir := c.MkDir()
 
 	caFilePath = path.Join(dir, caFile)
 	err := os.WriteFile(caFilePath, []byte(caFileContent), 0o644)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	certFilePath = path.Join(dir, certFile)
 	err = os.WriteFile(certFilePath, []byte(certFileContent), 0o644)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	keyFilePath = path.Join(dir, keyFile)
 	err = os.WriteFile(keyFilePath, []byte(keyFileContent), 0o644)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	sourceSampleFilePath = path.Join(dir, sourceSampleFile)
 	sourceFileContent := fmt.Sprintf(sourceFileContent, caFilePath, certFilePath, keyFilePath)
 	err = os.WriteFile(sourceSampleFilePath, []byte(sourceFileContent), 0o644)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (t *testForEtcd) TestSourceEtcd(c *C) {
+func (t *testForEtcd) TestSourceEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	cfg, err := config.LoadFromFile(sourceSampleFilePath)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	source := cfg.SourceID
 	cfgExtra := *cfg
 	cfgExtra.SourceID = "mysql-replica-2"
 
 	// no source config exist.
 	scm1, rev1, err := GetSourceCfg(etcdTestCli, source, 0)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
-	c.Assert(scm1, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
+	c.Assert(scm1, check.HasLen, 0)
 	cfgM, _, err := GetSourceCfg(etcdTestCli, "", 0)
-	c.Assert(err, IsNil)
-	c.Assert(cfgM, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfgM, check.HasLen, 0)
 
 	// put a source config.
-	c.Assert(cfg.From.Security.LoadTLSContent(), IsNil)
+	c.Assert(cfg.From.Security.LoadTLSContent(), check.IsNil)
 	rev2, err := PutSourceCfg(etcdTestCli, cfg)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// get the config back.
 	scm2, rev3, err := GetSourceCfg(etcdTestCli, source, 0)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
 	cfg2 := scm2[source]
-	c.Assert(cfg2, DeepEquals, cfg)
+	c.Assert(cfg2, check.DeepEquals, cfg)
 	noContentBytes := []byte("test no content")
-	c.Assert(bytes.Contains(cfg2.From.Security.SSLCABytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(cfg2.From.Security.SSLKeyBytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(cfg2.From.Security.SSLCertBytes, noContentBytes), Equals, true)
+	c.Assert(bytes.Contains(cfg2.From.Security.SSLCABytes, noContentBytes), check.Equals, true)
+	c.Assert(bytes.Contains(cfg2.From.Security.SSLKeyBytes, noContentBytes), check.Equals, true)
+	c.Assert(bytes.Contains(cfg2.From.Security.SSLCertBytes, noContentBytes), check.Equals, true)
 	// put another source config.
 	rev2, err = PutSourceCfg(etcdTestCli, &cfgExtra)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// get all two config.
 	cfgM, rev3, err = GetSourceCfg(etcdTestCli, "", 0)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(cfgM, HasLen, 2)
-	c.Assert(cfgM[source], DeepEquals, cfg)
-	c.Assert(cfgM[cfgExtra.SourceID], DeepEquals, &cfgExtra)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(cfgM, check.HasLen, 2)
+	c.Assert(cfgM[source], check.DeepEquals, cfg)
+	c.Assert(cfgM[cfgExtra.SourceID], check.DeepEquals, &cfgExtra)
 
 	// delete the config.
 	deleteOp := deleteSourceCfgOp(source)
 	deleteResp, err := etcdTestCli.Txn(context.Background()).Then(deleteOp).Commit()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// get again, not exists now.
 	scm3, rev4, err := GetSourceCfg(etcdTestCli, source, 0)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Equals, deleteResp.Header.Revision)
-	c.Assert(scm3, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Equals, deleteResp.Header.Revision)
+	c.Assert(scm3, check.HasLen, 0)
 }

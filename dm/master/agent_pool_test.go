@@ -17,15 +17,15 @@ import (
 	"context"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
-func (t *testMaster) TestAgentPool(c *C) {
+func (t *testMaster) TestAgentPool(c *check.C) {
 	t.testPool(c)
 	t.testEmit(c)
 }
 
-func (t *testMaster) testPool(c *C) {
+func (t *testMaster) testPool(c *check.C) {
 	var (
 		rate  = 10
 		burst = 100
@@ -43,7 +43,7 @@ func (t *testMaster) testPool(c *C) {
 
 	for i := 0; i < burst; i++ {
 		agent := <-pc
-		c.Assert(agent.ID, Equals, i)
+		c.Assert(agent.ID, check.Equals, i)
 	}
 	select {
 	case <-pc:
@@ -54,7 +54,7 @@ func (t *testMaster) testPool(c *C) {
 	for i := 0; i < rate; i++ {
 		select {
 		case agent := <-pc:
-			c.Assert(agent.ID, Equals, i+burst)
+			c.Assert(agent.ID, check.Equals, i+burst)
 		case <-time.After(time.Millisecond * 200):
 			// add 100ms time drift here
 			c.Error("get agent timeout")
@@ -62,7 +62,7 @@ func (t *testMaster) testPool(c *C) {
 	}
 }
 
-func (t *testMaster) testEmit(c *C) {
+func (t *testMaster) testEmit(c *check.C) {
 	type testWorkerType int
 
 	var (
@@ -110,5 +110,5 @@ func (t *testMaster) testEmit(c *C) {
 		}
 		*pCounter++
 	}, []interface{}{&counter}...)
-	c.Assert(counter, Equals, 1)
+	c.Assert(counter, check.Equals, 1)
 }

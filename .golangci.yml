@@ -3,20 +3,18 @@ run:
   build-tags:
     - intest
 linters:
-  # temp disable errcheck because of panic of lint check.
-  # temp disable some check for upgrade to go 1.23, later need to enable them according situation. include:
-  # depguard, gosec, revive，gosimple
+  # temp disable errcheck because of panic of lint check with go 1.23.
   disable-all: true
   enable:
     - unconvert
     - unparam
-    #- revive
-    #- depguard
+    - revive
+    - depguard
     - misspell
     - ineffassign
     - typecheck
     - unused
-    #- gosimple
+    - gosimple
     #- errcheck
     - staticcheck
     - stylecheck
@@ -57,27 +55,13 @@ linters-settings:
       - name: unreachable-code
 
   depguard:
-    list-type: denylist
-    include-go-root: true
-    packages:
-      - log
-      - github.com/juju/errors
-    packages-with-error-message:
-      # specify an error message to output when a blacklisted package is used
-      - log: "logging is allowed only by pingcap/log"
-      - github.com/juju/errors: "error handling is allowed only by pingcap/errors"
-    additional-guards:
-      - list-type: denylist
-        include-go-root: true
-        packages:
-          - errors
-          - github.com/pingcap/errors
-        packages-with-error-message:
-          - errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
-          - github.com/pingcap/errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
-        ignore-file-rules:
-          - "!**/tiflow/engine/**"
-          - "**/engine/pkg/rpcutil/*.go"
+    rules:
+      main:
+        files:
+          - $all
+        deny:
+          - pkg: "github.com/juju/errors"
+            desc: error handling is allowed only by pingcap/errors
   staticcheck:
     checks:
       [

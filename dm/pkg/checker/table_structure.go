@@ -264,6 +264,7 @@ func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOp
 					if r.State != StateFailure {
 						r.State = StateWarning
 					}
+					// nolint
 					e := NewError(tableMsg + opt.errMessage)
 					e.Severity = StateWarning
 					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
@@ -272,6 +273,7 @@ func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOp
 					r.Errors = append(r.Errors, e)
 				case StateFailure:
 					r.State = StateFailure
+					// nolint:govet
 					e := NewError(tableMsg + opt.errMessage)
 					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
 						resultInstructions[opt.instruction] = struct{}{}

@@ -245,10 +245,10 @@ func TestScanRegions(t *testing.T) {
 		} else if i == 2 {
 			i++
 			return RegionsInfo{Regions: regions[4:5]}
-		} else {
-			require.FailNow(t, "must only request once")
-			return RegionsInfo{}
 		}
+
+		require.FailNow(t, "must only request once")
+		return RegionsInfo{}
 	}
 	rs, err = pc.scanRegions(
 		context.Background(),

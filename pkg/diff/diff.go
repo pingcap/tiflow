@@ -978,26 +978,25 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 				cmp = 1
 			}
 			break
-		} else {
-			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
-			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v",
-					string(data1.Data), string(data2.Data), err1, err2)
-				return
-			}
-
-			if num1 == num2 {
-				continue
-			}
-
-			if num1 < num2 {
-				cmp = -1
-			} else if num1 > num2 {
-				cmp = 1
-			}
-			break
 		}
+		num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
+		num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
+		if err1 != nil || err2 != nil {
+			err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v",
+				string(data1.Data), string(data2.Data), err1, err2)
+			return
+		}
+
+		if num1 == num2 {
+			continue
+		}
+
+		if num1 < num2 {
+			cmp = -1
+		} else if num1 > num2 {
+			cmp = 1
+		}
+		break
 	}
 
 	return

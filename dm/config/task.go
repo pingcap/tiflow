@@ -1019,11 +1019,10 @@ func getGenerateName(rule interface{}, nameIdx int, namePrefix string, nameMap m
 		return fmt.Sprintf("%s-%02d", namePrefix, nameIdx), nameIdx + 1
 	} else if val, ok := nameMap[string(ruleByte)]; ok {
 		return val, nameIdx
-	} else {
-		ruleName := fmt.Sprintf("%s-%02d", namePrefix, nameIdx+1)
-		nameMap[string(ruleByte)] = ruleName
-		return ruleName, nameIdx + 1
 	}
+	ruleName := fmt.Sprintf("%s-%02d", namePrefix, nameIdx+1)
+	nameMap[string(ruleByte)] = ruleName
+	return ruleName, nameIdx + 1
 }
 
 // checkDuplicateString checks whether the given string array has duplicate string item
