@@ -212,10 +212,12 @@ func (c *Config) Apply(
 	// configuration process. So we need to check it here again.
 	// We do this is because it can cause the data to be inconsistent if the TiDBSourceID is 0
 	// in BDR Mode cluster.
-	if replicaConfig.Sink.TiDBSourceID == 0 {
+	c.SourceID = config.DefaultTiDBSourceID
+	if replicaConfig.Sink == nil {
+		log.Error("The sink in replica config is nil. Please try to use default replica config")
+	} else if replicaConfig.Sink.TiDBSourceID == 0 {
 		log.Error("The TiDB source ID should never be set to 0. Please report it as a bug. The default value will be used: 1.",
 			zap.Uint64("tidbSourceID", replicaConfig.Sink.TiDBSourceID))
-		c.SourceID = config.DefaultTiDBSourceID
 	} else {
 		c.SourceID = replicaConfig.Sink.TiDBSourceID
 		log.Info("TiDB source ID is set", zap.Uint64("sourceID", c.SourceID))
@@ -229,7 +231,9 @@ func mergeConfig(
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
 	dest := &urlConfig{}
-	dest.SafeMode = replicaConfig.Sink.SafeMode
+	if replicaConfig.Sink != nil {
+		dest.SafeMode = replicaConfig.Sink.SafeMode
+	}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {
 		mConfig := replicaConfig.Sink.MySQLConfig
 		dest.WorkerCount = mConfig.WorkerCount
