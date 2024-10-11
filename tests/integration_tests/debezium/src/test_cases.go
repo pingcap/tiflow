@@ -37,6 +37,7 @@ var (
 	nFailed = 0
 	nPassed = 0
 )
+
 var (
 	msgKey   = "key"
 	msgValue = "value"
