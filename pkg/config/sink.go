@@ -89,6 +89,9 @@ const (
 	// DefaultSendBootstrapToAllPartition is the default value of
 	// whether to send bootstrap message to all partitions.
 	DefaultSendBootstrapToAllPartition = true
+	// DefaultSendAllBootstrapAtStart is the default value of whether
+	// to send all tables bootstrap message at changefeed start.
+	DefaultSendAllBootstrapAtStart = false
 
 	// DefaultMaxReconnectToPulsarBroker is the default max reconnect times to pulsar broker.
 	// The pulsar client uses an exponential backoff with jitter to reconnect to the broker.
@@ -175,6 +178,7 @@ type SinkConfig struct {
 
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
+	// Deprecated since v8.1.1
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 
 	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
@@ -188,7 +192,8 @@ type SinkConfig struct {
 	// If set to false, bootstrap message will only be sent to the first partition of each topic.
 	// Default value is true.
 	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
-
+	// SendAllBootstrapAtStart determines whether to send all tables bootstrap message at changefeed start.
+	SendAllBootstrapAtStart *bool `toml:"send-all-bootstrap-at-start" json:"send-all-bootstrap-at-start,omitempty"`
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 
@@ -225,6 +230,16 @@ func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
 	return protocol == ProtocolSimple.String() &&
 		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
 		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
+}
+
+// ShouldSendAllBootstrapAtStart returns whether the should send all bootstrap message at changefeed start.
+func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
+	if s == nil {
+		return false
+	}
+	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
+	log.Info("should send all bootstrap at start", zap.Bool("should", should))
+	return should
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -874,7 +889,7 @@ func (s *SinkConfig) ValidateProtocol(scheme string) error {
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
-	case sink.PulsarScheme, sink.PulsarSSLScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme, sink.PulsarHTTPScheme, sink.PulsarHTTPSScheme:
 		outputRawChangeEvent = s.PulsarConfig.GetOutputRawChangeEvent()
 	default:
 		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
@@ -897,15 +912,14 @@ func (s *SinkConfig) applyParameterBySinkURI(sinkURI *url.URL) error {
 		return nil
 	}
 
-	cfgInSinkURI := map[string]string{}
-	cfgInFile := map[string]string{}
 	params := sinkURI.Query()
+	var errFromURI, errFromFile strings.Builder
 
 	txnAtomicityFromURI := AtomicityLevel(params.Get(TxnAtomicityKey))
 	if txnAtomicityFromURI != unknownTxnAtomicity {
 		if util.GetOrZero(s.TxnAtomicity) != unknownTxnAtomicity && util.GetOrZero(s.TxnAtomicity) != txnAtomicityFromURI {
-			cfgInSinkURI[TxnAtomicityKey] = string(txnAtomicityFromURI)
-			cfgInFile[TxnAtomicityKey] = string(util.GetOrZero(s.TxnAtomicity))
+			errFromURI.WriteString(fmt.Sprintf("%s=%s, ", TxnAtomicityKey, txnAtomicityFromURI))
+			errFromFile.WriteString(fmt.Sprintf("%s=%s, ", TxnAtomicityKey, util.GetOrZero(s.TxnAtomicity)))
 		}
 		s.TxnAtomicity = util.AddressOf(txnAtomicityFromURI)
 	}
@@ -913,31 +927,17 @@ func (s *SinkConfig) applyParameterBySinkURI(sinkURI *url.URL) error {
 	protocolFromURI := params.Get(ProtocolKey)
 	if protocolFromURI != "" {
 		if s.Protocol != nil && util.GetOrZero(s.Protocol) != protocolFromURI {
-			cfgInSinkURI[ProtocolKey] = protocolFromURI
-			cfgInFile[ProtocolKey] = util.GetOrZero(s.Protocol)
+			errFromURI.WriteString(fmt.Sprintf("%s=%s, ", ProtocolKey, protocolFromURI))
+			errFromFile.WriteString(fmt.Sprintf("%s=%s, ", ProtocolKey, util.GetOrZero(s.Protocol)))
 		}
 		s.Protocol = util.AddressOf(protocolFromURI)
 	}
 
-	getError := func() error {
-		if len(cfgInSinkURI) != len(cfgInFile) {
-			log.Panic("inconsistent configuration items in sink uri and configuration file",
-				zap.Any("cfgInSinkURI", cfgInSinkURI), zap.Any("cfgInFile", cfgInFile))
-		}
-		if len(cfgInSinkURI) == 0 && len(cfgInFile) == 0 {
-			return nil
-		}
-		getErrMsg := func(cfgIn map[string]string) string {
-			var errMsg strings.Builder
-			for k, v := range cfgIn {
-				errMsg.WriteString(fmt.Sprintf("%s=%s, ", k, v))
-			}
-			return errMsg.String()[0 : errMsg.Len()-2]
-		}
-		return cerror.ErrIncompatibleSinkConfig.GenWithStackByArgs(
-			getErrMsg(cfgInSinkURI), getErrMsg(cfgInFile))
+	if errFromURI.Len() == 0 && errFromFile.Len() == 0 {
+		return nil
 	}
-	return getError()
+	return cerror.ErrIncompatibleSinkConfig.GenWithStackByArgs(
+		errFromURI.String()[0:errFromURI.Len()-2], errFromFile.String()[0:errFromFile.Len()-2])
 }
 
 // CheckCompatibilityWithSinkURI check whether the sinkURI is compatible with the sink config.

@@ -204,6 +204,8 @@ definitions:
     type: object
   config.LargeMessageHandleConfig:
     properties:
+      claim-check-raw-value:
+        type: boolean
       claim-check-storage-uri:
         type: string
       large-message-handle-compression:
@@ -348,6 +350,7 @@ definitions:
         description: |-
           AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
           advanced for this given duration, the sink will be canceled and re-established.
+          Deprecated since v8.1.1
         type: integer
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
@@ -417,6 +420,10 @@ definitions:
         description: SchemaRegistry is only available when the downstream is MQ using
           avro protocol.
         type: string
+      send-all-bootstrap-at-start:
+        description: SendAllBootstrapAtStart determines whether to send all tables
+          bootstrap message at changefeed start.
+        type: boolean
       send-bootstrap-in-msg-count:
         description: SendBootstrapInMsgCount means bootstrap messages are being sent
           every SendBootstrapInMsgCount row change messages.
@@ -1008,6 +1015,8 @@ definitions:
     type: object
   v2.LargeMessageHandleConfig:
     properties:
+      claim_check_raw_value:
+        type: boolean
       claim_check_storage_uri:
         type: string
       large_message_handle_compression:
@@ -1273,6 +1282,8 @@ definitions:
         type: boolean
       schema_registry:
         type: string
+      send-all-bootstrap-at-start:
+        type: boolean
       send_bootstrap_in_msg_count:
         type: integer
       send_bootstrap_interval_in_sec:

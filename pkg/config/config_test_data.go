@@ -70,6 +70,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
@@ -295,7 +296,8 @@ const (
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+		"claim-check-raw-value": false
       },
       "glue-schema-registry-config": {
         "region":"region",
@@ -337,6 +339,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true
@@ -511,6 +514,7 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
     "debezium-disable-schema": false,
     "open": {
       "output-old-value": true

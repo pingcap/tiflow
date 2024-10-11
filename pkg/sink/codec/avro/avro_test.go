@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro/v2"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -64,7 +64,7 @@ func TestDMLEventE2E(t *testing.T) {
 			schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 			require.NoError(t, err)
 
-			decoder := NewDecoder(codecConfig, schemaM, topic)
+			decoder := NewDecoder(codecConfig, schemaM, topic, nil)
 			err = decoder.AddKeyValue(message.Key, message.Value)
 			require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestDDLEventE2E(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(codecConfig, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic, nil)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -129,7 +129,7 @@ func TestResolvedE2E(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(codecConfig, nil, topic)
+	decoder := NewDecoder(codecConfig, nil, topic, nil)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 

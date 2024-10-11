@@ -16,7 +16,7 @@ package filter
 import (
 	"fmt"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
@@ -30,6 +30,8 @@ func isSysSchema(db string) bool {
 	// TiCDCSystemSchema is used by TiCDC only.
 	// Tables in TiCDCSystemSchema should not be replicated by cdc.
 	case TiCDCSystemSchema:
+		return true
+	case LightningTaskInfoSchema:
 		return true
 	default:
 		return tifilter.IsSystemSchema(db)

@@ -366,7 +366,7 @@ func decodeColumnGroup(bits []byte, allocator *SliceAllocator, dict *termDiction
 	}, nil
 }
 
-func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column, onlyHandleKeyColumns bool) (int, *columnGroup) {
+func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.ColumnData, tb *model.TableInfo, onlyHandleKeyColumns bool) (int, *columnGroup) {
 	l := len(columns)
 	if l == 0 {
 		return 0, nil
@@ -378,18 +378,16 @@ func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column,
 	estimatedSize := 0
 	idx := 0
 	for _, col := range columns {
-		if col == nil {
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
 			continue
 		}
-		if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
-			continue
-		}
-		names[idx] = col.Name
-		types[idx] = uint64(col.Type)
-		flags[idx] = uint64(col.Flag)
-		value := EncodeTiDBType(allocator, col.Type, col.Flag, col.Value)
+		names[idx] = colx.GetName()
+		types[idx] = uint64(colx.GetType())
+		flags[idx] = uint64(colx.GetFlag())
+		value := EncodeTiDBType(allocator, colx.GetType(), colx.GetFlag(), colx.Value)
 		values[idx] = value
-		estimatedSize += len(col.Name) + len(value) + 16 /* two 64-bits integers */
+		estimatedSize += len(colx.GetName()) + len(value) + 16 /* two 64-bits integers */
 		idx++
 	}
 	if idx > 0 {
@@ -421,7 +419,8 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent, 
 	if size, group := newColumnGroup(
 		allocator,
 		columnGroupTypeNew,
-		ev.GetColumns(),
+		ev.Columns,
+		ev.TableInfo,
 		false); group != nil {
 		groups[idx] = group
 		idx++
@@ -431,7 +430,8 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent, 
 	if size, group := newColumnGroup(
 		allocator,
 		columnGroupTypeOld,
-		ev.GetPreColumns(),
+		ev.PreColumns,
+		ev.TableInfo,
 		onlyHandleKeyColumns); group != nil {
 		groups[idx] = group
 		estimatedSize += size

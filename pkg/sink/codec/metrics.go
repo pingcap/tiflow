@@ -25,9 +25,9 @@ var (
 			Subsystem: "sink",
 			Name:      "encoder_group_input_chan_size",
 			Help:      "The size of input channel of encoder group",
-		}, []string{"namespace", "changefeed", "index"})
-	// EncoderGroupOutputChanSizeGauge tracks the size of output channel of encoder group
-	EncoderGroupOutputChanSizeGauge = prometheus.NewGaugeVec(
+		}, []string{"namespace", "changefeed"})
+	// encoderGroupOutputChanSizeGauge tracks the size of output channel of encoder group
+	encoderGroupOutputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -39,6 +39,6 @@ var (
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(encoderGroupInputChanSizeGauge)
-	registry.MustRegister(EncoderGroupOutputChanSizeGauge)
+	registry.MustRegister(encoderGroupOutputChanSizeGauge)
 	common.InitMetrics(registry)
 }

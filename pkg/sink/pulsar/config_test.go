@@ -14,6 +14,7 @@
 package pulsar
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -115,4 +116,18 @@ func TestGetDefaultTopicName(t *testing.T) {
 	sink, _ = url.Parse("pulsar://127.0.0.1:6650/persistent://tenant/namespace/test-topic")
 	config, _ = NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 	assert.Equal(t, config.GetDefaultTopicName(), "persistent://tenant/namespace/test-topic")
+}
+
+func TestNewPulsarConfigFailure(t *testing.T) {
+	t.Parallel()
+	invalidPulsarSchema := "pulsar+htp"
+	sinkURL := fmt.Sprintf("%s://127.0.0.1:6650/persistent://public/default/test?", invalidPulsarSchema) +
+		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
+		"authentication-token=eyJhbcGcixxxxxxxxxxxxxx"
+	sinkURI, err := url.Parse(sinkURL)
+	assert.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	assert.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	_, err = NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
+	assert.Error(t, err)
 }

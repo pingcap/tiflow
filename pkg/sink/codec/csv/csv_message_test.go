@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -629,6 +630,19 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			config.BinaryEncodingBase64,
 		},
 	},
+	{
+		{
+			model.Column{Name: "vectorfloat32", Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")), Type: mysql.TypeTiDBVectorFloat32},
+			rowcodec.ColInfo{
+				ID:            37,
+				IsPKHandle:    false,
+				VirtualGenCol: false,
+				Ft:            types.NewFieldType(mysql.TypeTiDBVectorFloat32),
+			},
+			"[1,2,3,4,5]",
+			config.BinaryEncodingBase64,
+		},
+	},
 }
 
 func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
@@ -959,9 +973,9 @@ func TestCSVMessageEncode(t *testing.T) {
 func TestConvertToCSVType(t *testing.T) {
 	for _, group := range csvTestColumnsGroup {
 		for _, c := range group {
-			val, _ := fromColValToCsvVal(&common.Config{
-				BinaryEncodingMethod: c.BinaryEncodingMethod,
-			}, &c.col, c.colInfo.Ft)
+			cfg := &common.Config{BinaryEncodingMethod: c.BinaryEncodingMethod}
+			col := model.Column2ColumnDataXForTest(&c.col)
+			val, _ := fromColValToCsvVal(cfg, col, c.colInfo.Ft)
 			require.Equal(t, c.want, val, c.col.Name)
 		}
 	}

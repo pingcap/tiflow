@@ -11,7 +11,7 @@ group_num=${group#G}
 # Other tests that only support mysql: batch_update_to_no_batch ddl_reentrant
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
-mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint syncpoint_check_ts hang_sink_suicide server_config_compatibility changefeed_dup_error_restart"
+mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint syncpoint_check_ts server_config_compatibility changefeed_dup_error_restart"
 mysql_only_http="http_api http_api_tls api_v2 http_api_tls_with_user_auth cli_tls_with_auth"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
@@ -42,7 +42,7 @@ groups=(
 	# G04
 	'foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
 	# G05
-	'charset_gbk ddl_manager multi_source'
+	'charset_gbk ddl_manager multi_source vector'
 	# G06
 	'sink_retry changefeed_error ddl_sequence resourcecontrol'
 	# G07 pulsar oauth2 authentication enabled
@@ -62,7 +62,7 @@ groups=(
 	# G14
 	'changefeed_finish force_replicate_table'
 	# G15
-	'new_ci_collation batch_add_table multi_rocks'
+	'new_ci_collation batch_add_table multi_rocks ci_collation_compatibility'
 	# G16, currently G16 is not running in kafka pipeline
 	'owner_resign processor_etcd_worker_delay sink_hang'
 	# G17

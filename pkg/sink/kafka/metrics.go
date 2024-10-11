@@ -16,7 +16,6 @@ package kafka
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	// Counter inc by 1 once a request send, dec by 1 for a response received.
 	requestsInFlightGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -64,7 +63,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_records_per_request",
-			Help:      "The P99 number of records per request for all topics.",
+			Help:      "The number of records per request for all topics.",
 		}, []string{"namespace", "changefeed", "type"})
 
 	// Meter mark by 1 once a response received.

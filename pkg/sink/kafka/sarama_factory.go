@@ -15,12 +15,15 @@ package kafka
 
 import (
 	"context"
+	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
+	"go.uber.org/zap"
 )
 
 type saramaFactory struct {
@@ -43,17 +46,32 @@ func NewSaramaFactory(
 }
 
 func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, error) {
+	start := time.Now()
 	config, err := NewSaramaConfig(ctx, f.option)
+	duration := time.Since(start).Seconds()
+	if duration > 2 {
+		log.Warn("new sarama config cost too much time", zap.Any("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+	}
 	if err != nil {
 		return nil, err
 	}
 
+	start = time.Now()
 	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	duration = time.Since(start).Seconds()
+	if duration > 2 {
+		log.Warn("new sarama client cost too much time", zap.Any("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	start = time.Now()
 	admin, err := sarama.NewClusterAdminFromClient(client)
+	duration = time.Since(start).Seconds()
+	if duration > 2 {
+		log.Warn("new sarama cluster admin cost too much time", zap.Any("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

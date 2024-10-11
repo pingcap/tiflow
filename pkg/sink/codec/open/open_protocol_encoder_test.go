@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
@@ -420,7 +421,12 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 		colName := insertEvent.TableInfo.ForceGetColumnName(column.ColumnID)
 		decodedColumn, ok := decodedColumns[colName]
 		require.True(t, ok)
-		require.Equal(t, column.Value, decodedColumn.Value, colName)
+		switch v := column.Value.(type) {
+		case types.VectorFloat32:
+			require.Equal(t, v.String(), decodedColumn.Value, colName)
+		default:
+			require.Equal(t, v, decodedColumn.Value, colName)
+		}
 	}
 }
 
@@ -460,4 +466,36 @@ func TestOutputOldValueFalse(t *testing.T) {
 	decoded, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.Nil(t, decoded.PreColumns)
+}
+
+func TestNoHandleKeys(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.ForceReplicate = true
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	// insert
+	_ = helper.DDL2Event(`create table test.t(a varchar(10), b varchar(10))`)
+	event := helper.DML2Event(`insert into test.t values ("aa", "bb")`, "test", "t")
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
+	key, value, err := rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
+
+	// update
+	event.PreColumns = event.Columns
+	key, value, err = rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
+
+	// delete
+	event.PreColumns = event.Columns
+	event.Columns = nil
+	key, value, err = rowChangeToMsg(event, codecConfig, true)
+	require.Error(t, err)
+	require.Nil(t, value)
+	require.Nil(t, key)
 }

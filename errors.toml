@@ -171,6 +171,11 @@ error = '''
 TiCDC cluster is unhealthy
 '''
 
+["CDC:ErrCodeNilFunction"]
+error = '''
+function is not initialized
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -498,7 +503,7 @@ kafka send message failed
 
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
-invalid topic expression
+invalid topic expression: %s 
 '''
 
 ["CDC:ErrLeaseExpired"]
@@ -1004,6 +1009,11 @@ some tables are not eligible to replicate(%v), if you want to ignore these table
 ["CDC:ErrTargetTsBeforeStartTs"]
 error = '''
 fail to create changefeed because target-ts %d is earlier than start-ts %d
+'''
+
+["CDC:ErrTiDBUnexpectedJobMeta"]
+error = '''
+unexpected `job_meta` from tidb
 '''
 
 ["CDC:ErrTiKVEventFeed"]

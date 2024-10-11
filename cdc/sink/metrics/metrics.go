@@ -55,7 +55,16 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 15), // 2K~32M
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecDDLHistogram records the exexution time of a DDL.
+	// ExecDDLCounter records the count of DDL executed.
+	ExecDDLCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "ddl_exec_count",
+			Help:      "Total count of ddl execution.",
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+
+	// ExecDDLHistogram records the execution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -79,6 +88,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(TotalWriteBytesCounter)
+	registry.MustRegister(ExecDDLCounter)
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)

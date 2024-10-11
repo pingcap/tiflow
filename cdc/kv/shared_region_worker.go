@@ -175,6 +175,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 			zap.Uint64("streamID", stream.streamID),
 			zap.Any("subscriptionID", state.getRegionID()),
 			zap.Uint64("regionID", state.region.verID.GetID()),
+			zap.Int64("tableID", state.region.span.TableID),
 			zap.Bool("reschedule", stepsToRemoved),
 			zap.Error(err))
 	}
@@ -228,12 +229,6 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 		}
 	}
 	tableID := state.region.subscribedTable.span.TableID
-	log.Debug("region worker get an Event",
-		zap.String("namespace", w.changefeed.Namespace),
-		zap.String("changefeed", w.changefeed.ID),
-		zap.Any("subscriptionID", state.region.subscribedTable.subscriptionID),
-		zap.Int64("tableID", tableID),
-		zap.Int("rows", len(x.Entries.GetEntries())))
 	return handleEventEntry(x, startTs, state, w.metrics, emit, w.changefeed, tableID, w.client.logRegionDetails)
 }
 
@@ -250,7 +245,7 @@ func handleEventEntry(
 	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
 		// NOTE: from TiKV 7.0.0, entries are already filtered out in TiKV side.
-		// We can remove the check in future.
+		// We can remove the check in the future.
 		comparableKey := spanz.ToComparableKey(entry.GetKey())
 		if entry.Type != cdcpb.Event_INITIALIZED &&
 			!spanz.KeyInSpan(comparableKey, regionSpan) {
@@ -266,6 +261,7 @@ func handleEventEntry(
 				zap.String("changefeed", changefeed.ID),
 				zap.Int64("tableID", tableID),
 				zap.Uint64("regionID", regionID),
+				zap.Int64("tableID", state.region.span.TableID),
 				zap.Uint64("requestID", state.requestID),
 				zap.Stringer("span", &state.region.span))
 

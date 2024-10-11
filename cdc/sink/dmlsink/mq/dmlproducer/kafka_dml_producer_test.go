@@ -160,7 +160,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
-
 		if err != nil {
 			require.Condition(t, func() bool {
 				return errors.Is(err, cerror.ErrKafkaProducerClosed) ||

@@ -210,6 +210,9 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		byteSize := (ft.GetFlen() + 7) >> 3
 		datum.SetUint64(0)
 		datum.SetMysqlBit(types.NewBinaryLiteralFromUint(val, byteSize))
+	case mysql.TypeTiDBVectorFloat32:
+		datum.SetVectorFloat32(types.ZeroVectorFloat32)
+		return datum, nil
 	}
 	return datum, nil
 }

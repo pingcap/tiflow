@@ -154,7 +154,7 @@ type changefeed struct {
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -233,7 +233,7 @@ func newChangefeed4Test(
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
 	cfstateManager FeedStateManager, up *upstream.Upstream,
-	newDDLPuller func(ctx context.Context,
+	newDDLPuller func(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
@@ -428,6 +428,10 @@ func (c *changefeed) tick(ctx context.Context,
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
+	}
+	// bootstrap not finished yet, cannot send any event.
+	if !c.ddlManager.isBootstrapped() {
+		return 0, 0, nil
 	}
 
 	err = c.handleBarrier(ctx, cfInfo, cfStatus, barrier)
@@ -672,7 +676,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, filter)
+	c.ddlPuller = c.newDDLPuller(c.upstream, ddlStartTs, c.id, c.schema, filter)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -716,7 +720,10 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-		util.GetOrZero(cfInfo.Config.BDRMode))
+		util.GetOrZero(cfInfo.Config.BDRMode),
+		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		c.Throw(ctx),
+	)
 
 	// create scheduler
 	cfg := *c.cfg
@@ -925,8 +932,6 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	barrier *schedulepb.BarrierWithMinTs,
 ) error {
 	barrierTp, barrierTs := c.barriers.Min()
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
-
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
@@ -968,6 +973,8 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// MinTableBarrierTs is always the next barrier that blocking the global resolvedTs.
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
 

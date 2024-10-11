@@ -27,7 +27,7 @@ $ make cdc
 $ make test
 ```
 
-Note that TiCDC supports building with the Go version `Go >= 1.21`.
+Note that TiCDC supports building with the Go version `Go >= 1.23`.
 
 When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](./tests/integration_tests/README.md).
 
@@ -38,7 +38,7 @@ You can set up a CDC cluster for replication test manually as following:
 1. Set up a TiDB cluster.
 2. Start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server
    is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
-3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used. Currently, TiCDC supports MySQL protocol-compatible databases as downstream sinks only, and we will add more sink types in the future.
+3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used.
 
 For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticdc).
 

@@ -24,7 +24,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"

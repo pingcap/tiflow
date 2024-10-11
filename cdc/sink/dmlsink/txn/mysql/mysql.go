@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -86,7 +87,7 @@ func NewMySQLBackends(
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
+	dbConnFactory pmysql.IDBConnectionFactory,
 	statistics *metrics.Statistics,
 ) ([]*mysqlBackend, error) {
 	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)
@@ -97,20 +98,17 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory.CreateTemporaryConnection)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := dbConnFactory(ctx, dsnStr)
+	db, err := dbConnFactory.CreateStandardConnection(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
-	if err != nil {
-		return nil, err
-	}
+	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {
@@ -338,17 +336,19 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(cols []*model.ColumnData, tableInfo *model.TableInfo) {
+func convertValue(cols []*model.ColumnData, tableInfo *model.TableInfo) {
 	for i, col := range cols {
 		if col == nil {
 			continue
 		}
-		colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
-		if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
-			colValBytes, ok := col.Value.([]byte)
-			if ok {
-				cols[i].Value = string(colValBytes)
+		switch v := col.Value.(type) {
+		case []byte:
+			colInfo := tableInfo.ForceGetColumnInfo(col.ColumnID)
+			if colInfo.GetCharset() != "" && colInfo.GetCharset() != charset.CharsetBin {
+				cols[i].Value = string(v)
 			}
+		case types.VectorFloat32:
+			cols[i].Value = v.String()
 		}
 	}
 }
@@ -367,8 +367,8 @@ func (s *mysqlBackend) groupRowsByType(
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range event.Event.Rows {
-		convertBinaryToString(row.Columns, tableInfo)
-		convertBinaryToString(row.PreColumns, tableInfo)
+		convertValue(row.Columns, tableInfo)
+		convertValue(row.PreColumns, tableInfo)
 
 		if row.IsInsert() {
 			insertRow = append(
@@ -574,8 +574,9 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(
 					quoteTable,
-					row.GetPreColumns(),
-					row.GetColumns(),
+					row.PreColumns,
+					row.Columns,
+					row.TableInfo,
 					s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
@@ -587,7 +588,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 			// Delete Event
 			if len(row.PreColumns) != 0 {
-				query, args = prepareDelete(quoteTable, row.GetPreColumns(), s.cfg.ForceReplicate)
+				query, args = prepareDelete(quoteTable, row.PreColumns, row.TableInfo, s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -599,11 +600,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// INSERT(not in safe mode)
 			// or REPLACE(in safe mode) SQL.
 			if len(row.Columns) != 0 {
-				query, args = prepareReplace(
-					quoteTable,
-					row.GetColumns(),
-					true, /* appendPlaceHolder */
-					translateToInsert)
+				query, args = prepareReplace(quoteTable, row.Columns, row.TableInfo, true, translateToInsert)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

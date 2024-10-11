@@ -17,7 +17,8 @@ import (
 	"fmt"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +80,7 @@ func TestSchema(t *testing.T) {
 	snap := NewEmptySnapshot(true)
 
 	// createSchema fails if the schema ID or name already exist.
-	dbName := timodel.CIStr{O: "DB_1", L: "db_1"}
+	dbName := pmodel.CIStr{O: "DB_1", L: "db_1"}
 	require.Nil(t, snap.inner.createSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 100))
 	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 100))
 	require.Error(t, snap.inner.createSchema(&timodel.DBInfo{ID: 1}, 110))
@@ -87,7 +88,7 @@ func TestSchema(t *testing.T) {
 	snap1 := snap.Copy()
 
 	// replaceSchema only success if the schema ID exists.
-	dbName = timodel.CIStr{O: "DB_2", L: "db_2"}
+	dbName = pmodel.CIStr{O: "DB_2", L: "db_2"}
 	require.Error(t, snap.inner.replaceSchema(&timodel.DBInfo{ID: 2}, 130))
 	require.Nil(t, snap.inner.replaceSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 140))
 	snap2 := snap.Copy()
@@ -354,7 +355,7 @@ func TestDrop(t *testing.T) {
 func newDBInfo(id int64) *timodel.DBInfo {
 	return &timodel.DBInfo{
 		ID: id,
-		Name: timodel.CIStr{
+		Name: pmodel.CIStr{
 			O: fmt.Sprintf("DB_%d", id),
 			L: fmt.Sprintf("db_%d", id),
 		},
@@ -367,7 +368,7 @@ func newTbInfo(schemaID int64, schemaName string, tableID int64) *model.TableInf
 	return &model.TableInfo{
 		TableInfo: &timodel.TableInfo{
 			ID: tableID,
-			Name: timodel.CIStr{
+			Name: pmodel.CIStr{
 				O: fmt.Sprintf("TB_%d", tableID),
 				L: fmt.Sprintf("TB_%d", tableID),
 			},

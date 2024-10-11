@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -220,6 +221,9 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 		fallthrough
 	case mysql.TypeGeometry:
 		return nil
+	case mysql.TypeTiDBVectorFloat32:
+		vec := value.(types.VectorFloat32)
+		return []byte(vec.String())
 	}
 	return nil
 }
