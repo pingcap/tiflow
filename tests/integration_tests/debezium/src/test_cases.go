@@ -181,7 +181,7 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 		if kind == KindMySQL {
 			schema, ok := obj["schema"]
 			if !ok {
-				return nil, fmt.Errorf("Unexpected CDC record of %s: schema field not exist in %s", kind, m.Value)
+				return nil, nil, fmt.Errorf("Unexpected CDC record of %s: schema field not exist in %s", kind, m.Value)
 			}
 			if schema.(map[string]any)["name"] == "io.debezium.connector.mysql.SchemaChangeValue" {
 				continue

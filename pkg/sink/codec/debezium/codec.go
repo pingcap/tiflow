@@ -537,10 +537,6 @@ func (c *dbzCodec) EncodeKey(
 	dest io.Writer,
 ) error {
 	cols, _ := e.HandleKeyColInfos()
-	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
-	if len(cols) == 0 {
-		return nil
-	}
 	jWriter := util.BorrowJSONWriter(dest)
 	defer util.ReturnJSONWriter(jWriter)
 
