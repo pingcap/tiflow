@@ -19,7 +19,7 @@ pid=$$
 
 all_matched=true
 echo "dmctl test cmd: \"$cmd\""
-for ((k = 0; k < 10; k++)); do
+for ((k = 0; k < 30; k++)); do
 	echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr >$dmctl_log 2>&1
 	all_matched=true
 	for ((i = 1; i < $#; i += 2)); do
