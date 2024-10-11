@@ -565,7 +565,7 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
+	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
 	ddlJobPullerImpl.setResolvedTs(startTs)
@@ -695,7 +695,7 @@ func TestResolvedTsStuck(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
+	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
