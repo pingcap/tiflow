@@ -51,6 +51,8 @@ type SourceManager struct {
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
+	safeModeAtStart bool
+
 	enableTableMonitor bool
 	puller             *puller.MultiplexingPuller
 }
@@ -63,8 +65,9 @@ func New(
 	engine sorter.SortEngine,
 	bdrMode bool,
 	enableTableMonitor bool,
+	safeModeAtStart bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor)
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, enableTableMonitor, safeModeAtStart)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -85,6 +88,10 @@ func NewForTest(
 	}
 }
 
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
+}
+
 func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
@@ -92,6 +99,7 @@ func newSourceManager(
 	engine sorter.SortEngine,
 	bdrMode bool,
 	enableTableMonitor bool,
+	safeModeAtStart bool,
 ) *SourceManager {
 	mgr := &SourceManager{
 		ready:              make(chan struct{}),
@@ -101,6 +109,7 @@ func newSourceManager(
 		engine:             engine,
 		bdrMode:            bdrMode,
 		enableTableMonitor: enableTableMonitor,
+		safeModeAtStart:    safeModeAtStart,
 	}
 
 	serverConfig := config.GetGlobalServerConfig()
@@ -113,15 +122,25 @@ func newSourceManager(
 
 	// consume add raw kv entry to the engine.
 	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",
 				zap.String("namespace", mgr.changefeedID.Namespace),
 				zap.String("changefeed", mgr.changefeedID.ID))
 		}
 		if raw != nil {
-			pEvent := model.NewPolymorphicEvent(raw)
-			mgr.engine.Add(spans[0], pEvent)
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				mgr.engine.Add(spans[0], pEvent)
+			}
 		}
 		return nil
 	}
@@ -140,13 +159,17 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+	}
+
 	// Only nil in unit tests.
 	if m.puller != nil {
-		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+		m.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
 	}
 }
 

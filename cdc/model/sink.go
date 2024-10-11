@@ -23,7 +23,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -94,8 +95,8 @@ func (b *ColumnFlagType) UnsetIsBinary() {
 }
 
 // IsBinary shows whether BinaryFlag is set
-func (b *ColumnFlagType) IsBinary() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+func (b ColumnFlagType) IsBinary() bool {
+	return (util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
 // SetIsHandleKey sets HandleKey
@@ -109,8 +110,8 @@ func (b *ColumnFlagType) UnsetIsHandleKey() {
 }
 
 // IsHandleKey shows whether HandleKey is set
-func (b *ColumnFlagType) IsHandleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
+func (b ColumnFlagType) IsHandleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
 // SetIsGeneratedColumn sets GeneratedColumn
@@ -124,8 +125,8 @@ func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
 }
 
 // IsGeneratedColumn shows whether GeneratedColumn is set
-func (b *ColumnFlagType) IsGeneratedColumn() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
+func (b ColumnFlagType) IsGeneratedColumn() bool {
+	return (util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
 // SetIsPrimaryKey sets PrimaryKeyFlag
@@ -139,8 +140,8 @@ func (b *ColumnFlagType) UnsetIsPrimaryKey() {
 }
 
 // IsPrimaryKey shows whether PrimaryKeyFlag is set
-func (b *ColumnFlagType) IsPrimaryKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
+func (b ColumnFlagType) IsPrimaryKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
 }
 
 // SetIsUniqueKey sets UniqueKeyFlag
@@ -154,13 +155,13 @@ func (b *ColumnFlagType) UnsetIsUniqueKey() {
 }
 
 // IsUniqueKey shows whether UniqueKeyFlag is set
-func (b *ColumnFlagType) IsUniqueKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
+func (b ColumnFlagType) IsUniqueKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
 }
 
 // IsMultipleKey shows whether MultipleKeyFlag is set
-func (b *ColumnFlagType) IsMultipleKey() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
+func (b ColumnFlagType) IsMultipleKey() bool {
+	return (util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
 }
 
 // SetIsMultipleKey sets MultipleKeyFlag
@@ -174,8 +175,8 @@ func (b *ColumnFlagType) UnsetIsMultipleKey() {
 }
 
 // IsNullable shows whether NullableFlag is set
-func (b *ColumnFlagType) IsNullable() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(NullableFlag))
+func (b ColumnFlagType) IsNullable() bool {
+	return (util.Flag)(b).HasAll(util.Flag(NullableFlag))
 }
 
 // SetIsNullable sets NullableFlag
@@ -189,8 +190,8 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 }
 
 // IsUnsigned shows whether UnsignedFlag is set
-func (b *ColumnFlagType) IsUnsigned() bool {
-	return (*util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
+func (b ColumnFlagType) IsUnsigned() bool {
+	return (util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
 }
 
 // SetIsUnsigned sets UnsignedFlag
@@ -272,7 +273,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 }
 
 // TrySplitAndSortUpdateEvent redo log do nothing
-func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -298,7 +299,7 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		Table: &TableName{
 			Schema:      r.TableInfo.GetSchemaName(),
 			Table:       r.TableInfo.GetTableName(),
-			TableID:     r.PhysicalTableID,
+			TableID:     r.GetTableID(),
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
 		Columns:      r.GetColumns(),
@@ -382,6 +383,30 @@ type RowChangedEventInRedoLog struct {
 	IndexColumns [][]int   `msg:"index-columns"`
 }
 
+// ToRowChangedEvent converts RowChangedEventInRedoLog to RowChangedEvent
+func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
+	cols := r.Columns
+	if cols == nil {
+		cols = r.PreColumns
+	}
+	tableInfo := BuildTableInfo(
+		r.Table.Schema,
+		r.Table.Table,
+		cols,
+		r.IndexColumns)
+	tableInfo.TableName.TableID = r.Table.TableID
+	tableInfo.TableName.IsPartition = r.Table.IsPartition
+	row := &RowChangedEvent{
+		StartTs:         r.StartTs,
+		CommitTs:        r.CommitTs,
+		PhysicalTableID: r.Table.TableID,
+		TableInfo:       tableInfo,
+		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
+		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
+	}
+	return row
+}
+
 // txnRows represents a set of events that belong to the same transaction.
 type txnRows []*RowChangedEvent
 
@@ -409,13 +434,18 @@ func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
+// GetTableID returns the table ID of the event.
+func (r *RowChangedEvent) GetTableID() int64 {
+	return r.PhysicalTableID
+}
+
 // GetCommitTs returns the commit timestamp of this event.
 func (r *RowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
 }
 
 // TrySplitAndSortUpdateEvent do nothing
-func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string) error {
+func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string, _ bool) error {
 	return nil
 }
 
@@ -459,15 +489,17 @@ func columnDatas2Columns(cols []*ColumnData, tableInfo *TableInfo) []*Column {
 		return nil
 	}
 	columns := make([]*Column, len(cols))
+	nilColumnNum := 0
 	for i, colData := range cols {
 		if colData == nil {
-			log.Warn("meet nil column data, should not happened in production env",
-				zap.Any("cols", cols),
-				zap.Any("tableInfo", tableInfo))
+			nilColumnNum++
 			continue
 		}
 		columns[i] = columnData2Column(colData, tableInfo)
 	}
+	log.Debug("meet nil column data",
+		zap.Any("nilColumnNum", nilColumnNum),
+		zap.Any("tableInfo", tableInfo))
 	return columns
 }
 
@@ -782,7 +814,7 @@ func BuildTiDBTableInfoImpl(
 	columnIDAllocator ColumnIDAllocator,
 ) *model.TableInfo {
 	ret := &model.TableInfo{}
-	ret.Name = model.NewCIStr(tableName)
+	ret.Name = pmodel.NewCIStr(tableName)
 
 	hasPrimaryKeyColumn := false
 	for i, col := range columns {
@@ -793,7 +825,7 @@ func BuildTiDBTableInfoImpl(
 		if col == nil {
 			// actually, col should never be nil according to `datum2Column` and `WrapTableInfo` in prod env
 			// we mock it as generated column just for test
-			columnInfo.Name = model.NewCIStr("omitted")
+			columnInfo.Name = pmodel.NewCIStr("omitted")
 			columnInfo.GeneratedExprString = "pass_generated_check"
 			columnInfo.GeneratedStored = false
 			ret.Columns = append(ret.Columns, columnInfo)
@@ -801,7 +833,7 @@ func BuildTiDBTableInfoImpl(
 		}
 		// add a mock id to identify columns inside cdc
 		columnInfo.ID = columnIDAllocator.GetColumnID(col.Name)
-		columnInfo.Name = model.NewCIStr(col.Name)
+		columnInfo.Name = pmodel.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
 
 		if col.Collation != "" {
@@ -872,7 +904,7 @@ func BuildTiDBTableInfoImpl(
 	nextMockIndexID := minIndexID + 1
 	for i, colOffsets := range indexColumns {
 		indexInfo := &model.IndexInfo{
-			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
+			Name:  pmodel.NewCIStr(fmt.Sprintf("idx_%d", i)),
 			State: model.StatePublic,
 		}
 		firstCol := columns[colOffsets[0]]
@@ -1111,32 +1143,25 @@ func (t *SingleTableTxn) GetPhysicalTableID() int64 {
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
-func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string) error {
-	if !t.shouldSplitUpdateEvent(scheme) {
+func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string, outputRawChangeEvent bool) error {
+	if sink.IsMySQLCompatibleScheme(scheme) || outputRawChangeEvent {
+		// For MySQL Sink, all update events will be split into insert and delete at the puller side
+		// according to whether the changefeed is in safemode. We don't split update event here(in sink)
+		// since there may be OOM issues. For more information, ref https://github.com/tikv/tikv/issues/17062.
+		//
+		// For the Kafka and Storage sink, the outputRawChangeEvent parameter is introduced to control
+		// split behavior. TiCDC only output original change event if outputRawChangeEvent is true.
 		return nil
 	}
+
+	// Try to split update events for the Kafka and Storage sink if outputRawChangeEvent is false.
+	// Note it is only for backward compatibility, and we should remove this logic in the future.
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.Rows = newRows
 	return nil
-}
-
-// Whether split a single update event into delete and insert events？
-//
-// For the MySQL Sink, there is no need to split a single unique key changed update event, this
-// is also to keep the backward compatibility, the same behavior as before.
-//
-// For the Kafka and Storage sink, always split a single unique key changed update event, since:
-// 1. Avro and CSV does not output the previous column values for the update event, so it would
-// cause consumer missing data if the unique key changed event is not split.
-// 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
-func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
-	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
-		return false
-	}
-	return true
 }
 
 // trySplitAndSortUpdateEvent try to split update events if unique key is updated
@@ -1148,8 +1173,7 @@ func trySplitAndSortUpdateEvent(
 	split := false
 	for _, e := range events {
 		if e == nil {
-			log.Warn("skip emit nil event",
-				zap.Any("event", e))
+			log.Warn("skip emit nil event", zap.Any("event", e))
 			continue
 		}
 
@@ -1159,15 +1183,14 @@ func trySplitAndSortUpdateEvent(
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
-			log.Warn("skip emit empty row event",
-				zap.Any("event", e))
+			log.Warn("skip emit empty row event", zap.Any("event", e))
 			continue
 		}
 
 		// This indicates that it is an update event. if the pk or uk is updated,
 		// we need to split it into two events (delete and insert).
-		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(e)
+		if e.IsUpdate() && ShouldSplitUpdateEvent(e) {
+			deleteEvent, insertEvent, err := SplitUpdateEvent(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -1192,10 +1215,10 @@ func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
 	return false
 }
 
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
-// If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
+// If is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
 		return false
@@ -1217,8 +1240,8 @@ func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	return false
 }
 
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(
+// SplitUpdateEvent splits an update event into a delete and an insert event.
+func SplitUpdateEvent(
 	updateEvent *RowChangedEvent,
 ) (*RowChangedEvent, *RowChangedEvent, error) {
 	if updateEvent == nil {
@@ -1232,17 +1255,30 @@ func splitUpdateEvent(
 	// so it won't have an impact and no more full deep copy wastes memory.
 	deleteEvent := *updateEvent
 	deleteEvent.Columns = nil
+	if deleteEvent.Checksum != nil {
+		deleteEvent.Checksum.Current = 0
+	}
 
 	insertEvent := *updateEvent
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.PreColumns = nil
+	if insertEvent.Checksum != nil {
+		insertEvent.Checksum.Previous = 0
+	}
+
+	log.Debug("split update event", zap.Uint64("startTs", updateEvent.StartTs),
+		zap.Uint64("commitTs", updateEvent.CommitTs),
+		zap.String("schema", updateEvent.TableInfo.TableName.Schema),
+		zap.String("table", updateEvent.TableInfo.GetTableName()),
+		zap.Any("preCols", updateEvent.PreColumns),
+		zap.Any("cols", updateEvent.Columns))
 
 	return &deleteEvent, &insertEvent, nil
 }
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.PhysicalTableID != t.GetPhysicalTableID() {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.GetTableID() != t.GetPhysicalTableID() {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),
@@ -1258,4 +1294,95 @@ type TopicPartitionKey struct {
 	Partition      int32
 	PartitionKey   string
 	TotalPartition int32
+}
+
+// ColumnDataX is like ColumnData, but contains more informations.
+//
+//msgp:ignore RowChangedEvent
+type ColumnDataX struct {
+	*ColumnData
+	flag *ColumnFlagType
+	info *model.ColumnInfo
+}
+
+// GetColumnDataX encapsures ColumnData to ColumnDataX.
+func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
+	x := ColumnDataX{ColumnData: col}
+	if x.ColumnData != nil {
+		x.flag = tb.ColumnsFlag[col.ColumnID]
+		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
+	}
+	return x
+}
+
+// GetName returns name.
+func (x ColumnDataX) GetName() string {
+	return x.info.Name.O
+}
+
+// GetType returns type.
+func (x ColumnDataX) GetType() byte {
+	return x.info.GetType()
+}
+
+// GetCharset returns charset.
+func (x ColumnDataX) GetCharset() string {
+	return x.info.GetCharset()
+}
+
+// GetCollation returns collation.
+func (x ColumnDataX) GetCollation() string {
+	return x.info.GetCollate()
+}
+
+// GetFlag returns flag.
+func (x ColumnDataX) GetFlag() ColumnFlagType {
+	return *x.flag
+}
+
+// GetDefaultValue return default value.
+func (x ColumnDataX) GetDefaultValue() interface{} {
+	return GetColumnDefaultValue(x.info)
+}
+
+// GetColumnInfo returns column info.
+func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
+	return x.info
+}
+
+// Columns2ColumnDataForTest is for tests.
+func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+	info := &TableInfo{
+		TableInfo: &model.TableInfo{
+			Columns: make([]*model.ColumnInfo, len(columns)),
+		},
+		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
+		columnsOffset: make(map[int64]int),
+	}
+	colDatas := make([]*ColumnData, 0, len(columns))
+
+	for i, column := range columns {
+		var columnID int64 = int64(i)
+		info.columnsOffset[columnID] = i
+
+		info.Columns[i] = &model.ColumnInfo{}
+		info.Columns[i].Name.O = column.Name
+		info.Columns[i].SetType(column.Type)
+		info.Columns[i].SetCharset(column.Charset)
+		info.Columns[i].SetCollate(column.Collation)
+		info.Columns[i].DefaultValue = column.Default
+
+		info.ColumnsFlag[columnID] = new(ColumnFlagType)
+		*info.ColumnsFlag[columnID] = column.Flag
+
+		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
+	}
+
+	return colDatas, info
+}
+
+// Column2ColumnDataXForTest is for tests.
+func Column2ColumnDataXForTest(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnDataForTest([]*Column{column})
+	return GetColumnDataX(datas[0], info)
 }

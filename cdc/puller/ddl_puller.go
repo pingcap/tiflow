@@ -15,8 +15,8 @@ package puller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -75,11 +75,8 @@ type ddlJobPullerImpl struct {
 	resolvedTs    uint64
 	schemaVersion int64
 	filter        filter.Filter
-	// ddlJobsTable is initialized when receive the first concurrent DDL job.
-	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
-	ddlJobsTable *model.TableInfo
-	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	jobMetaColumnID int64
+	// ddlTableInfo is initialized when receive the first concurrent DDL job.
+	ddlTableInfo *entry.DDLTableInfo
 	// outputCh sends the DDL job entries to the caller.
 	outputCh chan *model.DDLJobEntry
 }
@@ -123,7 +120,7 @@ func NewDDLJobPuller(
 
 	slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
 	ddlJobPuller.mp = NewMultiplexingPuller(changefeed, client, up.PDClock, ddlJobPuller.Input, slots, hasher, 1)
-	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName)
+	ddlJobPuller.mp.Subscribe(ddlSpans, checkpointTs, memorysorter.DDLPullerTableName, func(_ *model.RawKVEntry) bool { return false })
 
 	return ddlJobPuller
 }
@@ -176,6 +173,7 @@ func (p *ddlJobPullerImpl) Input(
 	ctx context.Context,
 	rawDDL *model.RawKVEntry,
 	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
 ) error {
 	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
 	return nil
@@ -238,13 +236,14 @@ func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
-	if p.ddlJobsTable == nil && !entry.IsLegacyFormatJob(rawKV) {
-		err := p.initJobTableMeta()
+	if p.ddlTableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
+		err := p.initDDLTableInfo()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
+
+	return entry.ParseDDLJob(rawKV, p.ddlTableInfo)
 }
 
 func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
@@ -255,7 +254,7 @@ func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
 	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
-func (p *ddlJobPullerImpl) initJobTableMeta() error {
+func (p *ddlJobPullerImpl) initDDLTableInfo() error {
 	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return errors.Trace(err)
@@ -276,6 +275,8 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// for tidb_ddl_job
 	tableInfo, err := findTableByName(tbls, "tidb_ddl_job")
 	if err != nil {
 		return errors.Trace(err)
@@ -286,8 +287,24 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 		return errors.Trace(err)
 	}
 
-	p.ddlJobsTable = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
-	p.jobMetaColumnID = col.ID
+	p.ddlTableInfo = &entry.DDLTableInfo{}
+	p.ddlTableInfo.DDLJobTable = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
+	p.ddlTableInfo.JobMetaColumnIDinJobTable = col.ID
+
+	// for tidb_ddl_history
+	historyTableInfo, err := findTableByName(tbls, "tidb_ddl_history")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	historyTableCol, err := findColumnByName(historyTableInfo.Columns, "job_meta")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.ddlTableInfo.DDLHistoryTable = model.WrapTableInfo(db.ID, db.Name.L, 0, historyTableInfo)
+	p.ddlTableInfo.JobMetaColumnIDinHistoryTable = historyTableCol.ID
+
 	return nil
 }
 
@@ -373,6 +390,37 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
+	case timodel.ActionCreateTables:
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		if strings.Count(job.Query, ";") != len(job.BinlogInfo.MultipleTableInfos) {
+			log.Error("the number of queries in `Job.Query` is not equal to "+
+				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.String("Job.Query", job.Query),
+				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
+				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
+		}
+
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+		querys := strings.Split(job.Query, ";")
+
+		for index, tableInfo := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O) {
+				continue
+			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index]+";")
+		}
+
+		skip = len(newMultiTableInfos) == 0
+
+		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+		job.Query = strings.Join(newQuerys, "")
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
@@ -480,28 +528,14 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 // in the DDL job out and filter them one by one,
 // if all the tables are filtered, skip it.
 func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
-	var (
-		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-		newTableNames, oldSchemaNames           []*timodel.CIStr
-	)
-
-	err = job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
-		&newTableNames, &oldTableIDs, &oldSchemaNames)
+	var args *timodel.RenameTablesArgs
+	args, err = timodel.GetRenameTablesArgs(job)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
 
-	var (
-		remainOldSchemaIDs, remainNewSchemaIDs, remainOldTableIDs []int64
-		remainNewTableNames, remainOldSchemaNames                 []*timodel.CIStr
-	)
-
 	multiTableInfos := job.BinlogInfo.MultipleTableInfos
-	if len(multiTableInfos) != len(oldSchemaIDs) ||
-		len(multiTableInfos) != len(newSchemaIDs) ||
-		len(multiTableInfos) != len(newTableNames) ||
-		len(multiTableInfos) != len(oldTableIDs) ||
-		len(multiTableInfos) != len(oldSchemaNames) {
+	if len(multiTableInfos) != len(args.RenameTableInfos) {
 		return true, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 
@@ -511,28 +545,31 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	// 3. old table name and new table name do not match the filter rule, skip it.
 	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
 	snap := p.schemaStorage.GetLastSnapshot()
+
+	argsForRemaining := &timodel.RenameTablesArgs{}
 	for i, tableInfo := range multiTableInfos {
+		info := args.RenameTableInfos[i]
 		var shouldDiscardOldTable, shouldDiscardNewTable bool
 		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			shouldDiscardOldTable = true
 		} else {
-			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O)
 		}
 
-		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
+		newSchemaName, ok := snap.SchemaByID(info.NewSchemaID)
 		if !ok {
 			// the new table name does not hit the filter rule, so we should discard the table.
 			shouldDiscardNewTable = true
 		} else {
-			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, info.NewTableName.O)
 		}
 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
 			// skip a rename table ddl only when its old table name and new table name are both filtered.
 			log.Info("RenameTables is filtered",
 				zap.Int64("tableID", tableInfo.ID),
-				zap.String("schema", oldSchemaNames[i].O),
+				zap.String("schema", info.OldSchemaName.O),
 				zap.String("query", job.Query))
 			continue
 		}
@@ -541,50 +578,26 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 		}
 		// old table name matches the filter rule, remain it.
+		argsForRemaining.RenameTableInfos = append(argsForRemaining.RenameTableInfos, &timodel.RenameTableArgs{
+			OldSchemaID:   info.OldSchemaID,
+			NewSchemaID:   info.NewSchemaID,
+			TableID:       info.TableID,
+			NewTableName:  info.NewTableName,
+			OldSchemaName: info.OldSchemaName,
+			OldTableName:  info.OldTableName,
+		})
 		remainTables = append(remainTables, tableInfo)
-		remainOldSchemaIDs = append(remainOldSchemaIDs, oldSchemaIDs[i])
-		remainNewSchemaIDs = append(remainNewSchemaIDs, newSchemaIDs[i])
-		remainOldTableIDs = append(remainOldTableIDs, oldTableIDs[i])
-		remainNewTableNames = append(remainNewTableNames, newTableNames[i])
-		remainOldSchemaNames = append(remainOldSchemaNames, oldSchemaNames[i])
 	}
 
 	if len(remainTables) == 0 {
 		return true, nil
 	}
 
-	newArgs := make([]json.RawMessage, 5)
-	v, err := json.Marshal(remainOldSchemaIDs)
+	bakJob, err := entry.GetNewJobWithArgs(job, argsForRemaining)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[0] = v
-	v, err = json.Marshal(remainNewSchemaIDs)
-	if err != nil {
-		return true, errors.Trace(err)
-	}
-	newArgs[1] = v
-	v, err = json.Marshal(remainNewTableNames)
-	if err != nil {
-		return true, errors.Trace(err)
-	}
-	newArgs[2] = v
-	v, err = json.Marshal(remainOldTableIDs)
-	if err != nil {
-		return true, errors.Trace(err)
-	}
-	newArgs[3] = v
-	v, err = json.Marshal(remainOldSchemaNames)
-	if err != nil {
-		return true, errors.Trace(err)
-	}
-	newArgs[4] = v
-
-	newRawArgs, err := json.Marshal(newArgs)
-	if err != nil {
-		return true, errors.Trace(err)
-	}
-	job.RawArgs = newRawArgs
+	job.RawArgs = bakJob.RawArgs
 	job.BinlogInfo.MultipleTableInfos = remainTables
 	return false, nil
 }

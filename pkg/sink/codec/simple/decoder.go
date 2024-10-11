@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -57,7 +58,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 	)
 	if config.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := config.LargeMessageHandle.ClaimCheckStorageURI
-		externalStorage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		externalStorage, err = util.GetExternalStorage(ctx, storageURI, nil, util.NewS3Retryer(10, 10*time.Second, 10*time.Second))
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
@@ -69,10 +70,6 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 	}
 
 	m, err := newMarshaller(config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return &Decoder{
 		config:     config,
 		marshaller: m,
@@ -82,21 +79,17 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 
 		memo:           newMemoryTableInfoProvider(),
 		cachedMessages: list.New(),
-	}, nil
+	}, errors.Trace(err)
 }
 
 // AddKeyValue add the received key and values to the Decoder,
-func (d *Decoder) AddKeyValue(_, value []byte) error {
+func (d *Decoder) AddKeyValue(_, value []byte) (err error) {
 	if d.value != nil {
-		return cerror.ErrDecodeFailed.GenWithStack(
+		return cerror.ErrCodecDecode.GenWithStack(
 			"Decoder value already exists, not consumed yet")
 	}
-	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return err
-	}
-	d.value = value
-	return nil
+	d.value, err = common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	return err
 }
 
 // HasNext returns whether there is any event need to be consumed
@@ -164,13 +157,11 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, nil
 	}
 
-	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
-	if err != nil {
-		return nil, err
-	}
-	log.Debug("row changed event assembled", zap.Any("event", event))
+	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum, d.upstreamTiDB)
 	d.msg = nil
-	return event, nil
+
+	log.Debug("row changed event assembled", zap.Any("event", event))
+	return event, err
 }
 
 func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (*model.RowChangedEvent, error) {
@@ -179,12 +170,16 @@ func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 	if err != nil {
 		return nil, err
 	}
-	claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
-	if err != nil {
-		return nil, err
+
+	if !d.config.LargeMessageHandle.ClaimCheckRawValue {
+		claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+		if err != nil {
+			return nil, err
+		}
+		data = claimCheckM.Value
 	}
 
-	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
+	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, data)
 	if err != nil {
 		return nil, err
 	}
@@ -201,9 +196,14 @@ func (d *Decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
 	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"cannot found the table info, schema: %s, table: %s, version: %d",
-			m.Schema, m.Table, m.SchemaVersion)
+		log.Debug("table info not found for the event, "+
+			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
+			zap.String("schema", d.msg.Schema),
+			zap.String("table", d.msg.Table),
+			zap.Uint64("version", d.msg.SchemaVersion))
+		d.cachedMessages.PushBack(d.msg)
+		d.msg = nil
+		return nil, nil
 	}
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
@@ -215,6 +215,7 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		Version:       defaultVersion,
 		Schema:        m.Schema,
 		Table:         m.Table,
+		TableID:       m.TableID,
 		Type:          m.Type,
 		CommitTs:      m.CommitTs,
 		SchemaVersion: m.SchemaVersion,
@@ -251,13 +252,7 @@ func (d *Decoder) buildData(
 		col := holder.Types[i]
 		value := holder.Values[i]
 
-		fieldType, ok := fieldTypeMap[col.Name()]
-		if !ok {
-			log.Panic("cannot found the field type",
-				zap.String("schema", d.msg.Schema),
-				zap.String("table", d.msg.Table),
-				zap.String("column", col.Name()))
-		}
+		fieldType := fieldTypeMap[col.Name()]
 		result[col.Name()] = encodeValue(value, fieldType, timezone)
 	}
 	return result
@@ -269,10 +264,7 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"no message found when decode DDL event")
 	}
-	ddl, err := newDDLEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+	ddl := newDDLEvent(d.msg)
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
@@ -283,10 +275,6 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		event, err := d.NextRowChangedEvent()
 		if err != nil {
 			return nil, err
-		}
-		if event == nil {
-			ele = ele.Next()
-			continue
 		}
 		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
 
@@ -335,7 +323,7 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 
 	_, ok := m.memo[key]
 	if ok {
-		log.Warn("table info not stored, since it already exists",
+		log.Debug("table info not stored, since it already exists",
 			zap.String("schema", info.TableName.Schema),
 			zap.String("table", info.TableName.Table),
 			zap.Uint64("version", info.UpdateTS))

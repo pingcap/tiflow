@@ -144,6 +144,12 @@ func IsResumableError(err *pb.ProcessError) bool {
 		return false
 	}
 
+	if err.ErrCode == int32(terror.ErrLoadLightningRuntime.Code()) {
+		// for lightning parallel import, the table may be dropped by other lightning, we
+		// treat it as resumable error.
+		return strings.Contains(err.RawCause, "doesn't exist")
+	}
+
 	return true
 }
 

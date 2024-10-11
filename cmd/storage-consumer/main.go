@@ -191,7 +191,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		stdCtx,
 		model.DefaultChangeFeedID(defaultChangefeedName),
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		replicaConfig,
 		errCh,
 		nil,
 	)
@@ -201,7 +201,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
-		downstreamURIStr, config.GetDefaultReplicaConfig())
+		downstreamURIStr, replicaConfig)
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
@@ -647,7 +647,7 @@ func main() {
 	if enableProfiling {
 		go func() {
 			server := &http.Server{
-				Addr:              ":6060",
+				Addr:              "127.0.0.1:6060",
 				ReadHeaderTimeout: 5 * time.Second,
 			}
 

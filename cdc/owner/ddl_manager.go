@@ -17,13 +17,14 @@ import (
 	"context"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -130,6 +131,25 @@ type ddlManager struct {
 
 	BDRMode       bool
 	ddlResolvedTs model.Ts
+
+	bootstrapState bootstrapState
+	reportError    func(err error)
+}
+
+type bootstrapState int32
+
+const (
+	bootstrapNotStarted bootstrapState = iota
+	bootstrapInProgress
+	bootstrapFinished
+)
+
+func storeBootstrapState(addr *bootstrapState, state bootstrapState) {
+	atomic.StoreInt32((*int32)(addr), int32(state))
+}
+
+func loadBootstrapState(addr *bootstrapState) bootstrapState {
+	return bootstrapState(atomic.LoadInt32((*int32)(addr)))
 }
 
 func newDDLManager(
@@ -143,6 +163,8 @@ func newDDLManager(
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	bdrMode bool,
+	shouldSendAllBootstrapAtStart bool,
+	reportError func(err error),
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
@@ -150,6 +172,11 @@ func newDDLManager(
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode))
+
+	bootstrap := bootstrapFinished
+	if shouldSendAllBootstrapAtStart {
+		bootstrap = bootstrapNotStarted
+	}
 
 	return &ddlManager{
 		changfeedID:     changefeedID,
@@ -164,7 +191,58 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		bootstrapState:  bootstrap,
+		reportError:     reportError,
 	}
+}
+
+func (m *ddlManager) isBootstrapped() bool {
+	return loadBootstrapState(&m.bootstrapState) == bootstrapFinished
+}
+
+// return true if bootstrapped
+func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*model.TableInfo) bool {
+	bootstrap := loadBootstrapState(&m.bootstrapState)
+	switch bootstrap {
+	case bootstrapFinished:
+		return true
+	case bootstrapInProgress:
+		return false
+	case bootstrapNotStarted:
+	}
+	storeBootstrapState(&m.bootstrapState, bootstrapInProgress)
+	start := time.Now()
+	go func() {
+		log.Info("start to send bootstrap messages",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)))
+		for idx, table := range currentTables {
+			if table.TableInfo.IsView() {
+				continue
+			}
+			ddlEvent := &model.DDLEvent{
+				TableInfo:   table,
+				IsBootstrap: true,
+			}
+			err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
+			if err != nil {
+				log.Error("send bootstrap message failed",
+					zap.Stringer("changefeed", m.changfeedID),
+					zap.Int("tables", len(currentTables)),
+					zap.Int("emitted", idx+1),
+					zap.Duration("duration", time.Since(start)),
+					zap.Error(err))
+				m.reportError(err)
+				return
+			}
+		}
+		storeBootstrapState(&m.bootstrapState, bootstrapFinished)
+		log.Info("send bootstrap messages finished",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)),
+			zap.Duration("cost", time.Since(start)))
+	}()
+	return m.isBootstrapped()
 }
 
 // tick the ddlHandler, it does the following things:
@@ -186,6 +264,12 @@ func (m *ddlManager) tick(
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
+	}
+
+	// before bootstrap finished, cannot send any event.
+	ok := m.trySendBootstrap(ctx, currentTables)
+	if !ok {
+		return nil, nil, nil
 	}
 
 	if m.executingDDL == nil {
@@ -276,6 +360,13 @@ func (m *ddlManager) tick(
 					zap.Uint64("commitTs", nextDDL.CommitTs),
 					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
+				skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					m.cleanCache(cleanMsg)
+				}
 			}
 			err := m.executeDDL(ctx)
 			if err != nil {
@@ -339,14 +430,6 @@ func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
-		return nil
-	}
-	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if skip {
-		m.cleanCache(cleanMsg)
 		return nil
 	}
 
@@ -483,8 +566,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	return barrier
 }
 
-// allTables returns all tables in the schema that
-// less or equal than the checkpointTs.
+// allTables returns all tables in the schema in current checkpointTs.
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
 	if m.tableInfoCache == nil {
 		ts := m.getSnapshotTs()

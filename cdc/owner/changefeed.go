@@ -429,6 +429,10 @@ func (c *changefeed) tick(ctx context.Context,
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
+	// bootstrap not finished yet, cannot send any event.
+	if !c.ddlManager.isBootstrapped() {
+		return 0, 0, nil
+	}
 
 	err = c.handleBarrier(ctx, cfInfo, cfStatus, barrier)
 	if err != nil {
@@ -631,7 +635,15 @@ LOOP2:
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(cfInfo.Config.EnableSyncPoint) {
-		c.barriers.Update(syncPointBarrier, c.resolvedTs)
+		// firstSyncPointStartTs = k * syncPointInterval，
+		// which >= startTs, and choose the minimal k
+		syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval)
+		k := oracle.GetTimeFromTS(c.resolvedTs).Sub(time.Unix(0, 0)) / syncPointInterval
+		if oracle.GetTimeFromTS(c.resolvedTs).Sub(time.Unix(0, 0))%syncPointInterval != 0 || oracle.ExtractLogical(c.resolvedTs) != 0 {
+			k += 1
+		}
+		firstSyncPointTs := oracle.GoTimeToTS(time.Unix(0, 0).Add(k * syncPointInterval))
+		c.barriers.Update(syncPointBarrier, firstSyncPointTs)
 	}
 	c.barriers.Update(finishBarrier, cfInfo.GetTargetTs())
 
@@ -708,7 +720,10 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-		util.GetOrZero(cfInfo.Config.BDRMode))
+		util.GetOrZero(cfInfo.Config.BDRMode),
+		cfInfo.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		c.Throw(ctx),
+	)
 
 	// create scheduler
 	cfg := *c.cfg
@@ -811,6 +826,20 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.initialized.Store(false)
 	c.isReleased = true
 
+	// when closing a changefeed, we must clean the warningCh.
+	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
+OUT:
+	for {
+		select {
+		case err := <-c.warningCh:
+			log.Warn("drain owner warnings",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Error(err))
+		default:
+			break OUT
+		}
+	}
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
@@ -903,8 +932,6 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	barrier *schedulepb.BarrierWithMinTs,
 ) error {
 	barrierTp, barrierTs := c.barriers.Min()
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
-
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
@@ -946,6 +973,8 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// MinTableBarrierTs is always the next barrier that blocking the global resolvedTs.
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
 

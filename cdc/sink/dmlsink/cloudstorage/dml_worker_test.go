@@ -21,7 +21,8 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -51,8 +52,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
-	statistics := metrics.NewStatistics(ctx, model.DefaultChangeFeedID("dml-worker-test"),
-		sink.TxnSink)
+	statistics := metrics.NewStatistics(model.DefaultChangeFeedID("dml-worker-test"), sink.TxnSink)
 	pdlock := pdutil.NewMonotonicClock(clock.New())
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
 		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), pdlock, statistics)
@@ -75,10 +75,10 @@ func TestDMLWorkerRun(t *testing.T) {
 	}
 	tidbTableInfo := &timodel.TableInfo{
 		ID:   100,
-		Name: timodel.NewCIStr("table1"),
+		Name: pmodel.NewCIStr("table1"),
 		Columns: []*timodel.ColumnInfo{
-			{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
-			{ID: 2, Name: timodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeVarchar)},
+			{ID: 1, Name: pmodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: pmodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeVarchar)},
 		},
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 99, tidbTableInfo)

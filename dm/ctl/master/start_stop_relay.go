@@ -89,7 +89,6 @@ func startStopRelay(cmd *cobra.Command, op pb.RelayOpV2) error {
 		},
 		&resp,
 	)
-
 	if err != nil {
 		return err
 	}

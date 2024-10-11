@@ -30,6 +30,7 @@ import (
 func TestNewSaramaConfig(t *testing.T) {
 	options := NewOptions()
 	options.Version = "invalid"
+	options.IsAssignedVersion = true
 	ctx := context.Background()
 	_, err := NewSaramaConfig(ctx, options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))

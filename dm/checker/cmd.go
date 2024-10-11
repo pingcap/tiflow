@@ -75,12 +75,7 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	return "", nil
 }
 
-// RunCheckOnConfigs returns the check result for given subtask configs. Caller
-// should be noticed that result may be very large.
-// check result may be nil when check is not run.
-// when `dumpWholeInstance` is true, checker will require SELECT ON *.* privileges
-// for SourceDumpPrivilegeChecker.
-func RunCheckOnConfigs(
+func runCheckOnConfigs(
 	ctx context.Context,
 	cfgs []*config.SubTaskConfig,
 	dumpWholeInstance bool,
@@ -104,4 +99,28 @@ func RunCheckOnConfigs(
 	defer c.Close()
 
 	return checker.Do(ctx, c.checkList)
+}
+
+// RunCheckOnConfigs returns the check result for given subtask configs. Caller
+// should be noticed that result may be very large. The result will be truncated
+// to `warnLimit` and `errLimit`, but the total count in summary will be the same
+// as the original result.
+//
+// when `dumpWholeInstance` is true, checker will require SELECT ON *.*
+// privileges for SourceDumpPrivilegeChecker.
+//
+// This function is used by cloud services.
+func RunCheckOnConfigs(
+	ctx context.Context,
+	cfgs []*config.SubTaskConfig,
+	dumpWholeInstance bool,
+	warnLimit, errLimit int64,
+) (*checker.Results, error) {
+	result, err := runCheckOnConfigs(ctx, cfgs, dumpWholeInstance)
+	if err != nil || result == nil {
+		return result, err
+	}
+
+	filterResults(result, warnLimit, errLimit, true)
+	return result, nil
 }

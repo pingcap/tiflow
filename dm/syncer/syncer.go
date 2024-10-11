@@ -31,11 +31,11 @@ import (
 	mysql2 "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -69,6 +69,7 @@ import (
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
 	"github.com/pingcap/tiflow/dm/unit"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -881,8 +882,8 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	}
 	createStmt := createNode.(*ast.CreateTableStmt)
 	createStmt.IfNotExists = true
-	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
+	createStmt.Table.Schema = pmodel.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = pmodel.NewCIStr(sourceTable.Name)
 
 	// schema tracker sets non-clustered index, so can't handle auto_random.
 	for _, col := range createStmt.Cols {
@@ -3074,20 +3075,38 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				setFirstErr(err)
 				continue
 			}
-			err = s.schemaTracker.Exec(ctx, db, stmtNode)
-			if err != nil {
-				logger.Warn("fail to create table for dump files",
-					zap.Any("path", s.cfg.LoaderConfig.Dir),
-					zap.Any("file", file),
-					zap.ByteString("statement", stmt),
-					zap.Error(err))
-				setFirstErr(err)
-				continue
+			switch v := stmtNode.(type) {
+			case *ast.SetStmt:
+				logger.Warn("ignoring statement",
+					zap.String("type", fmt.Sprintf("%T", v)),
+					zap.ByteString("statement", stmt))
+			case *ast.CreateTableStmt:
+				err = s.schemaTracker.Exec(ctx, db, stmtNode)
+				if err != nil {
+					logger.Warn("fail to create table for dump files",
+						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
+						zap.Error(err))
+					setFirstErr(err)
+					continue
+				}
+				s.saveTablePoint(
+					&filter.Table{Schema: db, Name: v.Table.Name.O},
+					s.getFlushedGlobalPoint(),
+				)
+			default:
+				err = s.schemaTracker.Exec(ctx, db, stmtNode)
+				if err != nil {
+					logger.Warn("fail to create table for dump files",
+						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
+						zap.Error(err))
+					setFirstErr(err)
+					continue
+				}
 			}
-			s.saveTablePoint(
-				&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
-				s.getFlushedGlobalPoint(),
-			)
 		}
 	}
 	return firstErr

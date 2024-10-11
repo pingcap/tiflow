@@ -19,9 +19,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
@@ -574,7 +574,6 @@ func (g *shardGroup) allTableSmaller(tp tableType) bool {
 		err    error
 	)
 	joined, err = g.joinTables(tp)
-
 	if err != nil {
 		return false
 	}

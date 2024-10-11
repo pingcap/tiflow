@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -66,12 +66,12 @@ func tsToRawKVEntry(_ *testing.T, ts model.Ts) *model.RawKVEntry {
 
 func inputDDL(t *testing.T, puller *ddlJobPullerImpl, job *timodel.Job) {
 	rawJob := jonToRawKVEntry(t, job)
-	puller.Input(context.Background(), rawJob, []tablepb.Span{})
+	puller.Input(context.Background(), rawJob, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
 func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
 	rawTs := tsToRawKVEntry(t, ts)
-	puller.Input(context.Background(), rawTs, []tablepb.Span{})
+	puller.Input(context.Background(), rawTs, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
 func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
@@ -198,7 +198,6 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
-
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
 		require.False(t, skip)

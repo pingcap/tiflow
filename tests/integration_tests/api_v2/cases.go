@@ -240,6 +240,8 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		Do(ctx)
 	assertResponseIsOK(resp)
 
+	// sleep to wait owner to tick
+	time.Sleep(2 * time.Second)
 	resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1?namespace=test").Do(ctx)
 	assertResponseIsOK(resp)
 	cf := &ChangeFeedInfo{}
@@ -321,15 +323,20 @@ func testRemoveChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	return nil
 }
 
-func testCapture(ctx context.Context, client *CDCRESTClient) error {
+func listCaptures(ctx context.Context, client *CDCRESTClient) *ListResponse[Capture] {
 	resp := client.Get().WithURI("captures").Do(ctx)
 	assertResponseIsOK(resp)
 	captures := &ListResponse[Capture]{}
 	if err := json.Unmarshal(resp.body, captures); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
+	return captures
+}
+
+func testCapture(ctx context.Context, client *CDCRESTClient) error {
+	captures := listCaptures(ctx, client)
 	if len(captures.Items) != 1 {
-		log.Panic("capture size is not 1", zap.Any("resp", resp))
+		log.Panic("capture size is not 1", zap.Any("resp", captures))
 	}
 	println("pass test: capture apis")
 	return nil
@@ -361,9 +368,19 @@ func testProcessor(ctx context.Context, client *CDCRESTClient) error {
 }
 
 func testResignOwner(ctx context.Context, client *CDCRESTClient) error {
+	old := listCaptures(ctx, client)
 	resp := client.Post().WithURI("owner/resign").Do(ctx)
 	assertResponseIsOK(resp)
-	assertResponseIsOK(resp)
+	// sleep sometime to wait capture resign owner, then check the capture id again
+	// resign owner mustn't reset the capture
+	time.Sleep(3 * time.Second)
+	newCapture := listCaptures(ctx, client)
+	if len(newCapture.Items) != 1 || len(old.Items) != 1 {
+		log.Panic("capture size is not equals 1", zap.Any("old", old), zap.Any("new", newCapture))
+	}
+	if newCapture.Items[0].ID != old.Items[0].ID {
+		log.Panic("capture id is not equals, capture is reset", zap.Any("old", old), zap.Any("new", newCapture))
+	}
 	println("pass test: owner apis")
 	return nil
 }

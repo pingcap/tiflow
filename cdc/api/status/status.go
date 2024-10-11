@@ -82,7 +82,7 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 		}
 
 		st.ID = info.ID
-		st.IsOwner = h.capture.IsController()
+		st.IsOwner = h.capture.IsOwner()
 	}
 	api.WriteData(w, st)
 }

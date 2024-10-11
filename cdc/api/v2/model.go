@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -317,6 +317,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				BasicPassword:           c.Sink.PulsarConfig.BasicPassword,
 				AuthTLSCertificatePath:  c.Sink.PulsarConfig.AuthTLSCertificatePath,
 				AuthTLSPrivateKeyPath:   c.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+				OutputRawChangeEvent:    c.Sink.PulsarConfig.OutputRawChangeEvent,
 			}
 			if c.Sink.PulsarConfig.OAuth2 != nil {
 				pulsarConfig.OAuth2 = &config.OAuth2{
@@ -351,6 +352,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
 					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
 					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+					ClaimCheckRawValue:            oldConfig.ClaimCheckRawValue,
 				}
 			}
 
@@ -402,6 +404,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
 				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
+				OutputRawChangeEvent:         c.Sink.KafkaConfig.OutputRawChangeEvent,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -427,13 +430,14 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            c.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
-				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				WorkerCount:          c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:       c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:     c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputRawChangeEvent: c.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 		var debeziumConfig *config.DebeziumConfig
@@ -493,6 +497,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 
 		if c.Sink.SendBootstrapToAllPartition != nil {
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
+		}
+
+		if c.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*c.Sink.SendAllBootstrapAtStart)
 		}
 	}
 	if c.Mounter != nil {
@@ -615,6 +623,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
 					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
 					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+					ClaimCheckRawValue:            oldConfig.ClaimCheckRawValue,
 				}
 			}
 
@@ -666,6 +675,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
 				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
+				OutputRawChangeEvent:         cloned.Sink.KafkaConfig.OutputRawChangeEvent,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -708,6 +718,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				BasicPassword:           cloned.Sink.PulsarConfig.BasicPassword,
 				AuthTLSCertificatePath:  cloned.Sink.PulsarConfig.AuthTLSCertificatePath,
 				AuthTLSPrivateKeyPath:   cloned.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+				OutputRawChangeEvent:    cloned.Sink.PulsarConfig.OutputRawChangeEvent,
 			}
 			if cloned.Sink.PulsarConfig.OAuth2 != nil {
 				pulsarConfig.OAuth2 = &PulsarOAuth2{
@@ -722,13 +733,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
-				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
-				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
-				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				WorkerCount:          cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:        cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:             cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:       cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:   cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec:  cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:     cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputRawChangeEvent: cloned.Sink.CloudStorageConfig.OutputRawChangeEvent,
 			}
 		}
 		var debeziumConfig *DebeziumConfig
@@ -784,6 +796,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 		if cloned.Sink.SendBootstrapToAllPartition != nil {
 			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
+		}
+
+		if cloned.Sink.SendAllBootstrapAtStart != nil {
+			res.Sink.SendAllBootstrapAtStart = util.AddressOf(*cloned.Sink.SendAllBootstrapAtStart)
 		}
 
 		if cloned.Sink.DebeziumDisableSchema != nil {
@@ -951,6 +967,7 @@ type SinkConfig struct {
 	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
+	SendAllBootstrapAtStart          *bool               `json:"send-all-bootstrap-at-start,omitempty"`
 	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 	DebeziumConfig                   *DebeziumConfig     `json:"debezium,omitempty"`
 	OpenProtocolConfig               *OpenProtocolConfig `json:"open,omitempty"`
@@ -974,6 +991,7 @@ type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption      string `json:"large_message_handle_option"`
 	LargeMessageHandleCompression string `json:"large_message_handle_compression"`
 	ClaimCheckStorageURI          string `json:"claim_check_storage_uri"`
+	ClaimCheckRawValue            bool   `json:"claim_check_raw_value"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -1194,6 +1212,7 @@ type PulsarConfig struct {
 	AuthTLSCertificatePath  *string       `json:"auth-tls-certificate-path,omitempty"`
 	AuthTLSPrivateKeyPath   *string       `json:"auth-tls-private-key-path,omitempty"`
 	OAuth2                  *PulsarOAuth2 `json:"oauth2,omitempty"`
+	OutputRawChangeEvent    *bool         `json:"output-raw-change-event,omitempty"`
 }
 
 // PulsarOAuth2 is the configuration for OAuth2
@@ -1243,6 +1262,7 @@ type KafkaConfig struct {
 	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
+	OutputRawChangeEvent         *bool                     `json:"output_raw_change_event,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -1266,13 +1286,14 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount         *int    `json:"worker_count,omitempty"`
-	FlushInterval       *string `json:"flush_interval,omitempty"`
-	FileSize            *int    `json:"file_size,omitempty"`
-	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
-	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
-	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
-	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	WorkerCount          *int    `json:"worker_count,omitempty"`
+	FlushInterval        *string `json:"flush_interval,omitempty"`
+	FileSize             *int    `json:"file_size,omitempty"`
+	OutputColumnID       *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays   *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec  *string `json:"file_cleanup_cron_spec,omitempty"`
+	FlushConcurrency     *int    `json:"flush_concurrency,omitempty"`
+	OutputRawChangeEvent *bool   `json:"output_raw_change_event,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

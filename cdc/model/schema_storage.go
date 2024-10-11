@@ -17,7 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
@@ -52,8 +52,6 @@ type TableInfo struct {
 	Version uint64
 	// ColumnID -> offset in model.TableInfo.Columns
 	columnsOffset map[int64]int
-	// ColumnID -> offset in model.TableInfo.Indices
-	indicesOffset map[int64]int
 	// Column name -> ColumnID
 	nameToColID map[string]int64
 
@@ -112,7 +110,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
-		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		nameToColID:      make(map[string]int64, len(info.Columns)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]*ColumnFlagType, len(info.Columns)),
@@ -160,8 +157,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
 	}
 
-	for i, idx := range ti.Indices {
-		ti.indicesOffset[idx.ID] = i
+	for _, idx := range ti.Indices {
 		if ti.IsIndexUnique(idx) {
 			ti.hasUniqueColumn = true
 		}
@@ -487,22 +483,16 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 // GetPrimaryKeyColumnNames returns the primary key column names
 func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
-	result := make([]string, 0)
-	for _, index := range ti.Indices {
-		if index.Primary {
-			for _, col := range index.Columns {
-				result = append(result, col.Name.O)
-			}
-			return result
-		}
+	var result []string
+	if ti.PKIsHandle {
+		result = append(result, ti.GetPkColInfo().Name.O)
+		return result
 	}
 
-	for _, columnsOffsets := range ti.IndexColumnsOffset {
-		for _, offset := range columnsOffsets {
-			columnInfo := ti.Columns[offset]
-			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
-				result = append(result, columnInfo.Name.O)
-			}
+	indexInfo := ti.GetPrimaryKey()
+	if indexInfo != nil {
+		for _, col := range indexInfo.Columns {
+			result = append(result, col.Name.O)
 		}
 	}
 	return result

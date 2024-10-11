@@ -16,9 +16,9 @@ package filter
 import (
 	"testing"
 
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +34,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 	require.False(t, filter.ShouldIgnoreTable("metric_schema", "query_duration"))
 	require.False(t, filter.ShouldIgnoreTable("sns", "user"))
 	require.True(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
+	require.True(t, filter.ShouldIgnoreTable("lightning_task_info", "conflict_records"))
 }
 
 func TestShouldUseCustomRules(t *testing.T) {
@@ -371,7 +372,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 }
 
 func TestIsAllowedDDL(t *testing.T) {
-	require.Len(t, ddlWhiteListMap, 36)
+	require.Len(t, ddlWhiteListMap, 37)
 	type testCase struct {
 		timodel.ActionType
 		allowed bool

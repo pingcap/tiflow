@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -101,11 +100,9 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 	require.NoError(t, err)
 
 	require.ErrorIs(t, lw.Close(), context.Canceled)
-	require.Eventually(t, func() bool {
-		err = lw.WriteEvents(ctx, events...)
-		return err != nil
-	}, 2*time.Second, 10*time.Millisecond)
-	require.ErrorIs(t, err, cerror.ErrRedoWriterStopped)
+
+	err = lw.WriteEvents(ctx, events...)
+	require.NoError(t, err)
 	err = lw.FlushLog(ctx)
-	require.ErrorIs(t, err, cerror.ErrRedoWriterStopped)
+	require.NoError(t, err)
 }

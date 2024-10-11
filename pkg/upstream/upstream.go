@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -72,7 +73,6 @@ type Upstream struct {
 	session        *concurrency.Session
 
 	KVStorage   tidbkv.Storage
-	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
 	PDClock     pdutil.Clock
 	GCManager   gc.Manager
@@ -152,7 +152,8 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					},
 					MinConnectTimeout: 3 * time.Second,
 				}),
-			))
+			),
+			pd.WithForwardingOption(config.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)
@@ -190,8 +191,6 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 		return errors.Trace(err)
 	}
 
-	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.SecurityConfig)
-
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
@@ -226,11 +225,6 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 	go func() {
 		defer up.wg.Done()
 		up.PDClock.Run(ctx)
-	}()
-	up.wg.Add(1)
-	go func() {
-		defer up.wg.Done()
-		up.GrpcPool.RecycleConn(ctx)
 	}()
 
 	log.Info("upstream initialize successfully", zap.Uint64("upstreamID", up.ID))
@@ -284,9 +278,6 @@ func (up *Upstream) Close() {
 		}
 	}
 
-	if up.GrpcPool != nil {
-		up.GrpcPool.Close()
-	}
 	if up.RegionCache != nil {
 		up.RegionCache.Close()
 	}

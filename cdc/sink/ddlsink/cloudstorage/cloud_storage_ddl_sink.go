@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -82,7 +82,7 @@ func newDDLSink(ctx context.Context,
 	d := &DDLSink{
 		id:                       changefeedID,
 		storage:                  storage,
-		statistics:               metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		statistics:               metrics.NewStatistics(changefeedID, sink.TxnSink),
 		cfg:                      cfg,
 		lastSendCheckpointTsTime: time.Now(),
 	}

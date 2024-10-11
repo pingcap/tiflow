@@ -76,7 +76,6 @@ func queryStatusFunc(cmd *cobra.Command, _ []string) error {
 		},
 		&resp,
 	)
-
 	if err != nil {
 		common.PrintLinesf("can not query %s task's status(in sources %v)", taskName, sources)
 		return err

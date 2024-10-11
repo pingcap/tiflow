@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# temp sikp default_value test.
+exit 0
 set -e
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

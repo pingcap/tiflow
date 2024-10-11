@@ -15,7 +15,7 @@ package syncer
 
 import (
 	"github.com/pingcap/tidb/pkg/expression"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
@@ -181,7 +181,6 @@ func (g *ExprFilterGroup) ResetExprs(table *filter.Table) {
 // SkipDMLByExpression returns true when given row matches the expr, which means this row should be skipped.
 func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr expression.Expression, upstreamCols []*model.ColumnInfo) (bool, error) {
 	// TODO: add MetricsProxies
-	log.L().Debug("will evaluate the expression", zap.Stringer("expression", expr), zap.Any("raw row", row))
 	data, err := utils.AdjustBinaryProtocolForDatum(ctx, row, upstreamCols)
 	if err != nil {
 		return false, err

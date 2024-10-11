@@ -1447,6 +1447,10 @@ var doc = `{
                 "output-column-id": {
                     "type": "boolean"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "worker-count": {
                     "type": "integer"
                 }
@@ -1602,6 +1606,10 @@ var doc = `{
                 "max-message-bytes": {
                     "type": "integer"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "partition-num": {
                     "type": "integer"
                 },
@@ -1676,6 +1684,9 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim-check-raw-value": {
+                    "type": "boolean"
+                },
                 "claim-check-storage-uri": {
                     "type": "string"
                 },
@@ -1817,6 +1828,10 @@ var doc = `{
                     "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
                     "type": "integer"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "pulsar-producer-cache-size": {
                     "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
                     "type": "integer"
@@ -1848,7 +1863,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "advance-timeout-in-sec": {
-                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.\nDeprecated since v8.1.1",
                     "type": "integer"
                 },
                 "cloud-storage-config": {
@@ -1935,6 +1950,10 @@ var doc = `{
                 "schema-registry": {
                     "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
+                },
+                "send-all-bootstrap-at-start": {
+                    "description": "SendAllBootstrapAtStart determines whether to send all tables bootstrap message at changefeed start.",
+                    "type": "boolean"
                 },
                 "send-bootstrap-in-msg-count": {
                     "description": "SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.",
@@ -2452,6 +2471,9 @@ var doc = `{
                 "output_column_id": {
                     "type": "boolean"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "worker_count": {
                     "type": "integer"
                 }
@@ -2723,6 +2745,9 @@ var doc = `{
                 "max_message_bytes": {
                     "type": "integer"
                 },
+                "output_raw_change_event": {
+                    "type": "boolean"
+                },
                 "partition_num": {
                     "type": "integer"
                 },
@@ -2797,6 +2822,9 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim_check_raw_value": {
+                    "type": "boolean"
+                },
                 "claim_check_storage_uri": {
                     "type": "string"
                 },
@@ -2943,6 +2971,9 @@ var doc = `{
                 },
                 "operation-timeout": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "type": "boolean"
                 },
                 "pulsar-producer-cache-size": {
                     "type": "integer"
@@ -3196,6 +3227,9 @@ var doc = `{
                 },
                 "schema_registry": {
                     "type": "string"
+                },
+                "send-all-bootstrap-at-start": {
+                    "type": "boolean"
                 },
                 "send_bootstrap_in_msg_count": {
                     "type": "integer"

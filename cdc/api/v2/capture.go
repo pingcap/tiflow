@@ -90,12 +90,8 @@ func (h *OpenAPIV2) drainCapture(c *gin.Context) {
 // @Router	/api/v2/captures [get]
 func (h *OpenAPIV2) listCaptures(c *gin.Context) {
 	ctx := c.Request.Context()
-	controller, err := h.capture.GetController()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	captureInfos, err := controller.GetCaptures(ctx)
+	provider := h.capture.StatusProvider()
+	captureInfos, err := provider.GetCaptures(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return

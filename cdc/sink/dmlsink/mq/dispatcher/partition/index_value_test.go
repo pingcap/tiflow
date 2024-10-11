@@ -16,7 +16,8 @@ package partition
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -147,18 +148,18 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 
 	tidbTableInfo := &timodel.TableInfo{
 		ID:   100,
-		Name: timodel.NewCIStr("t1"),
+		Name: pmodel.NewCIStr("t1"),
 		Columns: []*timodel.ColumnInfo{
-			{ID: 1, Name: timodel.NewCIStr("a"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 1, Name: pmodel.NewCIStr("a"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 		},
 		Indices: []*timodel.IndexInfo{
 			{
-				Name: timodel.CIStr{
+				Name: pmodel.CIStr{
 					O: "index1",
 				},
 				Columns: []*timodel.IndexColumn{
 					{
-						Name: timodel.CIStr{
+						Name: pmodel.CIStr{
 							O: "a",
 						},
 					},
