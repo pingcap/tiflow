@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -536,6 +535,8 @@ func (c *dbzCodec) EncodeKey(
 	e *model.RowChangedEvent,
 	dest io.Writer,
 ) error {
+	// schema field describes the structure of the primary key, or the unique key if the table does not have a primary key, for the table that was changed.
+	// see https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-events
 	cols, _ := e.HandleKeyColInfos()
 	jWriter := util.BorrowJSONWriter(dest)
 	defer util.ReturnJSONWriter(jWriter)
@@ -544,19 +545,17 @@ func (c *dbzCodec) EncodeKey(
 	jWriter.WriteObject(func() {
 		jWriter.WriteObjectField("payload", func() {
 			for _, col := range cols {
-				if col.Flag.IsPrimaryKey() {
-					switch col.Type {
-					case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration:
-						var val int64
-						val, err = strconv.ParseInt(col.Value.(string), 10, 64)
-						if err != nil {
-							err = errors.Trace(err)
-							return
-						}
-						jWriter.WriteInt64Field(col.Name, val)
-					default:
-						jWriter.WriteAnyField(col.Name, col.Value)
+				switch col.Type {
+				case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration:
+					var val int64
+					val, err = strconv.ParseInt(col.Value.(string), 10, 64)
+					if err != nil {
+						err = errors.Trace(err)
+						return
 					}
+					jWriter.WriteInt64Field(col.Name, val)
+				default:
+					jWriter.WriteAnyField(col.Name, col.Value)
 				}
 			}
 		})
@@ -570,24 +569,22 @@ func (c *dbzCodec) EncodeKey(
 				jWriter.WriteBoolField("optional", false)
 				jWriter.WriteArrayField("fields", func() {
 					for _, col := range cols {
-						if col.Flag.IsPrimaryKey() {
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", col.Name)
-								jWriter.WriteBoolField("optional", false)
-								switch col.Type {
-								case mysql.TypeTimestamp, mysql.TypeDatetime:
-									jWriter.WriteStringField("name", "io.debezium.time.Timestamp")
-									jWriter.WriteStringField("type", "int64")
-									jWriter.WriteIntField("version", 1)
-								case mysql.TypeDate:
-									jWriter.WriteStringField("name", "io.debezium.time.Date")
-									jWriter.WriteStringField("type", "int32")
-									jWriter.WriteIntField("version", 1)
-								default:
-									jWriter.WriteStringField("type", "int32")
-								}
-							})
-						}
+						jWriter.WriteObjectElement(func() {
+							jWriter.WriteStringField("field", col.Name)
+							jWriter.WriteBoolField("optional", false)
+							switch col.Type {
+							case mysql.TypeTimestamp, mysql.TypeDatetime:
+								jWriter.WriteStringField("name", "io.debezium.time.Timestamp")
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteIntField("version", 1)
+							case mysql.TypeDate:
+								jWriter.WriteStringField("name", "io.debezium.time.Date")
+								jWriter.WriteStringField("type", "int32")
+								jWriter.WriteIntField("version", 1)
+							default:
+								jWriter.WriteStringField("type", "int32")
+							}
+						})
 					}
 				})
 			})
@@ -871,4 +868,3 @@ func (c *dbzCodec) EncodeValue(
 
 	return err
 }
-

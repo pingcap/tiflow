@@ -38,8 +38,8 @@ func TestEncodeInsert(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -50,7 +50,17 @@ func TestEncodeInsert(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeValue(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -85,6 +95,28 @@ func TestEncodeInsert(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
 	buf.Reset()
 	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
@@ -201,8 +233,8 @@ func TestEncodeUpdate(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -217,7 +249,18 @@ func TestEncodeUpdate(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeValue(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -254,6 +297,29 @@ func TestEncodeUpdate(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
 	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
@@ -360,6 +426,18 @@ func TestEncodeUpdate(t *testing.T) {
 
 	codec.config.DebeziumOutputOldValue = false
 	codec.config.DebeziumDisableSchema = true
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
 	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
@@ -405,8 +483,8 @@ func TestEncodeDelete(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -417,7 +495,18 @@ func TestEncodeDelete(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeValue(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -452,6 +541,30 @@ func TestEncodeDelete(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":false,
+				"type":"int32"
+			}
+			],
+			"name": "test-cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
 	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
@@ -578,11 +691,14 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
+		codec.EncodeKey(e, keyBuf)
 		codec.EncodeValue(e, buf)
 	}
 }
@@ -608,11 +724,14 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
+		codec.EncodeKey(e, keyBuf)
 		codec.EncodeValue(e, buf)
 	}
 }
@@ -639,11 +758,14 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
+		codec.EncodeKey(e, keyBuf)
 		codec.EncodeValue(e, buf)
 	}
 }
