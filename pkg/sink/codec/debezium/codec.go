@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -529,7 +531,77 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
-func (c *dbzCodec) EncodeRowChangedEvent(
+// EncodeKey encode RowChangedEvent into key message
+func (c *dbzCodec) EncodeKey(
+	e *model.RowChangedEvent,
+	dest io.Writer,
+) error {
+	cols, _ := e.HandleKeyColInfos()
+	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
+	if len(cols) == 0 {
+		return nil
+	}
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(jWriter)
+
+	var err error
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			for _, col := range cols {
+				if col.Flag.IsPrimaryKey() {
+					switch col.Type {
+					case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration:
+						var val int64
+						val, err = strconv.ParseInt(col.Value.(string), 10, 64)
+						if err != nil {
+							err = errors.Trace(err)
+							return
+						}
+						jWriter.WriteInt64Field(col.Name, val)
+					default:
+						jWriter.WriteAnyField(col.Name, col.Value)
+					}
+				}
+			}
+		})
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Key",
+					c.clusterID,
+					e.TableInfo.GetSchemaName(),
+					e.TableInfo.GetTableName()))
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteArrayField("fields", func() {
+					for _, col := range cols {
+						if col.Flag.IsPrimaryKey() {
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", col.Name)
+								jWriter.WriteBoolField("optional", false)
+								switch col.Type {
+								case mysql.TypeTimestamp, mysql.TypeDatetime:
+									jWriter.WriteStringField("name", "io.debezium.time.Timestamp")
+									jWriter.WriteStringField("type", "int64")
+									jWriter.WriteIntField("version", 1)
+								case mysql.TypeDate:
+									jWriter.WriteStringField("name", "io.debezium.time.Date")
+									jWriter.WriteStringField("type", "int32")
+									jWriter.WriteIntField("version", 1)
+								default:
+									jWriter.WriteStringField("type", "int32")
+								}
+							})
+						}
+					}
+				})
+			})
+		}
+	})
+	return err
+}
+
+// EncodeValue encode RowChangedEvent into value message
+func (c *dbzCodec) EncodeValue(
 	e *model.RowChangedEvent,
 	dest io.Writer,
 ) error {
@@ -803,3 +875,4 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 
 	return err
 }
+

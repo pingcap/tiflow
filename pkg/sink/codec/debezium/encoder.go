@@ -46,22 +46,17 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	valueBuf := bytes.Buffer{}
-	err := d.codec.EncodeRowChangedEvent(e, &valueBuf)
-	if err != nil {
+	var key []byte
+	var value []byte
+	var err error
+	if key, err = d.encodeKey(e); err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: Use a streaming compression is better.
-	value, err := common.Compress(
-		d.config.ChangefeedID,
-		d.config.LargeMessageHandle.LargeMessageHandleCompression,
-		valueBuf.Bytes(),
-	)
-	if err != nil {
+	if value, err = d.encodeValue(e); err != nil {
 		return errors.Trace(err)
 	}
 	m := &common.Message{
-		Key:      nil,
+		Key:      key,
 		Value:    value,
 		Ts:       e.CommitTs,
 		Schema:   e.TableInfo.GetSchemaNamePtr(),
