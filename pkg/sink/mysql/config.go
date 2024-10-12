@@ -190,9 +190,71 @@ func (c *Config) Apply(
 	return nil
 }
 
+<<<<<<< HEAD
 func getWorkerCount(values url.Values, workerCount *int) error {
 	s := values.Get("worker-count")
 	if len(s) == 0 {
+=======
+func mergeConfig(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
+	dest := &urlConfig{}
+	if replicaConfig != nil && replicaConfig.Sink != nil {
+		dest.SafeMode = replicaConfig.Sink.SafeMode
+		if replicaConfig.Sink.MySQLConfig != nil {
+			mConfig := replicaConfig.Sink.MySQLConfig
+			dest.WorkerCount = mConfig.WorkerCount
+			dest.MaxTxnRow = mConfig.MaxTxnRow
+			dest.MaxMultiUpdateRowCount = mConfig.MaxMultiUpdateRowCount
+			dest.MaxMultiUpdateRowSize = mConfig.MaxMultiUpdateRowSize
+			dest.TiDBTxnMode = mConfig.TiDBTxnMode
+			dest.SSLCa = mConfig.SSLCa
+			dest.SSLCert = mConfig.SSLCert
+			dest.SSLKey = mConfig.SSLKey
+			dest.TimeZone = mConfig.TimeZone
+			dest.WriteTimeout = mConfig.WriteTimeout
+			dest.ReadTimeout = mConfig.ReadTimeout
+			dest.Timeout = mConfig.Timeout
+			dest.EnableBatchDML = mConfig.EnableBatchDML
+			dest.EnableMultiStatement = mConfig.EnableMultiStatement
+			dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
+		}
+	}
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	return dest, nil
+}
+
+// IsSinkSafeMode returns whether the sink is in safe mode.
+func IsSinkSafeMode(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) (bool, error) {
+	if sinkURI == nil {
+		return false, cerror.ErrMySQLInvalidConfig.GenWithStack("fail to open MySQL sink, empty SinkURI")
+	}
+
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return false, cerror.ErrMySQLInvalidConfig.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+	}
+	req := &http.Request{URL: sinkURI}
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return false, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	var err error
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
+		return false, err
+	}
+	if urlParameter.SafeMode == nil {
+		return defaultSafeMode, nil
+	}
+	return *urlParameter.SafeMode, nil
+}
+
+func getWorkerCount(values *urlConfig, workerCount *int) error {
+	if values.WorkerCount == nil {
+>>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 		return nil
 	}
 
