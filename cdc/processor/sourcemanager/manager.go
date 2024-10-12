@@ -37,7 +37,6 @@ import (
 
 const defaultMaxBatchSize = 256
 
-<<<<<<< HEAD
 type pullerWrapperCreator func(
 	changefeed model.ChangeFeedID,
 	span tablepb.Span,
@@ -57,7 +56,7 @@ type tablePullers struct {
 type multiplexingPuller struct {
 	puller *pullerwrapper.MultiplexingWrapper
 }
-=======
+
 // PullerSplitUpdateMode is the mode to split update events in puller.
 type PullerSplitUpdateMode int32
 
@@ -67,7 +66,6 @@ const (
 	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
 	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
 )
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
@@ -85,19 +83,13 @@ type SourceManager struct {
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
-<<<<<<< HEAD
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
 	multiplexing       bool
-	safeModeAtStart    bool
 	tablePullers       tablePullers
 	multiplexingPuller multiplexingPuller
-=======
-	splitUpdateMode PullerSplitUpdateMode
 
-	enableTableMonitor bool
-	puller             *puller.MultiplexingPuller
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
+	splitUpdateMode PullerSplitUpdateMode
 }
 
 // New creates a new source manager.
@@ -105,21 +97,12 @@ func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-<<<<<<< HEAD
 	engine engine.SortEngine,
-	bdrMode bool,
-	safeModeAtStart bool,
-) *SourceManager {
-	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, safeModeAtStart, pullerwrapper.NewPullerWrapper)
-=======
-	engine sorter.SortEngine,
 	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
-	enableTableMonitor bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, enableTableMonitor)
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
+	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
+	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -130,7 +113,7 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, false, pullerwrapper.NewPullerWrapperForTest)
+	return newSourceManager(changefeedID, up, mg, engine, PullerSplitUpdateModeNone, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
 }
 
 func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
@@ -141,11 +124,10 @@ func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-<<<<<<< HEAD
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 	multiplexing bool,
-	safeModeAtStart bool,
 	pullerWrapperCreator pullerWrapperCreator,
 ) *SourceManager {
 	mgr := &SourceManager{
@@ -154,25 +136,9 @@ func newSourceManager(
 		up:              up,
 		mg:              mg,
 		engine:          engine,
+		splitUpdateMode: splitUpdateMode,
 		bdrMode:         bdrMode,
 		multiplexing:    multiplexing,
-		safeModeAtStart: safeModeAtStart,
-=======
-	engine sorter.SortEngine,
-	splitUpdateMode PullerSplitUpdateMode,
-	bdrMode bool,
-	enableTableMonitor bool,
-) *SourceManager {
-	mgr := &SourceManager{
-		ready:              make(chan struct{}),
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		splitUpdateMode:    splitUpdateMode,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 	}
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)

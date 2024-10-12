@@ -686,14 +686,8 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-<<<<<<< HEAD
-		sortEngine, util.GetOrZero(cfConfig.BDRMode),
-		isMysqlBackend)
-=======
 		sortEngine, pullerSplitUpdateMode,
-		util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor))
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
+		util.GetOrZero(cfConfig.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
