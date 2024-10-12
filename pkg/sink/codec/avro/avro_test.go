@@ -313,7 +313,7 @@ func TestSanitizeName(t *testing.T) {
 		"_1ColumnNameStartWithNumber",
 		common.SanitizeName("1ColumnNameStartWithNumber"),
 	)
-	// require.Equal(t, "A_B", common.SanitizeName("A.B"))
+	require.Equal(t, "_.AB", common.SanitizeName(".AB"))
 	require.Equal(t, "columnNameWith______", common.SanitizeName("columnNameWith中文"))
 }
 

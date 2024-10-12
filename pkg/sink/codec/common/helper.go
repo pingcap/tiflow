@@ -296,7 +296,6 @@ func trimLeadingZeroBytes(bytes []byte) []byte {
 
 const (
 	replacementChar = "_"
-	numberPrefix    = "_"
 )
 
 // EscapeEnumAndSetOptions escapes ",", "\" and "”"
@@ -310,21 +309,26 @@ func EscapeEnumAndSetOptions(option string) string {
 	return option
 }
 
+func isValidFirstCharacter(c rune) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+func isValidNonFirstCharacter(c rune) bool {
+	return isValidFirstCharacter(c) || c == '.' || (c >= '0' && c <= '9')
+}
+
 // SanitizeName escapes not permitted chars for avro
-// debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
-// https://avro.apache.org/docs/1.7.7/spec.html#Names
+// https://avro.apache.org/docs/1.12.0/specification/#names
+// see https://github.com/debezium/debezium/blob/main/debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
 func SanitizeName(name string) string {
 	changed := false
 	var sb strings.Builder
 	for i, c := range name {
-		if i == 0 && (c >= '0' && c <= '9') {
-			sb.WriteString(numberPrefix)
+		if i == 0 && !isValidFirstCharacter(c) {
+			sb.WriteString(replacementChar)
 			sb.WriteRune(c)
 			changed = true
-		} else if !(c == '_' || c == '.' ||
-			('a' <= c && c <= 'z') ||
-			('A' <= c && c <= 'Z') ||
-			('0' <= c && c <= '9')) {
+		} else if !isValidNonFirstCharacter(c) {
 			b := []byte(string(c))
 			for k := 0; k < len(b); k++ {
 				sb.WriteString(replacementChar)

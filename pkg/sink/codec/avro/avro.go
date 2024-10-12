@@ -448,8 +448,14 @@ func mysqlTypeFromTiDBType(tidbType string) byte {
 	return result
 }
 
+// <empty> | <name>[(<dot><name>)*]
 func getAvroNamespace(namespace string, schema string) string {
-	return common.SanitizeName(namespace) + "." + common.SanitizeName(schema)
+	ns := common.SanitizeName(namespace)
+	s := common.SanitizeName(schema)
+	if s != "" {
+		return ns + "." + s
+	}
+	return ns
 }
 
 type avroSchema struct {

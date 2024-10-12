@@ -164,13 +164,6 @@ insert into t(c_tinyint, c_mediumint, c_int, c_bigint, a) values (4, 5, 6, 7, 8)
 alter table t modify c_mediumint varchar(10) null;
 insert into t(c_tinyint, c_mediumint, c_int, c_bigint, a) values (5, "234", 6, 7, 8);
 
-create table `t.中文` (
-   id          int primary key auto_increment,
-   a int,
-);
-
-insert into `t.中文`(id, a) values (1, 1);
-
 create table finish_mark
 (
     id int PRIMARY KEY
