@@ -726,28 +726,18 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
-=======
-	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.latestInfo.SinkURI, cfConfig)
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
+	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.changefeed.Info.SinkURI, p.changefeed.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-<<<<<<< HEAD
-		sortEngine, p.changefeed.Info.Config.BDRMode,
-		isMysqlBackend)
-=======
 		sortEngine, pullerSplitUpdateMode,
-		util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor))
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
+		p.changefeed.Info.Config.BDRMode)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
