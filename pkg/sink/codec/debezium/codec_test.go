@@ -111,7 +111,7 @@ func TestEncodeInsert(t *testing.T) {
 				"type":"int32"
 			}
 			],
-			"name": "test-cluster.test.table1.Key",
+			"name": "test_cluster.test.table1.Key",
 			"optional": false,
 			"type":"struct"
 		}
@@ -150,20 +150,20 @@ func TestEncodeInsert(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
@@ -313,7 +313,7 @@ func TestEncodeUpdate(t *testing.T) {
 				"type":"int32"
 			}
 			],
-			"name": "test-cluster.test.table1.Key",
+			"name": "test_cluster.test.table1.Key",
 			"optional": false,
 			"type":"struct"
 		}
@@ -353,20 +353,20 @@ func TestEncodeUpdate(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
@@ -558,7 +558,7 @@ func TestEncodeDelete(t *testing.T) {
 				"type":"int32"
 			}
 			],
-			"name": "test-cluster.test.table1.Key",
+			"name": "test_cluster.test.table1.Key",
 			"optional": false,
 			"type":"struct"
 		}
@@ -598,20 +598,20 @@ func TestEncodeDelete(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
