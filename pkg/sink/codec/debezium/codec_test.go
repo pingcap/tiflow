@@ -29,7 +29,7 @@ import (
 func TestEncodeInsert(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -71,8 +71,8 @@ func TestEncodeInsert(t *testing.T) {
 			},
 			"op": "c",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -107,8 +107,8 @@ func TestEncodeInsert(t *testing.T) {
 			"fields": [
 			{
 				"field":"tiny",
-				"optional":false,
-				"type":"int32"
+				"optional":true,
+				"type":"int16"
 			}
 			],
 			"name": "test_cluster.test.table1.Key",
@@ -126,7 +126,7 @@ func TestEncodeInsert(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -139,7 +139,7 @@ func TestEncodeInsert(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -225,7 +225,7 @@ func TestEncodeInsert(t *testing.T) {
 func TestEncodeUpdate(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -273,8 +273,8 @@ func TestEncodeUpdate(t *testing.T) {
 			},
 			"op": "u",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -309,8 +309,8 @@ func TestEncodeUpdate(t *testing.T) {
 			"fields": [
 			{
 				"field":"tiny",
-				"optional":false,
-				"type":"int32"
+				"optional":true,
+				"type":"int16"
 			}
 			],
 			"name": "test_cluster.test.table1.Key",
@@ -329,7 +329,7 @@ func TestEncodeUpdate(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -342,7 +342,7 @@ func TestEncodeUpdate(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -447,7 +447,7 @@ func TestEncodeUpdate(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -460,7 +460,7 @@ func TestEncodeUpdate(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -474,7 +474,7 @@ func TestEncodeUpdate(t *testing.T) {
 func TestEncodeDelete(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumOutputOldValue = false
@@ -517,8 +517,8 @@ func TestEncodeDelete(t *testing.T) {
 			"after": null,
 			"op": "d",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -554,8 +554,8 @@ func TestEncodeDelete(t *testing.T) {
 			"fields": [
 			{
 				"field":"tiny",
-				"optional":false,
-				"type":"int32"
+				"optional":true,
+				"type":"int16"
 			}
 			],
 			"name": "test_cluster.test.table1.Key",
@@ -574,7 +574,7 @@ func TestEncodeDelete(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -587,7 +587,7 @@ func TestEncodeDelete(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -673,7 +673,7 @@ func TestEncodeDelete(t *testing.T) {
 func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -706,7 +706,7 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 func BenchmarkEncodeLargeText(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -739,7 +739,7 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 func BenchmarkEncodeLargeBinary(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
