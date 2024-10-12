@@ -65,13 +65,6 @@ var (
 			Name:      "send_event_count",
 			Help:      "event count sent to event channel by this puller",
 		}, []string{"type", "namespace", "changefeed"})
-	clientChannelSize = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "kvclient",
-			Name:      "channel_size",
-			Help:      "size of each channel in kv client",
-		}, []string{"namespace", "changefeed", "table", "type"})
 	clientRegionTokenSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -92,7 +85,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "batch_resolved_event_size",
 			Help:      "The number of region in one batch resolved ts event",
-			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 17),
 		}, []string{"namespace", "changefeed"})
 	grpcPoolStreamGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -165,6 +158,14 @@ var (
 			Name:      "slow_initialize_region_count",
 			Help:      "the number of slow initialize region",
 		}, []string{"namespace", "changefeed"})
+
+	channelSizeGuage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "channel_size",
+			Help:      "size of each channel in kv client",
+		}, []string{"namespace", "changefeed", "component", "worker", "type"})
 )
 
 // GetGlobalGrpcMetrics gets the global grpc metrics.
@@ -180,7 +181,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(eventFeedGauge)
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
-	registry.MustRegister(clientChannelSize)
 	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(cachedRegionSize)
 	registry.MustRegister(batchResolvedEventSize)
@@ -195,4 +195,6 @@ func InitMetrics(registry *prometheus.Registry) {
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)
+
+	registry.MustRegister(channelSizeGuage)
 }

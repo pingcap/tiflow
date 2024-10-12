@@ -38,8 +38,18 @@ var pullerQueueDuration = prometheus.NewHistogramVec(
 	// types : kv, resolved.
 	[]string{"namespace", "changefeed", "type"})
 
+var pullerInputChanSize = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "puller",
+		Name:      "input_chan_size",
+		Help:      "The size of input channel in puller",
+	},
+	[]string{"namespace", "changefeed", "worker"})
+
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(PullerEventCounter)
 	registry.MustRegister(pullerQueueDuration)
+	registry.MustRegister(pullerInputChanSize)
 }
