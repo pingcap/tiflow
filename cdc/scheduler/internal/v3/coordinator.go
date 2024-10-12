@@ -455,7 +455,11 @@ func (c *coordinator) maybeCollectMetrics() {
 	pdTime := now
 	// only nil in unit test
 	if c.pdClock != nil {
-		pdTime = c.pdClock.CurrentTime()
+		var err error
+		pdTime, err = c.pdClock.CurrentTime()
+		if err != nil {
+			log.Warn("schedulerv3: failed to get pd time", zap.Error(err))
+		}
 	}
 
 	c.schedulerM.CollectMetrics()
