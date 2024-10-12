@@ -16,18 +16,18 @@ package common
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
 func TestConfig(t *testing.T) {
-	TestingT(t)
+	check.TestingT(t)
 }
 
-var _ = Suite(&testConfigSuite{})
+var _ = check.Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 
-func (t *testConfigSuite) TestInteractiveQuotes(c *C) {
+func (t *testConfigSuite) TestInteractiveQuotes(c *check.C) {
 	cases := []struct {
 		input    string
 		expected []string
@@ -48,6 +48,6 @@ func (t *testConfigSuite) TestInteractiveQuotes(c *C) {
 
 	for _, ca := range cases {
 		got := SplitArgsRespectQuote(ca.input)
-		c.Assert(got, DeepEquals, ca.expected)
+		c.Assert(got, check.DeepEquals, ca.expected)
 	}
 }

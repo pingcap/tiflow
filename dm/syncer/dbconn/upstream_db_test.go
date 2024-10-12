@@ -21,13 +21,13 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 
-var _ = Suite(&testDBSuite{})
+var _ = check.Suite(&testDBSuite{})
 
 type testDBSuite struct {
 	db       *sql.DB
@@ -36,7 +36,7 @@ type testDBSuite struct {
 	cfg      *config.SubTaskConfig
 }
 
-func (s *testDBSuite) SetUpSuite(c *C) {
+func (s *testDBSuite) SetUpSuite(c *check.C) {
 	s.cfg = &config.SubTaskConfig{
 		From:       config.GetDBConfigForTest(),
 		To:         config.GetDBConfigForTest(),
@@ -55,14 +55,14 @@ func (s *testDBSuite) SetUpSuite(c *C) {
 	var err error
 	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8", s.cfg.From.User, s.cfg.From.Password, s.cfg.From.Host, s.cfg.From.Port)
 	s.db, err = sql.Open("mysql", dbAddr)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	s.resetBinlogSyncer(c)
 	_, err = s.db.Exec("SET GLOBAL binlog_format = 'ROW';")
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (s *testDBSuite) resetBinlogSyncer(c *C) {
+func (s *testDBSuite) resetBinlogSyncer(c *check.C) {
 	cfg := replication.BinlogSyncerConfig{
 		ServerID:       s.cfg.ServerID,
 		Flavor:         "mysql",
@@ -80,28 +80,28 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 	}
 
 	pos, _, err := conn.GetPosAndGs(tcontext.Background(), conn.NewBaseDBForTest(s.db), "mysql")
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	s.syncer = replication.NewBinlogSyncer(cfg)
 	s.streamer, err = s.syncer.StartSync(pos)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (s *testDBSuite) TestGetServerUUID(c *C) {
+func (s *testDBSuite) TestGetServerUUID(c *check.C) {
 	u, err := conn.GetServerUUID(tcontext.Background(), conn.NewBaseDBForTest(s.db), "mysql")
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	_, err = uuid.Parse(u)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (s *testDBSuite) TestGetServerID(c *C) {
+func (s *testDBSuite) TestGetServerID(c *check.C) {
 	id, err := conn.GetServerID(tcontext.Background(), conn.NewBaseDBForTest(s.db))
-	c.Assert(err, IsNil)
-	c.Assert(id, Greater, uint32(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(id, check.Greater, uint32(0))
 }
 
-func (s *testDBSuite) TestGetServerUnixTS(c *C) {
+func (s *testDBSuite) TestGetServerUnixTS(c *check.C) {
 	id, err := conn.GetServerUnixTS(context.Background(), conn.NewBaseDBForTest(s.db))
-	c.Assert(err, IsNil)
-	c.Assert(id, Greater, int64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(id, check.Greater, int64(0))
 }

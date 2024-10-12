@@ -72,11 +72,11 @@ func toMySQLVersion(v string) (MySQLVersion, error) {
 }
 
 // Ge means v >= min.
-func (v MySQLVersion) Ge(min MySQLVersion) bool {
+func (v MySQLVersion) Ge(minV MySQLVersion) bool {
 	for i := range v {
-		if v[i] > min[i] {
+		if v[i] > minV[i] {
 			return true
-		} else if v[i] < min[i] {
+		} else if v[i] < minV[i] {
 			return false
 		}
 	}
@@ -84,11 +84,11 @@ func (v MySQLVersion) Ge(min MySQLVersion) bool {
 }
 
 // Gt means v > min.
-func (v MySQLVersion) Gt(min MySQLVersion) bool {
+func (v MySQLVersion) Gt(minV MySQLVersion) bool {
 	for i := range v {
-		if v[i] > min[i] {
+		if v[i] > minV[i] {
 			return true
-		} else if v[i] < min[i] {
+		} else if v[i] < minV[i] {
 			return false
 		}
 	}
@@ -96,11 +96,11 @@ func (v MySQLVersion) Gt(min MySQLVersion) bool {
 }
 
 // Lt means v < min.
-func (v MySQLVersion) Lt(max MySQLVersion) bool {
+func (v MySQLVersion) Lt(maxV MySQLVersion) bool {
 	for i := range v {
-		if v[i] < max[i] {
+		if v[i] < maxV[i] {
 			return true
-		} else if v[i] > max[i] {
+		} else if v[i] > maxV[i] {
 			return false
 		}
 	}
@@ -108,11 +108,11 @@ func (v MySQLVersion) Lt(max MySQLVersion) bool {
 }
 
 // Le means v <= min.
-func (v MySQLVersion) Le(max MySQLVersion) bool {
+func (v MySQLVersion) Le(maxV MySQLVersion) bool {
 	for i := range v {
-		if v[i] < max[i] {
+		if v[i] < maxV[i] {
 			return true
-		} else if v[i] > max[i] {
+		} else if v[i] > maxV[i] {
 			return false
 		}
 	}
