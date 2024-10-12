@@ -64,11 +64,7 @@ message Stats {
     // Number of captured regions.
     uint64 region_count = 1;
     // The current timestamp from the table's point of view.
-<<<<<<< HEAD
-    uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
-=======
-    uint64 current_ts = 2 [(gogoproto.casttype) = "Ts", deprecated = true]; // Deprecated: Do not use this field.
->>>>>>> 1b026f6b75 (cordinator(ticdc): Fix Puller Resolved TS Lag Calculation and Deprecate current_ts Field in Stats (#11624))
+    uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts", deprecated = true]; // Deprecated: Do not use this field.
     // Checkponits at each stage.
     map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
     // The barrier timestamp of the table.
