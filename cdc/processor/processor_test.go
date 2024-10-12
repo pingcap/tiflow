@@ -753,15 +753,6 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 }
-<<<<<<< HEAD
-=======
-
-func TestProcessorNotInitialized(t *testing.T) {
-	globalVars, changefeedVars := vars.NewGlobalVarsAndChangefeedInfo4Test()
-	liveness := model.LivenessCaptureAlive
-	p, _, _ := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
-	require.Nil(t, p.WriteDebugInfo(os.Stdout))
-}
 
 func TestGetPullerSplitUpdateMode(t *testing.T) {
 	testCases := []struct {
@@ -832,4 +823,3 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 		require.Equal(t, tc.mode, mode)
 	}
 }
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
