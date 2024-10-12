@@ -198,7 +198,7 @@ func replaceString(s any, key any, val any) string {
 func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) ([]map[string]any, []map[string]any) {
 	var records []map[string]any
 	var keyMaps []map[string]any
-	waitTimeout := 10 * time.Second
+	waitTimeout := 30 * time.Second
 	for {
 		keyMap, obj, err := fetchNextCDCRecord(reader, kind, waitTimeout)
 		if err != nil {
@@ -222,7 +222,6 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) ([]map[string]any, []ma
 }
 
 var ignoredRecordPaths = map[string]bool{
-	`{map[string]any}["schema"]`:                             true,
 	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
 	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 }

@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
@@ -291,4 +292,61 @@ func trimLeadingZeroBytes(bytes []byte) []byte {
 		}
 	}
 	return bytes[pos:]
+}
+
+const (
+	replacementChar = "_"
+	numberPrefix    = "_"
+)
+
+// EscapeEnumAndSetOptions escapes ",", "\" and "”"
+// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
+// /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
+// MySqlAntlrDdlParser.java#L374
+func EscapeEnumAndSetOptions(option string) string {
+	option = strings.ReplaceAll(option, ",", "\\,")
+	option = strings.ReplaceAll(option, "\\'", "'")
+	option = strings.ReplaceAll(option, "''", "'")
+	return option
+}
+
+// SanitizeName escapes not permitted chars for avro
+// debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
+// https://avro.apache.org/docs/1.7.7/spec.html#Names
+func SanitizeName(name string) string {
+	changed := false
+	var sb strings.Builder
+	for i, c := range name {
+		if i == 0 && (c >= '0' && c <= '9') {
+			sb.WriteString(numberPrefix)
+			sb.WriteRune(c)
+			changed = true
+		} else if !(c == '_' || c == '.' ||
+			('a' <= c && c <= 'z') ||
+			('A' <= c && c <= 'Z') ||
+			('0' <= c && c <= '9')) {
+			b := []byte(string(c))
+			for k := 0; k < len(b); k++ {
+				sb.WriteString(replacementChar)
+			}
+			changed = true
+		} else {
+			sb.WriteRune(c)
+		}
+	}
+
+	sanitizedName := sb.String()
+	if changed {
+		log.Warn(
+			"Name is potentially not safe for serialization, replace it",
+			zap.String("name", name),
+			zap.String("replacedName", sanitizedName),
+		)
+	}
+	return sanitizedName
+}
+
+// SanitizeTopic escapes ".", it may have special meanings for sink connectors
+func SanitizeTopic(name string) string {
+	return strings.ReplaceAll(name, ".", replacementChar)
 }
