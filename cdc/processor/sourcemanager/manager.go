@@ -57,17 +57,10 @@ type SourceManager struct {
 	pullers sync.Map
 	// Used to report the error to the processor.
 	errChan chan error
+	// Used to specify the behavior of splitting update events in puller.
+	splitUpdateMode PullerSplitUpdateMode
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-
-<<<<<<< HEAD
-	safeModeAtStart bool
-=======
-	splitUpdateMode PullerSplitUpdateMode
-
-	enableTableMonitor bool
-	puller             *puller.MultiplexingPuller
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 }
 
 // New creates a new source manager.
@@ -75,38 +68,19 @@ func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-<<<<<<< HEAD
 	engine engine.SortEngine,
 	errChan chan error,
-	bdrMode bool,
-	safeModeAtStart bool,
-) *SourceManager {
-=======
-	engine sorter.SortEngine,
 	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
-	enableTableMonitor bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, enableTableMonitor)
-}
-
-// NewForTest creates a new source manager for testing.
-func NewForTest(
-	changefeedID model.ChangeFeedID,
-	up *upstream.Upstream,
-	mg entry.MounterGroup,
-	engine sorter.SortEngine,
-	bdrMode bool,
-) *SourceManager {
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 	return &SourceManager{
 		changefeedID:    changefeedID,
 		up:              up,
 		mg:              mg,
 		engine:          engine,
 		errChan:         errChan,
+		splitUpdateMode: splitUpdateMode,
 		bdrMode:         bdrMode,
-		safeModeAtStart: safeModeAtStart,
 	}
 }
 
@@ -114,75 +88,6 @@ func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) boo
 	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
-<<<<<<< HEAD
-=======
-func newSourceManager(
-	changefeedID model.ChangeFeedID,
-	up *upstream.Upstream,
-	mg entry.MounterGroup,
-	engine sorter.SortEngine,
-	splitUpdateMode PullerSplitUpdateMode,
-	bdrMode bool,
-	enableTableMonitor bool,
-) *SourceManager {
-	mgr := &SourceManager{
-		ready:              make(chan struct{}),
-		changefeedID:       changefeedID,
-		up:                 up,
-		mg:                 mg,
-		engine:             engine,
-		splitUpdateMode:    splitUpdateMode,
-		bdrMode:            bdrMode,
-		enableTableMonitor: enableTableMonitor,
-	}
-
-	serverConfig := config.GetGlobalServerConfig()
-	grpcPool := sharedconn.NewConnAndClientPool(mgr.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
-	client := kv.NewSharedClient(
-		mgr.changefeedID, serverConfig, mgr.bdrMode,
-		mgr.up.PDClient, grpcPool, mgr.up.RegionCache, mgr.up.PDClock,
-		txnutil.NewLockerResolver(mgr.up.KVStorage.(tikv.Storage), mgr.changefeedID),
-	)
-
-	// consume add raw kv entry to the engine.
-	// It will be called by the puller when new raw kv entry is received.
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
-		if len(spans) > 1 {
-			log.Panic("DML puller subscribes multiple spans",
-				zap.String("namespace", mgr.changefeedID.Namespace),
-				zap.String("changefeed", mgr.changefeedID.ID))
-		}
-		if raw != nil {
-			if shouldSplitKVEntry(raw) {
-				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
-				if err != nil {
-					return err
-				}
-				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
-				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
-				mgr.engine.Add(spans[0], deleteEvent, insertEvent)
-			} else {
-				pEvent := model.NewPolymorphicEvent(raw)
-				mgr.engine.Add(spans[0], pEvent)
-			}
-		}
-		return nil
-	}
-	slots, hasher := mgr.engine.SlotsAndHasher()
-
-	mgr.puller = puller.NewMultiplexingPuller(
-		mgr.changefeedID,
-		client,
-		up.PDClock,
-		consume,
-		slots,
-		hasher,
-		int(serverConfig.KVClient.FrontierConcurrent))
-
-	return mgr
-}
-
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.

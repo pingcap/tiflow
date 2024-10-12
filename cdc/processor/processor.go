@@ -874,12 +874,17 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
+
+		pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.changefeed.Info.SinkURI, p.changefeed.Info.Config)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, isMysqlBackend)
+			sortEngine, p.errCh, pullerSplitUpdateMode, p.changefeed.Info.Config.BDRMode)
+		isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
@@ -940,37 +945,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
-=======
-	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.latestInfo.SinkURI, cfConfig)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	p.sourceManager.r = sourcemanager.New(
-		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, pullerSplitUpdateMode,
-		util.GetOrZero(cfConfig.BDRMode),
-		util.GetOrZero(cfConfig.EnableTableMonitor))
-	p.sourceManager.name = "SourceManager"
-	p.sourceManager.changefeedID = p.changefeedID
-	p.sourceManager.spawn(ctx)
-
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	p.sinkManager.r = sinkmanager.New(
-		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
-	p.sinkManager.name = "SinkManager"
-	p.sinkManager.changefeedID = p.changefeedID
-	p.sinkManager.spawn(ctx)
-
-	// Bind them so that sourceManager can notify sinkManager.r.
-	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
->>>>>>> f1d2ee62f8 (puller(ticdc): always split update kv entries in sink safe mode (#11224))
 	if err != nil {
 		return err
 	}
