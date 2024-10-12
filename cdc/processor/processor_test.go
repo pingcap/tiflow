@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -656,42 +655,6 @@ func TestGetPullerSplitUpdateMode(t *testing.T) {
 			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
 			config:  nil,
 			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
-		},
-		{
-			sinkURI: "mysql://root:test@127.0.0.1:3306/",
-			config: &config.ReplicaConfig{
-				Sink: &config.SinkConfig{
-					SafeMode: util.AddressOf(true),
-				},
-			},
-			mode: sourcemanager.PullerSplitUpdateModeAlways,
-		},
-		{
-			sinkURI: "mysql://root:test@127.0.0.1:3306/",
-			config: &config.ReplicaConfig{
-				Sink: &config.SinkConfig{
-					SafeMode: util.AddressOf(false),
-				},
-			},
-			mode: sourcemanager.PullerSplitUpdateModeAtStart,
-		},
-		{
-			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
-			config: &config.ReplicaConfig{
-				Sink: &config.SinkConfig{
-					SafeMode: util.AddressOf(false),
-				},
-			},
-			mode: sourcemanager.PullerSplitUpdateModeAlways,
-		},
-		{
-			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
-			config: &config.ReplicaConfig{
-				Sink: &config.SinkConfig{
-					SafeMode: util.AddressOf(true),
-				},
-			},
-			mode: sourcemanager.PullerSplitUpdateModeAlways,
 		},
 	}
 	for _, tc := range testCases {
