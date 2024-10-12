@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -39,6 +40,7 @@ import (
 	redoPkg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -750,4 +752,74 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
+}
+
+func TestGetPullerSplitUpdateMode(t *testing.T) {
+	testCases := []struct {
+		sinkURI string
+		config  *config.ReplicaConfig
+		mode    sourcemanager.PullerSplitUpdateMode
+	}{
+		{
+			sinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeNone,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAlways,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(true),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(false),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateModeAtStart,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(false),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
+			config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SafeMode: util.AddressOf(true),
+				},
+			},
+			mode: sourcemanager.PullerSplitUpdateModeAlways,
+		},
+	}
+	for _, tc := range testCases {
+		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
+		require.Nil(t, err)
+		require.Equal(t, tc.mode, mode)
+	}
 }
