@@ -974,7 +974,7 @@ func TestConvertToCSVType(t *testing.T) {
 	for _, group := range csvTestColumnsGroup {
 		for _, c := range group {
 			cfg := &common.Config{BinaryEncodingMethod: c.BinaryEncodingMethod}
-			col := model.Column2ColumnDataXForTest(&c.col)
+			col := model.Column2ColumnDataX(&c.col)
 			val, _ := fromColValToCsvVal(cfg, col, c.colInfo.Ft)
 			require.Equal(t, c.want, val, c.col.Name)
 		}

@@ -149,8 +149,6 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		m, err := reader.FetchMessage(ctx)
-		cancel()
-
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				return nil, nil, nil
@@ -224,7 +222,7 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) ([]map[string]any, []ma
 }
 
 var ignoredRecordPaths = map[string]bool{
-	// `{map[string]any}["schema"]`:                             true,
+	`{map[string]any}["schema"]`:                             true,
 	`{map[string]any}["payload"].(map[string]any)["source"]`: true,
 	`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 }

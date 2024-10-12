@@ -1350,8 +1350,8 @@ func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
 	return x.info
 }
 
-// Columns2ColumnDataForTest is for tests.
-func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+// Columns2ColumnData converts column to column data and table info.
+func Columns2ColumnData(columns []*Column) ([]*ColumnData, *TableInfo) {
 	info := &TableInfo{
 		TableInfo: &model.TableInfo{
 			Columns: make([]*model.ColumnInfo, len(columns)),
@@ -1381,8 +1381,8 @@ func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 	return colDatas, info
 }
 
-// Column2ColumnDataXForTest is for tests.
-func Column2ColumnDataXForTest(column *Column) ColumnDataX {
-	datas, info := Columns2ColumnDataForTest([]*Column{column})
+// Column2ColumnDataX only use by debezium protocol.
+func Column2ColumnDataX(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnData([]*Column{column})
 	return GetColumnDataX(datas[0], info)
 }
