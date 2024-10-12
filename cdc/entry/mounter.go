@@ -277,7 +277,6 @@ func (m *mounter) decodeRow(
 		datums map[int64]types.Datum
 		err    error
 	)
-
 	if rowcodec.IsNewFormat(rawValue) {
 		decoder := rowcodec.NewDatumMapDecoder(reqCols, m.tz)
 		if isPreColumns {
