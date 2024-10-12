@@ -25,11 +25,13 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -626,4 +628,38 @@ func TestProcessorLiveness(t *testing.T) {
 	// Force set liveness to alive.
 	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
+}
+
+func TestGetPullerSplitUpdateMode(t *testing.T) {
+	testCases := []struct {
+		sinkURI string
+		config  *config.ReplicaConfig
+		mode    sourcemanager.PullerSplitUpdateMode
+	}{
+		{
+			sinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeNone,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=true",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAlways,
+		},
+		{
+			sinkURI: "mysql://root:test@127.0.0.1:3306/?safe-mode=false",
+			config:  nil,
+			mode:    sourcemanager.PullerSplitUpdateModeAtStart,
+		},
+	}
+	for _, tc := range testCases {
+		mode, err := getPullerSplitUpdateMode(tc.sinkURI, tc.config)
+		require.Nil(t, err)
+		require.Equal(t, tc.mode, mode)
+	}
 }
