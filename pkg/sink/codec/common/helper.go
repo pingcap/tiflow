@@ -296,6 +296,7 @@ func trimLeadingZeroBytes(bytes []byte) []byte {
 
 const (
 	replacementChar = "_"
+	numberPrefix    = 'x'
 )
 
 // EscapeEnumAndSetOptions escapes ",", "\" and "”"
@@ -314,10 +315,14 @@ func isValidFirstCharacter(c rune) bool {
 }
 
 func isValidNonFirstCharacter(c rune) bool {
-	return isValidFirstCharacter(c) || c == '.' || (c >= '0' && c <= '9')
+	return isValidFirstCharacter(c) || (c >= '0' && c <= '9')
 }
 
-// SanitizeName escapes not permitted chars for avro
+func isValidNonFirstCharacterForTableName(c rune) bool {
+	return isValidNonFirstCharacter(c) || c == '.'
+}
+
+// SanitizeName escapes not permitted chars
 // https://avro.apache.org/docs/1.12.0/specification/#names
 // see https://github.com/debezium/debezium/blob/main/debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
 func SanitizeName(name string) string {
@@ -325,7 +330,11 @@ func SanitizeName(name string) string {
 	var sb strings.Builder
 	for i, c := range name {
 		if i == 0 && !isValidFirstCharacter(c) {
-			sb.WriteString(replacementChar)
+			if c >= '0' && c <= '9' {
+				sb.WriteRune(numberPrefix)
+			} else {
+				sb.WriteString(replacementChar)
+			}
 			sb.WriteRune(c)
 			changed = true
 		} else if !isValidNonFirstCharacter(c) {
@@ -350,7 +359,36 @@ func SanitizeName(name string) string {
 	return sanitizedName
 }
 
-// SanitizeTopic escapes ".", it may have special meanings for sink connectors
-func SanitizeTopic(name string) string {
-	return strings.ReplaceAll(name, ".", replacementChar)
+// SanitizeSchemaName escapes ".", it may have special meanings for sink connectors
+// https://github.com/confluentinc/schema-registry/blob/c9deee5686ea5b6ed866e52435fc0269611f1676/avro-data/src/main/java/io/confluent/connect/avro/AvroData.java#L1150
+func SanitizeSchemaName(name string) string {
+	return SanitizeName(name)
+}
+
+// SanitizeTopicName escapes not permitted chars for topic name
+// https://github.com/debezium/debezium/blob/main/debezium-api/src/main/java/io/debezium/spi/topic/TopicNamingStrategy.java
+func SanitizeTopicName(name string) string {
+	changed := false
+	var sb strings.Builder
+	for _, c := range name {
+		if !isValidNonFirstCharacterForTableName(c) {
+			b := []byte(string(c))
+			for k := 0; k < len(b); k++ {
+				sb.WriteString(replacementChar)
+			}
+			changed = true
+		} else {
+			sb.WriteRune(c)
+		}
+	}
+
+	sanitizedName := sb.String()
+	if changed {
+		log.Warn(
+			"Table name sanitize",
+			zap.String("name", name),
+			zap.String("replacedName", sanitizedName),
+		)
+	}
+	return sanitizedName
 }

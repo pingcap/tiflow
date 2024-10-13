@@ -210,7 +210,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	topic = common.SanitizeTopic(topic)
+	topic = common.SanitizeSchemaName(topic)
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
