@@ -330,12 +330,10 @@ func SanitizeName(name string) string {
 	var sb strings.Builder
 	for i, c := range name {
 		if i == 0 && !isValidFirstCharacter(c) {
+			sb.WriteString(replacementChar)
 			if c >= '0' && c <= '9' {
-				sb.WriteRune(numberPrefix)
-			} else {
-				sb.WriteString(replacementChar)
+				sb.WriteRune(c)
 			}
-			sb.WriteRune(c)
 			changed = true
 		} else if !isValidNonFirstCharacter(c) {
 			b := []byte(string(c))
@@ -360,9 +358,8 @@ func SanitizeName(name string) string {
 }
 
 // SanitizeSchemaName escapes ".", it may have special meanings for sink connectors
-// https://github.com/confluentinc/schema-registry/blob/c9deee5686ea5b6ed866e52435fc0269611f1676/avro-data/src/main/java/io/confluent/connect/avro/AvroData.java#L1150
 func SanitizeSchemaName(name string) string {
-	return SanitizeName(name)
+	return strings.ReplaceAll(name, ".", replacementChar)
 }
 
 // SanitizeTopicName escapes not permitted chars for topic name

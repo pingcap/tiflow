@@ -335,6 +335,12 @@ func TestGetAvroNamespace(t *testing.T) {
 		"N_amespace.S_chema",
 		getAvroNamespace("N-amespace", "S.chema"),
 	)
+
+	require.Equal(
+		t,
+		"normalNamespace",
+		getAvroNamespace("normalNamespace", ""),
+	)
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
