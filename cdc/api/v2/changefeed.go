@@ -284,7 +284,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
-		if commonInfo.FeedState == model.StateNormal || commonInfo.FeedState == model.StateStopped || commonInfo.FeedState == model.StateFinished || commonInfo.FeedState == model.StateRemoved {
+		if !shouldShowRunningError(commonInfo.FeedState) {
 			commonInfo.RunningError = nil
 		}
 
@@ -1025,6 +1025,19 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	})
 }
 
+func shouldShowRunningError(state model.FeedState) bool {
+	switch state {
+	case model.StateNormal:
+	case model.StateStopped:
+	case model.StateFinished:
+	case model.StateRemoved:
+		return false
+	default:
+		return true
+	}
+	return true
+}
+
 func toAPIModel(
 	info *model.ChangeFeedInfo,
 	resolvedTs uint64,
@@ -1036,7 +1049,7 @@ func toAPIModel(
 
 	// if the state is normal, we shall not return the error info
 	// because changefeed will is retrying. errors will confuse the users
-	if info.Error != nil && info.State != model.StateNormal && info.State != model.StateStopped && info.State != model.StateFinished && info.State != model.StateRemoved {
+	if info.Error != nil && !shouldShowRunningError(info.State) {
 		runningError = &RunningError{
 			Addr:    info.Error.Addr,
 			Code:    info.Error.Code,
