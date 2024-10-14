@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -1553,7 +1554,7 @@ func TestBuildTableInfo(t *testing.T) {
 	for i, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
-		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		originTI, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
@@ -1623,7 +1624,7 @@ func TestNewDMRowChange(t *testing.T) {
 	for _, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
-		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		originTI, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		cols := []*model.Column{

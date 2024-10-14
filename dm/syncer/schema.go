@@ -24,6 +24,7 @@ import (
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
@@ -132,7 +133,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("overwrite --flush to true for operate-schema")
 		}
 
-		ti, err2 := ddl2.BuildTableInfoFromAST(stmt)
+		ti, err2 := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt)
 		if err2 != nil {
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}

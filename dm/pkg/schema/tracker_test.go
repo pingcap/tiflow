@@ -23,6 +23,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -735,7 +736,7 @@ func TestVarchar20000(t *testing.T) {
 	p := parser.New()
 	node, err := p.ParseOneStmt("create table t(c varchar(20000)) charset=utf8", "", "")
 	require.NoError(t, err)
-	oriTi, err := ddl.BuildTableInfoFromAST(node.(*ast.CreateTableStmt))
+	oriTi, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), node.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	// tracker and sqlmock
@@ -764,7 +765,7 @@ func TestPlacementRule(t *testing.T) {
 	p := parser.New()
 	node, err := p.ParseOneStmt("create table t(c int) charset=utf8mb4", "", "")
 	require.NoError(t, err)
-	oriTi, err := ddl.BuildTableInfoFromAST(node.(*ast.CreateTableStmt))
+	oriTi, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), node.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	dbConn, mock := mockBaseConn(t)

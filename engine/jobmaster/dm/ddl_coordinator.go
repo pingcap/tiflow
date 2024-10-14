@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -797,7 +798,7 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 func genCmpTable(createStmt string) schemacmp.Table {
 	p := parser.New()
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
-	ti, _ := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
+	ti, _ := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmtNode.(*ast.CreateTableStmt))
 	ti.State = model.StatePublic
 	return schemacmp.Encode(ti)
 }
