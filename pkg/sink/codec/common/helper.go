@@ -318,13 +318,13 @@ func isValidNonFirstCharacter(c rune) bool {
 	return isValidFirstCharacter(c) || (c >= '0' && c <= '9')
 }
 
-func isValidNonFirstCharacterForTableName(c rune) bool {
+func isValidNonFirstCharacterForTopicName(c rune) bool {
 	return isValidNonFirstCharacter(c) || c == '.'
 }
 
 // SanitizeName escapes not permitted chars
 // https://avro.apache.org/docs/1.12.0/specification/#names
-// see https://github.com/debezium/debezium/blob/main/debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
+// see https://github.com/debezium/debezium/blob/main/debezium-core/src/main/java/io/debezium/schema/SchemaNameAdjuster.java
 func SanitizeName(name string) string {
 	changed := false
 	var sb strings.Builder
@@ -357,18 +357,13 @@ func SanitizeName(name string) string {
 	return sanitizedName
 }
 
-// SanitizeSchemaName escapes ".", it may have special meanings for sink connectors
-func SanitizeSchemaName(name string) string {
-	return strings.ReplaceAll(name, ".", replacementChar)
-}
-
 // SanitizeTopicName escapes not permitted chars for topic name
 // https://github.com/debezium/debezium/blob/main/debezium-api/src/main/java/io/debezium/spi/topic/TopicNamingStrategy.java
 func SanitizeTopicName(name string) string {
 	changed := false
 	var sb strings.Builder
 	for _, c := range name {
-		if !isValidNonFirstCharacterForTableName(c) {
+		if !isValidNonFirstCharacterForTopicName(c) {
 			b := []byte(string(c))
 			for k := 0; k < len(b); k++ {
 				sb.WriteString(replacementChar)

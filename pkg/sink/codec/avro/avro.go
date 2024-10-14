@@ -210,7 +210,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	topic = common.SanitizeSchemaName(topic)
+	topic = sanitizeTopic(topic)
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
@@ -446,6 +446,11 @@ func mysqlTypeFromTiDBType(tidbType string) byte {
 		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
 	}
 	return result
+}
+
+// sanitizeTopic escapes ".", it may have special meanings for sink connectors
+func sanitizeTopic(name string) string {
+	return strings.ReplaceAll(name, ".", "_")
 }
 
 // <empty> | <name>[(<dot><name>)*]
