@@ -50,10 +50,11 @@ endif
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
 OS := "$(shell go env GOOS)"
 SED_IN_PLACE ?= $(shell which sed)
-IS_ALPINE := $(shell grep -qi Alpine /etc/os-release && echo 1)
+IS_ALPINE := "0"
 ifeq (${OS}, "linux")
 	CGO := 0
 	SED_IN_PLACE += -i
+	IS_ALPINE := $(shell grep -qi Alpine /etc/os-release && echo 1)
 else ifeq (${OS}, "darwin")
 	CGO := 1
 	SED_IN_PLACE += -i ''
