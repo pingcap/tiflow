@@ -245,8 +245,6 @@ github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ3
 github.com/cyberdelia/templates v0.0.0-20141128023046-ca7fffd4298c/go.mod h1:GyV+0YP4qX0UQ7r2MoYZ+AvYDp12OF5yg4q8rGnyNh4=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 h1:iwZdTE0PVqJCos1vaoKsclOGD3ADKpshg3SRtYBbwso=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548/go.mod h1:e6NPNENfs9mPDVNRekM7lKScauxd5kXTr1Mfyig6TDM=
-github.com/d3hunter/tidb v1.1.0-beta.0.20241014025427-5e200df2cb53 h1:nD3dJmJeWPTEfbP7T69NrPUSKhwMgZSKIYdtOQzyRYM=
-github.com/d3hunter/tidb v1.1.0-beta.0.20241014025427-5e200df2cb53/go.mod h1:pKErppbl4OhrGZVbAuS5ToknZ5Tw9KeNvU4FEgXuoZc=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/danjacques/gofslock v0.0.0-20240212154529-d899e02bfe22 h1:m+Fkk9QEMuV6Z1ithqqYogOHV7Pl6rMKe34NBTJTS/c=
@@ -906,10 +904,12 @@ github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d h1:y3EueKVfVykdpTyfU
 github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
+github.com/pingcap/tidb v1.1.0-beta.0.20241014034929-94b2ac04a0c4 h1:p6/3EiEs5RtSgVmr99sJ3sSEe6MuBg3VLt2P3EG/N4s=
+github.com/pingcap/tidb v1.1.0-beta.0.20241014034929-94b2ac04a0c4/go.mod h1:pKErppbl4OhrGZVbAuS5ToknZ5Tw9KeNvU4FEgXuoZc=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20241013080035-69f8a7bf352b h1:HaLNRFV2X/FKnkClENY2Soem2wXTuUfiDzHB3SoxIDI=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20241013080035-69f8a7bf352b/go.mod h1:Hju1TEWZvrctQKbztTRwXH7rd41Yq0Pgmq4PrEKcq7o=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20241014034929-94b2ac04a0c4 h1:+HMT6yCrQ0GGkhOPtP22u0/PnPmfXir9WC3NezF3OHo=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20241014034929-94b2ac04a0c4/go.mod h1:Hju1TEWZvrctQKbztTRwXH7rd41Yq0Pgmq4PrEKcq7o=
 github.com/pingcap/tipb v0.0.0-20241008083645-0bcddae67837 h1:tyIymn821fB8gUmqafdvLlcFkVOpgyJXImoYJ8n9oJE=
 github.com/pingcap/tipb v0.0.0-20241008083645-0bcddae67837/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
