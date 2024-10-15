@@ -1049,7 +1049,7 @@ func toAPIModel(
 
 	// if the state is normal, we shall not return the error info
 	// because changefeed will is retrying. errors will confuse the users
-	if info.Error != nil && !shouldShowRunningError(info.State) {
+	if info.Error != nil && shouldShowRunningError(info.State) {
 		runningError = &RunningError{
 			Addr:    info.Error.Addr,
 			Code:    info.Error.Code,
