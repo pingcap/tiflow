@@ -64,25 +64,25 @@ func (t *testEtcdUtilSuite) newConfig(c *C, name string, portCount int) *embed.C
 	cfg.Logger = "zap"
 	c.Assert(cfg.Validate(), IsNil)
 
-	cfg.LCUrls = []url.URL{}
+	cfg.ListenClientUrls = []url.URL{}
 	for i := 0; i < portCount; i++ {
 		endPoint := tempurl.Alloc()
 		cu, err2 := url.Parse(endPoint)
 		c.Assert(err2, IsNil)
-		cfg.LCUrls = append(cfg.LCUrls, *cu)
+		cfg.ListenClientUrls = append(cfg.ListenClientUrls, *cu)
 	}
 
-	cfg.ACUrls = cfg.LCUrls
-	cfg.LPUrls = []url.URL{}
+	cfg.AdvertiseClientUrls = cfg.ListenClientUrls
+	cfg.ListenPeerUrls = []url.URL{}
 	ic := make([]string, 0, portCount)
 	for i := 0; i < portCount; i++ {
 		endPoint := tempurl.Alloc()
 		pu, err2 := url.Parse(endPoint)
 		c.Assert(err2, IsNil)
-		cfg.LPUrls = append(cfg.LPUrls, *pu)
+		cfg.ListenPeerUrls = append(cfg.ListenPeerUrls, *pu)
 		ic = append(ic, fmt.Sprintf("%s=%s", cfg.Name, pu))
 	}
-	cfg.APUrls = cfg.LPUrls
+	cfg.AdvertisePeerUrls = cfg.ListenPeerUrls
 	cfg.InitialCluster = strings.Join(ic, ",")
 	cfg.ClusterState = embed.ClusterStateFlagNew
 	return cfg
@@ -121,8 +121,8 @@ func (t *testEtcdUtilSuite) checkMember(c *C, mid uint64, m *etcdserverpb.Member
 		c.Assert(m.Name, Equals, cfg.Name)
 	}
 	c.Assert(m.ID, Equals, mid)
-	require.ElementsMatch(t.testT, m.ClientURLs, t.urlsToStrings(cfg.ACUrls))
-	require.ElementsMatch(t.testT, m.PeerURLs, t.urlsToStrings(cfg.APUrls))
+	require.ElementsMatch(t.testT, m.ClientURLs, t.urlsToStrings(cfg.AdvertiseClientUrls))
+	require.ElementsMatch(t.testT, m.PeerURLs, t.urlsToStrings(cfg.AdvertisePeerUrls))
 }
 
 func (t *testEtcdUtilSuite) TestMemberUtil(c *C) {
@@ -134,7 +134,7 @@ func (t *testEtcdUtilSuite) TestMemberUtil(c *C) {
 func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	// start a etcd
 	cfg1 := t.newConfig(c, "etcd1", portCount)
-	endpoints1 := t.urlsToStrings(cfg1.LCUrls)
+	endpoints1 := t.urlsToStrings(cfg1.ListenClientUrls)
 	etcd1 := t.startEtcd(c, cfg1)
 	defer etcd1.Close()
 
@@ -149,7 +149,7 @@ func (t *testEtcdUtilSuite) testMemberUtilInternal(c *C, portCount int) {
 	cfg2 := t.newConfig(c, "etcd2", portCount)
 	cfg2.InitialCluster = cfg1.InitialCluster + "," + cfg2.InitialCluster
 	cfg2.ClusterState = embed.ClusterStateFlagExisting
-	addResp, err := AddMember(cli, t.urlsToStrings(cfg2.APUrls))
+	addResp, err := AddMember(cli, t.urlsToStrings(cfg2.AdvertisePeerUrls))
 	c.Assert(err, IsNil)
 	c.Assert(addResp.Members, HasLen, 2)
 
