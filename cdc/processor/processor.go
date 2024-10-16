@@ -356,11 +356,9 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	span tablepb.Span, sinkStats sinkmanager.TableStats,
 ) tablepb.Stats {
 	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
-	now, _ := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
-		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
 		BarrierTs:   sinkStats.BarrierTs,
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
