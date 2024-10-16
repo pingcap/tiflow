@@ -1032,7 +1032,6 @@ func shouldShowRunningError(state model.FeedState) bool {
 	default:
 		return true
 	}
-	return true
 }
 
 func toAPIModel(
