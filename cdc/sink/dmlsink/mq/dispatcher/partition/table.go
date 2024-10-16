@@ -34,6 +34,11 @@ func NewTableDispatcher() *TableDispatcher {
 	}
 }
 
+// IsPartitionKeyUpdated checks whether the partition key is updated in the RowChangedEvent.
+func (t *TableDispatcher) IsPartitionKeyUpdated(row *model.RowChangedEvent) (bool, error) {
+	return false, nil
+}
+
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
