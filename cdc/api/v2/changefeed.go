@@ -1027,10 +1027,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 
 func shouldShowRunningError(state model.FeedState) bool {
 	switch state {
-	case model.StateNormal:
-	case model.StateStopped:
-	case model.StateFinished:
-	case model.StateRemoved:
+	case model.StateNormal, model.StateStopped, model.StateFinished, model.StateRemoved:
 		return false
 	default:
 		return true
