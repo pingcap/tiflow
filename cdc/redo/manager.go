@@ -525,7 +525,6 @@ func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duratio
 	overseerTicker := time.NewTicker(overseerDuration)
 	defer overseerTicker.Stop()
 	var workTimeSlice time.Duration
-	startToWork := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -537,10 +536,8 @@ func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duratio
 				return nil // channel closed
 			}
 			err = m.handleEvent(ctx, event, &workTimeSlice)
-		case now := <-overseerTicker.C:
-			busyRatio := workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * overseerDuration.Seconds()
-			m.metricRedoWorkerBusyRatio.Add(busyRatio)
-			startToWork = now
+		case <-overseerTicker.C:
+			m.metricRedoWorkerBusyRatio.Add(workTimeSlice.Seconds())
 			workTimeSlice = 0
 		case err = <-logErrCh:
 		}

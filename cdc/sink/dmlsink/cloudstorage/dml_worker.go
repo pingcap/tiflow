@@ -162,15 +162,12 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 	overseerDuration := d.config.FlushInterval * 2
 	overseerTicker := time.NewTicker(overseerDuration)
 	defer overseerTicker.Stop()
-	startToWork := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case now := <-overseerTicker.C:
-			busyRatio := flushTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * overseerDuration.Seconds()
-			d.metricsWorkerBusyRatio.Add(busyRatio)
-			startToWork = now
+		case <-overseerTicker.C:
+			d.metricsWorkerBusyRatio.Add(flushTimeSlice.Seconds())
 			flushTimeSlice = 0
 		case batchedTask := <-d.toBeFlushedCh:
 			if atomic.LoadUint64(&d.isClosed) == 1 {
