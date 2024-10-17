@@ -2544,11 +2544,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_redo_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (instance)",
+              "expr": "sum(rate(ticdc_redo_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (instance,type)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{type}}-{{instance}}",
               "queryType": "randomWalk",
               "refId": "A"
             },
@@ -2652,9 +2652,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_redo_write_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (instance)",
+              "expr": "sum(rate(ticdc_redo_write_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (instance,type)",
               "interval": "",
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{instance}}-{{type}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -2738,11 +2738,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_flush_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_redo_flush_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{le}}",
+              "legendFormat": "{{type}}-{{le}} s",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -2812,18 +2812,18 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_flushall_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_redo_flush_all_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{le}}",
+              "legendFormat": "{{type}}-{{le}} s",
               "queryType": "randomWalk",
               "refId": "A"
             }
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Redo flushall duration",
+          "title": "Redo flush all duration",
           "tooltip": {
             "show": true,
             "showHistogram": true

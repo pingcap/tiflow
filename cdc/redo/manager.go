@@ -231,13 +231,13 @@ func newLogManager(
 		logBuffer: chann.NewAutoDrainChann[cacheEvents](),
 		rtsMap:    spanz.SyncMap{},
 		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID, logType),
 		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID, logType),
 		metricTotalRowsCount: common.RedoTotalRowsCountGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID, logType),
 		metricRedoWorkerBusyRatio: common.RedoWorkerBusyRatio.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID, logType),
 	}
 }
 
@@ -521,7 +521,8 @@ func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duratio
 	logErrCh := make(chan error, 1)
 	handleErr := func(err error) { logErrCh <- err }
 
-	overseerTicker := time.NewTicker(time.Second * 5)
+	overseerDuration := time.Second * 5
+	overseerTicker := time.NewTicker(overseerDuration)
 	defer overseerTicker.Stop()
 	var workTimeSlice time.Duration
 	startToWork := time.Now()
@@ -537,8 +538,8 @@ func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duratio
 			}
 			err = m.handleEvent(ctx, event, &workTimeSlice)
 		case now := <-overseerTicker.C:
-			busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
-			m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+			busyRatio := workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * overseerDuration.Seconds()
+			m.metricRedoWorkerBusyRatio.Add(busyRatio)
 			startToWork = now
 			workTimeSlice = 0
 		case err = <-logErrCh:
