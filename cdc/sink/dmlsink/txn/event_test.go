@@ -89,7 +89,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 12,
@@ -104,7 +104,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,
@@ -126,7 +126,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 12,
@@ -141,7 +141,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
 					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,
@@ -163,7 +163,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: nil,
@@ -178,7 +178,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
 					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
+					PreColumns: model.Columns2ColumnDatas([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,
