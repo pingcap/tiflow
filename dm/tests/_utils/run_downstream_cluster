@@ -46,6 +46,12 @@ EOF
 
 start_tikv() {
 	echo "Starting TiKV..."
+
+	cat >"$WORK_DIR/tikv.toml" <<EOF
+[storage]
+engine = "partitioned-raft-kv"
+EOF
+
 	mkdir -p "$WORK_DIR/tikv"
 	bin/tikv-server \
 		--pd "$PD_ADDR" \
@@ -53,6 +59,7 @@ start_tikv() {
 		--status-addr "$TIKV_STATUS_ADDR" \
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
+		--config "$WORK_DIR/tikv.toml" \
 		-s "$WORK_DIR/tikv" &
 	while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
 		i=$((i + 1))
