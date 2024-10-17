@@ -285,8 +285,8 @@ type MetaPositionChecker struct {
 }
 
 // NewMetaPositionChecker returns a RealChecker.
-func NewMetaPositionChecker(db *conn.BaseDB, sourceCfg dbconfig.DBConfig, enableGTID bool, meta *config.Meta, cpMinLoc *binlog.Location) RealChecker {
-	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, enableGTID: enableGTID, meta: meta, cpLoc: cpMinLoc}
+func NewMetaPositionChecker(db *conn.BaseDB, sourceCfg dbconfig.DBConfig, enableGTID bool, meta *config.Meta, cpLoc *binlog.Location) RealChecker {
+	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, enableGTID: enableGTID, meta: meta, cpLoc: cpLoc}
 }
 
 // Check implements the RealChecker interface.
