@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -280,11 +281,12 @@ type MetaPositionChecker struct {
 	sourceCfg  dbconfig.DBConfig
 	enableGTID bool
 	meta       *config.Meta
+	cpLoc      *binlog.Location
 }
 
-// NewBinlogDBChecker returns a RealChecker.
-func NewMetaPositionChecker(db *conn.BaseDB, sourceCfg dbconfig.DBConfig, enableGTID bool, meta *config.Meta) RealChecker {
-	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, enableGTID: enableGTID, meta: meta}
+// NewMetaPositionChecker returns a RealChecker.
+func NewMetaPositionChecker(db *conn.BaseDB, sourceCfg dbconfig.DBConfig, enableGTID bool, meta *config.Meta, cpMinLoc *binlog.Location) RealChecker {
+	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, enableGTID: enableGTID, meta: meta, cpLoc: cpMinLoc}
 }
 
 // Check implements the RealChecker interface.
@@ -364,6 +366,12 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 				result.Instruction += "it should be any combination of single GTIDs and ranges of GTID, see https://dev.mysql.com/doc/refman/8.0/en/replication-gtids-concepts.html"
 			}
 			return result
+		}
+		cpGtidSet := c.cpLoc.GetGTID()
+		cmpRes, canCmp := binlog.CompareGTID(cpGtidSet, gtidSet)
+		// if cpGtidSet contains gtidSet, replace gtidSet
+		if canCmp && cmpRes > 0 {
+			gtidSet = cpGtidSet
 		}
 		streamer, err = syncer.StartSyncGTID(gtidSet)
 	} else {
