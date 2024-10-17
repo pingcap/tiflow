@@ -1,6 +1,9 @@
 name: DM Chaos
 
 on:
+  push:
+    branches:
+      - master
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -263,7 +266,7 @@ jobs:
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
       - name: Upload logs
         continue-on-error: true
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: chaos-base-logs.${{ matrix.chaos-obj }}
