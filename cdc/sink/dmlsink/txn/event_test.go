@@ -25,7 +25,7 @@ import (
 func TestGenKeyListCaseInSensitive(t *testing.T) {
 	t.Parallel()
 
-	columns, tb := model.Columns2ColumnData([]*model.Column{
+	columns, tb := model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "XyZ",
 			Type:      mysql.TypeVarchar,
@@ -35,7 +35,7 @@ func TestGenKeyListCaseInSensitive(t *testing.T) {
 
 	first := genKeyList(columns, tb, 0, []int{0}, 1)
 
-	columns, tb = model.Columns2ColumnData([]*model.Column{
+	columns, tb = model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "xYZ",
 			Type:      mysql.TypeVarchar,
@@ -89,7 +89,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 12,
@@ -104,7 +104,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,
@@ -126,7 +126,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 12,
@@ -141,7 +141,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
 					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,
@@ -163,7 +163,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					PhysicalTableID: 47,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: nil,
@@ -178,7 +178,7 @@ func TestGenKeys(t *testing.T) {
 					CommitTs:        418658114257813515,
 					TableInfo:       tableInfoWithTwoUniqueKeys,
 					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
+					PreColumns: model.Columns2ColumnDataForTests([]*model.Column{
 						{
 							Name:  "a1",
 							Value: 1,

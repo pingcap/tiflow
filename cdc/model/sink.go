@@ -580,6 +580,31 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	return pkeyCols, pkeyColInfos
 }
 
+// HandleKeyColDataXInfos returns the columnDataX(s) and colInfo(s) corresponding to the handle key(s)
+func (r *RowChangedEvent) HandleKeyColDataXInfos() ([]ColumnDataX, []rowcodec.ColInfo) {
+	pkeyColDataXs := make([]ColumnDataX, 0)
+	pkeyColInfos := make([]rowcodec.ColInfo, 0)
+
+	var cols []*ColumnData
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	tableInfo := r.TableInfo
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
+	for i, col := range cols {
+		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
+			pkeyColDataXs = append(pkeyColDataXs, GetColumnDataX(col, tableInfo))
+			pkeyColInfos = append(pkeyColInfos, colInfos[i])
+		}
+	}
+
+	// It is okay not to have handle keys, so the empty array is an acceptable result
+	return pkeyColDataXs, pkeyColInfos
+}
+
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
 func (r *RowChangedEvent) ApproximateBytes() int {
 	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
@@ -1350,8 +1375,8 @@ func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
 	return x.info
 }
 
-// Columns2ColumnData converts column to column data and table info.
-func Columns2ColumnData(columns []*Column) ([]*ColumnData, *TableInfo) {
+// Columns2ColumnDataForTest is for tests.
+func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 	info := &TableInfo{
 		TableInfo: &model.TableInfo{
 			Columns: make([]*model.ColumnInfo, len(columns)),
@@ -1381,8 +1406,8 @@ func Columns2ColumnData(columns []*Column) ([]*ColumnData, *TableInfo) {
 	return colDatas, info
 }
 
-// Column2ColumnDataX only use by debezium protocol.
-func Column2ColumnDataX(column *Column) ColumnDataX {
-	datas, info := Columns2ColumnData([]*Column{column})
+// Column2ColumnDataXForTest is for tests.
+func Column2ColumnDataXForTest(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnDataForTest([]*Column{column})
 	return GetColumnDataX(datas[0], info)
 }

@@ -721,16 +721,15 @@ func (c *dbzCodec) EncodeKey(
 ) error {
 	// schema field describes the structure of the primary key, or the unique key if the table does not have a primary key, for the table that was changed.
 	// see https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-events
-	cols, colInfos := e.HandleKeyColInfos()
+	colDataXs, colInfos := e.HandleKeyColDataXInfos()
 	jWriter := util.BorrowJSONWriter(dest)
 	defer util.ReturnJSONWriter(jWriter)
 
 	var err error
 	jWriter.WriteObject(func() {
 		jWriter.WriteObjectField("payload", func() {
-			for i, col := range cols {
-				colx := model.Column2ColumnDataX(col)
-				err = c.writeDebeziumFieldValue(jWriter, colx, colInfos[i].Ft)
+			for i, col := range colDataXs {
+				err = c.writeDebeziumFieldValue(jWriter, col, colInfos[i].Ft)
 			}
 		})
 		if !c.config.DebeziumDisableSchema {
@@ -740,9 +739,8 @@ func (c *dbzCodec) EncodeKey(
 					fmt.Sprintf("%s.Key", getSchemaTopicName(c.clusterID, e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName())))
 				jWriter.WriteBoolField("optional", false)
 				jWriter.WriteArrayField("fields", func() {
-					for i, col := range cols {
-						colx := model.Column2ColumnDataX(col)
-						c.writeDebeziumFieldSchema(jWriter, colx, colInfos[i].Ft)
+					for i, col := range colDataXs {
+						c.writeDebeziumFieldSchema(jWriter, col, colInfos[i].Ft)
 					}
 				})
 			})
