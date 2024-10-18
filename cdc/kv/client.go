@@ -450,6 +450,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 		s.regionCh.CloseAndDrain()
 		s.errCh.CloseAndDrain()
 		s.requestRangeCh.CloseAndDrain()
+
+		log.Info("event feed exited",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName))
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
