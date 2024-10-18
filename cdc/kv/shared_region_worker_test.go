@@ -67,7 +67,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	client := newSharedClientForTestSharedRegionWorker()
 	defer client.Close()
 
-	worker := newSharedRegionWorker(client)
+	worker := newSharedRegionWorker(client, 0)
 	eventCh := make(chan MultiplexingEvent, 2)
 
 	span := spanz.ToSpan([]byte{}, spanz.UpperBoundKey)
@@ -173,7 +173,7 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 	client := newSharedClientForTestSharedRegionWorker()
 	defer client.Close()
 
-	worker := newSharedRegionWorker(client)
+	worker := newSharedRegionWorker(client, 0)
 	eventCh := make(chan MultiplexingEvent, 2)
 
 	s1 := newRegionFeedState(regionInfo{verID: tikv.NewRegionVerID(1, 1, 1)}, 1)
