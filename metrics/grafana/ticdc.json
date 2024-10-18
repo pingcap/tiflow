@@ -18889,11 +18889,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_fsync_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
+              "expr": "max(rate(ticdc_redo_fsync_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{type}}-{{le}} s",
+              "legendFormat": "{{le}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -18963,11 +18963,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_flush_all_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
+              "expr": "max(rate(ticdc_redo_flush_all_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{type}}-{{le}} s",
+              "legendFormat": "{{le}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -19037,11 +19037,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_write_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
+              "expr": "max(rate(ticdc_redo_write_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{type}}-{{le}} s",
+              "legendFormat": "{{le}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -19111,11 +19111,11 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "max(rate(ticdc_redo_flush_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,type)",
+              "expr": "max(rate(ticdc_redo_flush_log_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{type}}-{{le}} s",
+              "legendFormat": "{{le}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
