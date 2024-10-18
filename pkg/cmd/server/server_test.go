@@ -168,6 +168,7 @@ func TestParseCfg(t *testing.T) {
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
+<<<<<<< HEAD
 				Count:                       8,
 				Concurrency:                 128,
 				MaxOpenFiles:                10000,
@@ -180,6 +181,15 @@ func TestParseCfg(t *testing.T) {
 				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
+=======
+				Count:               8,
+				MaxOpenFiles:        10000,
+				BlockSize:           65536,
+				WriterBufferSize:    8388608,
+				Compression:         "snappy",
+				WriteL0PauseTrigger: math.MaxInt32,
+				CompactionL0Trigger: 16,
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -458,6 +468,7 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
+<<<<<<< HEAD
 				Count:                       8,
 				Concurrency:                 128,
 				MaxOpenFiles:                10000,
@@ -470,6 +481,15 @@ cert-allowed-cn = ["dd","ee"]
 				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
+=======
+				Count:               8,
+				MaxOpenFiles:        10000,
+				BlockSize:           65536,
+				WriterBufferSize:    8388608,
+				Compression:         "snappy",
+				WriteL0PauseTrigger: math.MaxInt32,
+				CompactionL0Trigger: 16,
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -525,6 +545,7 @@ unknown3 = 3
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
 		DB: &config.DBConfig{
+<<<<<<< HEAD
 			Count:                       8,
 			Concurrency:                 128,
 			MaxOpenFiles:                10000,
@@ -537,6 +558,15 @@ unknown3 = 3
 			CompactionPeriod:            1800,
 			IteratorMaxAliveDuration:    10000,
 			IteratorSlowReadDuration:    256,
+=======
+			Count:               8,
+			MaxOpenFiles:        10000,
+			BlockSize:           65536,
+			WriterBufferSize:    8388608,
+			Compression:         "snappy",
+			WriteL0PauseTrigger: math.MaxInt32,
+			CompactionL0Trigger: 16,
+>>>>>>> 08aec53320 (cdc: adjust sorter options to avoid Seek CPU usage exploding (#11099))
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
