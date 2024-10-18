@@ -469,8 +469,6 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 	return nil
 }
 
-// Cleanup removes all redo logs of this manager, it is called when changefeed is removed
-// only owner should call this method.
 func (m *metaManager) cleanup(logType string) {
 	common.RedoFlushLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID, logType)
