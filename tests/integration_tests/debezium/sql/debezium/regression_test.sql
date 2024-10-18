@@ -85,7 +85,6 @@ CREATE TABLE dbz_123_bitvaluetest (
 INSERT INTO dbz_123_bitvaluetest VALUES (1,2,64,23989979, 1);
 INSERT INTO dbz_123_bitvaluetest VALUES (b'1',b'10',b'01000000',b'1011011100000111011011011', 2);
 
--- DBZ-104 handle create table like ...
 DROP DATABASE IF EXISTS connector_test;
 CREATE DATABASE connector_test;
 CREATE TABLE connector_test.customers (
