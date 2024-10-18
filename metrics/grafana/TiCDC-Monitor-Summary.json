@@ -2548,7 +2548,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{type}}-{{instance}}",
+              "legendFormat": "{{instance}}-{{type}}",
               "queryType": "randomWalk",
               "refId": "A"
             },
