@@ -205,6 +205,11 @@ func NewChangefeedReactorState(clusterID string,
 	}
 }
 
+// Checkpoint return the current checkpoint ts.
+func (s *ChangefeedReactorState) Checkpoint() model.Ts {
+	return s.Info.GetCheckpointTs(s.Status)
+}
+
 // GetID returns the changefeed ID.
 func (s *ChangefeedReactorState) GetID() model.ChangeFeedID {
 	return s.ID
@@ -487,7 +492,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 }
 
 // Active return true if the changefeed is ready to be processed
-func (s *ChangefeedReactorState) Active(captureID model.CaptureID) bool {
+func (s *ChangefeedReactorState) Active() bool {
 	return s.Info != nil && s.Status != nil && s.Status.AdminJobType == model.AdminNone
 }
 
