@@ -104,18 +104,12 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	var value []byte
 	var err error
 	if key, err = d.encodeKey(e); err != nil {
-	var key []byte
-	var value []byte
-	var err error
-	if key, err = d.encodeKey(e); err != nil {
 		return errors.Trace(err)
 	}
-	if value, err = d.encodeValue(e); err != nil {
 	if value, err = d.encodeValue(e); err != nil {
 		return errors.Trace(err)
 	}
 	m := &common.Message{
-		Key:      key,
 		Key:      key,
 		Value:    value,
 		Ts:       e.CommitTs,

@@ -45,11 +45,6 @@ var (
 	msgValue = "value"
 )
 
-var (
-	msgKey   = "key"
-	msgValue = "value"
-)
-
 func parseSQLText(data string) (res []ast.StmtNode, warns []error, err error) {
 	p := parser.New()
 	statements, warns, err := p.Parse(data, "utf8mb4", "utf8mb4_bin")
@@ -158,7 +153,7 @@ func runTestCase(testCasePath string) bool {
 func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) (map[string]any, map[string]any, bool, error) {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		m, err := reader.ReadMessage(ctx)
+		m, err := reader.FetchMessage(ctx)
 		cancel()
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -171,16 +166,10 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, nil, false, fmt.Errorf("Failed to commit CDC record of %s: %w", kind, err)
 		}
 
-		if err = reader.CommitMessages(context.Background(), m); err != nil {
-			return nil, nil, fmt.Errorf("Failed to commit CDC record of %s: %w", kind, err)
-		}
-		cancel()
-
 		if len(m.Value) == 0 {
 			continue
 		}
 
-		var keyMap map[string]any
 		var keyMap map[string]any
 		var obj map[string]any
 		err = json.Unmarshal(m.Key, &keyMap)
@@ -291,7 +280,6 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) ([]map[string]any, []ma
 	}
 
 	return keyMaps, records
-	return keyMaps, records
 }
 
 var ignoredRecordPaths = map[string]bool{
@@ -301,7 +289,6 @@ var ignoredRecordPaths = map[string]bool{
 
 var headingColor = color.New(color.FgHiWhite, color.Bold)
 
-func printRecord(obj any) {
 func printRecord(obj any) {
 	v, _ := json.MarshalIndent(obj, "", "  ")
 	quick.Highlight(os.Stdout, string(v), "json", "terminal16m", "vs")
@@ -350,9 +337,7 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 	}
 
 	var keyMapsDebezium []map[string]any
-	var keyMapsDebezium []map[string]any
 	var objsDebezium []map[string]any
-	var keyMapsTiCDC []map[string]any
 	var keyMapsTiCDC []map[string]any
 	var objsTiCDC []map[string]any
 	{
@@ -360,11 +345,9 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 		wg.Add(2)
 		go func() {
 			keyMapsDebezium, objsDebezium = fetchAllCDCRecords(readerDebezium, KindMySQL)
-			keyMapsDebezium, objsDebezium = fetchAllCDCRecords(readerDebezium, KindMySQL)
 			wg.Done()
 		}()
 		go func() {
-			keyMapsTiCDC, objsTiCDC = fetchAllCDCRecords(readerTiCDC, KindTiDB)
 			keyMapsTiCDC, objsTiCDC = fetchAllCDCRecords(readerTiCDC, KindTiDB)
 			wg.Done()
 		}()
@@ -379,34 +362,16 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 
 func diff(recordsDebezium, recordsTiCDC []map[string]any, onError func(error), msgType string) {
 	if len(recordsDebezium) != len(recordsTiCDC) {
-	diff(keyMapsDebezium, keyMapsTiCDC, onError, msgKey)
-	diff(objsDebezium, objsTiCDC, onError, msgValue)
-
-	return testCasePassed
-}
-
-func diff(recordsDebezium, recordsTiCDC []map[string]any, onError func(error), msgType string) {
-	if len(recordsDebezium) != len(recordsTiCDC) {
 		onError(fmt.Errorf(
 			"Mismatch CDC %s: Got %d record from Debezium and %d record from TiCDC",
 			msgType,
 			len(recordsDebezium),
 			len(recordsTiCDC)))
-
-			"Mismatch CDC %s: Got %d record from Debezium and %d record from TiCDC",
-			msgType,
-			len(recordsDebezium),
-			len(recordsTiCDC)))
-
 		headingColor.Print("\nDebezium output:\n\n")
-		for _, record := range recordsDebezium {
-			printRecord(record)
 		for _, record := range recordsDebezium {
 			printRecord(record)
 		}
 		headingColor.Print("\nTiCDC output:\n\n")
-		for _, record := range recordsTiCDC {
-			printRecord(record)
 		for _, record := range recordsTiCDC {
 			printRecord(record)
 		}
@@ -425,11 +390,6 @@ func diff(recordsDebezium, recordsTiCDC []map[string]any, onError func(error), m
 		cmp.Ignore(),
 	)
 
-	for i := 0; i < len(recordsDebezium); i++ {
-		recordDebezium := recordsDebezium[i]
-		recordTiCDC := recordsTiCDC[i]
-		if diff := cmp.Diff(recordDebezium, recordTiCDC, cmpOption); diff != "" {
-			onError(fmt.Errorf("Found mismatch CDC record (output record #%d)", i+1))
 	for i := 0; i < len(recordsDebezium); i++ {
 		recordDebezium := recordsDebezium[i]
 		recordTiCDC := recordsTiCDC[i]

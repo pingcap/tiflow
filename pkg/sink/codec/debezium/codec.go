@@ -1066,7 +1066,11 @@ func (c *dbzCodec) EncodeDDLEvent(
 	// message key
 	keyJWriter.WriteObject(func() {
 		keyJWriter.WriteObjectField("payload", func() {
-			keyJWriter.WriteStringField("databaseName", dbName)
+			if e.Type == timodel.ActionDropTable {
+				keyJWriter.WriteStringField("databaseName", e.PreTableInfo.GetSchemaName())
+			} else {
+				keyJWriter.WriteStringField("databaseName", dbName)
+			}
 		})
 		if !c.config.DebeziumDisableSchema {
 			keyJWriter.WriteObjectField("schema", func() {
@@ -1112,9 +1116,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 				// The followings are TiDB extended fields
 				jWriter.WriteUint64Field("commit_ts", e.CommitTs)
 				jWriter.WriteStringField("cluster_id", c.clusterID)
-				// jWriter.WriteAnyField("type", e.Type)
-				// jWriter.WriteStringField("collate", e.Collate)
-				// jWriter.WriteStringField("charset", e.Charset)
 			})
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 
@@ -1739,13 +1740,6 @@ func getDBTableName(e *model.DDLEvent) (string, string) {
 		return "", ""
 	}
 	return e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName()
-}
-
-func getSchemaTopicName(namespace string, schema string, table string) string {
-	return fmt.Sprintf("%s.%s.%s",
-		common.SanitizeName(namespace),
-		common.SanitizeName(schema),
-		common.SanitizeTopicName(table))
 }
 
 func getSchemaTopicName(namespace string, schema string, table string) string {
