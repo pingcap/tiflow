@@ -15,9 +15,6 @@ package puller
 
 import (
 	"context"
-	"sync"
-	"time"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -31,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+	"sync"
 )
 
 // Wrapper is a wrapper of puller used by source manager.
@@ -163,13 +161,6 @@ func (n *Wrapper) GetStats() puller.Stats {
 
 // Close the puller wrapper.
 func (n *Wrapper) Close() {
-	start := time.Now()
 	n.cancel()
 	n.wg.Wait()
-	log.Info("puller wrapper closed",
-		zap.String("namespace", n.changefeed.Namespace),
-		zap.String("changefeed", n.changefeed.ID),
-		zap.Any("tableID", n.tableID),
-		zap.String("tableName", n.tableName),
-		zap.Duration("duration", time.Since(start)))
 }
