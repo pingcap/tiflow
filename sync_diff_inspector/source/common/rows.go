@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// RowData represents a single row
 type RowData struct {
 	Data   map[string]*dbutil.ColumnData
 	Source int
@@ -34,7 +35,12 @@ type RowDatas struct {
 	OrderKeyCols []*model.ColumnInfo
 }
 
-func (r RowDatas) Len() int { return len(r.Rows) }
+// Len returns the number of rows
+func (r RowDatas) Len() int {
+	return len(r.Rows)
+}
+
+// Less compares two rows
 func (r RowDatas) Less(i, j int) bool {
 	for _, col := range r.OrderKeyCols {
 		col1, ok := r.Rows[i].Data[col.Name.O]
@@ -83,7 +89,11 @@ func (r RowDatas) Less(i, j int) bool {
 
 	return false
 }
-func (r RowDatas) Swap(i, j int) { r.Rows[i], r.Rows[j] = r.Rows[j], r.Rows[i] }
+
+// Swap swap two rows
+func (r RowDatas) Swap(i, j int) {
+	r.Rows[i], r.Rows[j] = r.Rows[j], r.Rows[i]
+}
 
 // Push implements heap.Interface's Push function
 func (r *RowDatas) Push(x interface{}) {

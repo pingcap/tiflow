@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 )
 
-type TableProgressPrinter struct {
+type tableProgressPrinter struct {
 	tableList     *list.List
 	tableFailList *list.List
 	tableMap      map[string]*list.Element
@@ -38,58 +38,59 @@ type TableProgressPrinter struct {
 	progress int
 	total    int
 
-	optCh    chan Operator
+	optCh    chan operator
 	finishCh chan struct{}
 }
 
-type table_state_t int
+type tableState int
 
 const (
-	TABLE_STATE_REGISTER                       table_state_t = 0x1
-	TABLE_STATE_PRESTART                       table_state_t = 0x2
-	TABLE_STATE_COMPARING                      table_state_t = 0x4
-	TABLE_STATE_FINISH                         table_state_t = 0x8
-	TABLE_STATE_RESULT_OK                      table_state_t = 0x00
-	TABLE_STATE_RESULT_FAIL_STRUCTURE_DONE     table_state_t = 0x10
-	TABLE_STATE_RESULT_FAIL_STRUCTURE_CONTINUE table_state_t = 0x20
-	TABLE_STATE_RESULT_FAIL_STRUCTURE_PASS     table_state_t = 0x40
-	TABLE_STATE_RESULT_DIFFERENT               table_state_t = 0x80
-	TABLE_STATE_HEAD                           table_state_t = 0xff
-	TABLE_STATE_RESULT_MASK                    table_state_t = 0xff0
-	TABLE_STATE_NOT_EXSIT_UPSTREAM             table_state_t = 0x100
-	TABLE_STATE_NOT_EXSIT_DOWNSTREAM           table_state_t = 0x200
+	tableStateRegister                    tableState = 0x1
+	tableStatePrestart                    tableState = 0x2
+	tableStateComparing                   tableState = 0x4
+	tableStateFinish                      tableState = 0x8
+	tableStateResultOK                    tableState = 0x00
+	tableStateResultFailStructureDone     tableState = 0x10
+	tableStateResultFailStructureContinue tableState = 0x20
+	tableStateResultFailStructurePass     tableState = 0x40
+	tableStateResultDifferent             tableState = 0x80
+	tableStateHead                        tableState = 0xff
+	tableStateResultMask                  tableState = 0xff0
+	tableStateNotExistUpstream            tableState = 0x100
+	tableStateNotExistDownstream          tableState = 0x200
 )
 
+// TableProgress store the progress of one table
 type TableProgress struct {
 	name            string
 	progress        int
 	total           int
-	state           table_state_t
+	state           tableState
 	totalStopUpdate bool
 }
 
-type progress_opt_t int
+type progressOpt int
 
 const (
-	PROGRESS_OPT_INC progress_opt_t = iota
-	PROGRESS_OPT_UPDATE
-	PROGRESS_OPT_REGISTER
-	PROGRESS_OPT_START
-	PROGRESS_OPT_FAIL
-	PROGRESS_OPT_CLOSE
-	PROGRESS_OPT_ERROR
+	progressOptInc progressOpt = iota
+	progressOptUpdate
+	progressOptRegister
+	progressOptStart
+	progressOptFail
+	progressOptClose
+	progressOptError
 )
 
-type Operator struct {
-	optType         progress_opt_t
+type operator struct {
+	optType         progressOpt
 	name            string
 	total           int
-	state           table_state_t
+	state           tableState
 	totalStopUpdate bool
 }
 
-func NewTableProgressPrinter(tableNums int, finishTableNums int) *TableProgressPrinter {
-	tpp := &TableProgressPrinter{
+func newTableProgressPrinter(tableNums int, finishTableNums int) *tableProgressPrinter {
+	tpp := &tableProgressPrinter{
 		tableList:     list.New(),
 		tableFailList: list.New(),
 		tableMap:      make(map[string]*list.Element),
@@ -102,7 +103,7 @@ func NewTableProgressPrinter(tableNums int, finishTableNums int) *TableProgressP
 		progress: 0,
 		total:    0,
 
-		optCh:    make(chan Operator, 16),
+		optCh:    make(chan operator, 16),
 		finishCh: make(chan struct{}),
 	}
 	tpp.init()
@@ -111,77 +112,77 @@ func NewTableProgressPrinter(tableNums int, finishTableNums int) *TableProgressP
 	return tpp
 }
 
-func (tpp *TableProgressPrinter) SetOutput(output io.Writer) {
+func (tpp *tableProgressPrinter) SetOutput(output io.Writer) {
 	tpp.output = output
 }
 
-func (tpp *TableProgressPrinter) Inc(name string) {
-	tpp.optCh <- Operator{
-		optType: PROGRESS_OPT_INC,
+func (tpp *tableProgressPrinter) Inc(name string) {
+	tpp.optCh <- operator{
+		optType: progressOptInc,
 		name:    name,
 	}
 }
 
-func (tpp *TableProgressPrinter) UpdateTotal(name string, total int, stopUpdate bool) {
-	tpp.optCh <- Operator{
-		optType:         PROGRESS_OPT_UPDATE,
+func (tpp *tableProgressPrinter) UpdateTotal(name string, total int, stopUpdate bool) {
+	tpp.optCh <- operator{
+		optType:         progressOptUpdate,
 		name:            name,
 		total:           total,
 		totalStopUpdate: stopUpdate,
 	}
 }
 
-func (tpp *TableProgressPrinter) RegisterTable(name string, isFailed bool, isDone bool, isExist int) {
-	var state table_state_t
+func (tpp *tableProgressPrinter) RegisterTable(name string, isFailed bool, isDone bool, isExist int) {
+	var state tableState
 	if isFailed {
 		if isDone {
 			switch isExist {
 			case common.UpstreamTableLackFlag:
-				state = TABLE_STATE_NOT_EXSIT_UPSTREAM | TABLE_STATE_REGISTER
+				state = tableStateNotExistUpstream | tableStateRegister
 			case common.DownstreamTableLackFlag:
-				state = TABLE_STATE_NOT_EXSIT_DOWNSTREAM | TABLE_STATE_REGISTER
+				state = tableStateNotExistDownstream | tableStateRegister
 			default:
-				state = TABLE_STATE_RESULT_FAIL_STRUCTURE_DONE | TABLE_STATE_REGISTER
+				state = tableStateResultFailStructureDone | tableStateRegister
 			}
 		} else {
-			state = TABLE_STATE_RESULT_FAIL_STRUCTURE_CONTINUE | TABLE_STATE_REGISTER
+			state = tableStateResultFailStructureContinue | tableStateRegister
 		}
 	} else {
-		state = TABLE_STATE_REGISTER
+		state = tableStateRegister
 	}
-	tpp.optCh <- Operator{
-		optType: PROGRESS_OPT_REGISTER,
+	tpp.optCh <- operator{
+		optType: progressOptRegister,
 		name:    name,
 		state:   state,
 	}
 }
 
-func (tpp *TableProgressPrinter) StartTable(name string, total int, stopUpdate bool) {
-	tpp.optCh <- Operator{
-		optType:         PROGRESS_OPT_START,
+func (tpp *tableProgressPrinter) StartTable(name string, total int, stopUpdate bool) {
+	tpp.optCh <- operator{
+		optType:         progressOptStart,
 		name:            name,
 		total:           total,
-		state:           TABLE_STATE_PRESTART,
+		state:           tableStatePrestart,
 		totalStopUpdate: stopUpdate,
 	}
 }
 
-func (tpp *TableProgressPrinter) FailTable(name string) {
-	tpp.optCh <- Operator{
-		optType: PROGRESS_OPT_FAIL,
+func (tpp *tableProgressPrinter) FailTable(name string) {
+	tpp.optCh <- operator{
+		optType: progressOptFail,
 		name:    name,
-		state:   TABLE_STATE_RESULT_DIFFERENT,
+		state:   tableStateResultDifferent,
 	}
 }
 
-func (tpp *TableProgressPrinter) Close() {
-	tpp.optCh <- Operator{
-		optType: PROGRESS_OPT_CLOSE,
+func (tpp *tableProgressPrinter) Close() {
+	tpp.optCh <- operator{
+		optType: progressOptClose,
 	}
 	<-tpp.finishCh
 }
 
-func (tpp *TableProgressPrinter) PrintSummary() {
+func (tpp *tableProgressPrinter) PrintSummary() {
 	var cleanStr, fixStr string
 	cleanStr = "\x1b[1A\x1b[J"
 	fixStr = "\nSummary:\n\n"
@@ -195,17 +196,17 @@ func (tpp *TableProgressPrinter) PrintSummary() {
 		SkippedNum := 0
 		for p := tpp.tableFailList.Front(); p != nil; p = p.Next() {
 			tp := p.Value.(*TableProgress)
-			if tp.state&(TABLE_STATE_RESULT_FAIL_STRUCTURE_DONE|TABLE_STATE_RESULT_FAIL_STRUCTURE_CONTINUE) != 0 {
+			if tp.state&(tableStateResultFailStructureDone|tableStateResultFailStructureContinue) != 0 {
 				fixStr = fmt.Sprintf("%sThe structure of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(TABLE_STATE_RESULT_DIFFERENT) != 0 {
+			if tp.state&(tableStateResultDifferent) != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(TABLE_STATE_NOT_EXSIT_DOWNSTREAM) != 0 {
+			if tp.state&(tableStateNotExistDownstream) != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in downstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}
-			if tp.state&(TABLE_STATE_NOT_EXSIT_UPSTREAM) != 0 {
+			if tp.state&(tableStateNotExistUpstream) != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in upstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}
@@ -219,9 +220,9 @@ func (tpp *TableProgressPrinter) PrintSummary() {
 	fmt.Fprintf(tpp.output, "%s%s\n", cleanStr, fixStr)
 }
 
-func (tpp *TableProgressPrinter) Error(err error) {
-	tpp.optCh <- Operator{
-		optType: PROGRESS_OPT_ERROR,
+func (tpp *tableProgressPrinter) Error(err error) {
+	tpp.optCh <- operator{
+		optType: progressOptError,
 	}
 	<-tpp.finishCh
 	var cleanStr, fixStr string
@@ -230,15 +231,15 @@ func (tpp *TableProgressPrinter) Error(err error) {
 	fmt.Fprintf(tpp.output, "%s%s", cleanStr, fixStr)
 }
 
-func (tpp *TableProgressPrinter) init() {
+func (tpp *tableProgressPrinter) init() {
 	tpp.tableList.PushBack(&TableProgress{
-		state: TABLE_STATE_HEAD,
+		state: tableStateHead,
 	})
 
 	tpp.output = os.Stdout
 }
 
-func (tpp *TableProgressPrinter) serve() {
+func (tpp *tableProgressPrinter) serve() {
 	tick := time.NewTicker(200 * time.Millisecond)
 
 	for {
@@ -247,27 +248,27 @@ func (tpp *TableProgressPrinter) serve() {
 			tpp.flush(false)
 		case opt := <-tpp.optCh:
 			switch opt.optType {
-			case PROGRESS_OPT_CLOSE:
+			case progressOptClose:
 				tpp.flush(false)
 				tpp.finishCh <- struct{}{}
 				return
-			case PROGRESS_OPT_ERROR:
+			case progressOptError:
 				tpp.finishCh <- struct{}{}
 				return
-			case PROGRESS_OPT_INC:
+			case progressOptInc:
 				if e, ok := tpp.tableMap[opt.name]; ok {
 					tp := e.Value.(*TableProgress)
 					tp.progress++
 					tpp.progress++
 					if tp.progress >= tp.total && tp.totalStopUpdate {
-						tp.state = (tp.state & TABLE_STATE_RESULT_MASK) | TABLE_STATE_FINISH
+						tp.state = (tp.state & tableStateResultMask) | tableStateFinish
 						tpp.progress -= tp.progress
 						tpp.total -= tp.total
 						delete(tpp.tableMap, opt.name)
 						tpp.flush(true)
 					}
 				}
-			case PROGRESS_OPT_REGISTER:
+			case progressOptRegister:
 				if _, ok := tpp.tableMap[opt.name]; !ok {
 					e := tpp.tableList.PushBack(&TableProgress{
 						name:            opt.name,
@@ -278,38 +279,38 @@ func (tpp *TableProgressPrinter) serve() {
 					})
 					tpp.tableMap[opt.name] = e
 				}
-			case PROGRESS_OPT_START:
+			case progressOptStart:
 				e, ok := tpp.tableMap[opt.name]
 				if !ok {
 					e = tpp.tableList.PushBack(&TableProgress{
 						name:            opt.name,
 						progress:        0,
 						total:           opt.total,
-						state:           opt.state | TABLE_STATE_RESULT_FAIL_STRUCTURE_PASS,
+						state:           opt.state | tableStateResultFailStructurePass,
 						totalStopUpdate: opt.totalStopUpdate,
 					})
 					tpp.tableMap[opt.name] = e
 				} else {
 					tp := e.Value.(*TableProgress)
-					tp.state ^= TABLE_STATE_REGISTER | opt.state
+					tp.state ^= tableStateRegister | opt.state
 					tp.progress = 0
 					tp.total = opt.total
 					tp.totalStopUpdate = opt.totalStopUpdate
 				}
-				if e.Value.(*TableProgress).state&TABLE_STATE_RESULT_FAIL_STRUCTURE_DONE == 0 {
+				if e.Value.(*TableProgress).state&tableStateResultFailStructureDone == 0 {
 					tpp.total += opt.total
 				} else {
 					delete(tpp.tableMap, opt.name)
 				}
 				tpp.flush(true)
-			case PROGRESS_OPT_UPDATE:
+			case progressOptUpdate:
 				if e, ok := tpp.tableMap[opt.name]; ok {
 					tp := e.Value.(*TableProgress)
 					tpp.total += opt.total
 					tp.total += opt.total
 					tp.totalStopUpdate = opt.totalStopUpdate
 				}
-			case PROGRESS_OPT_FAIL:
+			case progressOptFail:
 				if e, ok := tpp.tableMap[opt.name]; ok {
 					tp := e.Value.(*TableProgress)
 					tp.state |= opt.state
@@ -320,8 +321,8 @@ func (tpp *TableProgressPrinter) serve() {
 	}
 }
 
-// flush flush info
-func (tpp *TableProgressPrinter) flush(stateIsChanged bool) {
+// flush info
+func (tpp *tableProgressPrinter) flush(stateIsChanged bool) {
 	/*
 	 * A total of 15 tables need to be compared
 	 *
@@ -348,22 +349,22 @@ func (tpp *TableProgressPrinter) flush(stateIsChanged bool) {
 			// 4. structure is different and data is same
 			// 5. structure is different and data is different
 			switch tp.state & 0xf {
-			case TABLE_STATE_PRESTART:
-				switch tp.state & TABLE_STATE_RESULT_MASK {
-				case TABLE_STATE_RESULT_OK:
+			case tableStatePrestart:
+				switch tp.state & tableStateResultMask {
+				case tableStateResultOK:
 					fixStr = fmt.Sprintf("%sComparing the table structure of %s ... equivalent\n", fixStr, tp.name)
 					dynStr = fmt.Sprintf("%sComparing the table data of %s ...\n", dynStr, tp.name)
 					tpp.lines++
 					tpp.progressTableNums++
-					tp.state = TABLE_STATE_COMPARING
-				case TABLE_STATE_NOT_EXSIT_UPSTREAM, TABLE_STATE_NOT_EXSIT_DOWNSTREAM:
+					tp.state = tableStateComparing
+				case tableStateNotExistUpstream, tableStateNotExistDownstream:
 					dynStr = fmt.Sprintf("%sComparing the table data of %s ...skipped\n", dynStr, tp.name)
 					tpp.tableFailList.PushBack(tp)
 					preNode := p.Prev()
 					tpp.tableList.Remove(p)
 					p = preNode
 					tpp.finishTableNums++
-				case TABLE_STATE_RESULT_FAIL_STRUCTURE_DONE:
+				case tableStateResultFailStructureDone:
 					fixStr = fmt.Sprintf("%sComparing the table structure of %s ... failure\n", fixStr, tp.name)
 					tpp.tableFailList.PushBack(tp)
 					// we have empty node as list head, so p is not nil
@@ -371,29 +372,29 @@ func (tpp *TableProgressPrinter) flush(stateIsChanged bool) {
 					tpp.tableList.Remove(p)
 					p = preNode
 					tpp.finishTableNums++
-				case TABLE_STATE_RESULT_FAIL_STRUCTURE_CONTINUE:
+				case tableStateResultFailStructureContinue:
 					fixStr = fmt.Sprintf("%sComparing the table structure of %s ... failure\n", fixStr, tp.name)
 					dynStr = fmt.Sprintf("%sComparing the table data of %s ...\n", dynStr, tp.name)
 					tpp.lines++
 					tpp.progressTableNums++
-					tp.state ^= TABLE_STATE_COMPARING | TABLE_STATE_PRESTART
-				case TABLE_STATE_RESULT_FAIL_STRUCTURE_PASS:
+					tp.state ^= tableStateComparing | tableStatePrestart
+				case tableStateResultFailStructurePass:
 					fixStr = fmt.Sprintf("%sComparing the table structure of %s ... skip\n", fixStr, tp.name)
 					dynStr = fmt.Sprintf("%sComparing the table data of %s ...\n", dynStr, tp.name)
 					tpp.lines++
 					tpp.progressTableNums++
-					tp.state ^= TABLE_STATE_COMPARING | TABLE_STATE_PRESTART
+					tp.state ^= tableStateComparing | tableStatePrestart
 				}
-			case TABLE_STATE_COMPARING:
+			case tableStateComparing:
 				dynStr = fmt.Sprintf("%sComparing the table data of %s ...\n", dynStr, tp.name)
 				tpp.lines++
-			case TABLE_STATE_FINISH:
-				if tp.state&TABLE_STATE_RESULT_DIFFERENT == 0 {
+			case tableStateFinish:
+				if tp.state&tableStateResultDifferent == 0 {
 					fixStr = fmt.Sprintf("%sComparing the table data of %s ... equivalent\n", fixStr, tp.name)
 				} else {
 					fixStr = fmt.Sprintf("%sComparing the table data of %s ... failure\n", fixStr, tp.name)
 				}
-				if tp.state&TABLE_STATE_RESULT_MASK != 0 {
+				if tp.state&tableStateResultMask != 0 {
 					tpp.tableFailList.PushBack(tp)
 				}
 				// we have empty node as list head, so p is not nil
@@ -418,62 +419,72 @@ func (tpp *TableProgressPrinter) flush(stateIsChanged bool) {
 	fmt.Fprintf(tpp.output, "Progress [%s>%s] %d%% %d/%d\n", strings.Repeat("=", numLeft), strings.Repeat("-", 60-numLeft), percent, tpp.progress, tpp.total)
 }
 
-var progress_ *TableProgressPrinter = nil
+var progress *tableProgressPrinter = nil
 
+// Init initialize the printer
 func Init(tableNums, finishTableNums int) {
-	progress_ = NewTableProgressPrinter(tableNums, finishTableNums)
+	progress = newTableProgressPrinter(tableNums, finishTableNums)
 }
 
+// Inc update the progress of one table
 func Inc(name string) {
-	if progress_ != nil {
-		progress_.Inc(name)
+	if progress != nil {
+		progress.Inc(name)
 	}
 }
 
+// UpdateTotal the total for given table
 func UpdateTotal(name string, total int, stopUpdate bool) {
-	if progress_ != nil {
-		progress_.UpdateTotal(name, total, stopUpdate)
+	if progress != nil {
+		progress.UpdateTotal(name, total, stopUpdate)
 	}
 }
 
+// RegisterTable register a new table
 func RegisterTable(name string, isFailed bool, isDone bool, isExist int) {
-	if progress_ != nil {
-		progress_.RegisterTable(name, isFailed, isDone, isExist)
+	if progress != nil {
+		progress.RegisterTable(name, isFailed, isDone, isExist)
 	}
 }
 
+// StartTable start a table
 func StartTable(name string, total int, stopUpdate bool) {
-	if progress_ != nil {
-		progress_.StartTable(name, total, stopUpdate)
+	if progress != nil {
+		progress.StartTable(name, total, stopUpdate)
 	}
 }
 
+// FailTable stop a table
 func FailTable(name string) {
-	if progress_ != nil {
-		progress_.FailTable(name)
+	if progress != nil {
+		progress.FailTable(name)
 	}
 }
 
+// Close close the progress printer
 func Close() {
-	if progress_ != nil {
-		progress_.Close()
+	if progress != nil {
+		progress.Close()
 	}
 }
 
+// PrintSummary print the summary
 func PrintSummary() {
-	if progress_ != nil {
-		progress_.PrintSummary()
+	if progress != nil {
+		progress.PrintSummary()
 	}
 }
 
+// Error pass the error into progress printer
 func Error(err error) {
-	if progress_ != nil {
-		progress_.Error(err)
+	if progress != nil {
+		progress.Error(err)
 	}
 }
 
+// SetOutput set the output for progress printer
 func SetOutput(output io.Writer) {
-	if progress_ != nil {
-		progress_.SetOutput(output)
+	if progress != nil {
+		progress.SetOutput(output)
 	}
 }

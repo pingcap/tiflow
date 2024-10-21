@@ -35,20 +35,25 @@ import (
 	"go.uber.org/zap"
 )
 
+// DMLType is the type of DML
 type DMLType int32
 
 const (
+	// Insert means insert
 	Insert DMLType = iota + 1
+	// Delete means delete
 	Delete
+	// Replace means replace
 	Replace
 )
 
 const (
-	ShieldDBName      = "_no__exists__db_"
-	ShieldTableName   = "_no__exists__table_"
-	GetSyncPointQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
+	shieldDBName      = "_no__exists__db_"
+	shieldTableName   = "_no__exists__table_"
+	getSyncPointQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
 )
 
+// ChecksumInfo stores checksum and count
 type ChecksumInfo struct {
 	Checksum uint64
 	Count    int64
@@ -71,6 +76,7 @@ type TableAnalyzer interface {
 	AnalyzeSplitter(context.Context, *common.TableDiff, *splitter.RangeInfo) (splitter.ChunkIterator, error)
 }
 
+// Source is the interface for table
 type Source interface {
 	// GetTableAnalyzer pick the proper analyzer for different source.
 	// the implement of this function is different in mysql/tidb.
@@ -82,8 +88,8 @@ type Source interface {
 	// there are many workers consume the range from the channel to compare.
 	GetRangeIterator(context.Context, *splitter.RangeInfo, TableAnalyzer, int) (RangeIterator, error)
 
-	// GetCountAndMd5 gets the md5 result and the count from given range.
-	GetCountAndMd5(context.Context, *splitter.RangeInfo) *ChecksumInfo
+	// GetCountAndMD5 gets the md5 result and the count from given range.
+	GetCountAndMD5(context.Context, *splitter.RangeInfo) *ChecksumInfo
 
 	// GetCountForLackTable gets the count for tables that don't exist upstream or downstream.
 	GetCountForLackTable(context.Context, *splitter.RangeInfo) int64
@@ -112,6 +118,7 @@ type Source interface {
 	Close()
 }
 
+// NewSources returns a new source
 func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, upstream Source, err error) {
 	// init db connection for upstream / downstream.
 	err = initDBConn(ctx, cfg)
@@ -152,8 +159,8 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 					if d.Router.AddRule(&router.TableRule{
 						SchemaPattern: tableConfig.Schema,
 						TablePattern:  tableConfig.Table,
-						TargetSchema:  ShieldDBName,
-						TargetTable:   ShieldTableName,
+						TargetSchema:  shieldDBName,
+						TargetTable:   shieldTableName,
 					}) != nil {
 						return nil, nil, errors.Errorf("add shield rule failed [schema =  %s] [table = %s]", tableConfig.Schema, tableConfig.Table)
 					}
@@ -168,8 +175,8 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 					if d.Router.AddRule(&router.TableRule{
 						SchemaPattern: tableConfig.Schema,
 						TablePattern:  tableConfig.Table,
-						TargetSchema:  ShieldDBName,
-						TargetTable:   ShieldTableName,
+						TargetSchema:  shieldDBName,
+						TargetTable:   shieldTableName,
 					}) != nil {
 						return nil, nil, errors.Errorf("add shield rule failed [schema =  %s] [table = %s]", tableConfig.Schema, tableConfig.Table)
 					}
@@ -235,9 +242,9 @@ func buildSourceFromCfg(
 	if ok {
 		if len(dbs) == 1 {
 			return NewTiDBSource(ctx, tableDiffs, dbs[0], bucketSpliterPool, f, skipNonExistingTable)
-		} else {
-			log.Fatal("Don't support check table in multiple tidb instance, please specify one tidb instance.")
 		}
+
+		log.Fatal("Don't support check table in multiple tidb instance, please specify one tidb instance.")
 	}
 	return NewMySQLSources(ctx, tableDiffs, dbs, connCount, f, skipNonExistingTable)
 }
@@ -249,14 +256,14 @@ func getAutoSnapshotPosition(cfg *mysql.Config) (string, string, error) {
 	}
 	defer tmpConn.Close()
 	var primaryTs, secondaryTs string
-	err = tmpConn.QueryRow(GetSyncPointQuery).Scan(&primaryTs, &secondaryTs)
+	err = tmpConn.QueryRow(getSyncPointQuery).Scan(&primaryTs, &secondaryTs)
 	if err != nil {
 		return "", "", errors.Annotatef(err, "fetching auto-position tidb_snapshot failed")
 	}
 	return primaryTs, secondaryTs, nil
 }
 
-func initDBConn(ctx context.Context, cfg *config.Config) error {
+func initDBConn(_ context.Context, cfg *config.Config) error {
 	// Fill in tidb_snapshot if it is set to AUTO
 	// This is only supported when set to auto on both target/source.
 	if cfg.Task.TargetInstance.IsAutoSnapshot() {

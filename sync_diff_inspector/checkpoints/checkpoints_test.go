@@ -41,7 +41,7 @@ func TestSaveChunk(t *testing.T) {
 		go func(i int) {
 			node := &Node{
 				ChunkRange: &chunk.Range{
-					Index: &chunk.ChunkID{
+					Index: &chunk.CID{
 						TableIndex:       0,
 						BucketIndexLeft:  i / 10,
 						BucketIndexRight: i / 10,
@@ -74,7 +74,7 @@ func TestSaveChunk(t *testing.T) {
 	require.NotNil(t, cur)
 	id, err = checker.SaveChunk(ctx, "TestSaveChunk", cur, nil)
 	require.NoError(t, err)
-	require.Equal(t, id.Compare(&chunk.ChunkID{TableIndex: 0, BucketIndexLeft: 9, BucketIndexRight: 9, ChunkIndex: 9}), 0)
+	require.Equal(t, id.Compare(&chunk.CID{TableIndex: 0, BucketIndexLeft: 9, BucketIndexRight: 9, ChunkIndex: 9}), 0)
 }
 
 func TestLoadChunk(t *testing.T) {
@@ -96,7 +96,7 @@ func TestLoadChunk(t *testing.T) {
 							HasUpper: i != rounds,
 						},
 					},
-					Index: &chunk.ChunkID{
+					Index: &chunk.CID{
 						TableIndex:       0,
 						BucketIndexLeft:  i / 10,
 						BucketIndexRight: i / 10,

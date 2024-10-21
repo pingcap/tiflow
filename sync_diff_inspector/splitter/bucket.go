@@ -30,8 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultChannelBuffer is the default size for channel buffer
 const DefaultChannelBuffer = 1024
 
+// BucketIterator is struct for bucket iterator
 type BucketIterator struct {
 	buckets      []dbutil.Bucket
 	table        *common.TableDiff
@@ -53,10 +55,12 @@ type BucketIterator struct {
 	dbConn *sql.DB
 }
 
+// NewBucketIterator return a new iterator
 func NewBucketIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*BucketIterator, error) {
 	return NewBucketIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil, utils.NewWorkerPool(1, "bucketIter"))
 }
 
+// NewBucketIteratorWithCheckpoint return a new iterator
 func NewBucketIteratorWithCheckpoint(
 	ctx context.Context,
 	progressID string,
@@ -95,10 +99,12 @@ func NewBucketIteratorWithCheckpoint(
 	return bs, nil
 }
 
+// GetIndexID return the index id
 func (s *BucketIterator) GetIndexID() int64 {
 	return s.indexID
 }
 
+// Next return the next chunk
 func (s *BucketIterator) Next() (*chunk.Range, error) {
 	var ok bool
 	if uint(len(s.chunks)) <= s.nextChunk {
@@ -219,6 +225,7 @@ NEXTINDEX:
 	return nil
 }
 
+// Close closes the iterator
 func (s *BucketIterator) Close() {
 	s.cancel()
 }

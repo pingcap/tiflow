@@ -30,22 +30,23 @@ import (
 )
 
 const (
-	// SuccessState
-	// for chunk: means this chunk's data is equal
+	// SuccessState means
+	// for chunk: this chunk's data is equal
 	// for table: means this all chunk in this table is equal(except ignore chunk)
 	SuccessState = "success"
 
-	// FailedState
-	// for chunk: means this chunk's data is not equal
-	// for table: means some chunks' data is not equal or some chunk check failed in this table
+	// FailedState means
+	// for chunk: this chunk's data is not equal
+	// for table: some chunks' data is not equal or some chunk check failed in this table
 	FailedState = "failed"
 
-	// IgnoreState
+	// IgnoreState means
 	// for chunk: this chunk is ignored. if it is Empty chunk, will ignore some chunk
 	// for table: don't have this state
 	IgnoreState = "ignore"
 )
 
+// Node is the struct for node
 type Node struct {
 	State string `json:"state"` // indicate the state ("success" or "failed") of the chunk
 
@@ -53,16 +54,22 @@ type Node struct {
 	IndexID    int64        `json:"index-id"`
 }
 
-func (n *Node) GetID() *chunk.ChunkID { return n.ChunkRange.Index }
+// GetID returns id from the node
+func (n *Node) GetID() *chunk.CID { return n.ChunkRange.Index }
 
+// GetState returns the state from the node
 func (n *Node) GetState() string { return n.State }
 
+// GetTableIndex returns table index
 func (n *Node) GetTableIndex() int { return n.ChunkRange.Index.TableIndex }
 
+// GetBucketIndexLeft returns BucketIndexLeft
 func (n *Node) GetBucketIndexLeft() int { return n.ChunkRange.Index.BucketIndexLeft }
 
+// GetBucketIndexRight returns BucketIndexRight
 func (n *Node) GetBucketIndexRight() int { return n.ChunkRange.Index.BucketIndexRight }
 
+// GetChunkIndex returns ChunkIndex
 func (n *Node) GetChunkIndex() int { return n.ChunkRange.Index.ChunkIndex }
 
 // IsAdjacent represents whether the next node is adjacent node.
@@ -121,7 +128,7 @@ type Checkpoint struct {
 	hp *nodeHeap
 }
 
-// SaveState contains the information of the latest checked chunk and state of `report`
+// SavedState contains the information of the latest checked chunk and state of `report`
 // When sync-diff start from the checkpoint, it will load this information and continue running
 type SavedState struct {
 	Chunk  *Node          `json:"chunk-info"`
@@ -133,37 +140,39 @@ func (cp *Checkpoint) InitCurrentSavedID(n *Node) {
 	cp.hp.CurrentSavedNode = n
 }
 
+// GetCurrentSavedID returns the saved id with lock
 func (cp *Checkpoint) GetCurrentSavedID() *Node {
 	cp.hp.mu.Lock()
 	defer cp.hp.mu.Unlock()
 	return cp.hp.CurrentSavedNode
 }
 
+// Insert inserts a new node
 func (cp *Checkpoint) Insert(node *Node) {
 	cp.hp.mu.Lock()
 	heap.Push(cp.hp, node)
 	cp.hp.mu.Unlock()
 }
 
-// Len - get the length of the heap
+// Len gets the length of the heap
 func (hp *nodeHeap) Len() int { return len(hp.Nodes) }
 
-// Less - determine which is more priority than another
+// Less determines which is more priority than another
 func (hp *nodeHeap) Less(i, j int) bool {
 	return hp.Nodes[i].IsLess(hp.Nodes[j])
 }
 
-// Swap - implementation of swap for the heap interface
+// Swap implementation of swap for the heap interface
 func (hp *nodeHeap) Swap(i, j int) {
 	hp.Nodes[i], hp.Nodes[j] = hp.Nodes[j], hp.Nodes[i]
 }
 
-// Push - implementation of push for the heap interface
+// Push implementation of push for the heap interface
 func (hp *nodeHeap) Push(x interface{}) {
 	hp.Nodes = append(hp.Nodes, x.(*Node))
 }
 
-// Pop - implementation of pop for heap interface
+// Pop implementation of pop for heap interface
 func (hp *nodeHeap) Pop() (item interface{}) {
 	if len(hp.Nodes) == 0 {
 		return
@@ -173,13 +182,14 @@ func (hp *nodeHeap) Pop() (item interface{}) {
 	return
 }
 
+// Init initialize the Checkpoint
 func (cp *Checkpoint) Init() {
 	hp := &nodeHeap{
 		mu:    &sync.Mutex{},
 		Nodes: make([]*Node, 0),
 		CurrentSavedNode: &Node{
 			ChunkRange: &chunk.Range{
-				Index:   chunk.GetInitChunkID(),
+				Index:   chunk.GetInitCID(),
 				IsFirst: true,
 				IsLast:  true,
 			},
@@ -202,7 +212,7 @@ func (cp *Checkpoint) GetChunkSnapshot() (cur *Node) {
 }
 
 // SaveChunk saves the chunk to file.
-func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node, reportInfo *report.Report) (*chunk.ChunkID, error) {
+func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node, reportInfo *report.Report) (*chunk.CID, error) {
 	if cur == nil {
 		return nil, nil
 	}

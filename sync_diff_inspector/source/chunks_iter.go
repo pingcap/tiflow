@@ -28,7 +28,7 @@ import (
 
 // ChunksIterator is used for single mysql/tidb source.
 type ChunksIterator struct {
-	ID            *chunk.ChunkID
+	ID            *chunk.CID
 	tableAnalyzer TableAnalyzer
 
 	TableDiffs       []*common.TableDiff
@@ -40,6 +40,7 @@ type ChunksIterator struct {
 	cancel context.CancelFunc
 }
 
+// NewChunksIterator returns a new iterator
 func NewChunksIterator(ctx context.Context, analyzer TableAnalyzer, tableDiffs []*common.TableDiff, startRange *splitter.RangeInfo, splitThreadCount int) (*ChunksIterator, error) {
 	ctxx, cancel := context.WithCancel(ctx)
 	iter := &ChunksIterator{
@@ -114,7 +115,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 					return
 				case t.chunksCh <- &splitter.RangeInfo{
 					ChunkRange: &chunk.Range{
-						Index: &chunk.ChunkID{
+						Index: &chunk.CID{
 							TableIndex: curTableIndex,
 						},
 						Type:    chunk.Empty,
@@ -162,6 +163,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 	pool.WaitFinished()
 }
 
+// Next returns the next chunk
 func (t *ChunksIterator) Next(ctx context.Context) (*splitter.RangeInfo, error) {
 	select {
 	case <-ctx.Done():
@@ -176,6 +178,7 @@ func (t *ChunksIterator) Next(ctx context.Context) (*splitter.RangeInfo, error) 
 	}
 }
 
+// Close closes the iterator
 func (t *ChunksIterator) Close() {
 	t.cancel()
 }

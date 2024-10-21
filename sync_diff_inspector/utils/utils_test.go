@@ -49,8 +49,8 @@ func TestWorkerPool(t *testing.T) {
 		infoCh <- 2
 	})
 	pool.Apply(func() {
-		new_v := <-infoCh
-		v = new_v
+		newV := <-infoCh
+		v = newV
 		doneCh <- struct{}{}
 	})
 	<-doneCh
@@ -257,7 +257,7 @@ func TestBasicTableUtilOperation(t *testing.T) {
 	require.Equal(t, tableInfo.Indices[0].Columns[1].Offset, 1)
 }
 
-func TestGetCountAndMd5Checksum(t *testing.T) {
+func TestGetCountAndMD5Checksum(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -271,7 +271,7 @@ func TestGetCountAndMd5Checksum(t *testing.T) {
 
 	mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE \\[23 45\\].*").WithArgs("123", "234").WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456))
 
-	count, checksum, err := GetCountAndMd5Checksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", []interface{}{"123", "234"})
+	count, checksum, err := GetCountAndMD5Checksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", []interface{}{"123", "234"})
 	require.NoError(t, err)
 	require.Equal(t, count, int64(123))
 	require.Equal(t, checksum, uint64(0x1c8))
@@ -501,7 +501,7 @@ func TestCalculateChunkSize(t *testing.T) {
 }
 
 func TestGetSQLFileName(t *testing.T) {
-	index := &chunk.ChunkID{
+	index := &chunk.CID{
 		TableIndex:       1,
 		BucketIndexLeft:  2,
 		BucketIndexRight: 3,
@@ -511,8 +511,8 @@ func TestGetSQLFileName(t *testing.T) {
 	require.Equal(t, GetSQLFileName(index), "1:2-3:4")
 }
 
-func TestGetChunkIDFromSQLFileName(t *testing.T) {
-	tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := GetChunkIDFromSQLFileName("11:12-13:14")
+func TestGetCIDFromSQLFileName(t *testing.T) {
+	tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := GetCIDFromSQLFileName("11:12-13:14")
 	require.NoError(t, err)
 	require.Equal(t, tableIndex, 11)
 	require.Equal(t, bucketIndexLeft, 12)
@@ -620,16 +620,16 @@ func TestGenerateSQLBlob(t *testing.T) {
 	}
 
 	cases := []struct {
-		createTableSql string
+		createTableSQL string
 	}{
-		{createTableSql: "CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` tinyblob)"},
-		{createTableSql: "CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` blob)"},
-		{createTableSql: "CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` mediumblob)"},
-		{createTableSql: "CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` longblob)"},
+		{"CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` tinyblob)"},
+		{"CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` blob)"},
+		{"CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` mediumblob)"},
+		{"CREATE TABLE `diff_test`.`atest` (`id` int primary key, `b` longblob)"},
 	}
 
 	for _, c := range cases {
-		tableInfo, err := dbutiltest.GetTableInfoBySQL(c.createTableSql, parser.New())
+		tableInfo, err := dbutiltest.GetTableInfoBySQL(c.createTableSQL, parser.New())
 		require.NoError(t, err)
 
 		replaceSQL := GenerateReplaceDML(rowsData, tableInfo, "diff_test")

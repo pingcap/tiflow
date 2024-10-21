@@ -31,10 +31,12 @@ const (
 	gt  = ">"
 )
 
-type ChunkType int
+// Type is the type of the chunk
+type Type int
 
+// List all chunk types
 const (
-	Bucket ChunkType = iota + 1
+	Bucket Type = iota + 1
 	Random
 	Limit
 	Others
@@ -51,8 +53,8 @@ type Bound struct {
 	HasUpper bool `json:"has-upper"`
 }
 
-// ChunkID is to identify the sequence of chunks
-type ChunkID struct {
+// CID is to identify the sequence of chunks
+type CID struct {
 	TableIndex int `json:"table-index"`
 	// we especially treat random split has only one bucket
 	// which is the whole table
@@ -66,8 +68,9 @@ type ChunkID struct {
 	ChunkCnt int `json:"chunk-count"`
 }
 
-func GetInitChunkID() *ChunkID {
-	return &ChunkID{
+// GetInitCID return an empty CID
+func GetInitCID() *CID {
+	return &CID{
 		TableIndex:       -1,
 		BucketIndexLeft:  -1,
 		BucketIndexRight: -1,
@@ -76,7 +79,8 @@ func GetInitChunkID() *ChunkID {
 	}
 }
 
-func (c *ChunkID) Compare(o *ChunkID) int {
+// Compare compare two CIDs
+func (c *CID) Compare(o *CID) int {
 	if c.TableIndex < o.TableIndex {
 		return -1
 	}
@@ -101,16 +105,19 @@ func (c *ChunkID) Compare(o *ChunkID) int {
 	return 1
 }
 
-func (c *ChunkID) Copy() *ChunkID {
+// Copy return a same CID
+func (c *CID) Copy() *CID {
 	cp := *c
 	return &cp
 }
 
-func (c *ChunkID) ToString() string {
+// ToString return string for CID
+func (c *CID) ToString() string {
 	return fmt.Sprintf("%d:%d-%d:%d:%d", c.TableIndex, c.BucketIndexLeft, c.BucketIndexRight, c.ChunkIndex, c.ChunkCnt)
 }
 
-func (c *ChunkID) FromString(s string) error {
+// FromString get CID from given string
+func (c *CID) FromString(s string) error {
 	ids := strings.Split(s, ":")
 	tableIndex, err := strconv.Atoi(ids[0])
 	if err != nil {
@@ -141,11 +148,11 @@ func (c *ChunkID) FromString(s string) error {
 
 // Range represents chunk range
 type Range struct {
-	Index   *ChunkID  `json:"index"`
-	Type    ChunkType `json:"type"`
-	Bounds  []*Bound  `json:"bounds"`
-	IsFirst bool      `json:"is-first"`
-	IsLast  bool      `json:"is-last"`
+	Index   *CID     `json:"index"`
+	Type    Type     `json:"type"`
+	Bounds  []*Bound `json:"bounds"`
+	IsFirst bool     `json:"is-first"`
+	IsLast  bool     `json:"is-last"`
 
 	Where string        `json:"where"`
 	Args  []interface{} `json:"args"`
@@ -153,10 +160,12 @@ type Range struct {
 	columnOffset map[string]int
 }
 
+// IsFirstChunkForBucket return true if it's the first chunk
 func (r *Range) IsFirstChunkForBucket() bool {
 	return r.Index.ChunkIndex == 0
 }
 
+// IsLastChunkForBucket return true if it's the last chunk
 func (r *Range) IsLastChunkForBucket() bool {
 	return r.Index.ChunkIndex == r.Index.ChunkCnt-1
 }
@@ -166,7 +175,7 @@ func NewChunkRange() *Range {
 	return &Range{
 		Bounds:       make([]*Bound, 0, 2),
 		columnOffset: make(map[string]int),
-		Index:        &ChunkID{},
+		Index:        &CID{},
 	}
 }
 
@@ -186,12 +195,13 @@ func NewChunkRangeOffset(columnOffset map[string]int) *Range {
 	}
 }
 
-func (c *Range) IsLastChunkForTable() bool {
-	if c.IsLast {
+// IsLastChunkForTable return true if it's the last chunk
+func (r *Range) IsLastChunkForTable() bool {
+	if r.IsLast {
 		return true
 	}
 	// calculate from bounds
-	for _, b := range c.Bounds {
+	for _, b := range r.Bounds {
 		if b.HasUpper {
 			return false
 		}
@@ -199,12 +209,13 @@ func (c *Range) IsLastChunkForTable() bool {
 	return true
 }
 
-func (c *Range) IsFirstChunkForTable() bool {
-	if c.IsFirst {
+// IsFirstChunkForTable return true if it's the first chunk
+func (r *Range) IsFirstChunkForTable() bool {
+	if r.IsFirst {
 		return true
 	}
 	// calculate from bounds
-	for _, b := range c.Bounds {
+	for _, b := range r.Bounds {
 		if b.HasLower {
 			return false
 		}
@@ -213,8 +224,8 @@ func (c *Range) IsFirstChunkForTable() bool {
 }
 
 // String returns the string of Range, used for log.
-func (c *Range) String() string {
-	chunkBytes, err := json.Marshal(c)
+func (r *Range) String() string {
+	chunkBytes, err := json.Marshal(r)
 	if err != nil {
 		log.Warn("fail to encode chunk into string", zap.Error(err))
 		return ""
@@ -223,7 +234,8 @@ func (c *Range) String() string {
 	return string(chunkBytes)
 }
 
-func (c *Range) ToString(collation string) (string, []interface{}) {
+// ToString return string for range
+func (r *Range) ToString(collation string) (string, []interface{}) {
 	if collation != "" {
 		collation = fmt.Sprintf(" COLLATE '%s'", collation)
 	}
@@ -246,8 +258,8 @@ func (c *Range) ToString(collation string) (string, []interface{}) {
 	preConditionArgsForUpper := make([]interface{}, 0, 1)
 
 	i := 0
-	for ; i < len(c.Bounds); i++ {
-		bound := c.Bounds[i]
+	for ; i < len(r.Bounds); i++ {
+		bound := r.Bounds[i]
 		if !(bound.HasLower && bound.HasUpper) {
 			break
 		}
@@ -260,16 +272,16 @@ func (c *Range) ToString(collation string) (string, []interface{}) {
 		sameArgs = append(sameArgs, bound.Lower)
 	}
 
-	if i == len(c.Bounds) && i > 0 {
+	if i == len(r.Bounds) && i > 0 {
 		// All the columns are equal in bounds, should return FALSE!
 		return "FALSE", nil
 	}
 
-	for ; i < len(c.Bounds); i++ {
-		bound := c.Bounds[i]
+	for ; i < len(r.Bounds); i++ {
+		bound := r.Bounds[i]
 		lowerSymbol := gt
 		upperSymbol := lt
-		if i == len(c.Bounds)-1 {
+		if i == len(r.Bounds)-1 {
 			upperSymbol = lte
 		}
 
@@ -312,28 +324,29 @@ func (c *Range) ToString(collation string) (string, []interface{}) {
 		}
 
 		return fmt.Sprintf("(%s) AND (%s)", strings.Join(lowerCondition, " OR "), strings.Join(upperCondition, " OR ")), append(lowerArgs, upperArgs...)
-	} else {
-		if len(upperCondition) == 0 && len(lowerCondition) == 0 {
-			return strings.Join(sameCondition, " AND "), sameArgs
-		}
-
-		if len(upperCondition) == 0 {
-			return fmt.Sprintf("(%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(lowerCondition, " OR ")), append(sameArgs, lowerArgs...)
-		}
-
-		if len(lowerCondition) == 0 {
-			return fmt.Sprintf("(%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(upperCondition, " OR ")), append(sameArgs, upperArgs...)
-		}
-
-		return fmt.Sprintf("(%s) AND (%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(lowerCondition, " OR "), strings.Join(upperCondition, " OR ")), append(append(sameArgs, lowerArgs...), upperArgs...)
 	}
+
+	if len(upperCondition) == 0 && len(lowerCondition) == 0 {
+		return strings.Join(sameCondition, " AND "), sameArgs
+	}
+
+	if len(upperCondition) == 0 {
+		return fmt.Sprintf("(%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(lowerCondition, " OR ")), append(sameArgs, lowerArgs...)
+	}
+
+	if len(lowerCondition) == 0 {
+		return fmt.Sprintf("(%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(upperCondition, " OR ")), append(sameArgs, upperArgs...)
+	}
+
+	return fmt.Sprintf("(%s) AND (%s) AND (%s)", strings.Join(sameCondition, " AND "), strings.Join(lowerCondition, " OR "), strings.Join(upperCondition, " OR ")), append(append(sameArgs, lowerArgs...), upperArgs...)
 }
 
-func (c *Range) ToMeta() string {
+// ToMeta return string for range
+func (r *Range) ToMeta() string {
 	lowerCondition := make([]string, 0, 1)
 	upperCondition := make([]string, 0, 1)
 	columnName := make([]string, 0, 1)
-	for _, bound := range c.Bounds {
+	for _, bound := range r.Bounds {
 		columnName = append(columnName, bound.Column)
 		if bound.HasLower {
 			lowerCondition = append(lowerCondition, bound.Lower)
@@ -354,28 +367,29 @@ func (c *Range) ToMeta() string {
 	return fmt.Sprintf("range in sequence: (%s) < (%s) <= (%s)", strings.Join(lowerCondition, ","), strings.Join(columnName, ","), strings.Join(upperCondition, ","))
 }
 
-func (c *Range) addBound(bound *Bound) {
-	c.Bounds = append(c.Bounds, bound)
-	c.columnOffset[bound.Column] = len(c.Bounds) - 1
+func (r *Range) addBound(bound *Bound) {
+	r.Bounds = append(r.Bounds, bound)
+	r.columnOffset[bound.Column] = len(r.Bounds) - 1
 }
 
-func (c *Range) Update(column, lower, upper string, updateLower, updateUpper bool) {
-	if offset, ok := c.columnOffset[column]; ok {
+// Update update the range
+func (r *Range) Update(column, lower, upper string, updateLower, updateUpper bool) {
+	if offset, ok := r.columnOffset[column]; ok {
 		// update the bound
 		if updateLower {
-			c.Bounds[offset].Lower = lower
-			c.Bounds[offset].HasLower = true
+			r.Bounds[offset].Lower = lower
+			r.Bounds[offset].HasLower = true
 		}
 		if updateUpper {
-			c.Bounds[offset].Upper = upper
-			c.Bounds[offset].HasUpper = true
+			r.Bounds[offset].Upper = upper
+			r.Bounds[offset].HasUpper = true
 		}
 
 		return
 	}
 
 	// add a new bound
-	c.addBound(&Bound{
+	r.addBound(&Bound{
 		Column:   column,
 		Lower:    lower,
 		Upper:    upper,
@@ -384,9 +398,10 @@ func (c *Range) Update(column, lower, upper string, updateLower, updateUpper boo
 	})
 }
 
-func (c *Range) Copy() *Range {
+// Copy return a new range
+func (r *Range) Copy() *Range {
 	newChunk := NewChunkRange()
-	for _, bound := range c.Bounds {
+	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
 			Column:   bound.Column,
 			Lower:    bound.Lower,
@@ -399,9 +414,10 @@ func (c *Range) Copy() *Range {
 	return newChunk
 }
 
-func (c *Range) Clone() *Range {
+// Clone return a new range
+func (r *Range) Clone() *Range {
 	newChunk := NewChunkRange()
-	for _, bound := range c.Bounds {
+	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
 			Column:   bound.Column,
 			Lower:    bound.Lower,
@@ -410,28 +426,30 @@ func (c *Range) Clone() *Range {
 			HasUpper: bound.HasUpper,
 		})
 	}
-	newChunk.Type = c.Type
-	newChunk.Where = c.Where
-	newChunk.Args = c.Args
-	for i, v := range c.columnOffset {
+	newChunk.Type = r.Type
+	newChunk.Where = r.Where
+	newChunk.Args = r.Args
+	for i, v := range r.columnOffset {
 		newChunk.columnOffset[i] = v
 	}
-	newChunk.Index = c.Index.Copy()
-	newChunk.IsFirst = c.IsFirst
-	newChunk.IsLast = c.IsLast
+	newChunk.Index = r.Index.Copy()
+	newChunk.IsFirst = r.IsFirst
+	newChunk.IsLast = r.IsLast
 	return newChunk
 }
 
-func (c *Range) CopyAndUpdate(column, lower, upper string, updateLower, updateUpper bool) *Range {
-	newChunk := c.Copy()
+// CopyAndUpdate update the range
+func (r *Range) CopyAndUpdate(column, lower, upper string, updateLower, updateUpper bool) *Range {
+	newChunk := r.Copy()
 	newChunk.Update(column, lower, upper, updateLower, updateUpper)
 	return newChunk
 }
 
+// InitChunks init the given chunks
 // Notice: chunk may contain not only one bucket, which can be expressed as a range [3, 5],
 //
 //	And `lastBucketID` means the `5` and `firstBucketID` means the `3`.
-func InitChunks(chunks []*Range, t ChunkType, firstBucketID, lastBucketID int, index int, collation, limits string, chunkCnt int) {
+func InitChunks(chunks []*Range, t Type, firstBucketID, lastBucketID int, index int, collation, limits string, chunkCnt int) {
 	if chunks == nil {
 		return
 	}
@@ -439,7 +457,7 @@ func InitChunks(chunks []*Range, t ChunkType, firstBucketID, lastBucketID int, i
 		conditions, args := chunk.ToString(collation)
 		chunk.Where = fmt.Sprintf("((%s) AND (%s))", conditions, limits)
 		chunk.Args = args
-		chunk.Index = &ChunkID{
+		chunk.Index = &CID{
 			BucketIndexLeft:  firstBucketID,
 			BucketIndexRight: lastBucketID,
 			ChunkIndex:       index,
@@ -450,11 +468,12 @@ func InitChunks(chunks []*Range, t ChunkType, firstBucketID, lastBucketID int, i
 	}
 }
 
-func InitChunk(chunk *Range, t ChunkType, firstBucketID, lastBucketID int, collation, limits string) {
+// InitChunk initialize the chunk
+func InitChunk(chunk *Range, t Type, firstBucketID, lastBucketID int, collation, limits string) {
 	conditions, args := chunk.ToString(collation)
 	chunk.Where = fmt.Sprintf("((%s) AND (%s))", conditions, limits)
 	chunk.Args = args
-	chunk.Index = &ChunkID{
+	chunk.Index = &CID{
 		BucketIndexLeft:  firstBucketID,
 		BucketIndexRight: lastBucketID,
 		ChunkIndex:       0,

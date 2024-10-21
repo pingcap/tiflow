@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// RandomIterator is used to random iterate a table
 type RandomIterator struct {
 	table     *common.TableDiff
 	chunkSize int64
@@ -40,11 +41,19 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
+// NewRandomIterator return a new iterator
 func NewRandomIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*RandomIterator, error) {
 	return NewRandomIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
 }
 
-func NewRandomIteratorWithCheckpoint(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB, startRange *RangeInfo) (*RandomIterator, error) {
+// NewRandomIteratorWithCheckpoint return a new iterator with checkpoint
+func NewRandomIteratorWithCheckpoint(
+	ctx context.Context,
+	progressID string,
+	table *common.TableDiff,
+	dbConn *sql.DB,
+	startRange *RangeInfo,
+) (*RandomIterator, error) {
 	// get the chunk count by data count and chunk size
 	var splitFieldArr []string
 	if len(table.Fields) != 0 {
@@ -141,6 +150,7 @@ func NewRandomIteratorWithCheckpoint(ctx context.Context, progressID string, tab
 	}, nil
 }
 
+// Next get the next chunk
 func (s *RandomIterator) Next() (*chunk.Range, error) {
 	if uint(len(s.chunks)) <= s.nextChunk {
 		return nil, nil
@@ -159,6 +169,7 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 	return c, nil
 }
 
+// Close close the iterator
 func (s *RandomIterator) Close() {
 }
 

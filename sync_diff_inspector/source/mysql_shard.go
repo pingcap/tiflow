@@ -33,10 +33,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// MySQLTableAnalyzer is used to analyze MySQL table
 type MySQLTableAnalyzer struct {
 	sourceTableMap map[string][]*common.TableShardSource
 }
 
+// AnalyzeSplitter return an iterator for current table
 func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSources := getMatchedSourcesForTable(a.sourceTableMap, table)
 
@@ -57,6 +59,7 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 	return randIter, nil
 }
 
+// MySQLSources represent one table in MySQL
 type MySQLSources struct {
 	tableDiffs []*common.TableDiff
 
@@ -74,16 +77,19 @@ func getMatchedSourcesForTable(sourceTablesMap map[string][]*common.TableShardSo
 	return matchSources
 }
 
+// GetTableAnalyzer get analyzer for current table
 func (s *MySQLSources) GetTableAnalyzer() TableAnalyzer {
 	return &MySQLTableAnalyzer{
 		s.sourceTablesMap,
 	}
 }
 
+// GetRangeIterator get range iterator
 func (s *MySQLSources) GetRangeIterator(ctx context.Context, r *splitter.RangeInfo, analyzer TableAnalyzer, splitThreadCount int) (RangeIterator, error) {
 	return NewChunksIterator(ctx, analyzer, s.tableDiffs, r, splitThreadCount)
 }
 
+// Close close the current table
 func (s *MySQLSources) Close() {
 	for _, t := range s.sourceTablesMap {
 		for _, db := range t {
@@ -92,7 +98,8 @@ func (s *MySQLSources) Close() {
 	}
 }
 
-func (s *MySQLSources) GetCountAndMd5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
+// GetCountAndMD5 return count and checksum
+func (s *MySQLSources) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
 	beginTime := time.Now()
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	chunk := tableRange.GetChunk()
@@ -102,7 +109,7 @@ func (s *MySQLSources) GetCountAndMd5(ctx context.Context, tableRange *splitter.
 
 	for _, ms := range matchSources {
 		go func(ms *common.TableShardSource) {
-			count, checksum, err := utils.GetCountAndMd5Checksum(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, table.Info, chunk.Where, chunk.Args)
+			count, checksum, err := utils.GetCountAndMD5Checksum(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, table.Info, chunk.Where, chunk.Args)
 			infoCh <- &ChecksumInfo{
 				Checksum: checksum,
 				Count:    count,
@@ -137,24 +144,25 @@ func (s *MySQLSources) GetCountAndMd5(ctx context.Context, tableRange *splitter.
 	}
 }
 
+// GetCountForLackTable return count for lack table
 func (s *MySQLSources) GetCountForLackTable(ctx context.Context, tableRange *splitter.RangeInfo) int64 {
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	var totalCount int64
 
 	matchSources := getMatchedSourcesForTable(s.sourceTablesMap, table)
-	if matchSources != nil {
-		for _, ms := range matchSources {
-			count, _ := dbutil.GetRowCount(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, "", nil)
-			totalCount += count
-		}
+	for _, ms := range matchSources {
+		count, _ := dbutil.GetRowCount(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, "", nil)
+		totalCount += count
 	}
 	return totalCount
 }
 
+// GetTables return all tables
 func (s *MySQLSources) GetTables() []*common.TableDiff {
 	return s.tableDiffs
 }
 
+// GenerateFixSQL generate SQL
 func (s *MySQLSources) GenerateFixSQL(t DMLType, upstreamData, downstreamData map[string]*dbutil.ColumnData, tableIndex int) string {
 	switch t {
 	case Insert:
@@ -169,6 +177,7 @@ func (s *MySQLSources) GenerateFixSQL(t DMLType, upstreamData, downstreamData ma
 	return ""
 }
 
+// GetRowsIterator get iterator for current table
 func (s *MySQLSources) GetRowsIterator(ctx context.Context, tableRange *splitter.RangeInfo) (RowDataIterator, error) {
 	chunk := tableRange.GetChunk()
 
@@ -187,6 +196,11 @@ func (s *MySQLSources) GetRowsIterator(ctx context.Context, tableRange *splitter
 		rowsQuery, orderKeyCols = utils.GetTableRowsQueryFormat(ms.OriginSchema, ms.OriginTable, table.Info, table.Collation)
 		query := fmt.Sprintf(rowsQuery, chunk.Where)
 		rows, err := ms.DBConn.QueryContext(ctx, query, chunk.Args...)
+		defer func() {
+			if rows != nil {
+				_ = rows.Err()
+			}
+		}()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -222,6 +236,7 @@ func (s *MySQLSources) GetRowsIterator(ctx context.Context, tableRange *splitter
 	}, nil
 }
 
+// GetDB get the current DB
 func (s *MySQLSources) GetDB() *sql.DB {
 	// return any of them is ok
 	for _, st := range s.sourceTablesMap {
@@ -233,11 +248,13 @@ func (s *MySQLSources) GetDB() *sql.DB {
 	return nil
 }
 
+// GetSnapshot get the current snapshot
 func (s *MySQLSources) GetSnapshot() string {
 	log.Fatal("unreachable!, mysql doesn't have the snapshot")
 	return ""
 }
 
+// GetSourceStructInfo get the current table info
 func (s *MySQLSources) GetSourceStructInfo(ctx context.Context, tableIndex int) ([]*model.TableInfo, error) {
 	tableDiff := s.GetTables()[tableIndex]
 	// for tables that do not exist upstream or downstream
@@ -258,6 +275,7 @@ func (s *MySQLSources) GetSourceStructInfo(ctx context.Context, tableIndex int) 
 	return sourceTableInfos, nil
 }
 
+// MultiSourceRowsIterator is used to iterate rows from multi source
 type MultiSourceRowsIterator struct {
 	sourceRows     map[int]*sql.Rows
 	sourceRowDatas *common.RowDatas
@@ -271,6 +289,7 @@ func getRowData(rows *sql.Rows) (rowData map[string]*dbutil.ColumnData, err erro
 	return
 }
 
+// Next return the next row
 func (ms *MultiSourceRowsIterator) Next() (map[string]*dbutil.ColumnData, error) {
 	// Before running getSourceRow, heap save one row from all the sources,
 	// otherwise this source has read to the end. Each row should be the smallest in each source.
@@ -297,12 +316,14 @@ func (ms *MultiSourceRowsIterator) Next() (map[string]*dbutil.ColumnData, error)
 	return rowData.Data, nil
 }
 
+// Close return all sources
 func (ms *MultiSourceRowsIterator) Close() {
 	for _, s := range ms.sourceRows {
 		s.Close()
 	}
 }
 
+// NewMySQLSources return sources for MySQL tables
 func NewMySQLSources(ctx context.Context, tableDiffs []*common.TableDiff, ds []*config.DataSource, threadCount int, f tableFilter.Filter, skipNonExistingTable bool) (Source, error) {
 	sourceTablesMap := make(map[string][]*common.TableShardSource)
 	// we should get the real table name
@@ -340,20 +361,20 @@ func NewMySQLSources(ctx context.Context, tableDiffs []*common.TableDiff, ds []*
 						return nil, errors.Errorf("get route result for %d source %s.%s failed, error %v", i, schema, table, err)
 					}
 				}
-				uniqueId := utils.UniqueID(targetSchema, targetTable)
+				uniqueID := utils.UniqueID(targetSchema, targetTable)
 				isMatched := f.MatchTable(targetSchema, targetTable)
 				if isMatched {
 					// if match the filter, we should respect it and check target has this table later.
-					sourceTablesAfterRoute[uniqueId] = struct{}{}
+					sourceTablesAfterRoute[uniqueID] = struct{}{}
 				}
-				if _, ok := targetUniqueTableMap[uniqueId]; !ok && !(isMatched && skipNonExistingTable) {
+				if _, ok := targetUniqueTableMap[uniqueID]; !ok && !(isMatched && skipNonExistingTable) {
 					continue
 				}
-				maxSourceRouteTableCount[uniqueId]++
-				if _, ok := sourceTablesMap[uniqueId]; !ok {
-					sourceTablesMap[uniqueId] = make([]*common.TableShardSource, 0)
+				maxSourceRouteTableCount[uniqueID]++
+				if _, ok := sourceTablesMap[uniqueID]; !ok {
+					sourceTablesMap[uniqueID] = make([]*common.TableShardSource, 0)
 				}
-				sourceTablesMap[uniqueId] = append(sourceTablesMap[uniqueId], &common.TableShardSource{
+				sourceTablesMap[uniqueID] = append(sourceTablesMap[uniqueID], &common.TableShardSource{
 					TableSource: common.TableSource{
 						OriginSchema: schema,
 						OriginTable:  table,

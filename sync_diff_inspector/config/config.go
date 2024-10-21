@@ -44,13 +44,17 @@ import (
 )
 
 const (
-	LocalDirPerm  os.FileMode = 0o755
+	// LocalFilePerm is the permission for local files
 	LocalFilePerm os.FileMode = 0o644
 
+	localDirPerm os.FileMode = 0o755
+
+	// LogFileName is the filename of the log
 	LogFileName = "sync_diff.log"
 
 	baseSplitThreadCount = 3
 
+	// UnifiedTimeZone is the time zone
 	UnifiedTimeZone string = "+0:00"
 )
 
@@ -92,7 +96,7 @@ func (t *TableConfig) Valid() bool {
 	return true
 }
 
-// TLS Security wrapper
+// Security is the wrapper for TLS Security
 type Security struct {
 	TLSName string `json:"tls-name"`
 
@@ -112,7 +116,7 @@ type DataSource struct {
 	Port     int                `toml:"port" json:"port"`
 	User     string             `toml:"user" json:"user"`
 	Password utils.SecretString `toml:"password" json:"password"`
-	SqlMode  string             `toml:"sql-mode" json:"sql-mode"`
+	SQLMode  string             `toml:"sql-mode" json:"sql-mode"`
 	Snapshot string             `toml:"snapshot" json:"snapshot"`
 
 	Security *Security `toml:"security" json:"security"`
@@ -136,6 +140,7 @@ func (d *DataSource) SetSnapshot(newSnapshot string) {
 	d.Snapshot = newSnapshot
 }
 
+// ToDBConfig get the current config from data source
 func (d *DataSource) ToDBConfig() *dbutil.DBConfig {
 	return &dbutil.DBConfig{
 		Host:     d.Host,
@@ -146,7 +151,7 @@ func (d *DataSource) ToDBConfig() *dbutil.DBConfig {
 	}
 }
 
-// register TLS config for driver
+// RegisterTLS register TLS config for driver
 func (d *DataSource) RegisterTLS() error {
 	if d.Security == nil {
 		return nil
@@ -173,6 +178,7 @@ func (d *DataSource) RegisterTLS() error {
 	return errors.Trace(err)
 }
 
+// ToDriverConfig get the driver config
 func (d *DataSource) ToDriverConfig() *mysql.Config {
 	cfg := mysql.NewConfig()
 	cfg.Params = make(map[string]string)
@@ -195,6 +201,7 @@ func (d *DataSource) ToDriverConfig() *mysql.Config {
 	return cfg
 }
 
+// TaskConfig is the config for sync diff
 type TaskConfig struct {
 	Source       []string `toml:"source-instances" json:"source-instances"`
 	Routes       []string `toml:"source-routes" json:"source-routes"`
@@ -219,6 +226,7 @@ type TaskConfig struct {
 	HashFile      string
 }
 
+// Init return a new config
 func (t *TaskConfig) Init(
 	dataSources map[string]*DataSource,
 	tableConfigs map[string]*TableConfig,
@@ -310,7 +318,7 @@ func (t *TaskConfig) Init(
 		}
 		if !ok {
 			// not match, raise error
-			return errors.Errorf("config changes breaking the checkpoint, please use another outputDir and start over again!")
+			return errors.Errorf("config changes breaking the checkpoint, please use another outputDir and start over again")
 		}
 	}
 
@@ -522,7 +530,7 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 		Port:     subTaskCfgs[0].To.Port,
 		User:     subTaskCfgs[0].To.User,
 		Password: utils.SecretString(subTaskCfgs[0].To.Password),
-		SqlMode:  sqlMode,
+		SQLMode:  sqlMode,
 		Security: parseTLSFromDMConfig(subTaskCfgs[0].To.Security),
 	}
 	for _, subTaskCfg := range subTaskCfgs {
@@ -543,7 +551,7 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 			Port:     subTaskCfg.From.Port,
 			User:     subTaskCfg.From.User,
 			Password: utils.SecretString(subTaskCfg.From.Password),
-			SqlMode:  sqlMode,
+			SQLMode:  sqlMode,
 			Security: parseTLSFromDMConfig(subTaskCfg.From.Security),
 			Router:   tableRouter,
 
@@ -561,6 +569,7 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 	return nil
 }
 
+// Init initialize the config
 func (c *Config) Init() (err error) {
 	if len(c.DMAddr) > 0 {
 		err := c.adjustConfigByDMSubTasks()
@@ -599,6 +608,7 @@ func (c *Config) Init() (err error) {
 	return nil
 }
 
+// CheckConfig check whether the config is vaild
 func (c *Config) CheckConfig() bool {
 	if c.CheckThreadCount <= 0 {
 		log.Error("check-thread-count must greater than 0!")
@@ -636,7 +646,7 @@ func pathExists(_path string) (bool, error) {
 
 func mkdirAll(base string) error {
 	mask := syscall.Umask(0)
-	err := os.MkdirAll(base, LocalDirPerm)
+	err := os.MkdirAll(base, localDirPerm)
 	syscall.Umask(mask)
 	return errors.Trace(err)
 }

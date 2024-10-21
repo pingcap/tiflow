@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	AnnotationClusteredReplaceString    = "${1} /*T![clustered_index] CLUSTERED */${2}\n"
-	AnnotationNonClusteredReplaceString = "${1} /*T![clustered_index] NONCLUSTERED */${2}\n"
+	annotationClusteredReplaceString    = "${1} /*T![clustered_index] CLUSTERED */${2}\n"
+	annotationNonClusteredReplaceString = "${1} /*T![clustered_index] NONCLUSTERED */${2}\n"
 )
 
 func init() {
@@ -116,7 +116,7 @@ func getTableInfoBySQL(ctx *metabuild.Context, createTableSQL string, parser2 *p
 		return table, nil
 	}
 
-	return nil, errors.Errorf("get table info from sql %s failed!", createTableSQL)
+	return nil, errors.Errorf("get table info from sql %s failed", createTableSQL)
 }
 
 func isPKISHandle(
@@ -126,15 +126,20 @@ func isPKISHandle(
 ) bool {
 	query := fmt.Sprintf("SELECT _tidb_rowid FROM %s LIMIT 0;", dbutil.TableName(schemaName, tableName))
 	rows, err := db.QueryContext(ctx, query)
+	defer func() {
+		if rows != nil {
+			_ = rows.Err()
+			rows.Close()
+		}
+	}()
+
 	if err != nil && strings.Contains(err.Error(), "Unknown column") {
 		return true
-	}
-	if rows != nil {
-		rows.Close()
 	}
 	return false
 }
 
+// GetTableInfoWithVersion returns table info under given version.
 func GetTableInfoWithVersion(
 	ctx context.Context,
 	db dbutil.QueryExecutor,
@@ -149,9 +154,9 @@ func GetTableInfoWithVersion(
 	if version != nil && version.Major <= 4 {
 		var replaceString string
 		if isPKISHandle(ctx, db, schemaName, tableName) {
-			replaceString = AnnotationClusteredReplaceString
+			replaceString = annotationClusteredReplaceString
 		} else {
-			replaceString = AnnotationNonClusteredReplaceString
+			replaceString = annotationNonClusteredReplaceString
 		}
 		createTableSQL, err = addClusteredAnnotationForPrimaryKey(createTableSQL, replaceString)
 		if err != nil {

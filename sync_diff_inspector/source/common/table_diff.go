@@ -73,11 +73,15 @@ type TableDiff struct {
 }
 
 const (
-	AllTableExistFlag       = 0
+	// AllTableExistFlag means the table exists in both upstream and downstream
+	AllTableExistFlag = 0
+	// DownstreamTableLackFlag means the table only exists in upstream
 	DownstreamTableLackFlag = -1
-	UpstreamTableLackFlag   = 1
+	// UpstreamTableLackFlag means the table only exists in downstream
+	UpstreamTableLackFlag = 1
 )
 
+// AllTableExist check the status
 func AllTableExist(tableLack int) bool {
 	return tableLack == AllTableExistFlag
 }

@@ -915,7 +915,7 @@ func TestChunkSize(t *testing.T) {
 	tableInfo, err = dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
-	tableDiff_noindex := &common.TableDiff{
+	tableDiffNoIndex := &common.TableDiff{
 		Schema:    "test",
 		Table:     "test",
 		Info:      tableInfo,
@@ -923,7 +923,7 @@ func TestChunkSize(t *testing.T) {
 	}
 	// no index
 	createFakeResultForRandomSplit(mock, 1000, nil)
-	randomIter, err = NewRandomIterator(ctx, "", tableDiff_noindex, db)
+	randomIter, err = NewRandomIterator(ctx, "", tableDiffNoIndex, db)
 	require.NoError(t, err)
 	require.Equal(t, randomIter.chunkSize, int64(1001))
 

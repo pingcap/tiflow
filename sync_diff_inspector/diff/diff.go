@@ -100,6 +100,7 @@ func NewDiff(ctx context.Context, cfg *config.Config) (diff *Diff, err error) {
 	return diff, nil
 }
 
+// PrintSummary print the summary and return true if report is passed
 func (df *Diff) PrintSummary(ctx context.Context) bool {
 	// Stop updating progress bar so that summary won't be flushed.
 	progress.Close()
@@ -112,6 +113,7 @@ func (df *Diff) PrintSummary(ctx context.Context) bool {
 	return df.report.Result == report.Pass
 }
 
+// Close the current struct
 func (df *Diff) Close() {
 	if df.upstream != nil {
 		df.upstream.Close()
@@ -163,14 +165,14 @@ func (df *Diff) initCheckpoint() error {
 		node, reportInfo, err := df.cp.LoadChunk(path)
 		if err != nil {
 			return errors.Annotate(err, "the checkpoint load process failed")
-		} else {
-			// this need not be synchronized, because at the moment, the is only one thread access the section
-			log.Info("load checkpoint",
-				zap.Any("chunk index", node.GetID()),
-				zap.Reflect("chunk", node),
-				zap.String("state", node.GetState()))
-			df.cp.InitCurrentSavedID(node)
 		}
+
+		// this need not be synchronized, because at the moment, the is only one thread access the section
+		log.Info("load checkpoint",
+			zap.Any("chunk index", node.GetID()),
+			zap.Reflect("chunk", node),
+			zap.String("state", node.GetState()))
+		df.cp.InitCurrentSavedID(node)
 
 		if node != nil {
 			// remove the sql file that ID bigger than node.
@@ -189,7 +191,7 @@ func (df *Diff) initCheckpoint() error {
 		}
 	} else {
 		log.Info("not found checkpoint file, start from beginning")
-		id := &chunk.ChunkID{TableIndex: -1, BucketIndexLeft: -1, BucketIndexRight: -1, ChunkIndex: -1, ChunkCnt: 0}
+		id := &chunk.CID{TableIndex: -1, BucketIndexLeft: -1, BucketIndexRight: -1, ChunkIndex: -1, ChunkCnt: 0}
 		err := df.removeSQLFiles(id)
 		if err != nil {
 			return errors.Trace(err)
@@ -199,7 +201,7 @@ func (df *Diff) initCheckpoint() error {
 	return nil
 }
 
-func encodeReportConfig(config *report.ReportConfig) ([]byte, error) {
+func encodeConfig(config *report.Config) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if err := toml.NewEncoder(buf).Encode(config); err != nil {
 		return nil, errors.Trace(err)
@@ -208,35 +210,35 @@ func encodeReportConfig(config *report.ReportConfig) ([]byte, error) {
 }
 
 func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
-	sourceConfigs := make([]*report.ReportConfig, len(cfg.Task.SourceInstances))
+	sourceConfigs := make([]*report.Config, len(cfg.Task.SourceInstances))
 	for i := 0; i < len(cfg.Task.SourceInstances); i++ {
 		instance := cfg.Task.SourceInstances[i]
 
-		sourceConfigs[i] = &report.ReportConfig{
+		sourceConfigs[i] = &report.Config{
 			Host:     instance.Host,
 			Port:     instance.Port,
 			User:     instance.User,
 			Snapshot: instance.Snapshot,
-			SqlMode:  instance.SqlMode,
+			SQLMode:  instance.SQLMode,
 		}
 	}
 	instance := cfg.Task.TargetInstance
-	targetConfig := &report.ReportConfig{
+	targetConfig := &report.Config{
 		Host:     instance.Host,
 		Port:     instance.Port,
 		User:     instance.User,
 		Snapshot: instance.Snapshot,
-		SqlMode:  instance.SqlMode,
+		SQLMode:  instance.SQLMode,
 	}
 	sourceBytes := make([][]byte, len(sourceConfigs))
 	var err error
 	for i := range sourceBytes {
-		sourceBytes[i], err = encodeReportConfig(sourceConfigs[i])
+		sourceBytes[i], err = encodeConfig(sourceConfigs[i])
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 	}
-	targetBytes, err := encodeReportConfig(targetConfig)
+	targetBytes, err := encodeConfig(targetConfig)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -290,6 +292,7 @@ func (df *Diff) Equal(ctx context.Context) error {
 	return nil
 }
 
+// StructEqual compare tables from downstream
 func (df *Diff) StructEqual(ctx context.Context) error {
 	tables := df.downstream.GetTables()
 	tableIndex := 0
@@ -464,6 +467,7 @@ func (df *Diff) consume(ctx context.Context, rangeInfo *splitter.RangeInfo) bool
 	return isEqual
 }
 
+// BinGenerate ...
 func (df *Diff) BinGenerate(ctx context.Context, targetSource source.Source, tableRange *splitter.RangeInfo, count int64) (*splitter.RangeInfo, error) {
 	if count <= splitter.SplitThreshold {
 		return tableRange, nil
@@ -570,11 +574,11 @@ func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, table
 			return nil, errors.Trace(err)
 		}
 		return c, nil
-	} else {
-		// TODO: handle the error to foreground
-		log.Fatal("the isEqual1 and isEqual2 cannot be both true")
-		return nil, nil
 	}
+
+	// TODO: handle the error to foreground
+	log.Fatal("the isEqual1 and isEqual2 cannot be both true")
+	return nil, nil
 }
 
 func (df *Diff) compareChecksumAndGetCount(ctx context.Context, tableRange *splitter.RangeInfo) (bool, int64, int64, error) {
@@ -583,9 +587,9 @@ func (df *Diff) compareChecksumAndGetCount(ctx context.Context, tableRange *spli
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		upstreamInfo = df.upstream.GetCountAndMd5(ctx, tableRange)
+		upstreamInfo = df.upstream.GetCountAndMD5(ctx, tableRange)
 	}()
-	downstreamInfo = df.downstream.GetCountAndMd5(ctx, tableRange)
+	downstreamInfo = df.downstream.GetCountAndMD5(ctx, tableRange)
 	wg.Wait()
 
 	if upstreamInfo.Err != nil {
@@ -743,7 +747,6 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				fixSQLFile, err := os.Create(fixSQLPath)
 				if err != nil {
 					log.Fatal("write sql failed: cannot create file", zap.Strings("sql", dml.sqls), zap.Error(err))
-					continue
 				}
 				// write chunk meta
 				chunkRange := dml.node.ChunkRange
@@ -765,7 +768,7 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 	}
 }
 
-func (df *Diff) removeSQLFiles(checkPointId *chunk.ChunkID) error {
+func (df *Diff) removeSQLFiles(checkPointID *chunk.CID) error {
 	ts := time.Now().Format("2006-01-02T15:04:05Z07:00")
 	dirName := fmt.Sprintf(".trash-%s", ts)
 	folderPath := filepath.Join(df.FixSQLDir, dirName)
@@ -807,17 +810,17 @@ func (df *Diff) removeSQLFiles(checkPointId *chunk.ChunkID) error {
 			if len(fileIDSubstrs) != 3 {
 				return nil
 			}
-			tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := utils.GetChunkIDFromSQLFileName(fileIDSubstrs[2])
+			tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := utils.GetCIDFromSQLFileName(fileIDSubstrs[2])
 			if err != nil {
 				return errors.Trace(err)
 			}
-			fileID := &chunk.ChunkID{
+			fileID := &chunk.CID{
 				TableIndex: tableIndex, BucketIndexLeft: bucketIndexLeft, BucketIndexRight: bucketIndexRight, ChunkIndex: chunkIndex, ChunkCnt: 0,
 			}
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if fileID.Compare(checkPointId) > 0 {
+			if fileID.Compare(checkPointID) > 0 {
 				// move to trash
 				err = os.Rename(oldPath, newPath)
 				if err != nil {

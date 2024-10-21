@@ -56,7 +56,7 @@ type MockChunkIterator struct {
 	ctx       context.Context
 	tableDiff *common.TableDiff
 	rangeInfo *splitter.RangeInfo
-	index     *chunk.ChunkID
+	index     *chunk.CID
 }
 
 const (
@@ -70,7 +70,7 @@ func (m *MockChunkIterator) Next() (*chunk.Range, error) {
 	}
 	m.index.ChunkIndex = m.index.ChunkIndex + 1
 	return &chunk.Range{
-		Index: &chunk.ChunkID{
+		Index: &chunk.CID{
 			TableIndex:       m.index.TableIndex,
 			BucketIndexLeft:  m.index.BucketIndexLeft,
 			BucketIndexRight: m.index.BucketIndexRight,
@@ -86,7 +86,7 @@ func (m *MockChunkIterator) Close() {
 type MockAnalyzer struct{}
 
 func (m *MockAnalyzer) AnalyzeSplitter(ctx context.Context, tableDiff *common.TableDiff, rangeInfo *splitter.RangeInfo) (splitter.ChunkIterator, error) {
-	i := &chunk.ChunkID{
+	i := &chunk.CID{
 		TableIndex:       0,
 		BucketIndexLeft:  0,
 		BucketIndexRight: 0,
@@ -184,7 +184,7 @@ func TestTiDBSource(t *testing.T) {
 		require.Equal(t, n, tableCase.rangeInfo.GetTableIndex())
 		countRows := sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456)
 		mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
-		checksum := tidb.GetCountAndMd5(ctx, tableCase.rangeInfo)
+		checksum := tidb.GetCountAndMD5(ctx, tableCase.rangeInfo)
 		require.NoError(t, checksum.Err)
 		require.Equal(t, checksum.Count, int64(123))
 		require.Equal(t, checksum.Checksum, uint64(456))
@@ -399,7 +399,7 @@ func TestMysqlShardSources(t *testing.T) {
 			mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 		}
 
-		checksum := shard.GetCountAndMd5(ctx, tableCase.rangeInfo)
+		checksum := shard.GetCountAndMD5(ctx, tableCase.rangeInfo)
 		require.NoError(t, checksum.Err)
 		require.Equal(t, checksum.Count, int64(len(dbs)))
 		require.Equal(t, checksum.Checksum, resChecksum)
@@ -771,15 +771,17 @@ func TestRouterRules(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	r, err := router.NewTableRouter(false, []*router.TableRule{
-		// make sure this rule works
-		{
-			SchemaPattern: "schema1",
-			TablePattern:  "tbl",
-			TargetSchema:  "schema2",
-			TargetTable:   "tbl",
-		},
-	})
+	r, _ := router.NewTableRouter(
+		false,
+		[]*router.TableRule{
+			// make sure this rule works
+			{
+				SchemaPattern: "schema1",
+				TablePattern:  "tbl",
+				TargetSchema:  "schema2",
+				TargetTable:   "tbl",
+			},
+		})
 	cfg := &config.Config{
 		LogLevel:         "debug",
 		CheckThreadCount: 4,
@@ -851,8 +853,8 @@ func TestRouterRules(t *testing.T) {
 	require.Equal(t, "tbl", targetTable)
 	targetSchema, targetTable, err = cfg.Task.SourceInstances[0].Router.Route("schema2", "tbl")
 	require.NoError(t, err)
-	require.Equal(t, ShieldDBName, targetSchema)
-	require.Equal(t, ShieldTableName, targetTable)
+	require.Equal(t, shieldDBName, targetSchema)
+	require.Equal(t, shieldTableName, targetTable)
 	targetSchema, targetTable, err = cfg.Task.SourceInstances[0].Router.Route("schema_test", "tbl")
 	require.NoError(t, err)
 	require.Equal(t, "schema_test", targetSchema)
@@ -911,7 +913,7 @@ func TestInitTables(t *testing.T) {
 	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("", "")
 	mock.ExpectQuery("SHOW VARIABLES LIKE*").WillReturnRows(rows)
 
-	tablesToBeCheck, err = initTables(ctx, cfg)
+	_, err = initTables(ctx, cfg)
 	require.Contains(t, err.Error(), "different config matched to same target table")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -936,18 +938,18 @@ func TestCheckTableMatched(t *testing.T) {
 	tmap["`test`.`t1`"] = struct{}{}
 	tmap["`test`.`t2`"] = struct{}{}
 
-	tables, err := checkTableMatched(tableDiffs, tmap, smap, false)
+	_, err := checkTableMatched(tableDiffs, tmap, smap, false)
 	require.NoError(t, err)
 
 	smap["`test`.`t3`"] = struct{}{}
-	tables, err = checkTableMatched(tableDiffs, tmap, smap, false)
+	_, err = checkTableMatched(tableDiffs, tmap, smap, false)
 	require.Contains(t, err.Error(), "the target has no table to be compared. source-table is ``test`.`t3``")
 
 	delete(smap, "`test`.`t2`")
-	tables, err = checkTableMatched(tableDiffs, tmap, smap, false)
+	_, err = checkTableMatched(tableDiffs, tmap, smap, false)
 	require.Contains(t, err.Error(), "the source has no table to be compared. target-table is ``test`.`t2``")
 
-	tables, err = checkTableMatched(tableDiffs, tmap, smap, true)
+	tables, err := checkTableMatched(tableDiffs, tmap, smap, true)
 	require.NoError(t, err)
 	require.Equal(t, 0, tables[0].TableLack)
 	require.Equal(t, 1, tables[1].TableLack)

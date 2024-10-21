@@ -511,7 +511,7 @@ func TestChunkCopyAndUpdate(t *testing.T) {
 }
 
 func TestChunkID(t *testing.T) {
-	chunkIDBase := &ChunkID{
+	chunkIDBase := &CID{
 		TableIndex:       2,
 		BucketIndexLeft:  2,
 		BucketIndexRight: 2,
@@ -521,11 +521,11 @@ func TestChunkID(t *testing.T) {
 
 	str := chunkIDBase.ToString()
 	require.Equal(t, str, "2:2-2:2:4")
-	chunkIDtmp := &ChunkID{}
+	chunkIDtmp := &CID{}
 	chunkIDtmp.FromString(str)
 	require.Equal(t, chunkIDBase.Compare(chunkIDtmp), 0)
 
-	chunkIDSmalls := []*ChunkID{
+	chunkIDSmalls := []*CID{
 		{
 			TableIndex:       1,
 			BucketIndexLeft:  3,
@@ -557,12 +557,12 @@ func TestChunkID(t *testing.T) {
 		require.Equal(t, chunkIDBase.Compare(chunkIDSmall), 1)
 		str = chunkIDSmall.ToString()
 		require.Equal(t, str, stringRes[i])
-		chunkIDtmp = &ChunkID{}
+		chunkIDtmp = &CID{}
 		chunkIDtmp.FromString(str)
 		require.Equal(t, chunkIDSmall.Compare(chunkIDtmp), 0)
 	}
 
-	chunkIDLarges := []*ChunkID{
+	chunkIDLarges := []*CID{
 		{
 			TableIndex:       3,
 			BucketIndexLeft:  1,
@@ -594,7 +594,7 @@ func TestChunkID(t *testing.T) {
 		require.Equal(t, chunkIDBase.Compare(chunkIDLarge), -1)
 		str = chunkIDLarge.ToString()
 		require.Equal(t, str, stringRes[i])
-		chunkIDtmp = &ChunkID{}
+		chunkIDtmp = &CID{}
 		chunkIDtmp.FromString(str)
 		require.Equal(t, chunkIDLarge.Compare(chunkIDtmp), 0)
 	}

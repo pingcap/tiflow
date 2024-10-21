@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
@@ -33,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
-	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +53,7 @@ func getDMTaskCfg(dmAddr, task string) ([]*SubTaskConfig, error) {
 		// TLSClientConfig: tlsCfg,
 	}
 	client := &http.Client{Transport: tr}
-	req, err := http.NewRequest("GET", getDMTaskCfgURL(dmAddr, task), nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", getDMTaskCfgURL(dmAddr, task), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -95,12 +95,6 @@ func getDMTaskCfg(dmAddr, task string) ([]*SubTaskConfig, error) {
 
 // SubTaskConfig is the configuration for SubTask.
 type SubTaskConfig struct {
-	// BurntSushi/toml seems have a bug for flag "-"
-	// when doing encoding, if we use `toml:"-"`, it still try to encode it
-	// and it will panic because of unsupported type (reflect.Func)
-	// so we should not export flagSet
-	flagSet *flag.FlagSet
-
 	// when in sharding, multi dm-workers do one task
 	IsSharding                bool   `toml:"is-sharding" json:"is-sharding"`
 	ShardMode                 string `toml:"shard-mode" json:"shard-mode"`
@@ -172,9 +166,6 @@ type SubTaskConfig struct {
 
 	// deprecated, will auto discover SQL mode
 	EnableANSIQuotes bool `toml:"ansi-quotes" json:"ansi-quotes"`
-
-	// still needed by Syncer / Loader bin
-	printVersion bool
 
 	// which DM worker is running the subtask, this will be injected when the real worker starts running the subtask(StartSubTask).
 	WorkerName string `toml:"-" json:"-"`

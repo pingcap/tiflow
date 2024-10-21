@@ -117,7 +117,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 
 	d, err := diff.NewDiff(ctx, cfg)
 	if err != nil {
-		fmt.Printf("An error occured while initializing diff: %s, please check log info in %s for full details\n",
+		fmt.Printf("An error occurred while initializing diff: %s, please check log info in %s for full details\n",
 			err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
 		log.Fatal("failed to initialize diff process", zap.Error(err))
 		return false
@@ -127,7 +127,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	if !cfg.CheckDataOnly {
 		err = d.StructEqual(ctx)
 		if err != nil {
-			fmt.Printf("An error occured while comparing table structure: %s, please check log info in %s for full details\n",
+			fmt.Printf("An error occurred while comparing table structure: %s, please check log info in %s for full details\n",
 				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
 			log.Fatal("failed to check structure difference", zap.Error(err))
 			return false
@@ -138,7 +138,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	if !cfg.CheckStructOnly {
 		err = d.Equal(ctx)
 		if err != nil {
-			fmt.Printf("An error occured while comparing table data: %s, please check log info in %s for full details\n",
+			fmt.Printf("An error occurred while comparing table data: %s, please check log info in %s for full details\n",
 				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
 			log.Fatal("failed to check data difference", zap.Error(err))
 			return false

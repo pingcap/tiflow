@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	// SplitThreshold is the threshold for splitting
 	SplitThreshold = 1000
 )
 
@@ -41,22 +42,27 @@ type RangeInfo struct {
 	ProgressID string `json:"progress-id"`
 }
 
-// GetTableIndex return the index of table diffs.
+// GetTableIndex returns the index of table diffs.
 // IMPORTANT!!!
 // We need to keep the tables order during checkpoint.
 // So we should have to save the config info to checkpoint file too
 func (r *RangeInfo) GetTableIndex() int { return r.ChunkRange.Index.TableIndex }
 
+// GetBucketIndexLeft returns the BucketIndexLeft
 func (r *RangeInfo) GetBucketIndexLeft() int { return r.ChunkRange.Index.BucketIndexLeft }
 
+// GetBucketIndexRight returns the BucketIndexRight
 func (r *RangeInfo) GetBucketIndexRight() int { return r.ChunkRange.Index.BucketIndexRight }
 
+// GetChunkIndex returns the ChunkIndex
 func (r *RangeInfo) GetChunkIndex() int { return r.ChunkRange.Index.ChunkIndex }
 
+// GetChunk returns the chunk
 func (r *RangeInfo) GetChunk() *chunk.Range {
 	return r.ChunkRange
 }
 
+// Copy returns a copy of RangeInfo
 func (r *RangeInfo) Copy() *RangeInfo {
 	return &RangeInfo{
 		ChunkRange: r.ChunkRange.Clone(),
@@ -65,6 +71,7 @@ func (r *RangeInfo) Copy() *RangeInfo {
 	}
 }
 
+// Update updates the current RangeInfo
 func (r *RangeInfo) Update(column, lower, upper string, updateLower, updateUpper bool, collation, limits string) {
 	r.ChunkRange.Update(column, lower, upper, updateLower, updateUpper)
 	conditions, args := r.ChunkRange.ToString(collation)
@@ -72,6 +79,7 @@ func (r *RangeInfo) Update(column, lower, upper string, updateLower, updateUpper
 	r.ChunkRange.Args = args
 }
 
+// ToNode converts RangeInfo to node
 func (r *RangeInfo) ToNode() *checkpoints.Node {
 	return &checkpoints.Node{
 		ChunkRange: r.ChunkRange,
@@ -79,6 +87,7 @@ func (r *RangeInfo) ToNode() *checkpoints.Node {
 	}
 }
 
+// FromNode converts the Node into RangeInfo
 func FromNode(n *checkpoints.Node) *RangeInfo {
 	return &RangeInfo{
 		ChunkRange: n.ChunkRange,

@@ -33,12 +33,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// TiDBTableAnalyzer is used to analyze table
 type TiDBTableAnalyzer struct {
 	dbConn            *sql.DB
 	bucketSpliterPool *utils.WorkerPool
 	sourceTableMap    map[string]*common.TableSource
 }
 
+// AnalyzeSplitter returns a new iterator for TiDB table
 func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSource := getMatchSource(a.sourceTableMap, table)
 	// Shallow Copy
@@ -65,14 +67,17 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	return randIter, nil
 }
 
+// TiDBRowsIterator is used to iterate rows in TiDB
 type TiDBRowsIterator struct {
 	rows *sql.Rows
 }
 
+// Close closes the iterator
 func (s *TiDBRowsIterator) Close() {
 	s.rows.Close()
 }
 
+// Next gets the next row
 func (s *TiDBRowsIterator) Next() (map[string]*dbutil.ColumnData, error) {
 	if s.rows.Next() {
 		return dbutil.ScanRow(s.rows)
@@ -80,6 +85,7 @@ func (s *TiDBRowsIterator) Next() (map[string]*dbutil.ColumnData, error) {
 	return nil, nil
 }
 
+// TiDBSource represents the table in TiDB
 type TiDBSource struct {
 	tableDiffs     []*common.TableDiff
 	sourceTableMap map[string]*common.TableSource
@@ -91,6 +97,7 @@ type TiDBSource struct {
 	version *semver.Version
 }
 
+// GetTableAnalyzer gets the analyzer for current source
 func (s *TiDBSource) GetTableAnalyzer() TableAnalyzer {
 	return &TiDBTableAnalyzer{
 		s.dbConn,
@@ -111,21 +118,24 @@ func getMatchSource(sourceTableMap map[string]*common.TableSource, table *common
 	return sourceTableMap[uniqueID]
 }
 
+// GetRangeIterator returns a new iterator for TiDB table
 func (s *TiDBSource) GetRangeIterator(ctx context.Context, r *splitter.RangeInfo, analyzer TableAnalyzer, splitThreadCount int) (RangeIterator, error) {
 	return NewChunksIterator(ctx, analyzer, s.tableDiffs, r, splitThreadCount)
 }
 
+// Close closes the source
 func (s *TiDBSource) Close() {
 	s.dbConn.Close()
 }
 
-func (s *TiDBSource) GetCountAndMd5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
+// GetCountAndMD5 returns the checksum info
+func (s *TiDBSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
 	beginTime := time.Now()
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	chunk := tableRange.GetChunk()
 
 	matchSource := getMatchSource(s.sourceTableMap, table)
-	count, checksum, err := utils.GetCountAndMd5Checksum(ctx, s.dbConn, matchSource.OriginSchema, matchSource.OriginTable, table.Info, chunk.Where, chunk.Args)
+	count, checksum, err := utils.GetCountAndMD5Checksum(ctx, s.dbConn, matchSource.OriginSchema, matchSource.OriginTable, table.Info, chunk.Where, chunk.Args)
 
 	cost := time.Since(beginTime)
 	return &ChecksumInfo{
@@ -136,6 +146,7 @@ func (s *TiDBSource) GetCountAndMd5(ctx context.Context, tableRange *splitter.Ra
 	}
 }
 
+// GetCountForLackTable returns count for lack table
 func (s *TiDBSource) GetCountForLackTable(ctx context.Context, tableRange *splitter.RangeInfo) int64 {
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	matchSource := getMatchSource(s.sourceTableMap, table)
@@ -146,10 +157,12 @@ func (s *TiDBSource) GetCountForLackTable(ctx context.Context, tableRange *split
 	return 0
 }
 
+// GetTables returns all tables
 func (s *TiDBSource) GetTables() []*common.TableDiff {
 	return s.tableDiffs
 }
 
+// GetSourceStructInfo get the table info
 func (s *TiDBSource) GetSourceStructInfo(ctx context.Context, tableIndex int) ([]*model.TableInfo, error) {
 	var err error
 	tableInfos := make([]*model.TableInfo, 1)
@@ -163,6 +176,7 @@ func (s *TiDBSource) GetSourceStructInfo(ctx context.Context, tableIndex int) ([
 	return tableInfos, nil
 }
 
+// GenerateFixSQL generate SQL
 func (s *TiDBSource) GenerateFixSQL(t DMLType, upstreamData, downstreamData map[string]*dbutil.ColumnData, tableIndex int) string {
 	if t == Insert {
 		return utils.GenerateReplaceDML(upstreamData, s.tableDiffs[tableIndex].Info, s.tableDiffs[tableIndex].Schema)
@@ -177,6 +191,7 @@ func (s *TiDBSource) GenerateFixSQL(t DMLType, upstreamData, downstreamData map[
 	return ""
 }
 
+// GetRowsIterator returns a new iterator
 func (s *TiDBSource) GetRowsIterator(ctx context.Context, tableRange *splitter.RangeInfo) (RowDataIterator, error) {
 	chunk := tableRange.GetChunk()
 
@@ -187,6 +202,11 @@ func (s *TiDBSource) GetRowsIterator(ctx context.Context, tableRange *splitter.R
 
 	log.Debug("select data", zap.String("sql", query), zap.Reflect("args", chunk.Args))
 	rows, err := s.dbConn.QueryContext(ctx, query, chunk.Args...)
+	defer func() {
+		if rows != nil {
+			_ = rows.Err()
+		}
+	}()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -195,14 +215,17 @@ func (s *TiDBSource) GetRowsIterator(ctx context.Context, tableRange *splitter.R
 	}, nil
 }
 
+// GetDB get the current DB
 func (s *TiDBSource) GetDB() *sql.DB {
 	return s.dbConn
 }
 
+// GetSnapshot get the current snapshot
 func (s *TiDBSource) GetSnapshot() string {
 	return s.snapshot
 }
 
+// NewTiDBSource return a new TiDB source
 func NewTiDBSource(
 	ctx context.Context,
 	tableDiffs []*common.TableDiff, ds *config.DataSource,
@@ -248,18 +271,18 @@ func NewTiDBSource(
 				}
 			}
 
-			uniqueId := utils.UniqueID(targetSchema, targetTable)
+			uniqueID := utils.UniqueID(targetSchema, targetTable)
 			isMatched := f.MatchTable(targetSchema, targetTable)
 			if isMatched {
 				// if match the filter, we should respect it and check target has this table later.
-				sourceTablesAfterRoute[uniqueId] = struct{}{}
+				sourceTablesAfterRoute[uniqueID] = struct{}{}
 			}
-			if _, ok := targetUniqueTableMap[uniqueId]; ok || (isMatched && skipNonExistingTable) {
-				if _, ok := sourceTableMap[uniqueId]; ok {
+			if _, ok := targetUniqueTableMap[uniqueID]; ok || (isMatched && skipNonExistingTable) {
+				if _, ok := sourceTableMap[uniqueID]; ok {
 					log.Error("TiDB source don't support compare multiple source tables with one downstream table," +
 						" if this happening when diff on same instance is fine. otherwise we are not guarantee this diff result is right")
 				}
-				sourceTableMap[uniqueId] = &common.TableSource{
+				sourceTableMap[uniqueID] = &common.TableSource{
 					OriginSchema: schema,
 					OriginTable:  table,
 				}

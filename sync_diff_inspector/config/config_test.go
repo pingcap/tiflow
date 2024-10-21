@@ -91,7 +91,7 @@ func TestNoSecretLeak(t *testing.T) {
 		Port:     5432,
 		User:     "postgres",
 		Password: "AVeryV#ryStr0ngP@ssw0rd",
-		SqlMode:  "MYSQL",
+		SQLMode:  "MYSQL",
 		Snapshot: "2022/10/24",
 	}
 	cfg := &Config{}

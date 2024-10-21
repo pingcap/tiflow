@@ -39,10 +39,12 @@ import (
 // which yields redacted string when being marshaled.
 type SecretString string
 
+// MarshalJSON return fixed string for SerectString
 func (s SecretString) MarshalJSON() ([]byte, error) {
 	return []byte(`"******"`), nil
 }
 
+// String return fixed string for SerectString
 func (s SecretString) String() string {
 	return "******"
 }
@@ -130,7 +132,7 @@ func (pool *WorkerPool) HasWorker() bool {
 	return len(pool.workers) > 0
 }
 
-// WaitFinished waits till the pool finishs all the tasks.
+// WaitFinished waits till the pool finishes all the tasks.
 func (pool *WorkerPool) WaitFinished() {
 	pool.wg.Wait()
 }
@@ -211,7 +213,7 @@ func GenerateReplaceDML(data map[string]*dbutil.ColumnData, table *model.TableIn
 	return fmt.Sprintf("REPLACE INTO %s(%s) VALUES (%s);", dbutil.TableName(schema, table.Name.O), strings.Join(colNames, ","), strings.Join(values, ","))
 }
 
-// GerateReplaceDMLWithAnnotation returns the replace SQL for the specific 2 rows.
+// GenerateReplaceDMLWithAnnotation returns the replace SQL for the specific 2 rows.
 // And add Annotations to show the different columns.
 func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnData, table *model.TableInfo, schema string) string {
 	sqlColNames := make([]string, 0, len(table.Columns))
@@ -286,7 +288,7 @@ func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnDa
 	return fmt.Sprintf("/*\n%s*/\nREPLACE INTO %s(%s) VALUES (%s);", tableString.String(), dbutil.TableName(schema, table.Name.O), strings.Join(sqlColNames, ","), strings.Join(sqlValues, ","))
 }
 
-// GerateReplaceDMLWithAnnotation returns the delete SQL for the specific row.
+// GenerateDeleteDML returns the delete SQL for the specific row.
 func GenerateDeleteDML(data map[string]*dbutil.ColumnData, table *model.TableInfo, schema string) string {
 	kvs := make([]string, 0, len(table.Columns))
 	for _, col := range table.Columns {
@@ -649,25 +651,25 @@ func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns
 				cmp = 1
 			}
 			break
-		} else {
-			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
-			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", string(data1.Data), string(data2.Data), err1, err2)
-				return
-			}
-
-			if num1 == num2 {
-				continue
-			}
-
-			if num1 < num2 {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
 		}
+
+		num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
+		num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
+		if err1 != nil || err2 != nil {
+			err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", string(data1.Data), string(data2.Data), err1, err2)
+			return
+		}
+
+		if num1 == num2 {
+			continue
+		}
+
+		if num1 < num2 {
+			cmp = -1
+		} else {
+			cmp = 1
+		}
+		break
 	}
 
 	return
@@ -773,8 +775,8 @@ func GetTableSize(ctx context.Context, db *sql.DB, schemaName, tableName string)
 	return dataSize.Int64, nil
 }
 
-// GetCountAndMd5Checksum returns checksum code and count of some data by given condition
-func GetCountAndMd5Checksum(ctx context.Context, db *sql.DB, schemaName, tableName string, tbInfo *model.TableInfo, limitRange string, args []interface{}) (int64, uint64, error) {
+// GetCountAndMD5Checksum returns checksum code and count of some data by given condition
+func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableName string, tbInfo *model.TableInfo, limitRange string, args []interface{}) (int64, uint64, error) {
 	/*
 		calculate MD5 checksum and count example:
 		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
@@ -964,7 +966,7 @@ func GetBetterIndex(ctx context.Context, db *sql.DB, schema, table string, table
 			return []*model.IndexInfo{index}, nil
 		}
 	}
-	sels := make([]float64, len(indices))
+	sels := make([]float64, 0, len(indices))
 	for _, index := range indices {
 		column := GetColumnsFromIndex(index, tableInfo)[0]
 		selectivity, err := GetSelectivity(ctx, db, schema, table, column.Name.O, tableInfo)
@@ -1002,7 +1004,7 @@ func GetSelectivity(ctx context.Context, db *sql.DB, schemaName, tableName, colu
 func CalculateChunkSize(rowCount int64) int64 {
 	// we assume chunkSize is 50000 for any cluster.
 	chunkSize := int64(50000)
-	if rowCount > int64(chunkSize)*10000 {
+	if rowCount > chunkSize*10000 {
 		// we assume we only need 10k chunks for any table.
 		chunkSize = rowCount / 10000
 	}
@@ -1016,12 +1018,12 @@ func AnalyzeTable(ctx context.Context, db *sql.DB, tableName string) error {
 }
 
 // GetSQLFileName returns filename of fix-SQL identified by chunk's `Index`.
-func GetSQLFileName(index *chunk.ChunkID) string {
+func GetSQLFileName(index *chunk.CID) string {
 	return fmt.Sprintf("%d:%d-%d:%d", index.TableIndex, index.BucketIndexLeft, index.BucketIndexRight, index.ChunkIndex)
 }
 
-// GetChunkIDFromSQLFileName convert the filename to chunk's `Index`.
-func GetChunkIDFromSQLFileName(fileIDStr string) (int, int, int, int, error) {
+// GetCIDFromSQLFileName convert the filename to chunk's `Index`.
+func GetCIDFromSQLFileName(fileIDStr string) (int, int, int, int, error) {
 	ids := strings.Split(fileIDStr, ":")
 	tableIndex, err := strconv.Atoi(ids[0])
 	if err != nil {
@@ -1051,6 +1053,7 @@ func IsRangeTrivial(rangeCond string) bool {
 	return strings.ToLower(rangeCond) == "true"
 }
 
+// IsBinaryColumn checks if the given column is a binary column
 func IsBinaryColumn(col *model.ColumnInfo) bool {
 	// varbinary or binary
 	return (col.GetType() == mysql.TypeVarchar || col.GetType() == mysql.TypeString) && mysql.HasBinaryFlag(col.GetFlag())

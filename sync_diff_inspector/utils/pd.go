@@ -177,6 +177,7 @@ func parseVersion(versionStr string) (*semver.Version, error) {
 	return semver.NewVersion(versionStr)
 }
 
+// TryToGetVersion gets the version of current db.
 // It's OK to failed to get db version
 func TryToGetVersion(ctx context.Context, db *sql.DB) *semver.Version {
 	versionStr, err := dbutil.GetDBVersion(ctx, db)
@@ -267,6 +268,7 @@ func parseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
 	return uint64(tso.Int64*1000) << 18, nil
 }
 
+// GetSnapshot gets the snapshot
 func GetSnapshot(ctx context.Context, db *sql.DB) ([]string, error) {
 	query := "SHOW MASTER STATUS;"
 	rows, err := db.QueryContext(ctx, query)

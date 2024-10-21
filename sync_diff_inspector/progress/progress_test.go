@@ -24,7 +24,7 @@ import (
 )
 
 func TestProgress(t *testing.T) {
-	p := NewTableProgressPrinter(6, 0)
+	p := newTableProgressPrinter(6, 0)
 	p.RegisterTable("1", true, true, common.AllTableExistFlag)
 	p.StartTable("1", 50, true)
 	p.RegisterTable("2", true, false, common.AllTableExistFlag)
@@ -59,7 +59,7 @@ func TestProgress(t *testing.T) {
 }
 
 func TestTableError(t *testing.T) {
-	p := NewTableProgressPrinter(4, 0)
+	p := newTableProgressPrinter(4, 0)
 	p.RegisterTable("1", true, true, common.AllTableExistFlag)
 	p.StartTable("1", 50, true)
 	p.RegisterTable("2", true, true, common.AllTableExistFlag)

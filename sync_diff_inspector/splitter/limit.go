@@ -30,6 +30,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// LimitIterator is the iterator with limit
 type LimitIterator struct {
 	table     *common.TableDiff
 	tagChunk  *chunk.Range
@@ -46,11 +47,19 @@ type LimitIterator struct {
 	columnOffset map[string]int
 }
 
+// NewLimitIterator return a new iterator
 func NewLimitIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*LimitIterator, error) {
 	return NewLimitIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
 }
 
-func NewLimitIteratorWithCheckpoint(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB, startRange *RangeInfo) (*LimitIterator, error) {
+// NewLimitIteratorWithCheckpoint return a new iterator
+func NewLimitIteratorWithCheckpoint(
+	ctx context.Context,
+	progressID string,
+	table *common.TableDiff,
+	dbConn *sql.DB,
+	startRange *RangeInfo,
+) (*LimitIterator, error) {
 	indices, err := utils.GetBetterIndex(ctx, dbConn, table.Schema, table.Table, table.Info)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -161,10 +170,12 @@ func NewLimitIteratorWithCheckpoint(ctx context.Context, progressID string, tabl
 	return limitIterator, nil
 }
 
+// Close close the iterator
 func (lmt *LimitIterator) Close() {
 	lmt.cancel()
 }
 
+// Next return the next chunk
 func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 	select {
 	case err := <-lmt.errCh:
@@ -177,6 +188,7 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 	}
 }
 
+// GetIndexID get the current index id
 func (lmt *LimitIterator) GetIndexID() int64 {
 	return lmt.indexID
 }
@@ -199,7 +211,6 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		if dataMap == nil {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
-			bucketID++
 			progress.UpdateTotal(lmt.progressID, 1, true)
 			select {
 			case <-ctx.Done():

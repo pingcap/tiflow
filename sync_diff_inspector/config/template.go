@@ -111,6 +111,7 @@ collation = ""
 `
 )
 
+// ExportTemplateConfig print the configType
 func ExportTemplateConfig(configType string) error {
 	switch configType {
 	case "dm", "DM", "Dm", "dM":
@@ -118,7 +119,7 @@ func ExportTemplateConfig(configType string) error {
 	case "norm", "normal", "Norm", "Normal":
 		fmt.Print(normConfig)
 	default:
-		return errors.Errorf("Error: unexpect template name: %s\n-T dm: export a dm config\n-T norm: export a normal config\n", configType)
+		return errors.Errorf("Error: unexpect template name: %s\n-T dm: export a dm config\n-T norm: export a normal config", configType)
 	}
 	return nil
 }

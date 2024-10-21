@@ -41,17 +41,18 @@ const (
 	// Pass means all data and struct of tables are equal
 	Pass = "pass"
 	// Fail means not all data or struct of tables are equal
-	Fail  = "fail"
+	Fail = "fail"
+	// Error means we meet an error
 	Error = "error"
 )
 
-// ReportConfig stores the config information for the user
-type ReportConfig struct {
+// Config stores the config information for the user
+type Config struct {
 	Host     string `toml:"host"`
 	Port     int    `toml:"port"`
 	User     string `toml:"user"`
 	Snapshot string `toml:"snapshot,omitempty"`
-	SqlMode  string `toml:"sql-mode,omitempty"`
+	SQLMode  string `toml:"sql-mode,omitempty"`
 }
 
 // TableResult saves the check result for every table.
@@ -234,6 +235,7 @@ func (r *Report) CommitSummary() error {
 	return nil
 }
 
+// Print print the current report
 func (r *Report) Print(w io.Writer) error {
 	var summary strings.Builder
 	if r.Result == Pass && r.SkippedNum == 0 {
@@ -272,7 +274,7 @@ func (r *Report) Print(w io.Writer) error {
 		for schema, tableMap := range r.TableResults {
 			for table, result := range tableMap {
 				if result.MeetError != nil {
-					summary.WriteString(fmt.Sprintf("%s error occured in %s\n", result.MeetError.Error(), dbutil.TableName(schema, table)))
+					summary.WriteString(fmt.Sprintf("%s error occurred in %s\n", result.MeetError.Error(), dbutil.TableName(schema, table)))
 				}
 			}
 		}
@@ -291,6 +293,7 @@ func NewReport(task *config.TaskConfig) *Report {
 	}
 }
 
+// Init initialize the report
 func (r *Report) Init(tableDiffs []*common.TableDiff, sourceConfig [][]byte, targetConfig []byte) {
 	r.StartTime = time.Now()
 	r.SourceConfig = sourceConfig
@@ -325,7 +328,7 @@ func (r *Report) SetTableStructCheckResult(schema, table string, equal bool, ski
 }
 
 // SetTableDataCheckResult sets the data check result for table.
-func (r *Report) SetTableDataCheckResult(schema, table string, equal bool, rowsAdd, rowsDelete int, upCount, downCount int64, id *chunk.ChunkID) {
+func (r *Report) SetTableDataCheckResult(schema, table string, equal bool, rowsAdd, rowsDelete int, upCount, downCount int64, id *chunk.CID) {
 	r.Lock()
 	defer r.Unlock()
 	result := r.TableResults[schema][table]
@@ -368,7 +371,7 @@ func (r *Report) SetTableMeetError(schema, table string, err error) {
 
 // GetSnapshot get the snapshot of the current state of the report, then we can restart the
 // sync-diff and get the correct report state.
-func (r *Report) GetSnapshot(chunkID *chunk.ChunkID, schema, table string) (*Report, error) {
+func (r *Report) GetSnapshot(chunkID *chunk.CID, schema, table string) (*Report, error) {
 	r.RLock()
 	defer r.RUnlock()
 	targetID := utils.UniqueID(schema, table)
@@ -387,7 +390,7 @@ func (r *Report) GetSnapshot(chunkID *chunk.ChunkID, schema, table string) (*Rep
 					MeetError:   result.MeetError,
 				}
 				for id, chunkResult := range result.ChunkMap {
-					sid := new(chunk.ChunkID)
+					sid := new(chunk.CID)
 					err := sid.FromString(id)
 					if err != nil {
 						return nil, errors.Trace(err)
