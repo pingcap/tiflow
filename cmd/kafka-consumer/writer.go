@@ -326,6 +326,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				cachedEvents := simple.GetCachedEvents()
 				for _, row := range cachedEvents {
 					row.TableInfo.TableName.TableID = row.PhysicalTableID
+					w.checkPartition(row, partition, message)
+					if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+						continue
+					}
 					group, ok := eventGroup[row.PhysicalTableID]
 					if !ok {
 						group = NewEventsGroup()
@@ -367,44 +371,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				row.TableInfo.TableName.TableID = tableID
 			}
 
-			target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
-			if err != nil {
-				log.Panic("cannot calculate partition for the row changed event",
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", tableID),
-					zap.Error(err), zap.Any("event", row))
-			}
-			if partition != target {
-				log.Panic("RowChangedEvent dispatched to wrong partition",
-					zap.Int32("partition", partition), zap.Int32("expected", target),
-					zap.Int32("partitionNum", w.option.partitionNum),
-					zap.Any("offset", message.TopicPartition.Offset),
-					zap.Int64("tableID", tableID), zap.Any("row", row),
-				)
-			}
+			w.checkPartition(row, partition, message)
 
-			watermark := atomic.LoadUint64(&progress.watermark)
-			// if the kafka cluster is normal, this should not hit.
-			// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
-			if row.CommitTs < watermark {
-				// if commit message failed, the consumer may read previous message,
-				// just ignore this message should be fine, otherwise panic.
-				if message.TopicPartition.Offset > progress.watermarkOffset {
-					log.Panic("RowChangedEvent fallback row",
-						zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
-						zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-						zap.Int32("partition", partition), zap.Int64("tableID", tableID),
-						zap.String("schema", row.TableInfo.GetSchemaName()),
-						zap.String("table", row.TableInfo.GetTableName()))
-				}
-				log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
-					zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-					zap.Int32("partition", partition), zap.Int64("tableID", tableID),
-					zap.String("schema", row.TableInfo.GetSchemaName()),
-					zap.String("table", row.TableInfo.GetTableName()))
+			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
 				continue
 			}
+
 			group, ok := eventGroup[tableID]
 			if !ok {
 				group = NewEventsGroup()
@@ -433,18 +405,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", ts))
 
-			watermark := atomic.LoadUint64(&progress.watermark)
-			if ts < watermark {
-				if message.TopicPartition.Offset > progress.watermarkOffset {
-					log.Panic("partition resolved ts fallback, skip it",
-						zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-						zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-						zap.Int32("partition", partition))
-				}
-				log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
-					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-					zap.Int32("partition", partition))
+			if w.checkOldMessage(progress, ts, nil, partition, message) {
 				continue
 			}
 
@@ -487,6 +448,67 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	}
 	// flush when received DDL event or resolvedTs
 	return w.Write(ctx, messageType)
+}
+
+func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, message *kafka.Message) {
+	target, _, err := w.eventRouter.GetPartitionForRowChange(row, w.option.partitionNum)
+	if err != nil {
+		log.Panic("cannot calculate partition for the row changed event",
+			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", row.TableInfo.TableName.TableID),
+			zap.Error(err), zap.Any("event", row))
+	}
+	if partition != target {
+		log.Panic("RowChangedEvent dispatched to wrong partition",
+			zap.Int32("partition", partition), zap.Int32("expected", target),
+			zap.Int32("partitionNum", w.option.partitionNum),
+			zap.Any("offset", message.TopicPartition.Offset),
+			zap.Int64("tableID", row.TableInfo.TableName.TableID), zap.Any("row", row),
+		)
+	}
+}
+
+func (w *writer) checkOldMessage(progress *partitionProgress, ts uint64, row *model.RowChangedEvent, partition int32, message *kafka.Message) bool {
+	watermark := atomic.LoadUint64(&progress.watermark)
+	if row == nil {
+		watermark := atomic.LoadUint64(&progress.watermark)
+		if ts < watermark {
+			if message.TopicPartition.Offset > progress.watermarkOffset {
+				log.Panic("partition resolved ts fallback, skip it",
+					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+					zap.Int32("partition", partition))
+			}
+			log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+				zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+				zap.Int32("partition", partition))
+			return true
+		}
+		return false
+	}
+	// if the kafka cluster is normal, this should not hit.
+	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
+	if ts < watermark {
+		// if commit message failed, the consumer may read previous message,
+		// just ignore this message should be fine, otherwise panic.
+		if message.TopicPartition.Offset > progress.watermarkOffset {
+			log.Panic("RowChangedEvent fallback row",
+				zap.Uint64("commitTs", ts), zap.Any("offset", message.TopicPartition.Offset),
+				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+				zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
+				zap.String("schema", row.TableInfo.GetSchemaName()),
+				zap.String("table", row.TableInfo.GetTableName()))
+		}
+		log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
+			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+			zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
+			zap.String("schema", row.TableInfo.GetSchemaName()),
+			zap.String("table", row.TableInfo.GetTableName()))
+		return true
+	}
+	return false
 }
 
 type fakeTableIDGenerator struct {
