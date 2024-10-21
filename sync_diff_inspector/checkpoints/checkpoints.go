@@ -20,14 +20,12 @@ import (
 	"os"
 	"sync"
 
-	"github.com/pingcap/tiflow/sync_diff_inspector/config"
-	"github.com/pingcap/tiflow/sync_diff_inspector/report"
-
-	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
-	"github.com/siddontang/go/ioutil2"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"github.com/pingcap/tiflow/sync_diff_inspector/report"
+	"github.com/siddontang/go/ioutil2"
 	"go.uber.org/zap"
 )
 

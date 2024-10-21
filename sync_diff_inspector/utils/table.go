@@ -23,11 +23,12 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -80,7 +81,7 @@ func addClusteredAnnotationForPrimaryKey(raw string, replace string) (string, er
 	return reg.ReplaceAllString(raw, replace), nil
 }
 
-func getTableInfoBySQL(ctx sessionctx.Context, createTableSQL string, parser2 *parser.Parser) (table *model.TableInfo, err error) {
+func getTableInfoBySQL(ctx *metabuild.Context, createTableSQL string, parser2 *parser.Parser) (table *model.TableInfo, err error) {
 	stmt, err := parser2.ParseOneStmt(createTableSQL, "", "")
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -96,11 +97,11 @@ func getTableInfoBySQL(ctx sessionctx.Context, createTableSQL string, parser2 *p
 		// put primary key in indices
 		if table.PKIsHandle {
 			pkIndex := &model.IndexInfo{
-				Name:    model.NewCIStr("PRIMARY"),
+				Name:    pmodel.NewCIStr("PRIMARY"),
 				Primary: true,
 				State:   model.StatePublic,
 				Unique:  true,
-				Tp:      model.IndexTypeBtree,
+				Tp:      pmodel.IndexTypeBtree,
 				Columns: []*model.IndexColumn{
 					{
 						Name:   table.GetPkName(),
@@ -166,7 +167,8 @@ func GetTableInfoWithVersion(
 	sctx.GetSessionVars().TimeZone = time.UTC
 	sctx.GetSessionVars().SQLMode = mysql.DelSQLMode(sctx.GetSessionVars().SQLMode, mysql.ModeStrictTransTables)
 	sctx.GetSessionVars().SQLMode = mysql.DelSQLMode(sctx.GetSessionVars().SQLMode, mysql.ModeStrictAllTables)
-	return getTableInfoBySQL(sctx, createTableSQL, parser2)
+	metaBuildCtx := ddl.NewMetaBuildContextWithSctx(sctx)
+	return getTableInfoBySQL(metaBuildCtx, createTableSQL, parser2)
 }
 
 // GetTableInfo returns table information.
