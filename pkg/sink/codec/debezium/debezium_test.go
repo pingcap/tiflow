@@ -185,6 +185,8 @@ func (s *debeziumSuite) TestDataTypes() {
 
 	dataDbzOutput, err := os.ReadFile("testdata/datatype.dbz.json")
 	s.Require().Nil(err)
+	keyDbzOutput, err := os.ReadFile("testdata/datatype.dbz.key.json")
+	s.Require().Nil(err)
 
 	helper := NewSQLTestHelper(s.T(), "foo", string(dataDDL))
 
@@ -205,4 +207,5 @@ func (s *debeziumSuite) TestDataTypes() {
 	messages := encoder.Build()
 	s.Require().Len(messages, 1)
 	s.requireDebeziumJSONEq(dataDbzOutput, messages[0].Value)
+	s.requireDebeziumJSONEq(keyDbzOutput, messages[0].Key)
 }
