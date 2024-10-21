@@ -206,7 +206,7 @@ func TestProject(t *testing.T) {
 				Name: "tenant1",
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("111-222-333").WillReturnRows(
+				mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("111-222-333", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "id", "name",
 						"seq_id",
@@ -220,7 +220,7 @@ func TestProject(t *testing.T) {
 			},
 			err: errors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("p111").WillReturnError(
+				mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("p111", 1).WillReturnError(
 					errors.New("GetProjectByID error"))
 			},
 		},
@@ -581,7 +581,7 @@ func TestJob(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				expectedSQL := "SELECT * FROM `master_meta` WHERE id = ? AND `master_meta`.`deleted` IS NULL"
-				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111").WillReturnRows(
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
 						"type", "state", "node_id", "address", "epoch", "config", "seq_id", "ext",
@@ -597,7 +597,7 @@ func TestJob(t *testing.T) {
 			},
 			err: errors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta` WHERE id").WithArgs("j111").WillReturnError(
+				mock.ExpectQuery("SELECT [*] FROM `master_meta` WHERE id").WithArgs("j111", 1).WillReturnError(
 					errors.New("GetJobByID error"))
 			},
 		},
@@ -836,7 +836,7 @@ func TestWorker(t *testing.T) {
 				ExtBytes:  []byte{0x11, 0x22},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222").WillReturnRows(
+				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
 						"id", "type", "state", "epoch", "error_message", "extend_bytes", "seq_id",
@@ -852,7 +852,7 @@ func TestWorker(t *testing.T) {
 			},
 			err: errors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222").WillReturnError(
+				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222", 1).WillReturnError(
 					errors.New("GetWorkerByID error"))
 			},
 		},
@@ -1140,7 +1140,7 @@ func TestResource(t *testing.T) {
 				Deleted:   true,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `resource_meta` WHERE job_id = ? AND id = ?")).WithArgs("j111", "r222").WillReturnRows(
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `resource_meta` WHERE job_id = ? AND id = ?")).WithArgs("j111", "r222", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id", "job_id",
 						"worker_id", "executor_id", "deleted", "seq_id",
@@ -1158,7 +1158,7 @@ func TestResource(t *testing.T) {
 			},
 			err: errors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `resource_meta` WHERE job_id = ? AND id = ?")).WithArgs("j111", "r222").WillReturnError(
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `resource_meta` WHERE job_id = ? AND id = ?")).WithArgs("j111", "r222", 1).WillReturnError(
 					errors.New("GetResourceByID error"))
 			},
 		},
@@ -1387,7 +1387,7 @@ func TestError(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, res, 0)
 
-	mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("p111").WillReturnRows(
+	mock.ExpectQuery("SELECT [*] FROM `project_infos` WHERE id").WithArgs("p111", 1).WillReturnRows(
 		sqlmock.NewRows([]string{
 			"created_at", "updated_at", "id", "name",
 			"seq_id",
@@ -1485,7 +1485,7 @@ func TestJobOp(t *testing.T) {
 					}).AddRow(1))
 				mock.ExpectQuery(
 					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
-					WithArgs("job-111").WillReturnRows(
+					WithArgs("job-111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "op", "job_id", "seq_id",
 					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-111", 1))
@@ -1511,7 +1511,7 @@ func TestJobOp(t *testing.T) {
 					}).AddRow(1))
 				mock.ExpectQuery(
 					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
-					WithArgs("job-111").WillReturnRows(
+					WithArgs("job-111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "op", "job_id", "seq_id",
 					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceled, "job-111", 1))
@@ -1538,7 +1538,7 @@ func TestJobOp(t *testing.T) {
 					}).AddRow(1))
 				mock.ExpectQuery(
 					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
-					WithArgs("job-111").WillReturnRows(
+					WithArgs("job-111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "op", "job_id", "seq_id",
 					}).AddRow(createdAt, updatedAt, model.JobOpStatusNoop, "job-111", 1))

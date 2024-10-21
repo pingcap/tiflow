@@ -30,10 +30,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -41,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -112,6 +115,17 @@ func TestPrepareDML(t *testing.T) {
 		},
 	}, [][]int{{1, 2}})
 
+	tableInfoVector := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{
+		nil, {
+			Name: "a1",
+			Type: mysql.TypeLong,
+			Flag: model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+		}, {
+			Name: "a3",
+			Type: mysql.TypeTiDBVectorFloat32,
+		},
+	}, [][]int{{1, 2}})
+
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -177,6 +191,35 @@ func TestPrepareDML(t *testing.T) {
 				startTs:         []model.Ts{418658114257813516},
 				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:          [][]interface{}{{2, 2}},
+				rowCount:        1,
+				approximateSize: 63,
+			},
+		},
+		// vector type
+		{
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:   418658114257813518,
+					CommitTs:  418658114257813519,
+					TableInfo: tableInfoVector,
+					Columns: model.Columns2ColumnDatas(
+						[]*model.Column{
+							nil, {
+								Name:  "a1",
+								Type:  mysql.TypeLong,
+								Value: 1,
+							}, {
+								Name:  "a3",
+								Type:  mysql.TypeTiDBVectorFloat32,
+								Value: util.Must(types.ParseVectorFloat32("[1.1,-2,3.33,-4.12,-5]")),
+							},
+						}, tableInfoVector),
+				},
+			},
+			expected: &preparedDMLs{
+				startTs:         []model.Ts{418658114257813518},
+				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
+				values:          [][]interface{}{{1, "[1.1,-2,3.33,-4.12,-5]"}},
 				rowCount:        1,
 				approximateSize: 63,
 			},
@@ -1104,6 +1147,14 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		Charset: charset.CharsetGBK,
 		Flag:    model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 	}}, [][]int{{0, 1}})
+	tableInfoWithVector := model.BuildTableInfo("common_1", "uk_without_pk", []*model.Column{{
+		Name: "a1",
+		Type: mysql.TypeLong,
+		Flag: model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+	}, {
+		Name: "a3",
+		Type: mysql.TypeTiDBVectorFloat32,
+	}}, [][]int{{0, 1}})
 	testCases := []struct {
 		isTiDB   bool
 		input    []*model.RowChangedEvent
@@ -1418,6 +1469,37 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				approximateSize: 204,
 			},
 		},
+
+		// inser vector data
+		{
+			isTiDB: true,
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:   418658114257813516,
+					CommitTs:  418658114257813517,
+					TableInfo: tableInfoWithVector,
+					Columns: model.Columns2ColumnDatas([]*model.Column{{
+						Name:  "a1",
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+					}}, tableInfoWithVector),
+					ApproximateDataSize: 10,
+				},
+			},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
+				sqls: []string{
+					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
+				},
+				values: [][]interface{}{
+					{1, "[1,2,3,4,5]"},
+				},
+				rowCount:        1,
+				approximateSize: 73,
+			},
+		},
 	}
 
 	ms := newMySQLBackendWithoutDB()
@@ -1616,7 +1698,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"
 	stmt, err := parser.New().ParseOneStmt(createSQL, "", "")
 	require.NoError(t, err)
-	ti, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	ti, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	row1 := sqlmodel.NewRowChange(table, table, []any{1, "a"}, []any{1, "aa"}, ti, ti, nil)

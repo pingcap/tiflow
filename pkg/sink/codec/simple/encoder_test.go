@@ -25,8 +25,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang/mock/gomock"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
@@ -1387,7 +1388,12 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					switch v := col.Value.(type) {
+					case types.VectorFloat32:
+						require.EqualValues(t, v.String(), decoded.Value)
+					default:
+						require.EqualValues(t, v, decoded.Value)
+					}
 				}
 
 				decodedPreviousColumns := make(map[string]*model.ColumnData, len(decodedRow.PreColumns))
@@ -1399,7 +1405,12 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedPreviousColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					switch v := col.Value.(type) {
+					case types.VectorFloat32:
+						require.EqualValues(t, v.String(), decoded.Value)
+					default:
+						require.EqualValues(t, v, decoded.Value)
+					}
 				}
 			}
 		}
@@ -1541,7 +1552,12 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 					colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					switch v := col.Value.(type) {
+					case types.VectorFloat32:
+						require.EqualValues(t, v.String(), decoded.Value, colName)
+					default:
+						require.EqualValues(t, v, decoded.Value, colName)
+					}
 				}
 
 				for _, column := range decodedRow.PreColumns {
@@ -1552,7 +1568,12 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 					colName := updateEvent.TableInfo.ForceGetColumnName(col.ColumnID)
 					decoded, ok := decodedColumns[colName]
 					require.True(t, ok)
-					require.EqualValues(t, col.Value, decoded.Value)
+					switch v := col.Value.(type) {
+					case types.VectorFloat32:
+						require.EqualValues(t, v.String(), decoded.Value, colName)
+					default:
+						require.EqualValues(t, v, decoded.Value, colName)
+					}
 				}
 			}
 		}
@@ -1723,11 +1744,18 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 						case []byte:
 							length := len(decoded.Value.([]uint8))
 							require.Equal(t, v[:length], decoded.Value, colName)
+						case types.VectorFloat32:
+							require.Equal(t, v.String(), decoded.Value, colName)
 						default:
-							require.EqualValues(t, col.Value, decoded.Value, colName)
+							require.Equal(t, col.Value, decoded.Value, colName)
 						}
 					} else {
-						require.EqualValues(t, col.Value, decoded.Value, colName)
+						switch v := col.Value.(type) {
+						case []byte:
+							require.Equal(t, string(v), decoded.Value, colName)
+						default:
+							require.Equal(t, v, decoded.Value, colName)
+						}
 					}
 				}
 
@@ -1746,11 +1774,20 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 						case []byte:
 							length := len(decoded.Value.([]uint8))
 							require.Equal(t, v[:length], decoded.Value, colName)
+						case types.VectorFloat32:
+							require.Equal(t, v.String(), decoded.Value, colName)
 						default:
-							require.EqualValues(t, col.Value, decoded.Value, colName)
+							require.Equal(t, col.Value, decoded.Value, colName)
 						}
 					} else {
-						require.EqualValues(t, col.Value, decoded.Value, colName)
+						switch v := col.Value.(type) {
+						case types.VectorFloat32:
+							require.Equal(t, v.String(), decoded.Value, colName)
+						case []byte:
+							require.Equal(t, string(v), decoded.Value, colName)
+						default:
+							require.Equal(t, v, decoded.Value, colName)
+						}
 					}
 				}
 			}

@@ -17,8 +17,8 @@ import (
 	"sync"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -30,11 +30,11 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ = Suite(&statusSuite{})
+var _ = check.Suite(&statusSuite{})
 
 type statusSuite struct{}
 
-func (t *statusSuite) TestStatusRace(c *C) {
+func (t *statusSuite) TestStatusRace(c *check.C) {
 	s := &Syncer{}
 
 	l := log.With(zap.String("unit test", "TestStatueRace"))
@@ -62,8 +62,8 @@ func (t *statusSuite) TestStatusRace(c *C) {
 			defer wg.Done()
 			ret := s.Status(sourceStatus)
 			status := ret.(*pb.SyncStatus)
-			c.Assert(status.MasterBinlog, Equals, "(mysql-bin.000123, 223)")
-			c.Assert(status.SyncerBinlog, Equals, "(mysql-bin.000123, 123)")
+			c.Assert(status.MasterBinlog, check.Equals, "(mysql-bin.000123, 223)")
+			c.Assert(status.SyncerBinlog, check.Equals, "(mysql-bin.000123, 123)")
 		}()
 	}
 	wg.Wait()

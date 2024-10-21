@@ -99,6 +99,7 @@ func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 		RowId:     event.RowID,
 		Partition: 0,
 	}
+	// nolint
 	if b, err := key.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -130,6 +131,7 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 		OldValue: codecEncodeColumnsPB(event.GetPreColumns()),
 		NewValue: codecEncodeColumnsPB(event.GetColumns()),
 	}
+	// nolint
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -165,7 +167,7 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 		converted.RowId = append(converted.RowId, event.RowID)
 		converted.Partition = append(converted.Partition, 0)
 	}
-
+	// nolint
 	if b, err := converted.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -198,6 +200,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.GetPreColumns()))
 		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.GetColumns()))
 	}
+	// nolint
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
 	} else {

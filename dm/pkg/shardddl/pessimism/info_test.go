@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -37,38 +37,38 @@ func TestInfo(t *testing.T) {
 
 	etcdTestCli = mockCluster.RandClient()
 
-	TestingT(t)
+	check.TestingT(t)
 }
 
 // clear keys in etcd test cluster.
-func clearTestInfoOperation(c *C) {
+func clearTestInfoOperation(c *check.C) {
 	clearInfo := clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	clearOp := clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
 	_, err := etcdTestCli.Txn(context.Background()).Then(clearInfo, clearOp).Commit()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
 type testForEtcd struct{}
 
-var _ = Suite(&testForEtcd{})
+var _ = check.Suite(&testForEtcd{})
 
-func (t *testForEtcd) TestInfoJSON(c *C) {
+func (t *testForEtcd) TestInfoJSON(c *check.C) {
 	i1 := NewInfo("test", "mysql-replica-1", "foo", "bar", []string{
 		"ALTER TABLE bar ADD COLUMN c1 INT",
 		"ALTER TABLE bar ADD COLUMN c2 INT",
 	})
 
 	j, err := i1.toJSON()
-	c.Assert(err, IsNil)
-	c.Assert(j, Equals, `{"task":"test","source":"mysql-replica-1","schema":"foo","table":"bar","ddls":["ALTER TABLE bar ADD COLUMN c1 INT","ALTER TABLE bar ADD COLUMN c2 INT"]}`)
-	c.Assert(j, Equals, i1.String())
+	c.Assert(err, check.IsNil)
+	c.Assert(j, check.Equals, `{"task":"test","source":"mysql-replica-1","schema":"foo","table":"bar","ddls":["ALTER TABLE bar ADD COLUMN c1 INT","ALTER TABLE bar ADD COLUMN c2 INT"]}`)
+	c.Assert(j, check.Equals, i1.String())
 
 	i2, err := infoFromJSON(j)
-	c.Assert(err, IsNil)
-	c.Assert(i2, DeepEquals, i1)
+	c.Assert(err, check.IsNil)
+	c.Assert(i2, check.DeepEquals, i1)
 }
 
-func (t *testForEtcd) TestInfoEtcd(c *C) {
+func (t *testForEtcd) TestInfoEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -89,30 +89,30 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 
 	// put the same key twice.
 	rev1, err := PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	rev2, err := PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// get with only 1 info.
 	ifm, rev3, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm[task1], HasLen, 1)
-	c.Assert(ifm[task1][source1], DeepEquals, i11)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm[task1], check.HasLen, 1)
+	c.Assert(ifm[task1][source1], check.DeepEquals, i11)
 
 	// put another key and get again with 2 info.
 	rev4, err := PutInfo(etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm[task1], HasLen, 2)
-	c.Assert(ifm[task1][source1], DeepEquals, i11)
-	c.Assert(ifm[task1][source2], DeepEquals, i12)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm[task1], check.HasLen, 2)
+	c.Assert(ifm[task1][source1], check.DeepEquals, i11)
+	c.Assert(ifm[task1][source2], check.DeepEquals, i12)
 
 	// start the watcher.
 	wch := make(chan Info, 10)
@@ -129,7 +129,7 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 
 	// put another key for a different task.
 	_, err = PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	// wait response of WatchInfoPut, increase waiting time when resource shortage
 	utils.WaitSomething(10, 500*time.Millisecond, func() bool {
 		return len(wch) != 0
@@ -138,28 +138,28 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 	wg.Wait()
 
 	// watch should only get i21.
-	c.Assert(len(wch), Equals, 1)
-	c.Assert(len(ech), Equals, 0)
-	c.Assert(<-wch, DeepEquals, i21)
+	c.Assert(len(wch), check.Equals, 1)
+	c.Assert(len(ech), check.Equals, 0)
+	c.Assert(<-wch, check.DeepEquals, i21)
 
 	// delete i12.
 	deleteOp := deleteInfoOp(i12)
 	_, err = etcdTestCli.Txn(context.Background()).Then(deleteOp).Commit()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// get again.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 2)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm, HasKey, task2)
-	c.Assert(ifm[task1], HasLen, 1)
-	c.Assert(ifm[task1][source1], DeepEquals, i11)
-	c.Assert(ifm[task2], HasLen, 1)
-	c.Assert(ifm[task2][source1], DeepEquals, i21)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 2)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm, check.HasKey, task2)
+	c.Assert(ifm[task1], check.HasLen, 1)
+	c.Assert(ifm[task1][source1], check.DeepEquals, i11)
+	c.Assert(ifm[task2], check.HasLen, 1)
+	c.Assert(ifm[task2][source1], check.DeepEquals, i21)
 }
 
-func (t *testForEtcd) TestPutInfoIfOpNotDone(c *C) {
+func (t *testForEtcd) TestPutInfoIfOpNotDone(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -175,39 +175,39 @@ func (t *testForEtcd) TestPutInfoIfOpNotDone(c *C) {
 
 	// put info success because no operation exist.
 	rev1, putted, err := PutInfoIfOpNotDone(etcdTestCli, info)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
+	c.Assert(putted, check.IsTrue)
 
 	// put a non-done operation.
 	rev2, putted, err := PutOperations(etcdTestCli, false, op)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
+	c.Assert(putted, check.IsTrue)
 
 	// still can put info.
 	rev3, putted, err := PutInfoIfOpNotDone(etcdTestCli, info)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Greater, rev2)
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Greater, rev2)
+	c.Assert(putted, check.IsTrue)
 
 	// change op to `done` and put it.
 	op.Done = true
 	rev4, putted, err := PutOperations(etcdTestCli, false, op)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev3)
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Greater, rev3)
+	c.Assert(putted, check.IsTrue)
 
 	// can't put info anymore.
 	rev5, putted, err := PutInfoIfOpNotDone(etcdTestCli, info)
-	c.Assert(err, IsNil)
-	c.Assert(rev5, Equals, rev4)
-	c.Assert(putted, IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev5, check.Equals, rev4)
+	c.Assert(putted, check.IsFalse)
 
 	// try put anther info, but still can't put it.
 	info.DDLs = []string{"ALTER TABLE bar ADD COLUMN c2 INT"}
 	rev6, putted, err := PutInfoIfOpNotDone(etcdTestCli, info)
-	c.Assert(err, IsNil)
-	c.Assert(rev6, Equals, rev5)
-	c.Assert(putted, IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev6, check.Equals, rev5)
+	c.Assert(putted, check.IsFalse)
 }

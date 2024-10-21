@@ -16,7 +16,8 @@ package sqlmodel
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
@@ -47,18 +48,18 @@ func TestGeneratedColumnsNameSet(t *testing.T) {
 
 	cols := []*timodel.ColumnInfo{
 		{
-			Name:                timodel.CIStr{O: "A", L: "a"},
+			Name:                pmodel.CIStr{O: "A", L: "a"},
 			GeneratedExprString: "generated_expr",
 		},
 		{
-			Name: timodel.CIStr{O: "B", L: "b"},
+			Name: pmodel.CIStr{O: "B", L: "b"},
 		},
 		{
-			Name:                timodel.CIStr{O: "C", L: "c"},
+			Name:                pmodel.CIStr{O: "C", L: "c"},
 			GeneratedExprString: "generated_expr",
 		},
 		{
-			Name:                timodel.CIStr{O: "D", L: "d"},
+			Name:                pmodel.CIStr{O: "D", L: "d"},
 			GeneratedExprString: "generated_expr",
 		},
 	}

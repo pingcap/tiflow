@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -25,11 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testJobSuite{})
+var _ = check.Suite(&testJobSuite{})
 
 type testJobSuite struct{}
 
-func (t *testJobSuite) TestJobTypeString(c *C) {
+func (t *testJobSuite) TestJobTypeString(c *check.C) {
 	testCases := []struct {
 		tp  opType
 		str string
@@ -60,7 +60,7 @@ func (t *testJobSuite) TestJobTypeString(c *C) {
 
 	for _, testCase := range testCases {
 		tpStr := testCase.tp.String()
-		c.Assert(tpStr, Equals, testCase.str)
+		c.Assert(tpStr, check.Equals, testCase.str)
 	}
 }
 
@@ -113,13 +113,13 @@ func TestJob(t *testing.T) {
 	}
 }
 
-func (t *testJobSuite) TestQueueBucketName(c *C) {
+func (t *testJobSuite) TestQueueBucketName(c *check.C) {
 	name := queueBucketName(0)
-	c.Assert(name, Equals, "q_0")
+	c.Assert(name, check.Equals, "q_0")
 
 	name = queueBucketName(8)
-	c.Assert(name, Equals, "q_0")
+	c.Assert(name, check.Equals, "q_0")
 
 	name = queueBucketName(9)
-	c.Assert(name, Equals, "q_1")
+	c.Assert(name, check.Equals, "q_1")
 }

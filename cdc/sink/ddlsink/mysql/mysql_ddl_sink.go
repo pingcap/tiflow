@@ -20,10 +20,13 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/br/pkg/version"
+	"github.com/pingcap/tidb/dumpling/export"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -42,6 +45,8 @@ const (
 
 	// networkDriftDuration is used to construct a context timeout for database operations.
 	networkDriftDuration = 5 * time.Second
+
+	defaultSupportVectorVersion = "8.4.0"
 )
 
 // GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
@@ -66,6 +71,8 @@ type DDLSink struct {
 	// is running in downstream.
 	// map: model.TableName -> timodel.ActionType
 	lastExecutedNormalDDLCache *lru.Cache
+
+	needFormat bool
 }
 
 // NewDDLSink creates a new DDLSink.
@@ -102,12 +109,14 @@ func NewDDLSink(
 	if err != nil {
 		return nil, err
 	}
+
 	m := &DDLSink{
 		id:                         changefeedID,
 		db:                         db,
 		cfg:                        cfg,
 		statistics:                 metrics.NewStatistics(changefeedID, sink.TxnSink),
 		lastExecutedNormalDDLCache: lruCache,
+		needFormat:                 needFormatDDL(db, cfg),
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -195,6 +204,14 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	shouldSwitchDB := needSwitchDB(ddl)
 
+	// Convert vector type to string type for unsupport database
+	if m.needFormat {
+		if newQuery := formatQuery(ddl.Query); newQuery != ddl.Query {
+			log.Warn("format ddl query", zap.String("newQuery", newQuery), zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
+			ddl.Query = newQuery
+		}
+	}
+
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
 		select {
 		case <-ctx.Done():
@@ -266,6 +283,27 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 		return false
 	}
 	return true
+}
+
+// needFormatDDL checks vector type support
+func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
+	if !cfg.HasVectorType {
+		log.Warn("please set `has-vector-type` to be true if a column is vector type when the downstream is not TiDB or TiDB version less than specify version",
+			zap.Any("hasVectorType", cfg.HasVectorType), zap.Any("supportVectorVersion", defaultSupportVectorVersion))
+		return false
+	}
+	versionInfo, err := export.SelectVersion(db)
+	if err != nil {
+		log.Warn("fail to get version", zap.Error(err), zap.Bool("isTiDB", cfg.IsTiDB))
+		return false
+	}
+	serverInfo := version.ParseServerInfo(versionInfo)
+	version := semver.New(defaultSupportVectorVersion)
+	if !cfg.IsTiDB || serverInfo.ServerVersion.LessThan(*version) {
+		log.Error("downstream unsupport vector type. it will be converted to longtext", zap.String("version", serverInfo.ServerVersion.String()), zap.String("supportVectorVersion", defaultSupportVectorVersion), zap.Bool("isTiDB", cfg.IsTiDB))
+		return true
+	}
+	return false
 }
 
 // WriteCheckpointTs does nothing.

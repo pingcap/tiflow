@@ -87,6 +87,7 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
+	metricKvCongestedCounter          = eventFeedErrorCounter.WithLabelValues("KvCongested")
 )
 
 type eventError struct {
@@ -287,7 +288,6 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
-
 	s.rangeTaskCh.In() <- rangeTask{span: span, subscribedTable: rt}
 	log.Info("event feed subscribes table success",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -305,13 +305,17 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 	s.totalSpans.Unlock()
 	if rt != nil {
 		s.setTableStopped(rt)
+		log.Info("event feed unsubscribes table",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", rt.subscriptionID),
+			zap.String("span", rt.span.String()))
+		return
 	}
-
-	log.Info("event feed unsubscribes table",
+	log.Warn("event feed unsubscribes table, but not found",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.Bool("exists", rt != nil))
+		zap.Any("subscriptionID", subID))
 }
 
 // ResolveLock is a function. If outsider subscribers find a span resolved timestamp is
@@ -381,7 +385,8 @@ func (s *SharedClient) setTableStopped(rt *subscribedTable) {
 	log.Info("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Int64("tableID", rt.span.TableID))
 
 	// Set stopped to true so we can stop handling region events from the table.
 	// Then send a special singleRegionInfo to regionRouter to deregister the table
@@ -398,7 +403,8 @@ func (s *SharedClient) onTableDrained(rt *subscribedTable) {
 	log.Info("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Int64("tableID", rt.span.TableID))
 
 	s.totalSpans.Lock()
 	defer s.totalSpans.Unlock()
@@ -417,7 +423,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case region := <-s.regionCh.Out():
-			if region.isStoped() {
+			if region.isStopped() {
 				for _, rs := range s.stores {
 					s.broadcastRequest(rs, region)
 				}
@@ -440,6 +446,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Uint64("streamID", stream.streamID),
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
+				zap.String("span", region.span.String()),
 				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
@@ -553,7 +560,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Any("span", nextSpan),
+				zap.String("span", nextSpan.String()),
 				zap.Error(err))
 			backoffBeforeLoad = true
 			continue
@@ -571,7 +578,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.Any("span", nextSpan))
+				zap.String("span", nextSpan.String()))
 			backoffBeforeLoad = true
 			continue
 		}
@@ -589,7 +596,8 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				log.Panic("event feed check spans intersect shouldn't fail",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Any("subscriptionID", subscribedTable.subscriptionID))
+					zap.Any("subscriptionID", subscribedTable.subscriptionID),
+					zap.String("span", nextSpan.String()))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
@@ -675,6 +683,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Stringer("error", innerErr))
 
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
@@ -693,6 +703,11 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 			return nil
 		}
+		if innerErr.GetCongested() != nil {
+			metricKvCongestedCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
+			return nil
+		}
 		if innerErr.GetServerIsBusy() != nil {
 			metricKvIsBusyCounter.Inc()
 			s.scheduleRegionRequest(ctx, errInfo.regionInfo)
@@ -700,7 +715,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			// TODO(qupeng): It's better to add a new machanism to deregister one region.
+			// TODO(qupeng): It's better to add a new mechanism to deregister one region.
 			return errors.New("duplicate request")
 		}
 		if compatibility := innerErr.GetCompatibility(); compatibility != nil {
@@ -714,6 +729,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Stringer("error", innerErr))
 		metricFeedUnknownErrorCounter.Inc()
 		s.scheduleRegionRequest(ctx, errInfo.regionInfo)
@@ -734,6 +751,8 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.subscribedTable.subscriptionID),
+			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Int64("tableID", errInfo.span.TableID),
 			zap.Error(err))
 		return err
 	}
@@ -810,7 +829,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
-		slowInitializeRegion := 0
+		var slowInitializeRegionCount int
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.IterAll(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
@@ -820,20 +839,23 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Any("subscriptionID", subscriptionID),
+						zap.Int64("tableID", rt.span.TableID),
 						zap.Any("slowRegion", attr.SlowestRegion))
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
-				slowInitializeRegion += 1
+				slowInitializeRegionCount += 1
 				log.Info("event feed initializes a region too slow",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("slowRegion", attr.SlowestRegion))
 			} else if currTime.Sub(ckptTime) > 10*time.Minute {
 				log.Info("event feed finds a uninitialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.UnLockedRanges) > 0 {
@@ -841,11 +863,12 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
+					zap.Int64("tableID", rt.span.TableID),
 					zap.Any("holes", attr.UnLockedRanges))
 			}
 		}
 		s.totalSpans.RUnlock()
-		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegion))
+		s.metrics.slowInitializeRegion.Set(float64(slowInitializeRegionCount))
 	}
 }
 

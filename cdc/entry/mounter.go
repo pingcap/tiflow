@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
@@ -592,6 +592,8 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 		return types.NewFloat32Datum(value.(float32)), nil
 	case mysql.TypeDouble:
 		return types.NewFloat64Datum(value.(float64)), nil
+	case mysql.TypeTiDBVectorFloat32:
+		return types.NewVectorFloat32Datum(value.(types.VectorFloat32)), nil
 	default:
 		log.Panic("unexpected mysql type found", zap.Any("type", ft.GetType()))
 	}
@@ -888,6 +890,9 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		}
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
+	case mysql.TypeTiDBVectorFloat32:
+		b := datum.GetVectorFloat32()
+		return b, b.Len(), "", nil
 	default:
 		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
 		// Make specified convert upper if you need

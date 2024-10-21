@@ -42,7 +42,7 @@ groups=(
 	# G04
 	'foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
 	# G05
-	'charset_gbk ddl_manager multi_source'
+	'charset_gbk ddl_manager multi_source vector'
 	# G06
 	'sink_retry changefeed_error ddl_sequence resourcecontrol'
 	# G07 pulsar oauth2 authentication enabled
