@@ -91,7 +91,6 @@ tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third
 download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
 tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
 download "$tidb_tools_download_url" "tidb-tools.tar.gz" "tmp/tidb-tools.tar.gz"
-tar -xz -C third_bin 'bin/sync_diff_inspector' -f tmp/tidb-tools.tar.gz && mv third_bin/bin/sync_diff_inspector third_bin/
 download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
 tar -xz -C third_bin -f tmp/minio.tar.gz
 download "$gh_os_download_url" "gh-ost-binary-linux-20200828140552.tar.gz" "tmp/gh-ost-binary-linux-20200828140552.tar.gz"

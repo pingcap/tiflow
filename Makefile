@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
+.PHONY: build test check clean fmt sync-diff-inspector cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := default
 
 # Adapted from https://www.thapaliya.com/en/writings/well-documented-makefiles/
-help: ## Display this help and any documented user-facing targets. Other undocumented targets may be present in the Makefile.
+help: ## Display this help ann any documented user-facing targets. Other undocumented targets may be present in the Makefile.
 help:
 	@awk 'BEGIN {FS = ": ##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_\.\-\/%]+: ##/ { printf "  %-45s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
@@ -136,7 +136,7 @@ dev: check test
 
 test: unit_test dm_unit_test engine_unit_test
 
-build: cdc dm engine
+build: cdc dm engine sync_diff_inspector
 
 check-makefiles: ## Check the makefiles format. Please run this target after the changes are committed.
 check-makefiles: format-makefiles
@@ -157,6 +157,9 @@ build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
+
+sync_diff_inspector:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector/main.go
 
 kafka_consumer:
 	$(CONSUMER_GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
@@ -218,7 +221,6 @@ check_third_party_binary:
 	@which bin/pd-server
 	@which bin/tiflash
 	@which bin/pd-ctl
-	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
@@ -496,7 +498,6 @@ install_test_python_dep:
 
 check_third_party_binary_for_dm:
 	@which bin/tidb-server
-	@which bin/sync_diff_inspector
 	@which mysql
 	@which bin/minio
 
@@ -565,7 +566,6 @@ check_third_party_binary_for_engine:
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
 	@which mc || (echo "mc not found in ${PATH}, you can use 'make bin/mc' and move bin/mc to ${PATH}"; exit 1)
-	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
@@ -579,9 +579,6 @@ check_cdc_integration_test:
 
 bin/mc:
 	./scripts/download-mc.sh
-
-bin/sync_diff_inspector:
-	./scripts/download-sync-diff.sh
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)

@@ -44,13 +44,13 @@ jobs:
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
       - name: Build DM binary
-        run: make dm_integration_test_build
+        run: |
+          make dm_integration_test_build
+          make sync_diff_inspector
 
       - name: Setup CI environment
         run: |
           docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
-          curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
-          mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
           curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-nightly-linux-amd64/bin/tidb-server bin/
           curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
