@@ -15,6 +15,8 @@ package puller
 
 import (
 	"context"
+	"sync"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -28,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-	"sync"
 )
 
 // Wrapper is a wrapper of puller used by source manager.
