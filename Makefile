@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt sync-diff-inspector cdc kafka_consumer storage_consumer coverage \
+.PHONY: build test check clean fmt sync_diff_inspector cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -499,6 +499,7 @@ install_test_python_dep:
 
 check_third_party_binary_for_dm:
 	@which bin/tidb-server
+	@which bin/sync_diff_inspector
 	@which mysql
 	@which bin/minio
 
