@@ -23,7 +23,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -66,7 +66,8 @@ func TestSplitRangeByRandom(t *testing.T) {
 					[]interface{}{"7", "7", "n", "10", "10", "z"},
 				},
 			},
-		}, {
+		},
+		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`, `a`))",
 			3,
 			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true).CopyAndUpdate("a", "0", "10", true, true),
@@ -106,7 +107,8 @@ func TestSplitRangeByRandom(t *testing.T) {
 					[]interface{}{"n", "z"},
 				},
 			},
-		}, {
+		},
+		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			2,
 			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
@@ -122,7 +124,8 @@ func TestSplitRangeByRandom(t *testing.T) {
 					[]interface{}{"g", "z"},
 				},
 			},
-		}, {
+		},
+		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
 			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
@@ -139,7 +142,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		tableInfo, err := dbutil.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
+		tableInfo, err := dbutiltest.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
 		require.NoError(t, err)
 
 		splitCols, err := GetSplitFields(tableInfo, nil)
@@ -319,7 +322,7 @@ func TestRandomSpliter(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		tableInfo, err := dbutil.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
+		tableInfo, err := dbutiltest.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
 		require.NoError(t, err)
 
 		info, needUnifiedTimeStamp := utils.ResetColumns(tableInfo, testCase.IgnoreColumns)
@@ -354,15 +357,15 @@ func TestRandomSpliter(t *testing.T) {
 
 	// Test Checkpoint
 	stopJ := 3
-	tableInfo, err := dbutil.GetTableInfoBySQL(testCases[0].createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(testCases[0].createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	tableDiff := &common.TableDiff{
 		Schema: "test",
 		Table:  "test",
 		Info:   tableInfo,
-		//IgnoreColumns: []string{"c"},
-		//Fields:        "a,b",
+		// IgnoreColumns: []string{"c"},
+		// Fields:        "a,b",
 		ChunkSize: 5,
 	}
 
@@ -398,7 +401,6 @@ func TestRandomSpliter(t *testing.T) {
 
 	require.Equal(t, chunk.Index.ChunkCnt, chunkID1.ChunkCnt)
 	require.Equal(t, chunk.Index.ChunkIndex, chunkID1.ChunkIndex+1)
-
 }
 
 func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValues [][]string) {
@@ -421,7 +423,6 @@ func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValue
 		randomRows.AddRow(row...)
 	}
 	mock.ExpectQuery("ORDER BY rand_value").WillReturnRows(randomRows)
-
 }
 
 func TestBucketSpliter(t *testing.T) {
@@ -430,7 +431,7 @@ func TestBucketSpliter(t *testing.T) {
 	require.NoError(t, err)
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -741,7 +742,7 @@ func TestLimitSpliter(t *testing.T) {
 	require.NoError(t, err)
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -862,7 +863,6 @@ func TestRangeInfo(t *testing.T) {
 	require.Equal(t, chunkRange.Args, []interface{}{"1", "2"})
 
 	require.Equal(t, rangeInfo2.GetTableIndex(), 1)
-
 }
 
 func TestChunkSize(t *testing.T) {
@@ -871,7 +871,7 @@ func TestChunkSize(t *testing.T) {
 	require.NoError(t, err)
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	tableDiff := &common.TableDiff{
@@ -912,7 +912,7 @@ func TestChunkSize(t *testing.T) {
 	require.Equal(t, randomIter.chunkSize, int64(100000))
 
 	createTableSQL = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime)"
-	tableInfo, err = dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err = dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	tableDiff_noindex := &common.TableDiff{
@@ -932,5 +932,4 @@ func TestChunkSize(t *testing.T) {
 	mock.ExpectQuery("SELECT `a`,.*limit 50000.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
 	_, err = NewLimitIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
-
 }

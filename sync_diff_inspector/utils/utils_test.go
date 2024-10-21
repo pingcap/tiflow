@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/stretchr/testify/require"
 )
@@ -75,12 +76,11 @@ func TestStringsToInterface(t *testing.T) {
 	require.Equal(t, len(sliceMap), len(expectSlice))
 
 	require.Equal(t, UniqueID("123", "456"), "`123`.`456`")
-
 }
 
 func TestBasicTableUtilOperation(t *testing.T) {
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	query, orderKeyCols := GetTableRowsQueryFormat("test", "test", tableInfo, "123")
@@ -242,7 +242,7 @@ func TestBasicTableUtilOperation(t *testing.T) {
 
 	// Test ignore columns
 	createTableSQL = "create table `test`.`test`(`a` int, `c` float, `b` varchar(10), `d` datetime, `e` timestamp, primary key(`a`, `b`), key(`c`, `d`))"
-	tableInfo, err = dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err = dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	require.Equal(t, len(tableInfo.Indices), 2)
@@ -266,7 +266,7 @@ func TestGetCountAndMd5Checksum(t *testing.T) {
 	defer conn.Close()
 
 	createTableSQL := "create table `test`.`test`(`a` int, `c` float, `b` varchar(10), `d` datetime, primary key(`a`, `b`), key(`c`, `d`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE \\[23 45\\].*").WithArgs("123", "234").WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456))
@@ -286,7 +286,7 @@ func TestGetApproximateMid(t *testing.T) {
 	defer conn.Close()
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), primary key(`a`, `b`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	rows := sqlmock.NewRows([]string{"a", "b"}).AddRow("5", "10")
@@ -308,7 +308,7 @@ func TestGetApproximateMid(t *testing.T) {
 
 func TestGenerateSQLs(t *testing.T) {
 	createTableSQL := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), `id_gen` int(11) GENERATED ALWAYS AS ((`id` + 1)) VIRTUAL, primary key(`id`, `name`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	rowsData := map[string]*dbutil.ColumnData{
@@ -327,7 +327,7 @@ func TestGenerateSQLs(t *testing.T) {
 
 	// test the unique key
 	createTableSQL2 := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), unique key(`id`, `name`))"
-	tableInfo2, err := dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 	replaceSQL = GenerateReplaceDML(rowsData, tableInfo2, "diff_test")
 	deleteSQL = GenerateDeleteDML(rowsData, tableInfo2, "diff_test")
@@ -357,7 +357,7 @@ func TestGenerateSQLs(t *testing.T) {
 
 func TestResetColumns(t *testing.T) {
 	createTableSQL1 := "CREATE TABLE `test`.`atest` (`a` int, `b` int, `c` int, `d` int, primary key(`a`))"
-	tableInfo1, err := dbutil.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo1, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 	tbInfo, hasTimeStampType := ResetColumns(tableInfo1, []string{"a"})
 	require.Equal(t, len(tbInfo.Columns), 3)
@@ -366,14 +366,14 @@ func TestResetColumns(t *testing.T) {
 	require.False(t, hasTimeStampType)
 
 	createTableSQL2 := "CREATE TABLE `test`.`atest` (`a` int, `b` int, `c` int, `d` int, primary key(`a`), index idx(`b`, `c`))"
-	tableInfo2, err := dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 	tbInfo, _ = ResetColumns(tableInfo2, []string{"a", "b"})
 	require.Equal(t, len(tbInfo.Columns), 2)
 	require.Equal(t, len(tbInfo.Indices), 0)
 
 	createTableSQL3 := "CREATE TABLE `test`.`atest` (`a` int, `b` int, `c` int, `d` int, primary key(`a`), index idx(`b`, `c`))"
-	tableInfo3, err := dbutil.GetTableInfoBySQL(createTableSQL3, parser.New())
+	tableInfo3, err := dbutiltest.GetTableInfoBySQL(createTableSQL3, parser.New())
 	require.NoError(t, err)
 	tbInfo, _ = ResetColumns(tableInfo3, []string{"b", "c"})
 	require.Equal(t, len(tbInfo.Columns), 2)
@@ -455,7 +455,7 @@ func TestGetBetterIndex(t *testing.T) {
 		},
 	}
 	tableCase := tableCases[0]
-	tableInfo, err := dbutil.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
 	require.NoError(t, err)
 	indices := dbutil.FindAllIndex(tableInfo)
 	for i, index := range indices {
@@ -474,7 +474,7 @@ func TestGetBetterIndex(t *testing.T) {
 	require.Equal(t, indices[0].Name.O, tableCase.selected)
 
 	tableCase = tableCases[1]
-	tableInfo, err = dbutil.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
+	tableInfo, err = dbutiltest.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
 	require.NoError(t, err)
 	indices = dbutil.FindAllIndex(tableInfo)
 	for i, index := range indices {
@@ -493,7 +493,6 @@ func TestGetBetterIndex(t *testing.T) {
 	indices, err = GetBetterIndex(ctx, conn, "single_index", "test1", tableInfo)
 	require.NoError(t, err)
 	require.Equal(t, indices[0].Name.O, tableCase.selected)
-
 }
 
 func TestCalculateChunkSize(t *testing.T) {
@@ -523,7 +522,7 @@ func TestGetChunkIDFromSQLFileName(t *testing.T) {
 
 func TestCompareStruct(t *testing.T) {
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	var isEqual bool
@@ -534,7 +533,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// column length different
 	createTableSQL2 := "create table `test`(`a` int, `b` varchar(10), `c` float, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err := dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -543,7 +542,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// column name differernt
 	createTableSQL2 = "create table `test`(`aa` int, `b` varchar(10), `c` float, `d` datetime, primary key(`aa`, `b`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -552,7 +551,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// column type compatible
 	createTableSQL2 = "create table `test`(`a` int, `b` char(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -560,7 +559,7 @@ func TestCompareStruct(t *testing.T) {
 	require.False(t, isPanic)
 
 	createTableSQL2 = "create table `test`(`a` int(11), `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -569,7 +568,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// column type not compatible
 	createTableSQL2 = "create table `test`(`a` int, `b` varchar(10), `c` int, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -578,7 +577,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// column properties not compatible
 	createTableSQL2 = "create table `test`(`a` int, `b` varchar(11), `c` int, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -589,7 +588,7 @@ func TestCompareStruct(t *testing.T) {
 
 	// index different
 	createTableSQL2 = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -600,11 +599,11 @@ func TestCompareStruct(t *testing.T) {
 
 	// index column different
 	createTableSQL = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo, err = dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err = dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	createTableSQL2 = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `c`), index(`c`))"
-	tableInfo2, err = dbutil.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err = dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
@@ -612,7 +611,6 @@ func TestCompareStruct(t *testing.T) {
 	require.False(t, isPanic)
 	require.Equal(t, len(tableInfo.Indices), 1)
 	require.Equal(t, tableInfo.Indices[0].Name.O, "c")
-
 }
 
 func TestGenerateSQLBlob(t *testing.T) {
@@ -631,7 +629,7 @@ func TestGenerateSQLBlob(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		tableInfo, err := dbutil.GetTableInfoBySQL(c.createTableSql, parser.New())
+		tableInfo, err := dbutiltest.GetTableInfoBySQL(c.createTableSql, parser.New())
 		require.NoError(t, err)
 
 		replaceSQL := GenerateReplaceDML(rowsData, tableInfo, "diff_test")
@@ -643,7 +641,7 @@ func TestGenerateSQLBlob(t *testing.T) {
 
 func TestCompareBlob(t *testing.T) {
 	createTableSQL := "create table `test`.`test`(`a` int primary key, `b` blob)"
-	tableInfo, err := dbutil.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	_, orderKeyCols := GetTableRowsQueryFormat("test", "test", tableInfo, "123")

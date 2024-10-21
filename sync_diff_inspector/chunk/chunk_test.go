@@ -419,7 +419,6 @@ func TestChunkToString(t *testing.T) {
 	}
 	require.Equal(t, chunk.String(), `{"index":null,"type":0,"bounds":[{"column":"a","lower":"1","upper":"1","has-lower":true,"has-upper":true},{"column":"b","lower":"3","upper":"3","has-lower":true,"has-upper":true},{"column":"c","lower":"6","upper":"6","has-lower":true,"has-upper":true}],"is-first":false,"is-last":false,"where":"","args":null}`)
 	require.Equal(t, chunk.ToMeta(), "range in sequence: (1,3,6) < (a,b,c) <= (1,3,6)")
-
 }
 
 func TestChunkInit(t *testing.T) {
@@ -599,7 +598,6 @@ func TestChunkID(t *testing.T) {
 		chunkIDtmp.FromString(str)
 		require.Equal(t, chunkIDLarge.Compare(chunkIDtmp), 0)
 	}
-
 }
 
 func TestChunkIndex(t *testing.T) {

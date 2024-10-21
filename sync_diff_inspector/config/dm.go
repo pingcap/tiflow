@@ -50,7 +50,7 @@ func getDMTaskCfgURL(dmAddr, task string) string {
 func getDMTaskCfg(dmAddr, task string) ([]*SubTaskConfig, error) {
 	tr := &http.Transport{
 		// TODO: support tls
-		//TLSClientConfig: tlsCfg,
+		// TLSClientConfig: tlsCfg,
 	}
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", getDMTaskCfgURL(dmAddr, task), nil)

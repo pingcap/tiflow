@@ -139,7 +139,6 @@ func NewRandomIteratorWithCheckpoint(ctx context.Context, progressID string, tab
 		nextChunk: 0,
 		dbConn:    dbConn,
 	}, nil
-
 }
 
 func (s *RandomIterator) Next() (*chunk.Range, error) {
@@ -161,7 +160,6 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 }
 
 func (s *RandomIterator) Close() {
-
 }
 
 // GetSplitFields returns fields to split chunks, order by pk, uk, index, columns.
@@ -173,7 +171,6 @@ func GetSplitFields(table *model.TableInfo, splitFields []string) ([]*model.Colu
 		col := dbutil.FindColumnByName(table.Columns, splitField)
 		if col == nil {
 			return nil, errors.NotFoundf("column %s in table %s", splitField, table.Name)
-
 		}
 		splitCols = append(splitCols, col)
 	}

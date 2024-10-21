@@ -217,7 +217,6 @@ func (tpp *TableProgressPrinter) PrintSummary() {
 	}
 
 	fmt.Fprintf(tpp.output, "%s%s\n", cleanStr, fixStr)
-
 }
 
 func (tpp *TableProgressPrinter) Error(err error) {

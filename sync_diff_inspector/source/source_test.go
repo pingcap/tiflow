@@ -59,8 +59,10 @@ type MockChunkIterator struct {
 	index     *chunk.ChunkID
 }
 
-const CHUNKS = 5
-const BUCKETS = 1
+const (
+	CHUNKS  = 5
+	BUCKETS = 1
+)
 
 func (m *MockChunkIterator) Next() (*chunk.Range, error) {
 	if m.index.ChunkIndex == m.index.ChunkCnt-1 {
@@ -79,11 +81,9 @@ func (m *MockChunkIterator) Next() (*chunk.Range, error) {
 }
 
 func (m *MockChunkIterator) Close() {
-
 }
 
-type MockAnalyzer struct {
-}
+type MockAnalyzer struct{}
 
 func (m *MockAnalyzer) AnalyzeSplitter(ctx context.Context, tableDiff *common.TableDiff, rangeInfo *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	i := &chunk.ChunkID{
@@ -430,7 +430,7 @@ func TestMysqlShardSources(t *testing.T) {
 			break
 		}
 		for j, value := range tableCase.rows[i] {
-			//c.Log(j)
+			// c.Log(j)
 			require.Equal(t, columns[tableCase.rowColumns[j]].IsNull, false)
 			require.Equal(t, columns[tableCase.rowColumns[j]].Data, []byte(value.(string)))
 		}
@@ -763,7 +763,7 @@ func TestRouterRules(t *testing.T) {
 	}
 	portStr, isExist := os.LookupEnv("MYSQL_PORT")
 	if portStr == "" || !isExist {
-		//return
+		// return
 	}
 	port, err := strconv.Atoi(portStr)
 	require.NoError(t, err)

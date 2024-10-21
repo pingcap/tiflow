@@ -58,7 +58,6 @@ func TestParseConfig(t *testing.T) {
 	require.True(t, cfg.TableConfigs["config1"].Valid())
 
 	require.NoError(t, os.RemoveAll(cfg.Task.OutputDir))
-
 }
 
 func TestError(t *testing.T) {

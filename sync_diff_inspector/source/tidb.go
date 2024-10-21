@@ -63,7 +63,6 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 		return nil, errors.Trace(err)
 	}
 	return randIter, nil
-
 }
 
 type TiDBRowsIterator struct {
@@ -119,6 +118,7 @@ func (s *TiDBSource) GetRangeIterator(ctx context.Context, r *splitter.RangeInfo
 func (s *TiDBSource) Close() {
 	s.dbConn.Close()
 }
+
 func (s *TiDBSource) GetCountAndMd5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
 	beginTime := time.Now()
 	table := s.tableDiffs[tableRange.GetTableIndex()]
@@ -222,7 +222,6 @@ func NewTiDBSource(
 	// instance -> db -> table
 	allTablesMap := make(map[string]map[string]interface{})
 	sourceSchemas, err := dbutil.GetSchemas(ctx, ds.Conn)
-
 	if err != nil {
 		return nil, errors.Annotatef(err, "get schemas from database")
 	}

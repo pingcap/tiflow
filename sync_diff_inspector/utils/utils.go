@@ -310,7 +310,6 @@ func GenerateDeleteDML(data map[string]*dbutil.ColumnData, table *model.TableInf
 		}
 	}
 	return fmt.Sprintf("DELETE FROM %s WHERE %s LIMIT 1;", dbutil.TableName(schema, table.Name.O), strings.Join(kvs, " AND "))
-
 }
 
 // isCompatible checks whether 2 column types are compatible.
@@ -443,7 +442,6 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		}{index, 0}
 	}
 	for _, upstreamTableInfo := range upstreamTableInfos {
-
 	NextIndex:
 		for _, upstreamIndex := range upstreamTableInfo.Indices {
 			if _, ok := deleteIndicesSet[upstreamIndex.Name.O]; ok {
