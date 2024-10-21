@@ -139,25 +139,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			}
 		})
 
-	case mysql.TypeNewDecimal:
-		writer.WriteObjectElement(func() {
-			writer.WriteStringField("type", "double")
-			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
-			writer.WriteStringField("field", col.GetName())
-			if col.GetDefaultValue() != nil {
-				v, ok := col.GetDefaultValue().(string)
-				if !ok {
-					return
-				}
-				floatV, err := strconv.ParseFloat(v, 64)
-				if err != nil {
-					return
-				}
-
-				writer.WriteFloat64Field("default", floatV)
-			}
-		})
-
 	case mysql.TypeDate, mysql.TypeNewDate:
 		writer.WriteObjectElement(func() {
 			writer.WriteStringField("type", "int32")
@@ -243,7 +224,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -296,7 +276,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -315,7 +294,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -338,7 +316,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -357,7 +334,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -376,12 +352,11 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
 
-	case mysql.TypeDouble:
+	case mysql.TypeDouble, mysql.TypeNewDecimal:
 		// https://dev.mysql.com/doc/refman/8.4/en/numeric-types.html
 		// MySQL also treats REAL as a synonym for DOUBLE PRECISION (a nonstandard variation), unless the REAL_AS_FLOAT SQL mode is enabled.
 		writer.WriteObjectElement(func() {
@@ -397,7 +372,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -418,7 +392,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -433,6 +406,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
 		})
+
 	default:
 		log.Warn(
 			"meet unsupported field type",
@@ -699,10 +673,15 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		}
 
 	case mysql.TypeTiDBVectorFloat32:
-		v := col.Value.(types.VectorFloat32).String()
-		writer.WriteStringField(col.GetName(), v)
+		v, ok := col.Value.(types.VectorFloat32)
+		if !ok {
+			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				"unexpected column value type %T for unsigned vector column %s",
+				col.Value,
+				col.GetName())
+		}
+		writer.WriteStringField(col.GetName(), v.String())
 		return nil
-
 	}
 
 	writer.WriteAnyField(col.GetName(), col.Value)
