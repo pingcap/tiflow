@@ -402,8 +402,7 @@ func TestGetTableSize(t *testing.T) {
 }
 
 func TestGetBetterIndex(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer conn.Close()
@@ -445,9 +444,9 @@ func TestGetBetterIndex(t *testing.T) {
 				{"7", "d"},
 				{"8", "d"},
 				{"9", "e"},
-				{"A", "e"},
-				{"B", "f"},
-				{"C", "f"},
+				{"10", "e"},
+				{"11", "f"},
+				{"12", "f"},
 			},
 			indices:  []string{"a", "b"},
 			sels:     []float64{1.0, 0.5},
@@ -488,8 +487,8 @@ func TestGetBetterIndex(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sel, tableCase.sels[i])
 	}
-	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `a.*").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("2"))
-	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `b.*").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `a.*").WillReturnRows(sqlmock.NewRows([]string{"ESL"}).AddRow("5"))
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `b.*").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("2"))
 	indices, err = GetBetterIndex(ctx, conn, "single_index", "test1", tableInfo)
 	require.NoError(t, err)
 	require.Equal(t, indices[0].Name.O, tableCase.selected)

@@ -738,8 +738,6 @@ func createFakeResultForRandom(mock sqlmock.Sqlmock, aRandomValues, bRandomValue
 
 func TestLimitSpliter(t *testing.T) {
 	ctx := context.Background()
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
 	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
@@ -782,6 +780,10 @@ func TestLimitSpliter(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
 		createFakeResultForLimitSplit(mock, testCase.limitAValues, testCase.limitBValues, true)
 
 		iter, err := NewLimitIterator(ctx, "", tableDiff, db)
@@ -801,10 +803,14 @@ func TestLimitSpliter(t *testing.T) {
 		}
 	}
 
+	db2, mock2, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db2.Close()
+
 	// Test Checkpoint
 	stopJ := 2
-	createFakeResultForLimitSplit(mock, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
-	iter, err := NewLimitIterator(ctx, "", tableDiff, db)
+	createFakeResultForLimitSplit(mock2, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
+	iter, err := NewLimitIterator(ctx, "", tableDiff, db2)
 	require.NoError(t, err)
 	j := 0
 	var chunk *chunk.Range
@@ -819,8 +825,12 @@ func TestLimitSpliter(t *testing.T) {
 		IndexID:    iter.GetIndexID(),
 	}
 
-	createFakeResultForLimitSplit(mock, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
-	iter, err = NewLimitIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo)
+	db3, mock3, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db3.Close()
+
+	createFakeResultForLimitSplit(mock3, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
+	iter, err = NewLimitIteratorWithCheckpoint(ctx, "", tableDiff, db3, rangeInfo)
 	require.NoError(t, err)
 	chunk, err = iter.Next()
 	require.NoError(t, err)

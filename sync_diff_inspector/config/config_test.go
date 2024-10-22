@@ -38,7 +38,7 @@ func TestParseConfig(t *testing.T) {
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
 	// we change the config from config.toml to config_sharding.toml
 	// this action will raise error.
-	require.Contains(t, cfg.Init().Error(), "failed to init Task: config changes breaking the checkpoint, please use another outputDir and start over again!")
+	require.Contains(t, cfg.Init().Error(), "failed to init Task: config changes breaking the checkpoint, please use another outputDir and start over again")
 
 	require.NoError(t, os.RemoveAll(cfg.Task.OutputDir))
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))

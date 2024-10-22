@@ -19,16 +19,40 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 )
 
+type atomicWriter struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
+
+func (aw *atomicWriter) Set(writer io.Writer) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+	aw.writer = writer
+}
+
+func (aw *atomicWriter) Write(s string, args ...any) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+	fmt.Fprintf(aw.writer, s, args...)
+}
+
+func (aw *atomicWriter) Get() io.Writer {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+	return aw.writer
+}
+
 type tableProgressPrinter struct {
 	tableList     *list.List
 	tableFailList *list.List
 	tableMap      map[string]*list.Element
-	output        io.Writer
+	output        atomicWriter
 	lines         int
 
 	progressTableNums int
@@ -108,12 +132,12 @@ func newTableProgressPrinter(tableNums int, finishTableNums int) *tableProgressP
 	}
 	tpp.init()
 	go tpp.serve()
-	fmt.Fprintf(tpp.output, "A total of %d tables need to be compared\n\n\n", tableNums)
+	tpp.output.Write("A total of %d tables need to be compared\n\n\n", tableNums)
 	return tpp
 }
 
 func (tpp *tableProgressPrinter) SetOutput(output io.Writer) {
-	tpp.output = output
+	tpp.output.Set(output)
 }
 
 func (tpp *tableProgressPrinter) Inc(name string) {
@@ -217,7 +241,7 @@ func (tpp *tableProgressPrinter) PrintSummary() {
 		)
 	}
 
-	fmt.Fprintf(tpp.output, "%s%s\n", cleanStr, fixStr)
+	tpp.output.Write("%s%s\n", cleanStr, fixStr)
 }
 
 func (tpp *tableProgressPrinter) Error(err error) {
@@ -228,7 +252,7 @@ func (tpp *tableProgressPrinter) Error(err error) {
 	var cleanStr, fixStr string
 	cleanStr = "\x1b[1A\x1b[J"
 	fixStr = fmt.Sprintf("\nError in comparison process:\n%v\n\nYou can view the comparison details through './output_dir/sync_diff_inspector.log'\n", err)
-	fmt.Fprintf(tpp.output, "%s%s", cleanStr, fixStr)
+	tpp.output.Write("%s%s", cleanStr, fixStr)
 }
 
 func (tpp *tableProgressPrinter) init() {
@@ -236,7 +260,7 @@ func (tpp *tableProgressPrinter) init() {
 		state: tableStateHead,
 	})
 
-	tpp.output = os.Stdout
+	tpp.output.Set(os.Stdout)
 }
 
 func (tpp *tableProgressPrinter) serve() {
@@ -407,16 +431,16 @@ func (tpp *tableProgressPrinter) flush(stateIsChanged bool) {
 		}
 
 		dynStr = fmt.Sprintf("%s_____________________________________________________________________________\n", dynStr)
-		fmt.Fprintf(tpp.output, "%s%s%s", cleanStr, fixStr, dynStr)
+		tpp.output.Write("%s%s%s", cleanStr, fixStr, dynStr)
 	} else {
-		fmt.Fprint(tpp.output, "\x1b[1A\x1b[J")
+		tpp.output.Write("\x1b[1A\x1b[J")
 	}
 	// show bar
 	// 60 '='+'-'
 	coe := float32(tpp.progressTableNums*tpp.progress)/float32(tpp.tableNums*(tpp.total+1)) + float32(tpp.finishTableNums)/float32(tpp.tableNums)
 	numLeft := int(60 * coe)
 	percent := int(100 * coe)
-	fmt.Fprintf(tpp.output, "Progress [%s>%s] %d%% %d/%d\n", strings.Repeat("=", numLeft), strings.Repeat("-", 60-numLeft), percent, tpp.progress, tpp.total)
+	tpp.output.Write("Progress [%s>%s] %d%% %d/%d\n", strings.Repeat("=", numLeft), strings.Repeat("-", 60-numLeft), percent, tpp.progress, tpp.total)
 }
 
 var progress *tableProgressPrinter = nil
