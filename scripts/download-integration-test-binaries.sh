@@ -91,7 +91,7 @@ download_community_binaries() {
 	mv ${THIRD_BIN_DIR}/tiflash ${THIRD_BIN_DIR}/_tiflash
 	mv ${THIRD_BIN_DIR}/_tiflash/* ${THIRD_BIN_DIR} && rm -rf ${THIRD_BIN_DIR}/_tiflash
 	tar -xz -C ${THIRD_BIN_DIR} pd-ctl -f ${TMP_DIR}/$tidb_file_name/ctl-${dist}.tar.gz
-	tar -xz -C ${THIRD_BIN_DIR} $toolkit_file_name/etcdctl -f ${TMP_DIR}/$toolkit_tar_name
+	tar -xz -C ${THIRD_BIN_DIR} $toolkit_file_name/etcdctl $toolkit_file_name/sync_diff_inspector -f ${TMP_DIR}/$toolkit_tar_name
 	mv ${THIRD_BIN_DIR}/$toolkit_file_name/* ${THIRD_BIN_DIR} && rm -rf ${THIRD_BIN_DIR}/$toolkit_file_name
 
 	# Download additional tools
@@ -147,6 +147,7 @@ download_binaries() {
 	local minio_download_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 	local go_ycsb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 	local etcd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
+	local sync_diff_inspector_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/sync_diff_inspector_hash-a129f096_linux-amd64.tar.gz"
 	local jq_download_url="${FILE_SERVER_URL}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 	local schema_registry_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 
@@ -157,6 +158,7 @@ download_binaries() {
 	download_and_extract "$tiflash_download_url" "tiflash.tar.gz"
 	download_and_extract "$minio_download_url" "minio.tar.gz"
 	download_and_extract "$etcd_download_url" "etcd.tar.gz" "etcd-v3.4.7-linux-amd64/etcdctl"
+	download_and_extract "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz"
 	download_and_extract "$schema_registry_url" "schema-registry.tar.gz"
 
 	download_file "$go_ycsb_download_url" "go-ycsb" "${THIRD_BIN_DIR}/go-ycsb"

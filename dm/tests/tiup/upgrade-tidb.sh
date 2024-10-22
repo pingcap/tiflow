@@ -52,6 +52,8 @@ function destroy_v2_by_tiup() {
 
 # run this before upgrade TiDB.
 function before_upgrade() {
+	install_sync_diff
+
 	deploy_dm
 
 	migrate_before_upgrade

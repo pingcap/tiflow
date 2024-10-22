@@ -56,6 +56,12 @@ function run_sql_tidb_with_retry() {
 	fi
 }
 
+function install_sync_diff() {
+	curl https://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
+	mkdir -p bin
+	mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
+}
+
 function exec_full_stage() {
 	# drop previous data
 	exec_sql mysql1 3306 "DROP DATABASE IF EXISTS $DB1;"

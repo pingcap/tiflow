@@ -108,6 +108,7 @@ function test_master_down_and_up() {
 	cleanup_process
 	clean_data
 	setup_replica
+	install_sync_diff
 	gen_full_data
 	run_dm_components_and_create_source $1
 	start_task

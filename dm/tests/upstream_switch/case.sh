@@ -208,6 +208,7 @@ function check_master() {
 function test_relay() {
 	cleanup_process
 	check_master
+	install_sync_diff
 	clean_data
 	prepare_binlogs
 	setup_replica

@@ -170,6 +170,8 @@ function destroy_v2_by_tiup() {
 }
 
 function test() {
+	install_sync_diff
+
 	deploy_previous_v2
 
 	migrate_in_previous_v2
