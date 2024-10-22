@@ -137,7 +137,7 @@ dev: check test
 
 test: unit_test dm_unit_test engine_unit_test
 
-build: cdc dm engine sync_diff_inspector
+build: cdc dm engine
 
 check-makefiles: ## Check the makefiles format. Please run this target after the changes are committed.
 check-makefiles: format-makefiles
@@ -222,13 +222,14 @@ check_third_party_binary:
 	@which bin/pd-server
 	@which bin/tiflash
 	@which bin/pd-ctl
+	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server sync_diff_inspector
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -445,7 +446,7 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
 	$(FAILPOINT_DISABLE)
 
-dm_integration_test_build: check_failpoint_ctl sync_diff_inspector
+dm_integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/dm/... \
@@ -475,7 +476,7 @@ dm_integration_test_build_worker: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
-dm_integration_test_build_master: check_failpoint_ctl sync_diff_inspector
+dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/dm/... \

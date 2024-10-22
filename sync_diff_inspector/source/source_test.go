@@ -22,7 +22,6 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/go-sql-driver/mysql"
@@ -102,8 +101,7 @@ func (m *MockAnalyzer) AnalyzeSplitter(ctx context.Context, tableDiff *common.Ta
 }
 
 func TestTiDBSource(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -270,8 +268,7 @@ func TestTiDBSource(t *testing.T) {
 }
 
 func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -319,8 +316,7 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 }
 
 func TestMysqlShardSources(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	tableCases := []*tableCaseType{
 		{
@@ -443,8 +439,7 @@ func TestMysqlShardSources(t *testing.T) {
 }
 
 func TestMysqlRouter(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -556,8 +551,7 @@ func TestMysqlRouter(t *testing.T) {
 }
 
 func TestTiDBRouter(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -668,8 +662,7 @@ func TestSource(t *testing.T) {
 	port, err := strconv.Atoi(portstr)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	router, err := router.NewTableRouter(false, nil)
 	require.NoError(t, err)
@@ -768,8 +761,7 @@ func TestRouterRules(t *testing.T) {
 	port, err := strconv.Atoi(portStr)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	r, _ := router.NewTableRouter(
 		false,

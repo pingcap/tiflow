@@ -487,7 +487,7 @@ func TestGetBetterIndex(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sel, tableCase.sels[i])
 	}
-	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `a.*").WillReturnRows(sqlmock.NewRows([]string{"ESL"}).AddRow("5"))
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `a.*").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
 	mock.ExpectQuery("SELECT COUNT\\(DISTINCT `b.*").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("2"))
 	indices, err = GetBetterIndex(ctx, conn, "single_index", "test1", tableInfo)
 	require.NoError(t, err)
