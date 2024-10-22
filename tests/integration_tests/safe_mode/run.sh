@@ -30,11 +30,13 @@ function run() {
 	# insert data into upstream but not downstream
 	run_sql_file $CUR/data/insert.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+	echo "insert data success"
+
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	TOPIC_NAME="ticdc-changefeed-dup-error-restart-test-$RANDOM"
 	case $SINK_TYPE in
-	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?safe_mode=true" ;;
+	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?safe-mode=true" ;;
 	esac
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 
