@@ -25,6 +25,8 @@ function run() {
 	run_sql_file $CUR/data/create_table.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/create_table.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+	echo "create table success"
+
 	# insert data into upstream but not downstream
 	run_sql_file $CUR/data/insert.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
