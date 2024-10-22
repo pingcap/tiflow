@@ -1,0 +1,1 @@
+insert into `safe_mode.t` values (1, "hello"), (2, "world");
