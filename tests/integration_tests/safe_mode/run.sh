@@ -25,6 +25,7 @@ function run() {
 	run_sql_file $CUR/data/create_table.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/create_table.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+	# insert data into upstream but not downstream
 	run_sql_file $CUR/data/insert.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
@@ -36,6 +37,7 @@ function run() {
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 
 	# test update sql can be split into delete + replace at all times in safe mode
+	# otherwise the update sql will fail to execute on downstream cluster.
 	sleep 10
 	run_sql_file $CUR/data/update.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
