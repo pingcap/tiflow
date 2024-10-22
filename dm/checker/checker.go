@@ -345,7 +345,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				(instance.cfg.EnableGTID && len(instance.cfg.Meta.BinLogGTID) > 0)
 			if _, ok := c.checkingItems[config.MetaPositionChecking]; checkMetaPos && ok {
 				// get position from global checkpoint
-				cpLock, err := worker.GetMinLocForSubTask(ctx, *instance.cfg)
+				cpLoc, err := worker.GetMinLocForSubTask(ctx, *instance.cfg)
 				if err != nil {
 					return err
 				}
@@ -353,7 +353,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					instance.cfg.From,
 					instance.cfg.EnableGTID,
 					instance.cfg.Meta,
-					cpLock))
+					cpLoc))
 			}
 		}
 		if config.HasSync(instance.cfg.Mode) {
