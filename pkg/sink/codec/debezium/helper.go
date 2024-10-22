@@ -132,6 +132,9 @@ func getCharset(ft types.FieldType) string {
 func getLen(ft types.FieldType) int {
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
+	if mysql.HasUnsignedFlag(ft.GetFlag()) {
+		return -1
+	}
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
 		return decimal
@@ -140,12 +143,15 @@ func getLen(ft types.FieldType) int {
 		return flen
 	case mysql.TypeEnum:
 		return 1
-	// case mysql.TypeLonglong, mysql.TypeInt24:
-	// 	if mysql.HasNotNullFlag(ft.GetFlag()) {
-	// 		return -1
-	// 	}
-	// 	return flen
-	case mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
+	case mysql.TypeLonglong, mysql.TypeInt24:
+		if mysql.HasNotNullFlag(ft.GetFlag()) {
+			return -1
+		}
+		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
+		if flen != defaultFlen {
+			return flen
+		}
+	case mysql.TypeLong:
 		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 		if flen != defaultFlen {
 			return flen

@@ -427,8 +427,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	ft *types.FieldType,
 ) error {
 	if col.Value == nil {
-		writer.WriteNullField(col.GetName())
-		return nil
+		if col.GetDefaultValue() == nil {
+			writer.WriteNullField(col.GetName())
+			return nil
+		}
+		col.Value = col.GetDefaultValue()
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
@@ -492,7 +495,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), enumVar.Name)
 		return nil
 
@@ -511,7 +513,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), setVar.Name)
 		return nil
 
@@ -530,7 +531,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteFloat64Field(col.GetName(), floatV)
 		return nil
 
@@ -555,7 +555,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				return nil
 			}
 		}
-
 		writer.WriteInt64Field(col.GetName(), t.Unix()/60/60/24)
 		return nil
 
@@ -573,25 +572,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+		t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
 		if err != nil {
 			// For example, time may be 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
 				return nil
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			writer.WriteNullField(col.GetName())
+			return nil
 		}
 
 		if ft.GetDecimal() <= 3 {
 			writer.WriteInt64Field(col.GetName(), t.UnixMilli())
 			return nil
-		} else {
-			writer.WriteInt64Field(col.GetName(), t.UnixMicro())
-			return nil
 		}
+		writer.WriteInt64Field(col.GetName(), t.UnixMicro())
+		return nil
 
 	case mysql.TypeTimestamp:
 		// Debezium behavior from doc:
@@ -616,10 +613,9 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			// For example, time may be invalid like 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				t = time.Unix(0, 0)
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			writer.WriteNullField(col.GetName())
+			return nil
 		}
 
 		str := t.UTC().Format("2006-01-02T15:04:05")
@@ -629,7 +625,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			str = str + tmp[:1+fsp]
 		}
 		str += "Z"
-
 		writer.WriteStringField(col.GetName(), str)
 		return nil
 
@@ -645,20 +640,29 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+		t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
+		if err != nil {
+			// For example, time may be invalid like 1000-00-00
+			if mysql.HasNotNullFlag(ft.GetFlag()) {
+				t = time.Unix(0, 0)
+			} else {
+				writer.WriteNullField(col.GetName())
+				return nil
+			}
+		}
+		str := t.AddDate(2006, 1, 2).UTC().Format("15:04:05.999999")
+		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, str, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteInt64Field(col.GetName(), d.Microseconds())
 		return nil
 
-	case mysql.TypeLonglong:
+	case mysql.TypeLonglong, mysql.TypeLong:
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
-		// So we only handle with TypeLonglong here.
 		if col.GetFlag().IsUnsigned() {
 			// Handle with BIGINT UNSIGNED.
 			// Debezium always produce INT64 instead of UINT64 for BIGINT.
@@ -669,8 +673,20 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 					col.Value,
 					col.GetName())
 			}
-
 			writer.WriteInt64Field(col.GetName(), int64(v))
+			return nil
+		}
+
+	case mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
+		if col.GetFlag().IsUnsigned() {
+			v, ok := col.Value.(uint32)
+			if !ok {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type %T for unsigned bigint column %s",
+					col.Value,
+					col.GetName())
+			}
+			writer.WriteIntField(col.GetName(), int(v))
 			return nil
 		}
 

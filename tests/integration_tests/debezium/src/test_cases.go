@@ -35,6 +35,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var timeOut = time.Second * 30
+
 var (
 	nFailed = 0
 	nPassed = 0
@@ -89,7 +91,6 @@ func runAllTestCases(dir string) bool {
 
 	for _, path := range files {
 		logger.Info("Run", zap.String("case", path))
-		runTestCase(path)
 	}
 
 	if nFailed > 0 {
@@ -116,6 +117,20 @@ func resetDB(db *DBHelper) {
 func runTestCase(testCasePath string) bool {
 	resetDB(dbMySQL)
 	resetDB(dbTiDB)
+	// consume reset DB events
+	for i := 0; i < 2; i++ {
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
+		go func() {
+			fetchNextCDCRecord(readerDebezium, KindMySQL, timeOut)
+			wg.Done()
+		}()
+		go func() {
+			fetchNextCDCRecord(readerTiCDC, KindTiDB, timeOut)
+			wg.Done()
+		}()
+		wg.Wait()
+	}
 
 	statementKindsToWaitCDCRecord := map[string]bool{
 		"Delete":         true,
@@ -146,7 +161,6 @@ func runTestCase(testCasePath string) bool {
 			hasError = true
 		}
 	}
-
 	return hasError
 }
 
@@ -251,35 +265,8 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 	}
 }
 
-func replaceString(s any, key any, val any) string {
-	return strings.Replace(s.(string), key.(string), val.(string), 1)
-}
-
-func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) ([]map[string]any, []map[string]any) {
-	var records []map[string]any
-	var keyMaps []map[string]any
-	waitTimeout := 30 * time.Second
-	for {
-		keyMap, obj, isRow, err := fetchNextCDCRecord(reader, kind, waitTimeout)
-		if err != nil {
-			logger.Error(
-				"Received error when fetching CDC record",
-				zap.Error(err),
-				zap.String("kind", string(kind)))
-			break
-		}
-		if obj != nil {
-			records = append(records, obj)
-			keyMaps = append(keyMaps, keyMap)
-		}
-		if obj == nil || isRow {
-			// Row record must be one by one
-			break
-		}
-		waitTimeout = time.Millisecond * 1000
-	}
-
-	return keyMaps, records
+func replaceString(s any, old any, new any) string {
+	return strings.Replace(s.(string), old.(string), new.(string), 1)
 }
 
 var ignoredRecordPaths = map[string]bool{
@@ -321,8 +308,18 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 		}()
 		wg.Wait()
 	}
-
 	if !waitCDCRows {
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
+		go func() {
+			fetchNextCDCRecord(readerDebezium, KindMySQL, timeOut)
+			wg.Done()
+		}()
+		go func() {
+			fetchNextCDCRecord(readerTiCDC, KindTiDB, timeOut)
+			wg.Done()
+		}()
+		wg.Wait()
 		return true
 	}
 
@@ -336,50 +333,22 @@ func runSingleQuery(query string, waitCDCRows bool) bool {
 		testCasePassed = false
 	}
 
-	var keyMapsDebezium []map[string]any
-	var objsDebezium []map[string]any
-	var keyMapsTiCDC []map[string]any
-	var objsTiCDC []map[string]any
+	var keyMapsDebezium map[string]any
+	var objsDebezium map[string]any
+	var keyMapsTiCDC map[string]any
+	var objsTiCDC map[string]any
 	{
 		wg := &sync.WaitGroup{}
 		wg.Add(2)
 		go func() {
-			keyMapsDebezium, objsDebezium = fetchAllCDCRecords(readerDebezium, KindMySQL)
+			keyMapsDebezium, objsDebezium, _, _ = fetchNextCDCRecord(readerDebezium, KindMySQL, timeOut)
 			wg.Done()
 		}()
 		go func() {
-			keyMapsTiCDC, objsTiCDC = fetchAllCDCRecords(readerTiCDC, KindTiDB)
+			keyMapsTiCDC, objsTiCDC, _, _ = fetchNextCDCRecord(readerTiCDC, KindTiDB, timeOut)
 			wg.Done()
 		}()
 		wg.Wait()
-	}
-
-	diff(keyMapsDebezium, keyMapsTiCDC, onError, msgKey)
-	diff(objsDebezium, objsTiCDC, onError, msgValue)
-
-	return testCasePassed
-}
-
-func diff(recordsDebezium, recordsTiCDC []map[string]any, onError func(error), msgType string) {
-	if len(recordsDebezium) != len(recordsTiCDC) {
-		onError(fmt.Errorf(
-			"Mismatch CDC %s: Got %d record from Debezium and %d record from TiCDC",
-			msgType,
-			len(recordsDebezium),
-			len(recordsTiCDC)))
-		headingColor.Print("\nDebezium output:\n\n")
-		for _, record := range recordsDebezium {
-			printRecord(record)
-		}
-		headingColor.Print("\nTiCDC output:\n\n")
-		for _, record := range recordsTiCDC {
-			printRecord(record)
-		}
-		return
-	}
-	if len(recordsDebezium) == 0 {
-		onError(fmt.Errorf(
-			"Mismatch CDC %s: Got 0 record from Debezium and TiCDC", msgType))
 	}
 	cmpOption := cmp.FilterPath(
 		func(p cmp.Path) bool {
@@ -390,15 +359,17 @@ func diff(recordsDebezium, recordsTiCDC []map[string]any, onError func(error), m
 		cmp.Ignore(),
 	)
 
-	for i := 0; i < len(recordsDebezium); i++ {
-		recordDebezium := recordsDebezium[i]
-		recordTiCDC := recordsTiCDC[i]
-		if diff := cmp.Diff(recordDebezium, recordTiCDC, cmpOption); diff != "" {
-			onError(fmt.Errorf("Found mismatch CDC record (output record #%d)", i+1))
-			headingColor.Print("\nCDC Result Diff (-debezium +ticdc):\n\n")
-			quick.Highlight(os.Stdout, diff, "diff", "terminal16m", "murphy")
-			fmt.Println()
-			continue
-		}
+	if diff := cmp.Diff(keyMapsDebezium, keyMapsTiCDC, cmpOption); diff != "" {
+		onError(fmt.Errorf("Found mismatch CDC record (msg type %s)", msgKey))
+		headingColor.Print("\nCDC Result Diff (-debezium +ticdc):\n\n")
+		quick.Highlight(os.Stdout, diff, "diff", "terminal16m", "murphy")
+		fmt.Println()
 	}
+	if diff := cmp.Diff(objsDebezium, objsTiCDC, cmpOption); diff != "" {
+		onError(fmt.Errorf("Found mismatch CDC record (msg type %s)", msgValue))
+		headingColor.Print("\nCDC Result Diff (-debezium +ticdc):\n\n")
+		quick.Highlight(os.Stdout, diff, "diff", "terminal16m", "murphy")
+		fmt.Println()
+	}
+	return testCasePassed
 }
