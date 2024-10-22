@@ -169,6 +169,7 @@ func GetTableInfoWithVersion(
 	}
 	sctx := mock.NewContext()
 	// unify the timezone to UTC +0:00
+	// TODO(joechenrh): the following code doesn't work on the latest version of tidb.
 	sctx.GetSessionVars().TimeZone = time.UTC
 	sctx.GetSessionVars().SQLMode = mysql.DelSQLMode(sctx.GetSessionVars().SQLMode, mysql.ModeStrictTransTables)
 	sctx.GetSessionVars().SQLMode = mysql.DelSQLMode(sctx.GetSessionVars().SQLMode, mysql.ModeStrictAllTables)
