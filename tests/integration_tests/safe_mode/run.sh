@@ -36,7 +36,7 @@ function run() {
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 
 	# test update sql can be split into delete + replace at all times in safe mode
-	# otherwise the update sql will fail to execute on downstream cluster.
+	# otherwise the update sql will have no effect on the downstream and the downstream will have no data.
 	sleep 10
 	run_sql_file $CUR/data/update.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
