@@ -14,6 +14,7 @@ If you need to specify a version, os or arch, you can use, for example: `make pr
    * `pd-ctl`      # version >= 6.0.0-rc.1
    * `tiflash`     # tiflash binary
    * `libc++.so, libc++abi.so, libgmssl.so, libtiflash_proxy.so` # some necessary so files related to tiflash
+   * `sync_diff_inspector`
    * [go-ycsb](https://github.com/pingcap/go-ycsb)
    * [etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
    * [jq](https://stedolan.github.io/jq/)
