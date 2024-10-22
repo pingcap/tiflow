@@ -43,7 +43,7 @@ const (
 	JavaSQLTypeNUMERIC                 JavaSQLType = 2
 	JavaSQLTypeOTHER                   JavaSQLType = 1111
 	JavaSQLTypeNCHAR                   JavaSQLType = -15
-	JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
+	JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014 //nolint
 
 	// unused
 	// JavaSQLTypeLONGVARCHAR             JavaSQLType = -1
@@ -151,7 +151,7 @@ func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 	}
 }
 
-// MySQLType2JavaType converts the mysql protocol types to jdbc type
+// MySQLType2JdbcType converts the mysql protocol types to jdbc type
 func MySQLType2JdbcType(mysqlType byte, isBinary bool) JavaSQLType {
 	switch mysqlType {
 	case mysql.TypeTiny:
@@ -176,7 +176,7 @@ func MySQLType2JdbcType(mysqlType byte, isBinary bool) JavaSQLType {
 		return JavaSQLTypeDECIMAL // equal to JavaSQLTypeNUMERIC
 
 	case mysql.TypeTimestamp:
-		return JavaSQLTypeTIMESTAMP_WITH_TIMEZONE
+		return JavaSQLTypeTIMESTAMP_WITH_TIMEZONE //nolint
 
 	case mysql.TypeDatetime:
 		return JavaSQLTypeTIMESTAMP
