@@ -84,7 +84,6 @@ type LogConfig struct {
 }
 
 var defaultServerConfig = &ServerConfig{
-	Experimental:  false,
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
 	LogFile:       "",
@@ -127,7 +126,6 @@ var defaultServerConfig = &ServerConfig{
 
 // ServerConfig represents a config for server
 type ServerConfig struct {
-	Experimental  bool   `toml:"experimental" json:"experimental"`
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
