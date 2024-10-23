@@ -24,6 +24,6 @@ spec:
           command:
             - "/chaos-case"
             - "--config-dir=/conf" # we put config files into `/conf` when building the docker image
-            - "--duration=20m"
+            - "--duration=10m"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
