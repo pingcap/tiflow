@@ -109,7 +109,6 @@ const (
 }`
 
 	testCfgTestServerConfigMarshal = `{
-  "experimental": false,
   "addr": "192.155.22.33:8887",
   "advertise-addr": "",
   "log-file": "",
