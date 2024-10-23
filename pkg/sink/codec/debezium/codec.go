@@ -23,12 +23,13 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/hack"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -425,19 +426,31 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	ft *types.FieldType,
 ) error {
 	if col.Value == nil {
-		writer.WriteNullField(col.GetName())
-		return nil
+		if col.GetDefaultValue() == nil {
+			writer.WriteNullField(col.GetName())
+			return nil
+		}
+		col.Value = col.GetDefaultValue()
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
-		v, ok := col.Value.(uint64)
-		if !ok {
+		var v uint64
+		switch val := col.Value.(type) {
+		case uint64:
+		case string:
+			hexValue, err := strconv.ParseUint(val, 0, 64)
+			if err != nil {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type string for bit column %s, error:%s",
+					col.GetName(), err.Error())
+			}
+			v = hexValue
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for bit column %s",
 				col.Value,
 				col.GetName())
 		}
-
 		// Debezium behavior:
 		// BIT(1) → BOOLEAN
 		// BIT(>1) → BYTES		The byte[] contains the bits in little-endian form and is sized to
@@ -459,21 +472,21 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		v, ok := col.Value.([]byte)
-		if !ok {
-			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-				"unexpected column value type %T for string column %s",
-				col.Value,
-				col.GetName())
+		isBinary := col.GetFlag().IsBinary()
+		switch v := col.Value.(type) {
+		case []byte:
+			if !isBinary {
+				writer.WriteStringField(col.GetName(), common.UnsafeBytesToString(v))
+			} else {
+				c.writeBinaryField(writer, col.GetName(), v)
+			}
+		case string:
+			if isBinary {
+				c.writeBinaryField(writer, col.GetName(), common.UnsafeStringToBytes(v))
+			}
+			writer.WriteStringField(col.GetName(), v)
 		}
-
-		if col.GetFlag().IsBinary() {
-			c.writeBinaryField(writer, col.GetName(), v)
-			return nil
-		} else {
-			writer.WriteStringField(col.GetName(), string(hack.String(v)))
-			return nil
-		}
+		return nil
 
 	case mysql.TypeEnum:
 		v, ok := col.Value.(uint64)
@@ -490,7 +503,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), enumVar.Name)
 		return nil
 
@@ -509,7 +521,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), setVar.Name)
 		return nil
 
@@ -528,7 +539,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteFloat64Field(col.GetName(), floatV)
 		return nil
 
@@ -553,7 +563,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				return nil
 			}
 		}
-
 		writer.WriteInt64Field(col.GetName(), t.Unix()/60/60/24)
 		return nil
 
@@ -571,25 +580,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+		t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
 		if err != nil {
 			// For example, time may be 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
 				return nil
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			writer.WriteNullField(col.GetName())
+			return nil
 		}
 
 		if ft.GetDecimal() <= 3 {
 			writer.WriteInt64Field(col.GetName(), t.UnixMilli())
 			return nil
-		} else {
-			writer.WriteInt64Field(col.GetName(), t.UnixMicro())
-			return nil
 		}
+		writer.WriteInt64Field(col.GetName(), t.UnixMicro())
+		return nil
 
 	case mysql.TypeTimestamp:
 		// Debezium behavior from doc:
@@ -614,10 +621,9 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			// For example, time may be invalid like 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				t = time.Unix(0, 0)
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			writer.WriteNullField(col.GetName())
+			return nil
 		}
 
 		str := t.UTC().Format("2006-01-02T15:04:05")
@@ -627,7 +633,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			str = str + tmp[:1+fsp]
 		}
 		str += "Z"
-
 		writer.WriteStringField(col.GetName(), str)
 		return nil
 
@@ -643,34 +648,67 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+		t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
+		if err != nil {
+			// For example, time may be invalid like 1000-00-00
+			if mysql.HasNotNullFlag(ft.GetFlag()) {
+				t = time.Unix(0, 0)
+			} else {
+				writer.WriteNullField(col.GetName())
+				return nil
+			}
+		}
+		str := t.AddDate(2006, 1, 2).UTC().Format("15:04:05.999999")
+		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, str, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteInt64Field(col.GetName(), d.Microseconds())
 		return nil
 
-	case mysql.TypeLonglong:
+	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
-		// So we only handle with TypeLonglong here.
-		if col.GetFlag().IsUnsigned() {
-			// Handle with BIGINT UNSIGNED.
-			// Debezium always produce INT64 instead of UINT64 for BIGINT.
-			v, ok := col.Value.(uint64)
-			if !ok {
+		isUnsigned := col.GetFlag().IsUnsigned()
+		switch v := col.Value.(type) {
+		case uint64, uint32:
+			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-					"unexpected column value type %T for unsigned bigint column %s",
+					"unexpected column value type %T for unsigned int column %s",
 					col.Value,
 					col.GetName())
 			}
-
-			writer.WriteInt64Field(col.GetName(), int64(v))
-			return nil
+			writer.WriteAnyField(col.GetName(), v)
+		case int64, int32:
+			if isUnsigned {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type %T for int column %s",
+					col.Value,
+					col.GetName())
+			}
+			writer.WriteAnyField(col.GetName(), v)
+		case string:
+			if isUnsigned {
+				t, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for unsigned int column %s",
+						col.GetName())
+				}
+				writer.WriteUint64Field(col.GetName(), t)
+			} else {
+				t, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for int column %s",
+						col.GetName())
+				}
+				writer.WriteInt64Field(col.GetName(), t)
+			}
 		}
+		return nil
 
 	case mysql.TypeTiDBVectorFloat32:
 		v, ok := col.Value.(types.VectorFloat32)
@@ -770,7 +808,6 @@ func (c *dbzCodec) EncodeValue(
 			// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 			jWriter.WriteNullField("transaction")
-
 			if e.IsInsert() {
 				// op: Mandatory string that describes the type of operation that caused the connector to generate the event.
 				// Valid values are:
@@ -996,6 +1033,759 @@ func (c *dbzCodec) EncodeValue(
 	})
 
 	return err
+}
+
+// EncodeDDLEvent encode DDLEvent into debezium change event
+func (c *dbzCodec) EncodeDDLEvent(
+	e *model.DDLEvent,
+	keyDest io.Writer,
+	dest io.Writer,
+) error {
+	keyJWriter := util.BorrowJSONWriter(keyDest)
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(keyJWriter)
+	defer util.ReturnJSONWriter(jWriter)
+
+	commitTime := oracle.GetTimeFromTS(e.CommitTs)
+	var changeType string
+	switch e.Type {
+	case timodel.ActionCreateSchema,
+		timodel.ActionCreateTable,
+		timodel.ActionCreatePlacementPolicy,
+		timodel.ActionCreateView,
+		timodel.ActionCreateSequence:
+		changeType = "CREATE"
+	case timodel.ActionAlterTableAttributes,
+		timodel.ActionAlterTablePartitionAttributes,
+		timodel.ActionAlterPlacementPolicy,
+		timodel.ActionAlterTablePartitionPlacement,
+		timodel.ActionModifySchemaDefaultPlacement,
+		timodel.ActionAlterTablePlacement,
+		timodel.ActionAlterCacheTable,
+		timodel.ActionModifyColumn,
+		timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue,
+		timodel.ActionModifyTableComment,
+		timodel.ActionModifyTableCharsetAndCollate,
+		timodel.ActionModifySchemaCharsetAndCollate,
+		timodel.ActionAlterSequence,
+		timodel.ActionAlterIndexVisibility,
+		timodel.ActionRenameTable,
+		timodel.ActionAddIndex,
+		timodel.ActionRenameIndex,
+		timodel.ActionShardRowID,
+		timodel.ActionAddPrimaryKey,
+		timodel.ActionRepairTable,
+		timodel.ActionModifyTableAutoIDCache,
+		timodel.ActionRebaseAutoRandomBase,
+		timodel.ActionExchangeTablePartition,
+		timodel.ActionAlterCheckConstraint:
+		changeType = "ALTER"
+	case timodel.ActionDropSchema,
+		timodel.ActionDropTable,
+		timodel.ActionDropPlacementPolicy,
+		timodel.ActionDropColumn,
+		timodel.ActionDropIndex,
+		timodel.ActionDropForeignKey,
+		timodel.ActionDropView,
+		timodel.ActionDropTablePartition,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionDropSequence,
+		timodel.ActionDropCheckConstraint:
+		changeType = "DROP"
+	default:
+		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type, e.Query)
+	}
+
+	var err error
+	dbName, tableName := getDBTableName(e)
+	// message key
+	keyJWriter.WriteObject(func() {
+		keyJWriter.WriteObjectField("payload", func() {
+			if e.Type == timodel.ActionDropTable {
+				keyJWriter.WriteStringField("databaseName", e.PreTableInfo.GetSchemaName())
+			} else {
+				keyJWriter.WriteStringField("databaseName", dbName)
+			}
+		})
+		if !c.config.DebeziumDisableSchema {
+			keyJWriter.WriteObjectField("schema", func() {
+				keyJWriter.WriteStringField("type", "struct")
+				keyJWriter.WriteStringField("name", "io.debezium.connector.mysql.SchemaChangeKey")
+				keyJWriter.WriteBoolField("optional", false)
+				keyJWriter.WriteIntField("version", 1)
+				keyJWriter.WriteArrayField("fields", func() {
+					keyJWriter.WriteObjectElement(func() {
+						keyJWriter.WriteStringField("field", "databaseName")
+						keyJWriter.WriteBoolField("optional", false)
+						keyJWriter.WriteStringField("type", "string")
+					})
+				})
+			})
+		}
+	})
+
+	// message value
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			jWriter.WriteObjectField("source", func() {
+				jWriter.WriteStringField("version", "2.4.0.Final")
+				jWriter.WriteStringField("connector", "TiCDC")
+				jWriter.WriteStringField("name", c.clusterID)
+				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
+				jWriter.WriteStringField("snapshot", "false")
+				if e.TableInfo == nil {
+					jWriter.WriteStringField("db", "")
+					jWriter.WriteStringField("table", "")
+				} else {
+					jWriter.WriteStringField("db", dbName)
+					jWriter.WriteStringField("table", tableName)
+				}
+				jWriter.WriteInt64Field("server_id", 0)
+				jWriter.WriteNullField("gtid")
+				jWriter.WriteStringField("file", "")
+				jWriter.WriteInt64Field("pos", 0)
+				jWriter.WriteInt64Field("row", 0)
+				jWriter.WriteInt64Field("thread", 0)
+				jWriter.WriteNullField("query")
+
+				// The followings are TiDB extended fields
+				jWriter.WriteUint64Field("commit_ts", e.CommitTs)
+				jWriter.WriteStringField("cluster_id", c.clusterID)
+			})
+			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+
+			if e.Type == timodel.ActionDropTable {
+				jWriter.WriteStringField("databaseName", e.PreTableInfo.GetSchemaName())
+			} else {
+				jWriter.WriteStringField("databaseName", dbName)
+			}
+			jWriter.WriteNullField("schemaName")
+			jWriter.WriteStringField("ddl", e.Query)
+			jWriter.WriteArrayField("tableChanges", func() {
+				// return early if there is no table changes
+				if tableName == "" {
+					return
+				}
+				jWriter.WriteObjectElement(func() {
+					// Describes the kind of change. The value is one of the following:
+					// CREATE: Table created.
+					// ALTER: Table modified.
+					// DROP: Table deleted.
+					jWriter.WriteStringField("type", changeType)
+					// In the case of a table rename, this identifier is a concatenation of <old>,<new> table names.
+					if e.Type == timodel.ActionRenameTable {
+						jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\",\"%s\".\"%s\"",
+							e.PreTableInfo.GetSchemaName(),
+							e.PreTableInfo.GetTableName(),
+							dbName,
+							tableName))
+					} else {
+						jWriter.WriteStringField("id", fmt.Sprintf("\"%s\".\"%s\"",
+							dbName,
+							tableName))
+					}
+					// return early if there is no table info
+					if e.Type == timodel.ActionDropTable {
+						jWriter.WriteNullField("table")
+						return
+					}
+					jWriter.WriteObjectField("table", func() {
+						jWriter.WriteStringField("defaultCharsetName", e.TableInfo.Charset)
+						jWriter.WriteArrayField("primaryKeyColumnNames", func() {
+							for _, pk := range e.TableInfo.GetPrimaryKeyColumnNames() {
+								jWriter.WriteStringElement(pk)
+							}
+						})
+						jWriter.WriteArrayField("columns", func() {
+							columns := getColumns(e.Query, e.TableInfo.Columns)
+							// columns := e.TableInfo.Columns
+							for pos, col := range columns {
+								jWriter.WriteObjectElement(func() {
+									flag := col.GetFlag()
+									jdbcType := internal.MySQLType2JdbcType(col.GetType(), mysql.HasBinaryFlag(flag))
+									expression, name := getExpressionAndName(col.FieldType)
+									jWriter.WriteStringField("name", col.Name.O)
+									jWriter.WriteIntField("jdbcType", int(jdbcType))
+									jWriter.WriteNullField("nativeType")
+									if col.Comment != "" {
+										jWriter.WriteStringField("comment", col.Comment)
+									} else {
+										jWriter.WriteNullField("comment")
+									}
+									if col.DefaultValue == nil {
+										jWriter.WriteNullField("defaultValueExpression")
+									} else {
+										v, ok := col.DefaultValue.(string)
+										if ok {
+											if strings.ToUpper(v) == "CURRENT_TIMESTAMP" {
+												jWriter.WriteAnyField("defaultValueExpression", "1970-01-01 00:00:00")
+												// jWriter.WriteAnyField("defaultValueExpression", "CURRENT_TIMESTAMP")
+											} else if v == "<nil>" {
+												jWriter.WriteNullField("defaultValueExpression")
+											} else if col.DefaultValueBit != nil && (strings.HasPrefix(v, "0x")) {
+												var hexValue int64
+												hexValue, err = strconv.ParseInt(v, 0, 64)
+												jWriter.WriteStringField("defaultValueExpression", fmt.Sprintf("%b", hexValue))
+											} else {
+												jWriter.WriteStringField("defaultValueExpression", v)
+											}
+										} else {
+											jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
+										}
+									}
+									elems := col.GetElems()
+									if len(elems) != 0 {
+										// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
+										jWriter.WriteArrayField("enumValues", func() {
+											for _, ele := range elems {
+												jWriter.WriteStringElement(fmt.Sprintf("'%s'", common.EscapeEnumAndSetOptions(ele)))
+											}
+										})
+									} else {
+										jWriter.WriteNullField("enumValues")
+									}
+
+									jWriter.WriteStringField("typeName", name)
+									jWriter.WriteStringField("typeExpression", expression)
+
+									charsetName := getCharset(col.FieldType)
+									if charsetName != "" {
+										jWriter.WriteStringField("charsetName", charsetName)
+									} else {
+										jWriter.WriteNullField("charsetName")
+									}
+
+									length := getLen(col.FieldType)
+									if length != -1 {
+										jWriter.WriteIntField("length", length)
+									} else {
+										jWriter.WriteNullField("length")
+									}
+
+									scale := getScale(col.FieldType)
+									if scale != -1 {
+										jWriter.WriteFloat64Field("scale", scale)
+									} else {
+										jWriter.WriteNullField("scale")
+									}
+									jWriter.WriteIntField("position", pos+1)
+									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
+
+									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag)
+									jWriter.WriteBoolField("autoIncremented", autoIncrementFlag)
+									jWriter.WriteBoolField("generated", autoIncrementFlag)
+								})
+							}
+						})
+						// if e.TableInfo.Comment != "" {
+						// 	jWriter.WriteStringField("comment", e.TableInfo.Comment)
+						// } else {
+						// }
+						jWriter.WriteNullField("comment")
+
+						// Custom attribute metadata for each table change.
+						// jWriter.WriteArrayField("attributes", func() {
+						// 	jWriter.WriteObjectElement(func() {
+						// 		jWriter.WriteStringField("collation", e.Collate)
+						// 	})
+						// })
+					})
+				})
+			})
+		})
+
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteIntField("version", 1)
+				jWriter.WriteStringField("name", "io.debezium.connector.mysql.SchemaChangeValue")
+				jWriter.WriteArrayField("fields", func() {
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "source")
+						jWriter.WriteStringField("name", "io.debezium.connector.mysql.Source")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("type", "struct")
+						jWriter.WriteArrayField("fields", func() {
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "version")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "connector")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "name")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "ts_ms")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "int64")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "snapshot")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteObjectField("parameters", func() {
+									jWriter.WriteStringField("allowed", "true,last,false,incremental")
+								})
+								jWriter.WriteStringField("default", "false")
+								jWriter.WriteStringField("name", "io.debezium.data.Enum")
+								jWriter.WriteIntField("version", 1)
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "db")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "sequence")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "table")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "server_id")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "int64")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "gtid")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "file")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "string")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "pos")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "int64")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "row")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("type", "int32")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "thread")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "int64")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("field", "query")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("type", "string")
+							})
+							// Below are extra TiDB fields
+							// jWriter.WriteObjectElement(func() {
+							// 	jWriter.WriteStringField("type", "int64")
+							// 	jWriter.WriteBoolField("optional", false)
+							// 	jWriter.WriteStringField("field", "commit_ts")
+							// })
+							// jWriter.WriteObjectElement(func() {
+							// 	jWriter.WriteStringField("type", "string")
+							// 	jWriter.WriteBoolField("optional", false)
+							// 	jWriter.WriteStringField("field", "cluster_id")
+							// })
+						})
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "ts_ms")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("type", "int64")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "databaseName")
+						jWriter.WriteBoolField("optional", true)
+						jWriter.WriteStringField("type", "string")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "schemaName")
+						jWriter.WriteBoolField("optional", true)
+						jWriter.WriteStringField("type", "string")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "ddl")
+						jWriter.WriteBoolField("optional", true)
+						jWriter.WriteStringField("type", "string")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("field", "tableChanges")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("type", "array")
+						jWriter.WriteObjectField("items", func() {
+							jWriter.WriteStringField("name", "io.debezium.connector.schema.Change")
+							jWriter.WriteBoolField("optional", false)
+							jWriter.WriteStringField("type", "struct")
+							jWriter.WriteIntField("version", 1)
+							jWriter.WriteArrayField("fields", func() {
+								jWriter.WriteObjectElement(func() {
+									jWriter.WriteStringField("field", "type")
+									jWriter.WriteBoolField("optional", false)
+									jWriter.WriteStringField("type", "string")
+								})
+								jWriter.WriteObjectElement(func() {
+									jWriter.WriteStringField("field", "id")
+									jWriter.WriteBoolField("optional", false)
+									jWriter.WriteStringField("type", "string")
+								})
+								jWriter.WriteObjectElement(func() {
+									jWriter.WriteStringField("field", "table")
+									jWriter.WriteBoolField("optional", true)
+									jWriter.WriteStringField("type", "struct")
+									jWriter.WriteStringField("name", "io.debezium.connector.schema.Table")
+									jWriter.WriteIntField("version", 1)
+									jWriter.WriteArrayField("fields", func() {
+										jWriter.WriteObjectElement(func() {
+											jWriter.WriteStringField("field", "defaultCharsetName")
+											jWriter.WriteBoolField("optional", true)
+											jWriter.WriteStringField("type", "string")
+										})
+										jWriter.WriteObjectElement(func() {
+											jWriter.WriteStringField("field", "primaryKeyColumnNames")
+											jWriter.WriteBoolField("optional", true)
+											jWriter.WriteStringField("type", "array")
+											jWriter.WriteObjectField("items", func() {
+												jWriter.WriteStringField("type", "string")
+												jWriter.WriteBoolField("optional", false)
+											})
+										})
+										jWriter.WriteObjectElement(func() {
+											jWriter.WriteStringField("field", "columns")
+											jWriter.WriteBoolField("optional", false)
+											jWriter.WriteStringField("type", "array")
+											jWriter.WriteObjectField("items", func() {
+												jWriter.WriteStringField("name", "io.debezium.connector.schema.Column")
+												jWriter.WriteBoolField("optional", false)
+												jWriter.WriteStringField("type", "struct")
+												jWriter.WriteIntField("version", 1)
+												jWriter.WriteArrayField("fields", func() {
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "name")
+														jWriter.WriteBoolField("optional", false)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "jdbcType")
+														jWriter.WriteBoolField("optional", false)
+														jWriter.WriteStringField("type", "int32")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "nativeType")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "int32")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "typeName")
+														jWriter.WriteBoolField("optional", false)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "typeExpression")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "charsetName")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "length")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "int32")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "scale")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "int32")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "position")
+														jWriter.WriteBoolField("optional", false)
+														jWriter.WriteStringField("type", "int32")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "optional")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "boolean")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "autoIncremented")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "boolean")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "generated")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "boolean")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "comment")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "defaultValueExpression")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "string")
+													})
+													jWriter.WriteObjectElement(func() {
+														jWriter.WriteStringField("field", "enumValues")
+														jWriter.WriteBoolField("optional", true)
+														jWriter.WriteStringField("type", "array")
+														jWriter.WriteObjectField("items", func() {
+															jWriter.WriteStringField("type", "string")
+															jWriter.WriteBoolField("optional", false)
+														})
+													})
+												})
+											})
+										})
+										jWriter.WriteObjectElement(func() {
+											jWriter.WriteStringField("field", "comment")
+											jWriter.WriteBoolField("optional", true)
+											jWriter.WriteStringField("type", "string")
+										})
+									})
+								})
+							})
+						})
+					})
+				})
+			})
+		}
+	})
+	return err
+}
+
+// EncodeCheckpointEvent encode checkpointTs into debezium change event
+func (c *dbzCodec) EncodeCheckpointEvent(
+	ts uint64,
+	keyDest io.Writer,
+	dest io.Writer,
+) error {
+	keyJWriter := util.BorrowJSONWriter(keyDest)
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(keyJWriter)
+	defer util.ReturnJSONWriter(jWriter)
+	commitTime := oracle.GetTimeFromTS(ts)
+	var err error
+	// message key
+	keyJWriter.WriteObject(func() {
+		keyJWriter.WriteObjectField("payload", func() {})
+		if !c.config.DebeziumDisableSchema {
+			keyJWriter.WriteObjectField("schema", func() {
+				keyJWriter.WriteStringField("type", "struct")
+				keyJWriter.WriteStringField("name",
+					fmt.Sprintf("%s.%s.Key", common.SanitizeName(c.clusterID), "watermark"))
+				keyJWriter.WriteBoolField("optional", false)
+				keyJWriter.WriteArrayField("fields", func() {
+				})
+			})
+		}
+	})
+	// message value
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			jWriter.WriteObjectField("source", func() {
+				jWriter.WriteStringField("version", "2.4.0.Final")
+				jWriter.WriteStringField("connector", "TiCDC")
+				jWriter.WriteStringField("name", c.clusterID)
+				// ts_ms: In the source object, ts_ms indicates the time that the change was made in the database.
+				// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
+				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
+				// snapshot field is a string of true,last,false,incremental
+				jWriter.WriteStringField("snapshot", "false")
+				jWriter.WriteStringField("db", "")
+				jWriter.WriteStringField("table", "")
+				jWriter.WriteInt64Field("server_id", 0)
+				jWriter.WriteNullField("gtid")
+				jWriter.WriteStringField("file", "")
+				jWriter.WriteInt64Field("pos", 0)
+				jWriter.WriteInt64Field("row", 0)
+				jWriter.WriteInt64Field("thread", 0)
+				jWriter.WriteNullField("query")
+
+				// The followings are TiDB extended fields
+				jWriter.WriteUint64Field("commit_ts", ts)
+				jWriter.WriteStringField("cluster_id", c.clusterID)
+			})
+
+			// ts_ms: displays the time at which the connector processed the event
+			// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
+			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+			jWriter.WriteNullField("transaction")
+			jWriter.WriteStringField("op", "m")
+		})
+
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteStringField("name",
+					fmt.Sprintf("%s.%s.Envelope", common.SanitizeName(c.clusterID), "watermark"))
+				jWriter.WriteIntField("version", 1)
+				jWriter.WriteArrayField("fields", func() {
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "struct")
+						jWriter.WriteArrayField("fields", func() {
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "version")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "connector")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "name")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "ts_ms")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("name", "io.debezium.data.Enum")
+								jWriter.WriteIntField("version", 1)
+								jWriter.WriteObjectField("parameters", func() {
+									jWriter.WriteStringField("allowed", "true,last,false,incremental")
+								})
+								jWriter.WriteStringField("default", "false")
+								jWriter.WriteStringField("field", "snapshot")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "db")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("field", "sequence")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("field", "table")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "server_id")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("field", "gtid")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "file")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "pos")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int32")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "row")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("field", "thread")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", true)
+								jWriter.WriteStringField("field", "query")
+							})
+							// Below are extra TiDB fields
+							// jWriter.WriteObjectElement(func() {
+							// 	jWriter.WriteStringField("type", "int64")
+							// 	jWriter.WriteBoolField("optional", false)
+							// 	jWriter.WriteStringField("field", "commit_ts")
+							// })
+							// jWriter.WriteObjectElement(func() {
+							// 	jWriter.WriteStringField("type", "string")
+							// 	jWriter.WriteBoolField("optional", false)
+							// 	jWriter.WriteStringField("field", "cluster_id")
+							// })
+						})
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("name", "io.debezium.connector.mysql.Source")
+						jWriter.WriteStringField("field", "source")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "string")
+						jWriter.WriteBoolField("optional", false)
+						jWriter.WriteStringField("field", "op")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "int64")
+						jWriter.WriteBoolField("optional", true)
+						jWriter.WriteStringField("field", "ts_ms")
+					})
+					jWriter.WriteObjectElement(func() {
+						jWriter.WriteStringField("type", "struct")
+						jWriter.WriteArrayField("fields", func() {
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "string")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "id")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "total_order")
+							})
+							jWriter.WriteObjectElement(func() {
+								jWriter.WriteStringField("type", "int64")
+								jWriter.WriteBoolField("optional", false)
+								jWriter.WriteStringField("field", "data_collection_order")
+							})
+						})
+						jWriter.WriteBoolField("optional", true)
+						jWriter.WriteStringField("name", "event.block")
+						jWriter.WriteIntField("version", 1)
+						jWriter.WriteStringField("field", "transaction")
+					})
+				})
+			})
+		}
+	})
+	return err
+}
+
+func getDBTableName(e *model.DDLEvent) (string, string) {
+	if e.TableInfo == nil {
+		return "", ""
+	}
+	return e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName()
 }
 
 func getSchemaTopicName(namespace string, schema string, table string) string {

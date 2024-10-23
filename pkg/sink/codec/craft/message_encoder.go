@@ -16,22 +16,12 @@ package craft
 import (
 	"encoding/binary"
 	"math"
-	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
-
-// create byte slice from string without copying
-func unsafeStringToBytes(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(
-		&struct {
-			string
-			Cap int
-		}{s, len(s)},
-	))
-}
 
 // Primitive type encoders
 func encodeFloat64(bits []byte, data float64) []byte {
@@ -193,7 +183,7 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 	switch ty {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeJSON, mysql.TypeNewDecimal:
 		// value type for these mysql types are string
-		return unsafeStringToBytes(value.(string))
+		return common.UnsafeStringToBytes(value.(string))
 	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
 		// value type for these mysql types are uint64
 		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
