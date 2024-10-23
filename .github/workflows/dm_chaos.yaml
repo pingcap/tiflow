@@ -254,8 +254,9 @@ jobs:
           $GITHUB_WORKSPACE/dm/chaos/scripts/check-case.sh
       
       - name: Setup tmate session
+        if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
-
+      
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
