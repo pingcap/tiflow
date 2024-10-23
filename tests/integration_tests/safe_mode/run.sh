@@ -8,9 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-CDC_COUNT=3
-DB_COUNT=4
-
 function run() {
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
