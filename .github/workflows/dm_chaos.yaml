@@ -70,10 +70,9 @@ jobs:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
-      - uses: debianmaster/actions-k3s@master
-        id: k3s
-        with:
-          version: 'latest'
+      - name: install k3s
+        run: |
+          curl -fsSL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
 
       - name: Print cluster information
         run: |
@@ -101,6 +100,10 @@ jobs:
           cp -r $GITHUB_WORKSPACE/dm/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
           docker build -f $GITHUB_WORKSPACE/dm/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
           docker image list
+      
+      - name: load image to k3s
+        run: |
+          docker save dm:chaos | sudo k3s ctr images import -
 
       # Set up upstream instances
       - name: Set up sources

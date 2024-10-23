@@ -36,7 +36,7 @@ spec:
       containers:
         - name: dm-master
           image: dm:chaos # build this image in GitHub action workflow
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /data
               name: dm-master
