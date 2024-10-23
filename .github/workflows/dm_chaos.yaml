@@ -70,8 +70,10 @@ jobs:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
-      - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.4.0
+      - uses: debianmaster/actions-k3s@master
+        id: k3s
+        with:
+          version: 'latest'
 
       - name: Print cluster information
         run: |
