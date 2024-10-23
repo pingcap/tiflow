@@ -218,7 +218,8 @@ func MySQLType2JdbcType(mysqlType byte, isBinary bool) JavaSQLType {
 		if isBinary {
 			return JavaSQLTypeBINARY
 		}
-		return JavaSQLTypeNCHAR
+		return JavaSQLTypeCHAR
+		// return JavaSQLTypeNCHAR
 
 	// Geometry is not supported, this should not hit.
 	case mysql.TypeGeometry:

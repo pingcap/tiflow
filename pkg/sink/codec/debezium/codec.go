@@ -26,7 +26,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/hack"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -435,14 +434,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
-		v, ok := col.Value.(uint64)
-		if !ok {
+		var v uint64
+		switch val := col.Value.(type) {
+		case uint64:
+		case string:
+			hexValue, err := strconv.ParseUint(val, 0, 64)
+			if err != nil {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type string for bit column %s, error:%s",
+					col.GetName(), err.Error())
+			}
+			v = hexValue
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for bit column %s",
 				col.Value,
 				col.GetName())
 		}
-
 		// Debezium behavior:
 		// BIT(1) → BOOLEAN
 		// BIT(>1) → BYTES		The byte[] contains the bits in little-endian form and is sized to
@@ -464,21 +472,21 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		v, ok := col.Value.([]byte)
-		if !ok {
-			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-				"unexpected column value type %T for string column %s",
-				col.Value,
-				col.GetName())
+		isBinary := col.GetFlag().IsBinary()
+		switch v := col.Value.(type) {
+		case []byte:
+			if !isBinary {
+				writer.WriteStringField(col.GetName(), common.UnsafeBytesToString(v))
+			} else {
+				c.writeBinaryField(writer, col.GetName(), v)
+			}
+		case string:
+			if isBinary {
+				c.writeBinaryField(writer, col.GetName(), common.UnsafeStringToBytes(v))
+			}
+			writer.WriteStringField(col.GetName(), v)
 		}
-
-		if col.GetFlag().IsBinary() {
-			c.writeBinaryField(writer, col.GetName(), v)
-			return nil
-		} else {
-			writer.WriteStringField(col.GetName(), string(hack.String(v)))
-			return nil
-		}
+		return nil
 
 	case mysql.TypeEnum:
 		v, ok := col.Value.(uint64)
@@ -660,35 +668,47 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		writer.WriteInt64Field(col.GetName(), d.Microseconds())
 		return nil
 
-	case mysql.TypeLonglong, mysql.TypeLong:
+	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
-		if col.GetFlag().IsUnsigned() {
-			// Handle with BIGINT UNSIGNED.
-			// Debezium always produce INT64 instead of UINT64 for BIGINT.
-			v, ok := col.Value.(uint64)
-			if !ok {
+		isUnsigned := col.GetFlag().IsUnsigned()
+		switch v := col.Value.(type) {
+		case uint64, uint32:
+			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-					"unexpected column value type %T for unsigned bigint column %s",
+					"unexpected column value type %T for unsigned int column %s",
 					col.Value,
 					col.GetName())
 			}
-			writer.WriteInt64Field(col.GetName(), int64(v))
-			return nil
-		}
-
-	case mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
-		if col.GetFlag().IsUnsigned() {
-			v, ok := col.Value.(uint32)
-			if !ok {
+			writer.WriteAnyField(col.GetName(), v)
+		case int64, int32:
+			if isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-					"unexpected column value type %T for unsigned bigint column %s",
+					"unexpected column value type %T for int column %s",
 					col.Value,
 					col.GetName())
 			}
-			writer.WriteIntField(col.GetName(), int(v))
-			return nil
+			writer.WriteAnyField(col.GetName(), v)
+		case string:
+			if isUnsigned {
+				t, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for unsigned int column %s",
+						col.GetName())
+				}
+				writer.WriteUint64Field(col.GetName(), t)
+			} else {
+				t, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for int column %s",
+						col.GetName())
+				}
+				writer.WriteInt64Field(col.GetName(), t)
+			}
 		}
+		return nil
 
 	case mysql.TypeTiDBVectorFloat32:
 		v, ok := col.Value.(types.VectorFloat32)
@@ -1197,9 +1217,19 @@ func (c *dbzCodec) EncodeDDLEvent(
 										jWriter.WriteNullField("defaultValueExpression")
 									} else {
 										v, ok := col.DefaultValue.(string)
-										if ok && strings.ToUpper(v) == "CURRENT_TIMESTAMP" {
-											jWriter.WriteAnyField("defaultValueExpression", "1970-01-01 00:00:00")
-											// jWriter.WriteAnyField("defaultValueExpression", "CURRENT_TIMESTAMP")
+										if ok {
+											if strings.ToUpper(v) == "CURRENT_TIMESTAMP" {
+												jWriter.WriteAnyField("defaultValueExpression", "1970-01-01 00:00:00")
+												// jWriter.WriteAnyField("defaultValueExpression", "CURRENT_TIMESTAMP")
+											} else if v == "<nil>" {
+												jWriter.WriteNullField("defaultValueExpression")
+											} else if col.DefaultValueBit != nil && (strings.HasPrefix(v, "0x")) {
+												var hexValue int64
+												hexValue, err = strconv.ParseInt(v, 0, 64)
+												jWriter.WriteStringField("defaultValueExpression", fmt.Sprintf("%b", hexValue))
+											} else {
+												jWriter.WriteStringField("defaultValueExpression", v)
+											}
 										} else {
 											jWriter.WriteAnyField("defaultValueExpression", col.DefaultValue)
 										}

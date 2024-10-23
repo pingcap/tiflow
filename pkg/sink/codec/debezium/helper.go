@@ -76,6 +76,10 @@ func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 		if c.OriginDefaultValue != nil {
 			c.SetDefaultValue(c.OriginDefaultValue)
 		}
+	case mysql.TypeBit:
+		if c.OriginDefaultValue != nil {
+			c.SetDefaultValue(c.OriginDefaultValue)
+		}
 	default:
 	}
 }
@@ -132,7 +136,10 @@ func getCharset(ft types.FieldType) string {
 func getLen(ft types.FieldType) int {
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
-	if mysql.HasUnsignedFlag(ft.GetFlag()) {
+	if flen == 0 {
+		return -1
+	}
+	if mysql.HasUnsignedFlag(ft.GetFlag()) && ft.GetType() != mysql.TypeBit {
 		return -1
 	}
 	switch ft.GetType() {
@@ -196,7 +203,7 @@ func getSuffix(ft types.FieldType) string {
 	case mysql.TypeNewDecimal:
 		suffix = fmt.Sprintf("(%d,%d)", displayFlen, displayDecimal)
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
-		if !mysql.HasBinaryFlag(ft.GetFlag()) {
+		if !mysql.HasBinaryFlag(ft.GetFlag()) && displayFlen != 1 {
 			suffix = fmt.Sprintf("(%d)", displayFlen)
 		}
 	case mysql.TypeYear:
