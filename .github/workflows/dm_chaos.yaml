@@ -252,6 +252,9 @@ jobs:
       - name: Wait for chaos test case complete
         run: |
           $GITHUB_WORKSPACE/dm/chaos/scripts/check-case.sh
+      
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
