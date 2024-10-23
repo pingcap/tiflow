@@ -73,7 +73,12 @@ jobs:
       - name: install k3s
         run: |
           curl -fsSL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          echo "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> ~/.profile
+
+      - name: Export KUBECONFIG environment variable
+        run: |
+          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
+        shell: bash
 
       - name: Print cluster information
         run: |
@@ -102,9 +107,9 @@ jobs:
           docker build -f $GITHUB_WORKSPACE/dm/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
           docker image list
       
-      - name: load image to k3s
-        run: |
-          docker save dm:chaos | sudo k3s ctr images import -
+      #- name: load image to k3s
+      #  run: |
+      #    docker save dm:chaos | sudo k3s ctr images import -
 
       # Set up upstream instances
       - name: Set up sources
