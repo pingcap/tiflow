@@ -64,7 +64,7 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
+            storage: 500Mi
 
 ---
 apiVersion: apps/v1
