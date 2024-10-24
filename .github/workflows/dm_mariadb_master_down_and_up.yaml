@@ -57,7 +57,7 @@ jobs:
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
       - name: Upload logs
         continue-on-error: true
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: upstream-switch-logs

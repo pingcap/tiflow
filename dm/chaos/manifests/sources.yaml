@@ -64,7 +64,7 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
+            storage: 500Mi
 
 ---
 apiVersion: apps/v1
@@ -87,7 +87,7 @@ spec:
     spec:
       containers:
         - name: mysql8
-          image: mysql:latest
+          image: mysql:8.0
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: "/var/lib/mysql"

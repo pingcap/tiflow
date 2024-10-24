@@ -282,7 +282,7 @@ func (t *task) createTask() error {
 	if err != nil {
 		return err
 	} else if !resp.Result && !strings.Contains(resp.Msg, "already exist") { // imprecise match
-		return fmt.Errorf("fail to start task: %s", resp.Msg)
+		return fmt.Errorf("fail to start task: %v", resp)
 	}
 	return nil
 }
