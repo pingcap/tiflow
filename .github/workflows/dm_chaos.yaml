@@ -79,13 +79,6 @@ jobs:
             --docker
         shell: bash
 
-      - name: Wait for coredns
-        run: |
-          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
-        shell: bash
-        env:
-          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-          
       - name: Export KUBECONFIG environment variable
         run: |
           echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
