@@ -72,9 +72,20 @@ jobs:
 
       - name: install k3s
         run: |
-          curl -fsSL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
-          echo "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> ~/.profile
+          curl -fsSL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 \
+            "${k3s_disable_command:---disable}" metrics-server \
+            "${k3s_disable_command:---disable}" traefik \
+            --flannel-backend=none \
+            --docker
+        shell: bash
 
+      - name: Wait for coredns
+        run: |
+          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+        shell: bash
+        env:
+          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+          
       - name: Export KUBECONFIG environment variable
         run: |
           echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
