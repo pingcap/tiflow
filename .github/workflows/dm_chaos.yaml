@@ -111,10 +111,6 @@ jobs:
           docker build -f $GITHUB_WORKSPACE/dm/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
           docker image list
       
-      - name: load image to k3s
-        run: |
-          docker save dm:chaos | sudo k3s ctr images import -
-
       # Set up upstream instances
       - name: Set up sources
         run: |
