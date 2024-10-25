@@ -41,9 +41,14 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
-	"github.com/siddontang/go/ioutil2"
 	"go.uber.org/zap"
 )
+
+// Check file exists or not
+func fileExists(name string) bool {
+	_, err := os.Stat(name)
+	return !os.IsNotExist(err)
+}
 
 const (
 	// checkpointFile represents the checkpoints' file name which used for save and loads chunks
@@ -161,7 +166,7 @@ func (df *Diff) initCheckpoint() error {
 
 	finishTableNums := 0
 	path := filepath.Join(df.CheckpointDir, checkpointFile)
-	if ioutil2.FileExists(path) {
+	if fileExists(path) {
 		node, reportInfo, err := df.cp.LoadChunk(path)
 		if err != nil {
 			return errors.Annotate(err, "the checkpoint load process failed")
@@ -740,7 +745,7 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				tableDiff := df.downstream.GetTables()[dml.node.GetTableIndex()]
 				fileName := fmt.Sprintf("%s:%s:%s.sql", tableDiff.Schema, tableDiff.Table, utils.GetSQLFileName(dml.node.GetID()))
 				fixSQLPath := filepath.Join(df.FixSQLDir, fileName)
-				if ok := ioutil2.FileExists(fixSQLPath); ok {
+				if fileExists(fixSQLPath) {
 					// unreachable
 					log.Fatal("write sql failed: repeat sql happen", zap.Strings("sql", dml.sqls))
 				}
