@@ -76,10 +76,6 @@ func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 		if c.OriginDefaultValue != nil {
 			c.SetDefaultValue(c.OriginDefaultValue)
 		}
-	case mysql.TypeBit:
-		if c.OriginDefaultValue != nil {
-			c.SetDefaultValue(c.OriginDefaultValue)
-		}
 	default:
 	}
 }
@@ -146,7 +142,7 @@ func getLen(ft types.FieldType) int {
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
 		return decimal
 	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal, mysql.TypeSet,
-		mysql.TypeVarString, mysql.TypeTiDBVectorFloat32, mysql.TypeTiny, mysql.TypeYear, mysql.TypeShort:
+		mysql.TypeVarString, mysql.TypeTiDBVectorFloat32, mysql.TypeYear:
 		return flen
 	case mysql.TypeEnum:
 		return 1
@@ -158,7 +154,7 @@ func getLen(ft types.FieldType) int {
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeLong:
+	case mysql.TypeLong, mysql.TypeTiny, mysql.TypeShort:
 		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 		if flen != defaultFlen {
 			return flen

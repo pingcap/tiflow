@@ -69,13 +69,31 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 	switch col.GetType() {
 	case mysql.TypeBit:
 		n := ft.GetFlen()
+		var v uint64
+		var err error
+		if col.GetDefaultValue() != nil {
+			val, ok := col.GetDefaultValue().(string)
+			if !ok {
+				log.Error(
+					"GetDefaultValue meet error",
+					zap.Any("column", col.GetName()), zap.Error(err))
+				return
+			}
+			v, err = strconv.ParseUint(common.UnsafeStringToBinary(val), 2, 64)
+			if err != nil {
+				log.Error(
+					"parsing uint from bit meet error",
+					zap.Any("column", col.GetName()), zap.Error(err))
+				return
+			}
+		}
 		if n == 1 {
 			writer.WriteObjectElement(func() {
 				writer.WriteStringField("type", "boolean")
 				writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
-					writer.WriteAnyField("default", col.GetDefaultValue())
+					writer.WriteBoolField("default", v != 0) // bool
 				}
 			})
 		} else {
@@ -89,7 +107,13 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				})
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
-					writer.WriteAnyField("default", col.GetDefaultValue())
+					var buf [8]byte
+					binary.LittleEndian.PutUint64(buf[:], v)
+					numBytes := n / 8
+					if n%8 != 0 {
+						numBytes += 1
+					}
+					c.writeBinaryField(writer, "default", buf[:numBytes]) // binary
 				}
 			})
 		}
@@ -156,7 +180,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
-
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -437,8 +460,9 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		var v uint64
 		switch val := col.Value.(type) {
 		case uint64:
+			v = val
 		case string:
-			hexValue, err := strconv.ParseUint(val, 0, 64)
+			hexValue, err := strconv.ParseUint(common.UnsafeStringToBinary(val), 2, 64)
 			if err != nil {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type string for bit column %s, error:%s",
@@ -460,6 +484,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteBoolField(col.GetName(), v != 0)
 			return nil
 		} else {
+			// 10110000100001111
 			var buf [8]byte
 			binary.LittleEndian.PutUint64(buf[:], v)
 			numBytes := n / 8
@@ -707,6 +732,20 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				}
 				writer.WriteInt64Field(col.GetName(), t)
 			}
+		}
+		return nil
+
+	case mysql.TypeDouble, mysql.TypeFloat:
+		if v, ok := col.Value.(string); ok {
+			val, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type string for int column %s",
+					col.GetName())
+			}
+			writer.WriteFloat64Field(col.GetName(), val)
+		} else {
+			writer.WriteAnyField(col.GetName(), col.Value)
 		}
 		return nil
 
@@ -1223,10 +1262,8 @@ func (c *dbzCodec) EncodeDDLEvent(
 												// jWriter.WriteAnyField("defaultValueExpression", "CURRENT_TIMESTAMP")
 											} else if v == "<nil>" {
 												jWriter.WriteNullField("defaultValueExpression")
-											} else if col.DefaultValueBit != nil && (strings.HasPrefix(v, "0x")) {
-												var hexValue int64
-												hexValue, err = strconv.ParseInt(v, 0, 64)
-												jWriter.WriteStringField("defaultValueExpression", fmt.Sprintf("%b", hexValue))
+											} else if col.DefaultValueBit != nil {
+												jWriter.WriteStringField("defaultValueExpression", common.UnsafeStringToBinary(v))
 											} else {
 												jWriter.WriteStringField("defaultValueExpression", v)
 											}

@@ -400,3 +400,27 @@ func UnsafeStringToBytes(s string) []byte {
 		}{s, len(s)},
 	))
 }
+
+// UnsafeStringToBinary create binary string from string without copying
+func UnsafeStringToBinary(s string) string {
+	var result string
+	bs := UnsafeStringToBytes(escapeBackslash(s))
+	if len(bs) >= 1 {
+		result += fmt.Sprintf("%b", bs[0])
+	}
+	for i := 1; i < len(bs); i++ {
+		result += fmt.Sprintf("%08b", bs[i])
+	}
+	return result
+}
+
+func escapeBackslash(s string) string {
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			continue
+		}
+		sb.WriteByte(s[i])
+	}
+	return sb.String()
+}

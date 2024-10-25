@@ -31,11 +31,12 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
-var timeOut = time.Second * 30
+var timeOut = time.Second * 10
 
 var (
 	nFailed = 0
@@ -91,6 +92,11 @@ func runAllTestCases(dir string) bool {
 
 	for _, path := range files {
 		logger.Info("Run", zap.String("case", path))
+		failed := runTestCase(path)
+		if failed {
+			logger.Info("failed", zap.String("case", path))
+			return false
+		}
 	}
 
 	if nFailed > 0 {
@@ -165,10 +171,10 @@ func runTestCase(testCasePath string) bool {
 }
 
 func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) (map[string]any, map[string]any, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		m, err := reader.FetchMessage(ctx)
-		cancel()
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				return nil, nil, false, nil
@@ -176,7 +182,7 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 			return nil, nil, false, fmt.Errorf("Failed to read CDC record of %s: %w", kind, err)
 		}
 
-		if err = reader.CommitMessages(context.Background(), m); err != nil {
+		if err = reader.CommitMessages(ctx, m); err != nil {
 			return nil, nil, false, fmt.Errorf("Failed to commit CDC record of %s: %w", kind, err)
 		}
 
@@ -241,18 +247,10 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 										col["typeName"] = replaceString(col["typeName"], "NUMERIC", "DECIMAL")
 										col["typeExpression"] = replaceString(col["typeExpression"], "NUMERIC", "DECIMAL")
 										col["jdbcType"] = float64(3)
-									case "NVARCHAR":
-										col["typeName"] = replaceString(col["typeName"], "NVARCHAR", "VARCHAR")
-										col["typeExpression"] = replaceString(col["typeExpression"], "NVARCHAR", "VARCHAR")
-										col["jdbcType"] = float64(12)
-									case "NCHAR":
-										col["typeName"] = replaceString(col["typeName"], "NCHAR", "CHAR")
-										col["typeExpression"] = replaceString(col["typeExpression"], "NCHAR", "CHAR")
-										col["jdbcType"] = float64(1)
 									case "REAL":
-										col["typeName"] = replaceString(col["typeName"], "REAL", "DOUBLE")
-										col["typeExpression"] = replaceString(col["typeExpression"], "REAL", "DOUBLE")
-										col["jdbcType"] = float64(7)
+										col["typeName"] = replaceString(col["typeName"], "REAL", "FLOAT")
+										col["typeExpression"] = replaceString(col["typeExpression"], "REAL", "FLOAT")
+										col["jdbcType"] = float64(6)
 									}
 								}
 							}
@@ -284,6 +282,7 @@ func printRecord(obj any) {
 
 func normalizeSQL(sql string) string {
 	p := parser.New()
+	p.SetSQLMode(mysql.ModeRealAsFloat) // necessary
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	buf := new(bytes.Buffer)
 	if err != nil {
