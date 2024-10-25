@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt sync_diff_inspector cdc kafka_consumer storage_consumer coverage \
+.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -158,9 +158,6 @@ build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
-
-sync_diff_inspector:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector/main.go
 
 kafka_consumer:
 	$(CONSUMER_GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
@@ -569,6 +566,7 @@ check_third_party_binary_for_engine:
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
 	@which mc || (echo "mc not found in ${PATH}, you can use 'make bin/mc' and move bin/mc to ${PATH}"; exit 1)
+	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
@@ -582,6 +580,9 @@ check_cdc_integration_test:
 
 bin/mc:
 	./scripts/download-mc.sh
+
+bin/sync_diff_inspector:
+	./scripts/download-sync-diff.sh
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)
