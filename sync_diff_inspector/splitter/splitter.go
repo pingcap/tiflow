@@ -29,6 +29,8 @@ const (
 type ChunkIterator interface {
 	// Next seeks the next chunk, return nil if seeks to end.
 	Next() (*chunk.Range, error)
+
+	// Close close the current iterator.
 	Close()
 }
 

@@ -607,6 +607,7 @@ func TestBucketSpliter(t *testing.T) {
 		tableDiff.ChunkSize = testCase.chunkSize
 		iter, err := NewBucketIterator(ctx, "", tableDiff, db)
 		require.NoError(t, err)
+		defer iter.Close()
 
 		obtainChunks := make([]chunkResult, 0, len(testCase.expectResult))
 		nextBeginBucket := 0
@@ -675,6 +676,8 @@ func TestBucketSpliter(t *testing.T) {
 			break
 		}
 	}
+	iter.Close()
+
 	bounds1 := chunk.Bounds
 
 	rangeInfo := &RangeInfo{
