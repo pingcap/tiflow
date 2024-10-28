@@ -60,28 +60,28 @@ func TestNewBackoff(t *testing.T) {
 func TestExponentialBackoff(t *testing.T) {
 	t.Parallel()
 	var (
-		min            = 1 * time.Millisecond
-		max            = 1 * time.Second
+		minT           = 1 * time.Millisecond
+		maxT           = 1 * time.Second
 		factor float64 = 2
 	)
 	b := &Backoff{
-		Min:    min,
-		Max:    max,
+		Min:    minT,
+		Max:    maxT,
 		Factor: factor,
 	}
 
 	for i := 0; i < 10; i++ {
-		expected := min * time.Duration(math.Pow(factor, float64(i)))
+		expected := minT * time.Duration(math.Pow(factor, float64(i)))
 		require.Equal(t, expected, b.Duration())
 	}
 	b.Rollback()
-	require.Equal(t, 512*min, b.Current())
+	require.Equal(t, 512*minT, b.Current())
 	b.Forward()
 	for i := 0; i < 10; i++ {
-		require.Equal(t, max, b.Duration())
+		require.Equal(t, maxT, b.Duration())
 	}
 	b.Reset()
-	require.Equal(t, min, b.Duration())
+	require.Equal(t, minT, b.Duration())
 }
 
 func checkBetween(t *testing.T, value, low, high time.Duration) {
@@ -93,38 +93,38 @@ func checkBetween(t *testing.T, value, low, high time.Duration) {
 func TestBackoffJitter(t *testing.T) {
 	t.Parallel()
 	var (
-		min            = 1 * time.Millisecond
-		max            = 1 * time.Second
+		minT           = 1 * time.Millisecond
+		maxT           = 1 * time.Second
 		factor float64 = 2
 	)
 	b := &Backoff{
-		Min:    min,
-		Max:    max,
+		Min:    minT,
+		Max:    maxT,
 		Factor: factor,
 		Jitter: true,
 	}
-	require.Equal(t, min, b.Duration())
-	checkBetween(t, b.Duration(), min, 2*min)
-	checkBetween(t, b.Duration(), 2*min, 4*min)
-	checkBetween(t, b.Duration(), 4*min, 8*min)
+	require.Equal(t, minT, b.Duration())
+	checkBetween(t, b.Duration(), minT, 2*minT)
+	checkBetween(t, b.Duration(), 2*minT, 4*minT)
+	checkBetween(t, b.Duration(), 4*minT, 8*minT)
 	b.Reset()
-	require.Equal(t, min, b.Duration())
+	require.Equal(t, minT, b.Duration())
 }
 
 func TestFixedBackoff(t *testing.T) {
 	t.Parallel()
 	var (
-		min            = 100 * time.Millisecond
-		max            = 100 * time.Millisecond
+		minT           = 100 * time.Millisecond
+		maxT           = 100 * time.Millisecond
 		factor float64 = 2
 	)
 	b := &Backoff{
-		Min:    min,
-		Max:    max,
+		Min:    minT,
+		Max:    maxT,
 		Factor: factor,
 	}
 	for i := 0; i < 10; i++ {
-		require.Equal(t, max, b.Duration())
+		require.Equal(t, maxT, b.Duration())
 	}
 }
 
@@ -154,13 +154,13 @@ func TestForward(t *testing.T) {
 	t.Parallel()
 	var (
 		factor float64 = 2
-		min            = 1 * time.Second
-		max            = 5 * time.Second
+		minT           = 1 * time.Second
+		maxT           = 5 * time.Second
 		n              = 10
 	)
 	b := &Backoff{
-		Min:    min,
-		Max:    max,
+		Min:    minT,
+		Max:    maxT,
 		Factor: factor,
 	}
 	for i := 0; i < n; i++ {

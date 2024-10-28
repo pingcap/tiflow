@@ -111,7 +111,7 @@ func (m *mockDDLSink) run(ctx context.Context) {
 	}()
 }
 
-func (m *mockDDLSink) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error) {
+func (m *mockDDLSink) emitDDLEvent(_ context.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
 	defer func() {
 		if m.resetDDLDone {
@@ -126,7 +126,7 @@ func (m *mockDDLSink) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	return m.ddlDone, nil
 }
 
-func (m *mockDDLSink) emitSyncPoint(ctx context.Context, checkpointTs uint64) error {
+func (m *mockDDLSink) emitSyncPoint(_ context.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
@@ -184,18 +184,18 @@ func (m *mockScheduler) Tick(
 }
 
 // MoveTable is used to trigger manual table moves.
-func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID) {}
+func (m *mockScheduler) MoveTable(_ model.TableID, _ model.CaptureID) {}
 
 // Rebalance is used to trigger manual workload rebalances.
 func (m *mockScheduler) Rebalance() {}
 
 // DrainCapture implement scheduler interface
-func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
+func (m *mockScheduler) DrainCapture(_ model.CaptureID) (int, error) {
 	return 0, nil
 }
 
 // Close closes the scheduler and releases resources.
-func (m *mockScheduler) Close(ctx context.Context) {}
+func (m *mockScheduler) Close(_ context.Context) {}
 
 func newMockDDLSink(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
 	return &mockDDLSink{
@@ -212,7 +212,7 @@ func newMockDDLSinkWithBootstrapError(_ model.ChangeFeedID, _ *model.ChangeFeedI
 	}
 }
 
-func newMockPuller(_ context.Context, _ *upstream.Upstream, startTs uint64, _ model.ChangeFeedID, schemaStorage entry.SchemaStorage, _ filter.Filter) puller.DDLPuller {
+func newMockPuller(_ *upstream.Upstream, startTs uint64, _ model.ChangeFeedID, schemaStorage entry.SchemaStorage, _ filter.Filter) puller.DDLPuller {
 	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage}
 }
 

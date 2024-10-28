@@ -451,61 +451,19 @@ func mysqlTypeFromTiDBType(tidbType string) byte {
 	return result
 }
 
-const (
-	replacementChar = "_"
-	numberPrefix    = "_"
-)
-
-// sanitizeName escapes not permitted chars for avro
-// debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
-// https://avro.apache.org/docs/current/spec.html#names
-func sanitizeName(name string) string {
-	changed := false
-	var sb strings.Builder
-	for i, c := range name {
-		if i == 0 && (c >= '0' && c <= '9') {
-			sb.WriteString(numberPrefix)
-			sb.WriteRune(c)
-			changed = true
-		} else if !(c == '_' ||
-			('a' <= c && c <= 'z') ||
-			('A' <= c && c <= 'Z') ||
-			('0' <= c && c <= '9')) {
-			sb.WriteString(replacementChar)
-			changed = true
-		} else {
-			sb.WriteRune(c)
-		}
-	}
-
-	sanitizedName := sb.String()
-	if changed {
-		log.Warn(
-			"Name is potentially not safe for serialization, replace it",
-			zap.String("name", name),
-			zap.String("replacedName", sanitizedName),
-		)
-	}
-	return sanitizedName
-}
-
 // sanitizeTopic escapes ".", it may have special meanings for sink connectors
 func sanitizeTopic(name string) string {
-	return strings.ReplaceAll(name, ".", replacementChar)
+	return strings.ReplaceAll(name, ".", "_")
 }
 
-// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
-// /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
-// MySqlAntlrDdlParser.java#L374
-func escapeEnumAndSetOptions(option string) string {
-	option = strings.ReplaceAll(option, ",", "\\,")
-	option = strings.ReplaceAll(option, "\\'", "'")
-	option = strings.ReplaceAll(option, "''", "'")
-	return option
-}
-
+// <empty> | <name>[(<dot><name>)*]
 func getAvroNamespace(namespace string, schema string) string {
-	return sanitizeName(namespace) + "." + sanitizeName(schema)
+	ns := common.SanitizeName(namespace)
+	s := common.SanitizeName(schema)
+	if s != "" {
+		return ns + "." + s
+	}
+	return ns
 }
 
 type avroSchema struct {
@@ -567,7 +525,7 @@ func (a *BatchEncoder) schemaWithExtension(
 func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroEncodeInput) (*avroSchemaTop, error) {
 	top := &avroSchemaTop{
 		Tp:        "record",
-		Name:      sanitizeName(tableName.Table),
+		Name:      common.SanitizeName(tableName.Table),
 		Namespace: getAvroNamespace(a.namespace, tableName.Schema),
 		Fields:    nil,
 	}
@@ -582,7 +540,7 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 			return nil, err
 		}
 		field := make(map[string]interface{})
-		field["name"] = sanitizeName(colx.GetName())
+		field["name"] = common.SanitizeName(colx.GetName())
 
 		copied := colx
 		copied.ColumnData = &model.ColumnData{ColumnID: colx.ColumnID, Value: colx.GetDefaultValue()}
@@ -675,9 +633,9 @@ func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]inter
 
 		// https: //pkg.go.dev/github.com/linkedin/goavro/v2#Union
 		if colx.GetFlag().IsNullable() {
-			ret[sanitizeName(colx.GetName())] = goavro.Union(str, data)
+			ret[common.SanitizeName(colx.GetName())] = goavro.Union(str, data)
 		} else {
-			ret[sanitizeName(colx.GetName())] = data
+			ret[common.SanitizeName(colx.GetName())] = data
 		}
 	}
 
@@ -786,7 +744,7 @@ func (a *BatchEncoder) columnToAvroSchema(col model.ColumnDataX) (interface{}, e
 		elems := col.GetColumnInfo().FieldType.GetElems()
 		es := make([]string, 0, len(elems))
 		for _, e := range elems {
-			e = escapeEnumAndSetOptions(e)
+			e = common.EscapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
 		return avroSchema{

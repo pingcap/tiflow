@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -28,11 +28,11 @@ import (
 // minLeaseTTL is 1 in etcd cluster.
 var keepAliveTTL = int64(0)
 
-func (t *testForEtcd) TestWorkerKeepAlive(c *C) {
+func (t *testForEtcd) TestWorkerKeepAlive(c *check.C) {
 	defer clearTestInfoOperation(c)
 	wwm, rev, err := GetKeepAliveWorkers(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(wwm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(wwm, check.HasLen, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -56,15 +56,15 @@ func (t *testForEtcd) TestWorkerKeepAlive(c *C) {
 		cancels = append(cancels, cancel1)
 		go func(ctx context.Context) {
 			err1 := KeepAlive(ctx, etcdTestCli, worker, keepAliveTTL)
-			c.Assert(err1, IsNil, Commentf("if \"context canceled\", retry later\ncause: context used in `KeepAlive` exceed timeout of 10s (`etcdutil.DefaultRequestTimeout`)"))
+			c.Assert(err1, check.IsNil, check.Commentf("if \"context canceled\", retry later\ncause: context used in `KeepAlive` exceed timeout of 10s (`etcdutil.DefaultRequestTimeout`)"))
 			atomic.AddInt32(&finished, 1)
 		}(ctx1)
 
 		select {
 		case ev := <-evCh:
-			c.Assert(ev.IsDeleted, IsFalse)
-			c.Assert(ev.WorkerName, Equals, worker)
-			c.Assert(ev.JoinTime.Before(curTime), IsFalse)
+			c.Assert(ev.IsDeleted, check.IsFalse)
+			c.Assert(ev.WorkerName, check.Equals, worker)
+			c.Assert(ev.JoinTime.Before(curTime), check.IsFalse)
 		case <-time.After(timeout):
 			c.Fatal("fail to receive put ev " + strconv.Itoa(i) + " before timeout")
 		}
@@ -75,8 +75,8 @@ func (t *testForEtcd) TestWorkerKeepAlive(c *C) {
 		cancel1()
 		select {
 		case ev := <-evCh:
-			c.Assert(ev.IsDeleted, IsTrue)
-			c.Assert(ev.WorkerName, Equals, worker)
+			c.Assert(ev.IsDeleted, check.IsTrue)
+			c.Assert(ev.WorkerName, check.Equals, worker)
 		case <-time.After(timeout):
 			c.Fatal("fail to receive delete ev " + strconv.Itoa(i+1) + " before timeout")
 		}
@@ -85,7 +85,7 @@ func (t *testForEtcd) TestWorkerKeepAlive(c *C) {
 	waitKeepAliveQuit := utils.WaitSomething(100, timeout, func() bool {
 		return atomic.LoadInt32(&finished) == 5
 	})
-	c.Assert(waitKeepAliveQuit, IsTrue)
+	c.Assert(waitKeepAliveQuit, check.IsTrue)
 
 	cancel()
 	select {
@@ -93,14 +93,14 @@ func (t *testForEtcd) TestWorkerKeepAlive(c *C) {
 	case <-time.After(timeout):
 		c.Fatal("fail to quit WatchWorkerEvent before timeout")
 	}
-	c.Assert(errCh, HasLen, 0)
+	c.Assert(errCh, check.HasLen, 0)
 }
 
-func (t *testForEtcd) TestKeepAliveRevokeLease(c *C) {
+func (t *testForEtcd) TestKeepAliveRevokeLease(c *check.C) {
 	defer clearTestInfoOperation(c)
 	wwm, rev, err := GetKeepAliveWorkers(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(wwm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(wwm, check.HasLen, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -121,7 +121,7 @@ func (t *testForEtcd) TestKeepAliveRevokeLease(c *C) {
 		go func(ctx context.Context, cancel1 context.CancelFunc) {
 			err1 := KeepAlive(ctx, etcdTestCli, worker, hugeKeepAliveTTL)
 			cancel1()
-			c.Assert(err1, IsNil)
+			c.Assert(err1, check.IsNil)
 			atomic.AddInt32(&finished, 1)
 		}(ctx1, cancel1)
 	}
@@ -129,9 +129,9 @@ func (t *testForEtcd) TestKeepAliveRevokeLease(c *C) {
 	ctx1, cancel1 := context.WithTimeout(ctx, 10*time.Second)
 	WatchWorkerEvent(ctx1, etcdTestCli, rev, evCh, errCh)
 	cancel1()
-	c.Assert(evCh, HasLen, 100)
-	c.Assert(errCh, HasLen, 0)
-	c.Assert(atomic.LoadInt32(&finished), Equals, int32(50))
+	c.Assert(evCh, check.HasLen, 100)
+	c.Assert(errCh, check.HasLen, 0)
+	c.Assert(atomic.LoadInt32(&finished), check.Equals, int32(50))
 	for len(evCh) > 0 {
 		ev := <-evCh
 		if ev.IsDeleted {
@@ -143,6 +143,6 @@ func (t *testForEtcd) TestKeepAliveRevokeLease(c *C) {
 	sort.Strings(putEvent)
 	sort.Strings(deleteEvent)
 	sort.Strings(workerSet)
-	c.Assert(putEvent, DeepEquals, workerSet)
-	c.Assert(deleteEvent, DeepEquals, workerSet)
+	c.Assert(putEvent, check.DeepEquals, workerSet)
+	c.Assert(deleteEvent, check.DeepEquals, workerSet)
 }

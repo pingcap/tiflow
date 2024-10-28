@@ -174,9 +174,9 @@ download_and_extract() {
 
 	download_file "$url" "$file_name" "${TMP_DIR}/$file_name"
 	if [ -n "$extract_path" ]; then
-		tar -xz -C ${THIRD_BIN_DIR} $extract_path -f ${TMP_DIR}/$file_name
+		tar -xz --wildcards -C ${THIRD_BIN_DIR} $extract_path -f ${TMP_DIR}/$file_name
 	else
-		tar -xz -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$file_name
+		tar -xz --wildcards -C ${THIRD_BIN_DIR} -f ${TMP_DIR}/$file_name
 	fi
 
 	# Move extracted files if necessary
@@ -206,6 +206,7 @@ cleanup() {
 
 setup() {
 	cleanup
+	rm -rf ${BIN_DIR}
 	mkdir -p ${THIRD_BIN_DIR} ${TMP_DIR} ${BIN_DIR}
 }
 
