@@ -30,7 +30,7 @@ function run() {
 		;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config=$CUR/conf/cf.toml
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
@@ -40,6 +40,10 @@ function run() {
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists foreign_key.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+	check_table_not_exists foreign_key.t12 ${DOWN_TIDB_HOST} ${DOWN_TIDB_HOST}
+	run_sql "select count(1) from foreign_key.t13;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 5"
 
 	cleanup_process $CDC_BINARY
 }
