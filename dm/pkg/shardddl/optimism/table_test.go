@@ -18,24 +18,24 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/stretchr/testify/require"
 )
 
-func (t *testForEtcd) TestSourceTablesJSON(c *C) {
+func (t *testForEtcd) TestSourceTablesJSON(c *check.C) {
 	st1 := NewSourceTables("test", "mysql-replica-1")
 	st1.AddTable("db1", "tbl1", "db", "tbl")
 	j, err := st1.toJSON()
-	c.Assert(err, IsNil)
-	c.Assert(j, Equals, `{"task":"test","source":"mysql-replica-1","tables":{"db":{"tbl":{"db1":{"tbl1":{}}}}}}`)
-	c.Assert(j, Equals, st1.String())
+	c.Assert(err, check.IsNil)
+	c.Assert(j, check.Equals, `{"task":"test","source":"mysql-replica-1","tables":{"db":{"tbl":{"db1":{"tbl1":{}}}}}}`)
+	c.Assert(j, check.Equals, st1.String())
 
 	st2, err := sourceTablesFromJSON(j)
-	c.Assert(err, IsNil)
-	c.Assert(st2, DeepEquals, st1)
+	c.Assert(err, check.IsNil)
+	c.Assert(st2, check.DeepEquals, st1)
 }
 
-func (t *testForEtcd) TestSourceTablesAddRemove(c *C) {
+func (t *testForEtcd) TestSourceTablesAddRemove(c *check.C) {
 	var (
 		task       = "task"
 		source     = "mysql-replica-1"
@@ -46,38 +46,38 @@ func (t *testForEtcd) TestSourceTablesAddRemove(c *C) {
 	)
 
 	// no target table exist.
-	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), IsTrue)
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), IsTrue)
+	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), check.IsTrue)
+	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
 
 	// add a table for downTable1.
-	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), IsTrue)
-	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable1), DeepEquals,
+	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), check.IsTrue)
+	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), check.IsFalse)
+	c.Assert(st.TargetTable(downSchema, downTable1), check.DeepEquals,
 		newTargetTable(task, source, downSchema, downTable1, map[string]map[string]struct{}{
 			"foo1": {"bar1": struct{}{}},
 		}))
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), IsTrue)
+	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
 
 	// add a table for downTable2.
-	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), IsTrue)
-	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable2), DeepEquals,
+	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), check.IsTrue)
+	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), check.IsFalse)
+	c.Assert(st.TargetTable(downSchema, downTable2), check.DeepEquals,
 		newTargetTable(task, source, downSchema, downTable2, map[string]map[string]struct{}{
 			"foo2": {"bar2": struct{}{}},
 		}))
 
 	// remove a table for downTable1.
-	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), IsTrue)
-	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), IsTrue)
+	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), check.IsTrue)
+	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), check.IsFalse)
+	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), check.IsTrue)
 
 	// remove a table for downTable2.
-	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), IsTrue)
-	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), IsTrue)
+	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), check.IsTrue)
+	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), check.IsFalse)
+	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
 }
 
-func (t *testForEtcd) TestSourceTablesEtcd(c *C) {
+func (t *testForEtcd) TestSourceTablesEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -98,19 +98,19 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *C) {
 
 	// put two SourceTables.
 	rev1, err := PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	rev2, err := PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// get with two SourceTables.
 	stm, rev3, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(stm, HasLen, 1)
-	c.Assert(stm[task], HasLen, 2)
-	c.Assert(stm[task][source1], DeepEquals, st1)
-	c.Assert(stm[task][source2], DeepEquals, st2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(stm, check.HasLen, 1)
+	c.Assert(stm[task], check.HasLen, 2)
+	c.Assert(stm[task][source1], check.DeepEquals, st1)
+	c.Assert(stm[task][source2], check.DeepEquals, st2)
 
 	// watch with an older revision for all SourceTables.
 	wch := make(chan SourceTables, 10)
@@ -122,22 +122,22 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *C) {
 	close(ech)
 
 	// get two source tables.
-	c.Assert(len(wch), Equals, 2)
-	c.Assert(<-wch, DeepEquals, st1)
-	c.Assert(<-wch, DeepEquals, st2)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(len(wch), check.Equals, 2)
+	c.Assert(<-wch, check.DeepEquals, st1)
+	c.Assert(<-wch, check.DeepEquals, st2)
+	c.Assert(len(ech), check.Equals, 0)
 
 	// delete tow sources tables.
 	_, err = DeleteSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	rev4, err := DeleteSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// get without SourceTables.
 	stm, rev5, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev5, Equals, rev4)
-	c.Assert(stm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev5, check.Equals, rev4)
+	c.Assert(stm, check.HasLen, 0)
 
 	// watch the deletion for SourceTables.
 	wch = make(chan SourceTables, 10)
@@ -147,12 +147,12 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *C) {
 	cancel()
 	close(wch)
 	close(ech)
-	c.Assert(len(wch), Equals, 1)
+	c.Assert(len(wch), check.Equals, 1)
 	std := <-wch
-	c.Assert(std.IsDeleted, IsTrue)
-	c.Assert(std.Task, Equals, st2.Task)
-	c.Assert(std.Source, Equals, st2.Source)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(std.IsDeleted, check.IsTrue)
+	c.Assert(std.Task, check.Equals, st2.Task)
+	c.Assert(std.Source, check.Equals, st2.Source)
+	c.Assert(len(ech), check.Equals, 0)
 }
 
 func TestToRouteTable(t *testing.T) {

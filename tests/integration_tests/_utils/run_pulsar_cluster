@@ -1,0 +1,188 @@
+#!/bin/bash
+
+# parameter 1: work directory
+# parameter 2: cluster_type,  mtls or oauth, otherwise use default configuration to start pulsar cluster
+
+set -eux
+
+echo "[$(date)] <<<<<< START pulsar cluster in $TEST_NAME case >>>>>>"
+workdir=$1
+cluster_type=$2
+
+cd $workdir
+
+DEFAULT_PULSAR_HOME="/usr/local/pulsar"
+# use PULSAR_HOME if it is set, otherwise use default pulsar home
+pulsar_dir=${PULSAR_HOME:-$DEFAULT_PULSAR_HOME}
+
+mtls_conf=$(
+	cat <<-EOF
+
+		authenticationEnabled=true
+		authenticationProviders=org.apache.pulsar.broker.authentication.AuthenticationProviderTls
+		brokerClientTlsEnabled=true
+		brokerClientTrustCertsFilePath=${workdir}/ca.cert.pem
+		brokerClientAuthenticationPlugin=org.apache.pulsar.client.impl.auth.AuthenticationTls
+		brokerClientAuthenticationParameters={"tlsCertFile":"${workdir}/broker_client.cert.pem","tlsKeyFile":"${workdir}/broker_client.key-pk8.pem"}
+		brokerServicePortTls=6651
+		webServicePortTls=8443
+		tlsTrustCertsFilePath=${workdir}/ca.cert.pem
+		tlsCertificateFilePath=${workdir}/server.cert.pem
+		tlsKeyFilePath=${workdir}/server.key-pk8.pem
+		tlsRequireTrustedClientCertOnConnect=true
+		tlsAllowInsecureConnection=false
+		tlsCertRefreshCheckDurationSec=300
+	EOF
+)
+
+normal_client_conf=$(
+	cat <<-EOF
+
+		webServiceUrl=http://localhost:8080/
+		brokerServiceUrl=pulsar://localhost:6650/
+	EOF
+)
+
+mtls_client_conf=$(
+	cat <<-EOF
+
+		webServiceUrl=https://localhost:8443/
+		brokerServiceUrl=pulsar+ssl://localhost:6651/
+		authPlugin=org.apache.pulsar.client.impl.auth.AuthenticationTls
+		authParams=tlsCertFile:${workdir}/broker_client.cert.pem,tlsKeyFile:${workdir}/broker_client.key-pk8.pem
+		tlsTrustCertsFilePath=${workdir}/ca.cert.pem
+	EOF
+)
+
+oauth_client_conf=$(
+	cat <<-EOF
+
+		    webServiceUrl=http://localhost:8080/
+		    brokerServiceUrl=pulsar://localhost:6650/
+		    authPlugin=org.apache.pulsar.client.impl.auth.oauth2.AuthenticationOAuth2
+		    authParams={"privateKey":"${workdir}/credential.json","audience":"cdc-api-uri","issuerUrl":"http://localhost:9096"}
+	EOF
+)
+
+oauth_conf=$(
+	cat <<-EOF
+
+		authenticationEnabled=true
+		authenticationProviders=org.apache.pulsar.broker.authentication.AuthenticationProviderToken
+
+		brokerClientAuthenticationPlugin=org.apache.pulsar.client.impl.auth.oauth2.AuthenticationOAuth2
+		brokerClientAuthenticationParameters={"privateKey":"file://${workdir}/credential.json","audience":"cdc-api-uri","issuerUrl":"http://localhost:9096"}
+		tokenSecretKey=data:;base64,U0poWDM2X0thcFlTeWJCdEpxMzVseFhfQnJyNExSVVJTa203UW1YSkdteThwVUZXOUVJT2NWUVBzeWt6OS1qag==
+	EOF
+)
+
+credential_json=$(
+	cat <<-EOF
+
+		    {
+		        "client_id":"1234",
+		        "client_secret":"e0KVlA2EiBfjoN13olyZd2kv1KL",
+		        "audience":"cdc-api-uri",
+		        "issuer_url":"http://localhost:9096",
+		        "type": "client_credentials"
+		    }
+	EOF
+)
+
+cert_server_conf=$(
+	cat <<-'EOF'
+		[ req ]
+		default_bits = 2048
+		prompt = no
+		default_md = sha256
+		distinguished_name = dn
+
+		[ v3_ext ]
+		authorityKeyIdentifier=keyid,issuer:always
+		basicConstraints=CA:FALSE
+		keyUsage=critical, digitalSignature, keyEncipherment
+		extendedKeyUsage=serverAuth
+		subjectAltName=@alt_names
+
+		[ dn ]
+		CN = server
+
+		[ alt_names ]
+		DNS.1 = localhost
+		IP.1 = 127.0.0.1
+	EOF
+)
+
+function gen_mtls_config() {
+	openssl genrsa -out ca.key.pem 2048
+	openssl req -x509 -new -nodes -key ca.key.pem -subj "/CN=CARoot" -days 365 -out ca.cert.pem
+	openssl genrsa -out server.key.pem 2048
+	openssl pkcs8 -topk8 -inform PEM -outform PEM -in server.key.pem -out server.key-pk8.pem -nocrypt
+	echo "$cert_server_conf" >server.conf
+	openssl req -new -config server.conf -key server.key.pem -out server.csr.pem -sha256
+	openssl x509 -req -in server.csr.pem -CA ca.cert.pem -CAkey ca.key.pem -CAcreateserial -out server.cert.pem -days 365 -extensions v3_ext -extfile server.conf -sha256
+	openssl genrsa -out broker_client.key.pem 2048
+	openssl pkcs8 -topk8 -inform PEM -outform PEM -in broker_client.key.pem -out broker_client.key-pk8.pem -nocrypt
+	openssl req -new -subj "/CN=broker_client" -key broker_client.key.pem -out broker_client.csr.pem -sha256
+	openssl x509 -req -in broker_client.csr.pem -CA ca.cert.pem -CAkey ca.key.pem -CAcreateserial -out broker_client.cert.pem -days 365 -sha256
+	echo "$mtls_conf" >>${workdir}/pulsar_standalone.conf
+	echo "$mtls_client_conf" >${pulsar_dir}/conf/client.conf
+}
+
+function gen_oauth_config() {
+	echo "$credential_json" >${workdir}/credential.json
+	echo "$oauth_conf" >>${workdir}/pulsar_standalone.conf
+	echo "$oauth_client_conf" >${pulsar_dir}/conf/client.conf
+}
+
+echo "$normal_client_conf" >${pulsar_dir}/conf/client.conf
+# copy the origin config to work directory
+cp $pulsar_dir/conf/standalone.conf ${workdir}/pulsar_standalone.conf
+pulsar_port=6650
+if [ "$cluster_type" == "mtls" ]; then
+	pulsar_port=6651
+	gen_mtls_config
+elif [ "$cluster_type" == "oauth" ]; then
+	oauth2-server >>$workdir/oauth_server.log 2>&1 &
+	echo "Waiting for oauth2 server to be ready..."
+	i=0
+	while ! nc -z localhost "9096"; do
+		i=$((i + 1))
+		if [ "$i" -gt 10 ]; then
+			cat $workdir/oauth_server.log
+			echo 'Failed to start oauth2 server'
+			exit 1
+		fi
+		sleep 2
+	done
+	gen_oauth_config
+else
+	echo "no cluster type specified, using default configuration."
+fi
+
+echo "[$(date)] <<<<<< START pulsar cluster in $cluster_type mode in $TEST_NAME case >>>>>>"
+$pulsar_dir/bin/pulsar standalone --config $workdir/pulsar_standalone.conf -nfw --metadata-dir $workdir/pulsar-metadata --bookkeeper-dir $workdir/pulsar-bookie >>$workdir/pulsar_stdout.log 2>&1 &
+echo "Waiting for pulsar port to be ready..."
+i=0
+while ! nc -z localhost "$pulsar_port"; do
+	i=$((i + 1))
+	if [ "$i" -gt 20 ]; then
+		cat $workdir/pulsar_stdout.log
+		echo 'Failed to start pulsar'
+		exit 1
+	fi
+	sleep 2
+done
+
+echo "Waiting for pulsar namespace to be ready..."
+i=0
+while ! $pulsar_dir/bin/pulsar-admin namespaces list public; do
+	i=$((i + 1))
+	if [ "$i" -gt 20 ]; then
+		cat $workdir/pulsar_stdout.log
+		echo 'Failed to list pulsar namespace'
+		exit 1
+	fi
+	sleep 2
+done
+echo "[$(date)] <<<<<< pulsar is ready >>>>>>"

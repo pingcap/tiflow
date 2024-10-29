@@ -100,8 +100,7 @@ function run() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 $(($TABLE_NUM - 1)) $(($TABLE_NUM + 1))
 
-	run_sql_tidb "select count(*) from dm_meta.test_syncer_checkpoint"
-	check_contains "count(*): $(($TABLE_NUM + 1))"
+	run_sql_tidb_with_retry "select count(*) from dm_meta.test_syncer_checkpoint" "count(*): $(($TABLE_NUM + 1))"
 
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004 (HY000): Transaction is too large'
 
@@ -173,6 +172,8 @@ function run() {
 	killall pd-server 2>/dev/null || true
 
 	run_downstream_cluster $WORK_DIR
+	# wait TiKV init
+	sleep 5
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"

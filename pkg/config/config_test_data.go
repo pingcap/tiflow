@@ -70,7 +70,14 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -95,7 +102,6 @@ const (
     "corruption-handle-level": "warn"
  },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
@@ -123,7 +129,12 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "cache-size-in-mb": 128
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 0,
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
   },
   "security": {
     "ca-path": "",
@@ -152,16 +163,16 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160
+      "compaction-l0-trigger": 16
     },
     "messages": {
       "client-max-batch-interval": 10000000,
-      "client-max-batch-size": 8388608,
-      "client-max-batch-count": 128,
+      "client-max-batch-size": 67108864,
+      "client-max-batch-count": 1024,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4,
+      "server-worker-pool-size": 8,
       "max-recv-msg-size": 268435456,
       "keep-alive-time": 30000000000,
       "keep-alive-timeout": 10000000000
@@ -189,7 +200,9 @@ const (
     }
   },
   "cluster-id": "default",
-  "gc-tuner-memory-threshold": 0
+  "gc-tuner-memory-threshold": 0,
+  "per-table-memory-quota": 0,
+  "max-memory-percentage": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -283,7 +296,8 @@ const (
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+		"claim-check-raw-value": false
       },
       "glue-schema-registry-config": {
         "region":"region",
@@ -325,7 +339,14 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -353,11 +374,11 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -493,7 +514,14 @@ const (
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
     "send-bootstrap-to-all-partition": true,
-    "debezium-disable-schema": false
+    "send-all-bootstrap-at-start": false,
+    "debezium-disable-schema": false,
+    "open": {
+      "output-old-value": true
+    },
+    "debezium": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -519,10 +547,10 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
   "synced-status": {
     "synced-check-interval": 300,
     "checkpoint-interval": 15
-  }
+  },
+  "sql-mode":""
 }`
 )

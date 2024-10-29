@@ -59,8 +59,8 @@ generate ./proto/benchmark ./proto/CraftBenchmark.proto
 generate ./proto/p2p ./proto/CDCPeerToPeer.proto plugins=grpc
 generate ./dm/pb ./dm/proto/dmworker.proto plugins=grpc,protoc-gen-grpc-gateway="$GRPC_GATEWAY"
 generate ./dm/pb ./dm/proto/dmmaster.proto plugins=grpc,protoc-gen-grpc-gateway="$GRPC_GATEWAY"
-shopt -s globstar
-for pb in cdc/**/*.proto; do
+
+for pb in $(find cdc -name '*.proto'); do
 	# Output generated go files next to protobuf files.
 	generate ./cdc $pb paths="source_relative"
 done

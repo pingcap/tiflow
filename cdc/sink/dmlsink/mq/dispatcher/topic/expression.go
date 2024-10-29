@@ -68,13 +68,13 @@ func (e Expression) Validate() error {
 		return nil
 	}
 
-	return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
+	return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs(e)
 }
 
 // ValidateForAvro checks whether topic pattern is {schema}_{table}, the only allowed
 func (e Expression) ValidateForAvro() error {
 	if ok := avroTopicNameRE.MatchString(string(e)); !ok {
-		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs(
+		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs(e,
 			"topic rule for Avro must contain {schema} and {table}",
 		)
 	}
@@ -104,9 +104,8 @@ func (e Expression) Substitute(schema, table string) string {
 		return "_"
 	} else if topicName == ".." {
 		return "__"
-	} else {
-		return topicName
 	}
+	return topicName
 }
 
 // PulsarValidate checks whether a pulsar topic name is valid or not.

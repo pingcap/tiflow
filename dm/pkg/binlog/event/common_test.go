@@ -71,7 +71,7 @@ func TestGenCommonFileHeader(t *testing.T) {
 
 	// MariaDB
 	flavor = gmysql.MariaDBFlavor
-	gSetStr = "1-2-12,2-2-3,3-3-8,4-4-4"
+	gSetStr = "1-2-12,2-2-3,3-3-8,3-4-9"
 
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	require.Nil(t, err)

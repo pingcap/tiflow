@@ -77,6 +77,8 @@ const (
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
+
+	defaultHasVectorType = false
 )
 
 type urlConfig struct {
@@ -96,6 +98,7 @@ type urlConfig struct {
 	EnableBatchDML               *bool   `form:"batch-dml-enable"`
 	EnableMultiStatement         *bool   `form:"multi-stmt-enable"`
 	EnableCachePreparedStatement *bool   `form:"cache-prep-stmts"`
+	HasVectorType                *bool   `form:"has-vector-type"`
 }
 
 // Config is the configs for MySQL backend.
@@ -117,6 +120,7 @@ type Config struct {
 	// IsBDRModeSupported is true if the downstream is TiDB and write source is existed.
 	// write source exists when the downstream is TiDB and version is greater than or equal to v6.5.0.
 	IsWriteSourceExisted bool
+	HasVectorType        bool // HasVectorType is true if the column is vector type
 
 	SourceID        uint64
 	BatchDMLEnable  bool
@@ -139,6 +143,8 @@ func NewConfig() *Config {
 		BatchDMLEnable:         defaultBatchDMLEnable,
 		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
+		SourceID:               config.DefaultTiDBSourceID,
+		HasVectorType:          defaultHasVectorType,
 	}
 }
 
@@ -196,10 +202,24 @@ func (c *Config) Apply(
 	}
 
 	getBatchDMLEnable(urlParameter, &c.BatchDMLEnable)
+	getHasVectorType(urlParameter, &c.HasVectorType)
 	getMultiStmtEnable(urlParameter, &c.MultiStmtEnable)
 	getCachePrepStmts(urlParameter, &c.CachePrepStmts)
 	c.ForceReplicate = replicaConfig.ForceReplicate
-	c.SourceID = replicaConfig.Sink.TiDBSourceID
+
+	// Note(dongmen): The TiDBSourceID should never be 0 here, but we have found that
+	// in some problematic cases, the TiDBSourceID is 0 since something went wrong in the
+	// configuration process. So we need to check it here again.
+	// We do this is because it can cause the data to be inconsistent if the TiDBSourceID is 0
+	// in BDR Mode cluster.
+	if replicaConfig.Sink.TiDBSourceID == 0 {
+		log.Error("The TiDB source ID should never be set to 0. Please report it as a bug. The default value will be used: 1.",
+			zap.Uint64("tidbSourceID", replicaConfig.Sink.TiDBSourceID))
+		c.SourceID = config.DefaultTiDBSourceID
+	} else {
+		c.SourceID = replicaConfig.Sink.TiDBSourceID
+		log.Info("TiDB source ID is set", zap.Uint64("sourceID", c.SourceID))
+	}
 
 	return nil
 }
@@ -209,29 +229,56 @@ func mergeConfig(
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
 	dest := &urlConfig{}
-	dest.SafeMode = replicaConfig.Sink.SafeMode
-	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {
-		mConfig := replicaConfig.Sink.MySQLConfig
-		dest.WorkerCount = mConfig.WorkerCount
-		dest.MaxTxnRow = mConfig.MaxTxnRow
-		dest.MaxMultiUpdateRowCount = mConfig.MaxMultiUpdateRowCount
-		dest.MaxMultiUpdateRowSize = mConfig.MaxMultiUpdateRowSize
-		dest.TiDBTxnMode = mConfig.TiDBTxnMode
-		dest.SSLCa = mConfig.SSLCa
-		dest.SSLCert = mConfig.SSLCert
-		dest.SSLKey = mConfig.SSLKey
-		dest.TimeZone = mConfig.TimeZone
-		dest.WriteTimeout = mConfig.WriteTimeout
-		dest.ReadTimeout = mConfig.ReadTimeout
-		dest.Timeout = mConfig.Timeout
-		dest.EnableBatchDML = mConfig.EnableBatchDML
-		dest.EnableMultiStatement = mConfig.EnableMultiStatement
-		dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
+	if replicaConfig != nil && replicaConfig.Sink != nil {
+		dest.SafeMode = replicaConfig.Sink.SafeMode
+		if replicaConfig.Sink.MySQLConfig != nil {
+			mConfig := replicaConfig.Sink.MySQLConfig
+			dest.WorkerCount = mConfig.WorkerCount
+			dest.MaxTxnRow = mConfig.MaxTxnRow
+			dest.MaxMultiUpdateRowCount = mConfig.MaxMultiUpdateRowCount
+			dest.MaxMultiUpdateRowSize = mConfig.MaxMultiUpdateRowSize
+			dest.TiDBTxnMode = mConfig.TiDBTxnMode
+			dest.SSLCa = mConfig.SSLCa
+			dest.SSLCert = mConfig.SSLCert
+			dest.SSLKey = mConfig.SSLKey
+			dest.TimeZone = mConfig.TimeZone
+			dest.WriteTimeout = mConfig.WriteTimeout
+			dest.ReadTimeout = mConfig.ReadTimeout
+			dest.Timeout = mConfig.Timeout
+			dest.EnableBatchDML = mConfig.EnableBatchDML
+			dest.EnableMultiStatement = mConfig.EnableMultiStatement
+			dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
+		}
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
 	return dest, nil
+}
+
+// IsSinkSafeMode returns whether the sink is in safe mode.
+func IsSinkSafeMode(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) (bool, error) {
+	if sinkURI == nil {
+		return false, cerror.ErrMySQLInvalidConfig.GenWithStack("fail to open MySQL sink, empty SinkURI")
+	}
+
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return false, cerror.ErrMySQLInvalidConfig.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+	}
+	req := &http.Request{URL: sinkURI}
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return false, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	var err error
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
+		return false, err
+	}
+	if urlParameter.SafeMode == nil {
+		return defaultSafeMode, nil
+	}
+	return *urlParameter.SafeMode, nil
 }
 
 func getWorkerCount(values *urlConfig, workerCount *int) error {
@@ -429,6 +476,12 @@ func getDuration(s *string, target *string) error {
 func getBatchDMLEnable(values *urlConfig, batchDMLEnable *bool) {
 	if values.EnableBatchDML != nil {
 		*batchDMLEnable = *values.EnableBatchDML
+	}
+}
+
+func getHasVectorType(values *urlConfig, hasVectorType *bool) {
+	if values.HasVectorType != nil {
+		*hasVectorType = *values.HasVectorType
 	}
 }
 

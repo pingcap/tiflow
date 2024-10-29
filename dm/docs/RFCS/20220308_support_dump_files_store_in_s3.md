@@ -6,7 +6,7 @@ When DM synchronizes data at the full stage, it requires a dynamic space which i
 
 ### User config change
 
-We still use loader's `dir` to config S3 url, but it should be noted that loader's `import-mode` should not be `loader` and it can be `sql` now, because we use [Lightning](https://github.com/pingcap/tidb/tree/master/br/pkg/lightning) to load files in S3. 
+We still use loader's `dir` to config S3 url, but it should be noted that loader's `import-mode` should not be `loader` and it can be `sql` now, because we use [Lightning](https://github.com/pingcap/tidb/tree/master/pkg/lightning) to load files in S3. 
 ```
 loaders:
   global:

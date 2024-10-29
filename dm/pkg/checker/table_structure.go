@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -263,6 +264,7 @@ func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOp
 					if r.State != StateFailure {
 						r.State = StateWarning
 					}
+					// nolint
 					e := NewError(tableMsg + opt.errMessage)
 					e.Severity = StateWarning
 					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
@@ -271,6 +273,7 @@ func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOp
 					r.Errors = append(r.Errors, e)
 				case StateFailure:
 					r.State = StateFailure
+					// nolint:govet
 					e := NewError(tableMsg + opt.errMessage)
 					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
 						resultInstructions[opt.instruction] = struct{}{}
@@ -890,7 +893,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 				c.reMu.Unlock()
 			}
 
-			ti, err := dbutil.GetTableInfoBySQL(statement, p)
+			ti, err := dbutiltest.GetTableInfoBySQL(statement, p)
 			if err != nil {
 				return err
 			}

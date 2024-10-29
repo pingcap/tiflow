@@ -171,6 +171,11 @@ error = '''
 TiCDC cluster is unhealthy
 '''
 
+["CDC:ErrCodeNilFunction"]
+error = '''
+function is not initialized
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -203,7 +208,7 @@ failed to convert ddl '%s' to filter event type
 
 ["CDC:ErrCorruptedDataMutation"]
 error = '''
-Changefeed %s.%s stopped due to corrupted data mutation received. Corrupted mutation detail information %+v
+Changefeed %s.%s stopped due to corrupted data mutation received
 '''
 
 ["CDC:ErrCraftCodecInvalidData"]
@@ -498,7 +503,7 @@ kafka send message failed
 
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
-invalid topic expression
+invalid topic expression: %s 
 '''
 
 ["CDC:ErrLeaseExpired"]
@@ -554,6 +559,11 @@ multiple TiCDC clusters exist while using --pd
 ["CDC:ErrMySQLConnectionError"]
 error = '''
 MySQL connection error
+'''
+
+["CDC:ErrMySQLDuplicateEntry"]
+error = '''
+MySQL duplicate entry error
 '''
 
 ["CDC:ErrMySQLInvalidConfig"]
@@ -911,6 +921,11 @@ error = '''
 cdc server is not ready
 '''
 
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
+'''
+
 ["CDC:ErrSinkInvalidConfig"]
 error = '''
 sink config invalid
@@ -994,6 +1009,11 @@ some tables are not eligible to replicate(%v), if you want to ignore these table
 ["CDC:ErrTargetTsBeforeStartTs"]
 error = '''
 fail to create changefeed because target-ts %d is earlier than start-ts %d
+'''
+
+["CDC:ErrTiDBUnexpectedJobMeta"]
+error = '''
+unexpected `job_meta` from tidb
 '''
 
 ["CDC:ErrTiKVEventFeed"]

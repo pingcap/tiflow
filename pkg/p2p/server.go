@@ -977,11 +977,10 @@ func errorToRPCResponse(err error) p2p.SendMessageResponse {
 			ExitReason:   p2p.ExitReason_CAPTURE_ID_MISMATCH,
 			ErrorMessage: err.Error(),
 		}
-	} else {
-		return p2p.SendMessageResponse{
-			ExitReason:   p2p.ExitReason_UNKNOWN,
-			ErrorMessage: err.Error(),
-		}
+	}
+	return p2p.SendMessageResponse{
+		ExitReason:   p2p.ExitReason_UNKNOWN,
+		ErrorMessage: err.Error(),
 	}
 }
 

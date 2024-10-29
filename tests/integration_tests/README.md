@@ -2,48 +2,36 @@
 
 ### Run integration tests locally
 
-1. The following executables must be copied or generated or linked into these locations. The versions of them should be 
-   the same as that of TiCDC. If you are compiling the master branch of TiCDC, try the latest release versions of the 
-   components.
+1. Run `make prepare_test_binaries` to download TiCDC related binaries for integration test.
+If you need to specify a version, os or arch, you can use, for example: `make prepare_test_binaries community=true ver=v7.0.0 os=linux arch=amd64`. (The `community=true` option is necessary when you need to specify a version, arch or whatever.)
 
-   * `bin/tidb-server` # version >= 6.0.0-rc.1
-   * `bin/tikv-server` # version >= 6.0.0-rc.1
-   * `bin/pd-server`   # version >= 6.0.0-rc.1
-   * `bin/pd-ctl`      # version >= 6.0.0-rc.1
-   * `bin/tiflash`     # needs tiflash binary and some necessary so files
-   * `bin/sync_diff_inspector`
-   * [bin/go-ycsb](https://github.com/pingcap/go-ycsb)
-   * [bin/etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
-   * [bin/jq](https://stedolan.github.io/jq/)
-   * [bin/minio](https://github.com/minio/minio)
+   > Note: Please be aware that if you manually specify the versions of the TiDB-related components during the download process, there is a potential risk of incompatibility if the specified versions do not match the current TiCDC version. For example, see issue #11507 where version mismatches caused incompatibility problems during integration tests.
 
-   > You can also download the binaries. `sync_diff_inspector` can be downloaded 
-   > from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz), 
-   > `tidb-server` related binaries can be downloaded 
-   > from [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz):
+   You should find these executables in the `tiflow/bin` directory after downloading successfully.
+   * `tidb-server` # version >= 6.0.0-rc.1
+   * `tikv-server` # version >= 6.0.0-rc.1
+   * `pd-server`   # version >= 6.0.0-rc.1
+   * `pd-ctl`      # version >= 6.0.0-rc.1
+   * `tiflash`     # tiflash binary
+   * `libc++.so, libc++abi.so, libgmssl.so, libtiflash_proxy.so` # some necessary so files related to tiflash
+   * `sync_diff_inspector`
+   * [go-ycsb](https://github.com/pingcap/go-ycsb)
+   * [etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
+   * [jq](https://stedolan.github.io/jq/)
+   * [minio](https://github.com/minio/minio)
 
-   > If you are running tests on MacOS, tidb related binaries can be downloaded from tiup mirrors, such as 
-   > https://tiup-mirrors.pingcap.com/tidb-v4.0.2-darwin-amd64.tar.gz. And `sync_diff_inspector` can be compiled by 
-   > yourself from source [tidb-tools](https://github.com/pingcap/tidb-tools)
-   
-   > All Tiflash required files can be found in 
-   > [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz) packages. 
-   > You should put `flash_cluster_manager`, `libtiflash_proxy.so` and `tiflash` into `bin` directory in TiCDC code base.
+   > You could download these binaries by yourself from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz) and [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz).
 
-   > Old versions of Minio may cause the integration test cases to fail. You can get a newer version by installing it from source
-   > ([Source Installation](https://github.com/minio/minio#install-from-source)).
-   > [RELEASE.2022-05-08T23-50-31Z](https://github.com/minio/minio/releases/tag/RELEASE.2022-05-08T23-50-31Z) is suggested.
-
-2. These are programs/packages need be installed. 
+2. These are programs/packages need be installed manually.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
      currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
    * [s3cmd](https://s3tools.org/download)
    * unzip
    * psmisc
-   
+
    > You can install `unzip` and `psmisc` using `apt-get` (Ubuntu / Debian) or `yum` (RHEL).
-   
-   > Since the integration test cases will use port 3306 on localhost, please make sure in advance that port 3306 is 
+
+   > Since the integration test cases will use port 3306 on localhost, please make sure in advance that port 3306 is
    > not occupied. (You’d like to stop the local MySQL service on port 3306, if there is one)
 
 3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts
@@ -73,10 +61,10 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 > These scripts and files may not work under the arm architecture,
 > and we have not tested against it. We will try to resolve it as soon as possible.
 >
-> The script is designed to download necessary binaries from the PingCAP 
-> intranet by default, requiring access to the PingCAP intranet. However, 
-> if you want to download the community version, you can specify it through 
-> the `COMMUNITY` environment variable. For instance, you can use the following 
+> The script is designed to download necessary binaries from the PingCAP
+> intranet by default, requiring access to the PingCAP intranet. However,
+> if you want to download the community version, you can specify it through
+> the `COMMUNITY` environment variable. For instance, you can use the following
 > command as an example:
 > `BRANCH=master COMMUNITY=true VERSION=v7.0.0 START_AT="clustered_index" make kafka_docker_integration_test_with_build`
 
@@ -113,7 +101,7 @@ Some useful tips:
    2. Execute `tests/integration_tests/run.sh`
 
    > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
-   
+
    > If want to run integration test cases from the specified one, just pass the START_AT parameter, such as `make integration_test START_AT=simple` .
 
    > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).

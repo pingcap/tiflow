@@ -43,7 +43,7 @@ var _ dmlsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 type dmlSink struct {
 	alive struct {
 		sync.RWMutex
-		conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
+		conflictDetector *causality.ConflictDetector[*txnEvent]
 		isDead           bool
 	}
 
@@ -58,11 +58,9 @@ type dmlSink struct {
 	scheme string
 }
 
-// GetDBConnImpl is the implementation of pmysql.Factory.
+// GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
 // Exported for testing.
-// Maybe we can use a better way to do this. Because this is not thread-safe.
-// You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
-var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+var GetDBConnImpl pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
 
 // NewMySQLSink creates a mysql dmlSink with given parameters.
 func NewMySQLSink(
@@ -74,7 +72,7 @@ func NewMySQLSink(
 	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.TxnSink)
+	statistics := metrics.NewStatistics(changefeedID, sink.TxnSink)
 
 	backendImpls, err := mysql.NewMySQLBackends(ctx, changefeedID, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
@@ -107,14 +105,19 @@ func newSink(ctx context.Context,
 		dead:    make(chan struct{}),
 	}
 
+	sink.alive.conflictDetector = causality.NewConflictDetector[*txnEvent](conflictDetectorSlots, causality.TxnCacheOption{
+		Count:         len(backends),
+		Size:          1024,
+		BlockStrategy: causality.BlockStrategyWaitEmpty,
+	})
+
 	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
 		w := newWorker(ctx1, changefeedID, i, backend, len(backends))
-		g.Go(func() error { return w.run() })
+		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
+		g.Go(func() error { return w.runLoop(txnCh) })
 		sink.workers = append(sink.workers, w)
 	}
-
-	sink.alive.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
 
 	sink.wg.Add(1)
 	go func() {
@@ -165,9 +168,6 @@ func (s *dmlSink) Close() {
 	}
 	s.wg.Wait()
 
-	for _, w := range s.workers {
-		w.close()
-	}
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
@@ -178,6 +178,6 @@ func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
 }
 
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, false
 }

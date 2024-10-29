@@ -414,14 +414,16 @@ LOOP:
 				err = errors.New("go-mysql returned an error")
 			})
 			if err != nil {
+				// nolint:nakedret
 				return
 			}
 		}
 
-		// fake rotate. binlog recorder should handle it
+		// For events whose LogPos is 0, it will not trigger event modification, we directly return.
 		if c.lastEventFromUpstream.Header.LogPos == 0 {
 			event = c.lastEventFromUpstream
 			c.lastEventFromUpstream = nil
+			// nolint:nakedret
 			return
 		}
 
@@ -514,6 +516,7 @@ LOOP:
 	}
 
 	if event != nil {
+		// nolint:nakedret
 		return
 	}
 
@@ -523,6 +526,7 @@ LOOP:
 	if c.lastEventFromUpstream != nil {
 		event = c.lastEventFromUpstream
 		c.lastEventFromUpstream = nil
+		// nolint:nakedret
 		return
 	}
 

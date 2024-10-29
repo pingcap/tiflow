@@ -17,7 +17,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/errors"
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
+	context2 "github.com/pingcap/tidb/pkg/expression/exprctx"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -439,7 +442,7 @@ create table t (
 	require.NoError(t, err)
 	require.Len(t, exprs, 1)
 	expr := exprs[0]
-	require.Equal(t, "0", expr.String())
+	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues, errors.RedactLogDisable))
 
 	// skip nothing
 	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
@@ -492,7 +495,7 @@ create table t (
 
 	stmt, err := parseSQL(tableStr)
 	require.NoError(t, err)
-	tableInfo, err := ddl2.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	tableInfo, err := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	for i, c := range cases {

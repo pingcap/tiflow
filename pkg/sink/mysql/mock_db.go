@@ -20,16 +20,11 @@ import (
 )
 
 // MockTestDB creates a mock mysql database connection.
-func MockTestDB(adjustSQLMode bool) (*sql.DB, error) {
+func MockTestDB() (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		return nil, err
-	}
-	if adjustSQLMode {
-		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
-			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
 
 	columns := []string{"Variable_name", "Value"}

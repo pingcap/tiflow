@@ -17,7 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
@@ -52,8 +52,6 @@ type TableInfo struct {
 	Version uint64
 	// ColumnID -> offset in model.TableInfo.Columns
 	columnsOffset map[int64]int
-	// ColumnID -> offset in model.TableInfo.Indices
-	indicesOffset map[int64]int
 	// Column name -> ColumnID
 	nameToColID map[string]int64
 
@@ -62,10 +60,7 @@ type TableInfo struct {
 	// ColumnID -> offset in RowChangedEvents.Columns.
 	RowColumnsOffset map[int64]int
 
-	ColumnsFlag map[int64]ColumnFlagType
-
-	// only for new row format decoder
-	handleColID []int64
+	ColumnsFlag map[int64]*ColumnFlagType
 
 	// the mounter will choose this index to output delete events
 	// special value:
@@ -86,10 +81,14 @@ type TableInfo struct {
 	// index2: a, c
 	// indexColumnsOffset: [[0], [0, 1], [0, 2]]
 	IndexColumnsOffset [][]int
+
+	// The following 3 fields, should only be used to decode datum from the raw value bytes, do not abuse those field.
 	// rowColInfos extend the model.ColumnInfo with some extra information
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+	// only for new row format decoder
+	handleColID []int64
 
 	// number of virtual columns
 	virtualColumnCount int
@@ -111,10 +110,9 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
-		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		nameToColID:      make(map[string]int64, len(info.Columns)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
-		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
+		ColumnsFlag:      make(map[int64]*ColumnFlagType, len(info.Columns)),
 		handleColID:      []int64{-1},
 		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
@@ -159,8 +157,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
 	}
 
-	for i, idx := range ti.Indices {
-		ti.indicesOffset[idx.ID] = i
+	for _, idx := range ti.Indices {
 		if ti.IsIndexUnique(idx) {
 			ti.hasUniqueColumn = true
 		}
@@ -260,7 +257,7 @@ func (ti *TableInfo) initColumnsFlag() {
 		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
-		ti.ColumnsFlag[colInfo.ID] = flag
+		ti.ColumnsFlag[colInfo.ID] = &flag
 	}
 
 	// In TiDB, just as in MySQL, only the first column of an index can be marked as "multiple key" or "unique key",
@@ -316,7 +313,7 @@ func (ti *TableInfo) ForceGetColumnFlagType(colID int64) *ColumnFlagType {
 	if !ok {
 		log.Panic("invalid column id", zap.Int64("columnID", colID))
 	}
-	return &flag
+	return flag
 }
 
 // ForceGetColumnName return the column name by ID
@@ -486,22 +483,16 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 // GetPrimaryKeyColumnNames returns the primary key column names
 func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
-	result := make([]string, 0)
-	for _, index := range ti.Indices {
-		if index.Primary {
-			for _, col := range index.Columns {
-				result = append(result, col.Name.O)
-			}
-			return result
-		}
+	var result []string
+	if ti.PKIsHandle {
+		result = append(result, ti.GetPkColInfo().Name.O)
+		return result
 	}
 
-	for _, columnsOffsets := range ti.IndexColumnsOffset {
-		for _, offset := range columnsOffsets {
-			columnInfo := ti.Columns[offset]
-			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
-				result = append(result, columnInfo.Name.O)
-			}
+	indexInfo := ti.GetPrimaryKey()
+	if indexInfo != nil {
+		for _, col := range indexInfo.Columns {
+			result = append(result, col.Name.O)
 		}
 	}
 	return result

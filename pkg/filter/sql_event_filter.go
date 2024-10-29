@@ -16,9 +16,9 @@ package filter
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -132,7 +132,7 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 }
 
 // skipDDLEvent skips ddl event by its type and query.
-func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
+func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (skip bool, err error) {
 	if len(f.rules) == 0 {
 		return false, nil
 	}

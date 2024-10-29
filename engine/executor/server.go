@@ -48,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -286,11 +287,7 @@ func convertMakeTaskErrorToRPCError(
 func checkBusinessErrorIsRetryable(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) (retryable bool, retErr error) {
-	switch tp {
-	case frameModel.DMJobMaster:
-		err = errors.ToDMError(err)
-	default:
-	}
+	err = errorutil.ConvertErr(tp, err)
 	return register.IsRetryableError(err, tp)
 }
 

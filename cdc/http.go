@@ -56,7 +56,7 @@ func RegisterRoutes(
 	// Log API
 	router.POST("/admin/log", gin.WrapF(owner.HandleAdminLogLevel))
 	router.GET("/config", func(c *gin.Context) {
-		c.JSON(http.StatusOK, config.GetDefaultServerConfig())
+		c.JSON(http.StatusOK, config.GetGlobalServerConfig())
 	})
 
 	// pprof debug API

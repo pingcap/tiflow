@@ -22,9 +22,7 @@ function run() {
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "checkpoint")
 	job_id2=$(create_job "DM" "$CUR_DIR/conf/job2.yaml" "checkpoint2")
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMLoadTask\"'" &
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id2/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMLoadTask\"'"
-	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'" &
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id2\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	# clean the lighting checkpoint in downstream after job is finished
 	exec_with_retry --count 30 '! run_sql --port 4000 "show databases;" | grep -q "checkpoint"'

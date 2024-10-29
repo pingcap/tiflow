@@ -7,7 +7,8 @@
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
-	format-makefiles check-makefiles
+	format-makefiles check-makefiles oauth2_server prepare_test_binaries
+
 
 .DEFAULT_GOAL := default
 
@@ -15,10 +16,6 @@
 help: ## Display this help and any documented user-facing targets. Other undocumented targets may be present in the Makefile.
 help:
 	@awk 'BEGIN {FS = ": ##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_\.\-\/%]+: ##/ { printf "  %-45s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-
-# Support gsed on OSX (installed via brew), falling back to sed. On Linux
-# systems gsed won't be installed, so will use sed as expected.
-SED ?= $(shell which gsed 2>/dev/null || which sed)
 
 PROJECT=tiflow
 P=3
@@ -51,11 +48,16 @@ endif
 # These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
 # ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
-OS    := "$(shell go env GOOS)"
+OS := "$(shell go env GOOS)"
+SED_IN_PLACE ?= $(shell which sed)
+IS_ALPINE := "0"
 ifeq (${OS}, "linux")
 	CGO := 0
+	SED_IN_PLACE += -i
+	IS_ALPINE := $(shell grep -qi Alpine /etc/os-release && echo 1)
 else ifeq (${OS}, "darwin")
 	CGO := 1
+	SED_IN_PLACE += -i ''
 endif
 
 BUILD_FLAG =
@@ -65,7 +67,13 @@ ifeq ("${ENABLE_FIPS}", "1")
 	GOEXPERIMENT = GOEXPERIMENT=boringcrypto
 	CGO = 1
 endif
+
+CONSUMER_BUILD_FLAG=
+ifeq ("${IS_ALPINE}", "1")
+	CONSUMER_BUILD_FLAG = -tags musl
+endif
 GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+CONSUMER_GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=1 $(GO) build $(CONSUMER_BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -101,31 +109,18 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v8.0.0-master
-	release_version_regex := ^v[0-9]\..*$$
-	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
-	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
-		# If we are in release branch, try to use tag version.
-		ifneq ($(shell git describe --tags --dirty | grep -E $(release_version_regex)),)
-			RELEASE_VERSION := $(shell git describe --tags --dirty)
-		endif
-	else ifneq ($(shell git status --porcelain),)
-		# Add -dirty if the working tree is dirty for non release branch.
-		RELEASE_VERSION := $(RELEASE_VERSION)-dirty
-	endif
+	RELEASE_VERSION := $(shell git describe --tags --dirty)
 endif
 
 BUILDTS := $(shell date -u '+%Y-%m-%d %H:%M:%S')
 GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
-GOVERSION := $(shell go version)
 
 # Version LDFLAGS.
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 LDFLAGS += -X "github.com/pingcap/tidb/pkg/parser/mysql.TiDBReleaseVersion=$(RELEASE_VERSION)"
 
 include tools/Makefile
@@ -150,7 +145,7 @@ check-makefiles: format-makefiles
 
 format-makefiles: ## Format all Makefiles.
 format-makefiles: $(MAKE_FILES)
-	$(SED) -i -e 's/^\(\t*\)  /\1\t/g' -e 's/^\(\t*\) /\1/' -- $?
+	$(SED_IN_PLACE) -e 's/^\(\t*\)  /\1\t/g' -e 's/^\(\t*\) /\1/' -- $?
 
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
@@ -165,13 +160,16 @@ cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
+	$(CONSUMER_GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer
 
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
 pulsar_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_pulsar_consumer ./cmd/pulsar-consumer/main.go
+
+oauth2_server:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/oauth2-server ./cmd/oauth2-server/main.go
 
 kafka_consumer_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
@@ -228,7 +226,7 @@ check_third_party_binary:
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -343,7 +341,7 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
+	tools/bin/golangci-lint run --timeout 10m0s --exclude-dirs "^dm/","^tests/"
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
@@ -352,7 +350,7 @@ check: check-copyright generate_mock go-generate fmt check-static tidy terror_ch
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 fast_check: check-copyright fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
 	check_cdc_integration_test check_dm_integration_test check_engine_integration_test
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
@@ -364,6 +362,9 @@ ifeq ("$(JenkinsCI)", "1")
 else
 	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
 endif
+
+swagger-spec: tools/bin/swag
+	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 unit_test_coverage:
 	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
@@ -524,7 +525,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	# unify cover mode in coverage files, more details refer to dm/tests/_utils/run_dm_ctl
-	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec $(SED) -i "s/mode: count/mode: atomic/g" {} \;
+	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec $(SED_IN_PLACE) "s/mode: count/mode: atomic/g" {} \;
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
@@ -604,5 +605,5 @@ engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin
 	$(FAILPOINT_DISABLE)
 
 prepare_test_binaries:
-	cd scripts && ./download-integration-test-binaries.sh master && cd ..
+	./scripts/download-integration-test-binaries.sh "$(branch)" "$(community)" "$(ver)" "$(os)" "$(arch)"
 	touch prepare_test_binaries

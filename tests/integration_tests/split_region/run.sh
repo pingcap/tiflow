@@ -26,14 +26,29 @@ function run() {
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
-	pulsar) SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
+	pulsar)
+		run_pulsar_cluster $WORK_DIR oauth
+		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
+		;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		cat <<EOF >>$WORK_DIR/pulsar_test.toml
+            [sink.pulsar-config.oauth2]
+            oauth2-issuer-url="http://localhost:9096"
+            oauth2-audience="cdc-api-uri"
+            oauth2-client-id="1234"
+            oauth2-private-key="${WORK_DIR}/credential.json"
+EOF
+	else
+		echo "" >$WORK_DIR/pulsar_test.toml
+	fi
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config $WORK_DIR/pulsar_test.toml
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
+	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI --oauth2-private-key ${WORK_DIR}/credential.json --oauth2-issuer-url "http://localhost:9096" -- oauth2-client-id "1234" ;;
 	esac
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first

@@ -15,12 +15,12 @@ package entry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -89,42 +89,68 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Equal(t, tableIDs, expectedTableIDs)
 }
 
+func TestNewSchemaStorage(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"test.t1"}
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+
+	// add table before create schema storage
+	job1 := helper.DDL2Job("create table test.t1 (id int primary key)")
+	helper.DDL2Job("create table test.t2 (id int primary key)")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
+	require.Nil(t, err)
+	require.NotNil(t, schema)
+	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	require.Equal(t, job1.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
+}
+
 func TestAllTables(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	// add table before create schema storage
+	job := helper.DDL2Job("create table test.dongment (id int primary key)")
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 0)
+	require.Len(t, tableInfos, 1)
+	require.Equal(t, job.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
 	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	job = helper.DDL2Job("create table test.t1(id int primary key)")
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 1)
-	tableName := tableInfos[0].TableName
+	require.Len(t, tableInfos, 2)
+	tableName := tableInfos[1].TableName
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 104,
+		TableID: 112,
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
-	require.Len(t, tableInfos, 1)
-	tableName = tableInfos[0].TableName
+	require.Len(t, tableInfos, 2)
+	tableName = tableInfos[1].TableName
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 104,
+		TableID: 112,
 	}, tableName)
 }
 
@@ -216,7 +242,7 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -241,8 +267,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
-					{Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeString)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeString)},
 				},
 			},
 		},
@@ -254,7 +280,7 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -301,26 +327,31 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	// rename test.t1 and test.t2
 	job = helper.DDL2Job(
 		"rename table test1.t1 to test1.t10, test1.t2 to test1.t20")
-	oldSchemaIDs := []int64{schemaID, schemaID}
-	oldTableIDs := []int64{t1TableID, t2TableID}
-	newSchemaIDs := oldSchemaIDs
-	oldSchemaNames := []timodel.CIStr{
-		timodel.NewCIStr("test1"),
-		timodel.NewCIStr("test1"),
+	args := &timodel.RenameTablesArgs{
+		RenameTableInfos: []*timodel.RenameTableArgs{
+			{
+				OldSchemaID:   schemaID,
+				NewSchemaID:   schemaID,
+				NewTableName:  pmodel.NewCIStr("t10"),
+				TableID:       t1TableID,
+				OldSchemaName: pmodel.NewCIStr("test1"),
+				OldTableName:  pmodel.NewCIStr("oldt10"),
+			},
+			{
+				OldSchemaID:   schemaID,
+				NewSchemaID:   schemaID,
+				NewTableName:  pmodel.NewCIStr("t20"),
+				TableID:       t2TableID,
+				OldSchemaName: pmodel.NewCIStr("test1"),
+				OldTableName:  pmodel.NewCIStr("oldt20"),
+			},
+		},
 	}
-	newTableNames := []timodel.CIStr{
-		timodel.NewCIStr("t10"),
-		timodel.NewCIStr("t20"),
-	}
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs,
-		newTableNames, oldTableIDs, oldSchemaNames,
-	}
-	rawArgs, err := json.Marshal(args)
-	require.Nil(t, err)
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
-	job.RawArgs = rawArgs
+	bakJob, err := GetNewJobWithArgs(job, args)
+	require.Nil(t, err)
+	job.RawArgs = bakJob.RawArgs
 	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
@@ -340,7 +371,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -352,7 +383,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -370,7 +401,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -382,7 +413,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -438,7 +469,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -450,7 +481,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -473,7 +504,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -485,7 +516,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -559,7 +590,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
@@ -571,7 +602,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
@@ -594,7 +625,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
@@ -606,7 +637,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
-					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
+					{Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},

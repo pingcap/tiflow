@@ -22,15 +22,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
-	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
-
-type txnWithNotifier struct {
-	*txnEvent
-	postTxnExecuted func()
-}
 
 type worker struct {
 	ctx         context.Context
@@ -38,7 +33,6 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   *chann.DrainableChann[txnWithNotifier]
 	backend backend
 
 	// Metrics.
@@ -52,19 +46,21 @@ type worker struct {
 	flushInterval            time.Duration
 	hasPending               bool
 	postTxnExecutedCallbacks []func()
+
+	lastSlowConflictDetectLog map[model.TableID]time.Time
 }
 
 func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 	ID int, backend backend, workerCount int,
 ) *worker {
 	wid := fmt.Sprintf("%d", ID)
+
 	return &worker{
 		ctx:         ctx,
 		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		backend: backend,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -76,24 +72,13 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 		flushInterval:            backend.MaxFlushInterval(),
 		hasPending:               false,
 		postTxnExecutedCallbacks: make([]func(), 0, 1024),
+
+		lastSlowConflictDetectLog: make(map[model.TableID]time.Time),
 	}
 }
 
-// Add adds a txnEvent to the worker.
-// The worker will call postTxnExecuted() after the txn executed.
-// The postTxnExecuted will remove the txn related Node in the conflict detector's
-// dependency graph and resolve related dependencies for these transacitons
-// which depend on this executed txn.
-func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) {
-	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
-}
-
-func (w *worker) close() {
-	w.txnCh.CloseAndDrain()
-}
-
-// Continuously get events from txnCh and call backend flush based on conditions.
-func (w *worker) run() error {
+// Run a loop.
+func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -106,6 +91,9 @@ func (w *worker) run() error {
 		zap.String("changefeedID", w.changefeed),
 		zap.Int("workerID", w.ID))
 
+	cleanSlowLogHistory := time.NewTicker(time.Hour)
+	defer cleanSlowLogHistory.Stop()
+
 	start := time.Now()
 	for {
 		select {
@@ -114,18 +102,27 @@ func (w *worker) run() error {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID))
 			return nil
-		case txn := <-w.txnCh.Out():
-			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
-			// If no more data in txnCh.out, and also not reach the state that can be flushed,
+		case <-cleanSlowLogHistory.C:
+			lastSlowConflictDetectLog := w.lastSlowConflictDetectLog
+			w.lastSlowConflictDetectLog = make(map[model.TableID]time.Time)
+			now := time.Now()
+			for tableID, lastLog := range lastSlowConflictDetectLog {
+				if now.Sub(lastLog) <= time.Minute {
+					w.lastSlowConflictDetectLog[tableID] = lastLog
+				}
+			}
+		case txn := <-txnCh:
+			// we get the data from txnCh until no more data here or reach the state that can be flushed.
+			// If no more data in txnCh, and also not reach the state that can be flushed,
 			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
-			if txn.txnEvent != nil {
-				needFlush := w.onEvent(txn)
+			if txn.TxnEvent != nil {
+				needFlush := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
 				if !needFlush {
 					delay := time.NewTimer(w.flushInterval)
 					for !needFlush {
 						select {
-						case txn := <-w.txnCh.Out():
-							needFlush = w.onEvent(txn)
+						case txn := <-txnCh:
+							needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
 						case <-delay.C:
 							needFlush = true
 						}
@@ -157,24 +154,40 @@ func (w *worker) run() error {
 }
 
 // onEvent is called when a new event is received.
-// It returns true if it needs flush immediately.
-func (w *worker) onEvent(txn txnWithNotifier) bool {
+// It returns true if the event is sent to backend.
+func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	w.hasPending = true
 
-	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
+	if txn.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
-		txn.txnEvent.Callback()
+		txn.Callback()
 		// Still necessary to append the callbacks into the pending list.
-		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
+		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
 		return false
 	}
 
-	w.metricConflictDetectDuration.Observe(txn.conflictResolved.Sub(txn.start).Seconds())
+	conflictDetectTime := txn.conflictResolved.Sub(txn.start).Seconds()
+	w.metricConflictDetectDuration.Observe(conflictDetectTime)
 	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
+
+	// Log tables which conflict detect time larger than 1 minute.
+	if conflictDetectTime > float64(60) {
+		now := time.Now()
+		// Log slow conflict detect tables every minute.
+		if lastLog, ok := w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID]; !ok || now.Sub(lastLog) > time.Minute {
+			log.Warn("Transaction dmlSink finds a slow transaction in conflict detector",
+				zap.String("changefeedID", w.changefeed),
+				zap.Int("workerID", w.ID),
+				zap.Int64("TableID", txn.Event.PhysicalTableID),
+				zap.Float64("seconds", conflictDetectTime))
+			w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID] = now
+		}
+	}
+
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
-	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
-	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
+	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
+	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
 }
 
 // doFlush flushes the backend.

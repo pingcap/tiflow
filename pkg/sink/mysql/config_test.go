@@ -33,7 +33,7 @@ import (
 func TestGenerateDSNByConfig(t *testing.T) {
 	t.Parallel()
 	testDefaultConfig := func() {
-		db, err := MockTestDB(false)
+		db, err := MockTestDB()
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -58,7 +58,7 @@ func TestGenerateDSNByConfig(t *testing.T) {
 	}
 
 	testTimezoneParam := func() {
-		db, err := MockTestDB(false)
+		db, err := MockTestDB()
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -72,7 +72,7 @@ func TestGenerateDSNByConfig(t *testing.T) {
 	}
 
 	testTimeoutConfig := func() {
-		db, err := MockTestDB(false)
+		db, err := MockTestDB()
 		require.Nil(t, err)
 		defer db.Close()
 

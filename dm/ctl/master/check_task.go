@@ -111,7 +111,6 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		},
 		&resp,
 	)
-
 	if err != nil {
 		return err
 	}

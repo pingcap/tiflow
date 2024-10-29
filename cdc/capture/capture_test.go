@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
+	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/prometheus/client_golang/prometheus"
@@ -66,7 +66,7 @@ func TestReset(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		err = cp.reset(ctx)
+		_, err = cp.reset(ctx)
 		require.Regexp(t, ".*context canceled.*", err)
 		wg.Done()
 	}()
@@ -220,10 +220,10 @@ func TestCampaignLiveness(t *testing.T) {
 		info:     &model.CaptureInfo{ID: "test"},
 		election: me,
 	}
-	ctx := cdcContext.NewContext4Test(context.Background(), true)
-
+	globalVars := vars.NewGlobalVars4Test()
+	ctx := context.Background()
 	cp.liveness.Store(model.LivenessCaptureStopping)
-	err := cp.campaignOwner(ctx)
+	err := cp.campaignOwner(ctx, globalVars)
 	require.Nil(t, err)
 	require.False(t, me.campaignFlag)
 
@@ -239,7 +239,7 @@ func TestCampaignLiveness(t *testing.T) {
 		cp.liveness.Store(model.LivenessCaptureStopping)
 		me.campaignGrantCh <- g
 	}()
-	err = cp.campaignOwner(ctx)
+	err = cp.campaignOwner(ctx, globalVars)
 	require.Nil(t, err)
 	require.True(t, me.campaignFlag)
 	require.True(t, me.resignFlag)

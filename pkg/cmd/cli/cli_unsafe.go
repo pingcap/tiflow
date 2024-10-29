@@ -36,7 +36,7 @@ func (o *unsafeCommonOptions) confirmMetaDelete(cmd *cobra.Command) error {
 	}
 
 	cmd.Printf("Confirm that you know what this command will do and use it at your own risk [Y/N]\n")
-	confirmed := readInput(cmd)
+	confirmed := readYOrN(cmd)
 	if !confirmed {
 		return errors.NewNoStackError("abort meta command")
 	}

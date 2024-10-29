@@ -25,24 +25,24 @@ import (
 func TestGenKeyListCaseInSensitive(t *testing.T) {
 	t.Parallel()
 
-	columns := []*model.Column{
+	columns, tb := model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "XyZ",
 			Type:      mysql.TypeVarchar,
 			Collation: "utf8_unicode_ci",
 		},
-	}
+	})
 
-	first := genKeyList(columns, 0, []int{0}, 1)
+	first := genKeyList(columns, tb, 0, []int{0}, 1)
 
-	columns = []*model.Column{
+	columns, tb = model.Columns2ColumnDataForTest([]*model.Column{
 		{
 			Value:     "xYZ",
 			Type:      mysql.TypeVarchar,
 			Collation: "utf8_unicode_ci",
 		},
-	}
-	second := genKeyList(columns, 0, []int{0}, 1)
+	})
+	second := genKeyList(columns, tb, 0, []int{0}, 1)
 
 	require.Equal(t, first, second)
 }
@@ -197,32 +197,5 @@ func TestGenKeys(t *testing.T) {
 		keys := genTxnKeys(tc.txn)
 		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 		require.Equal(t, tc.expected, keys)
-	}
-}
-
-func TestSortAndDedupHash(t *testing.T) {
-	// If a transaction contains multiple rows, these rows may generate the same hash
-	// in some rare cases. We should dedup these hashes to avoid unnecessary self cyclic
-	// dependency in the causality dependency graph.
-	t.Parallel()
-	testCases := []struct {
-		hashes   []uint64
-		expected []uint64
-	}{{
-		// No duplicate hashes
-		hashes:   []uint64{1, 2, 3, 4, 5},
-		expected: []uint64{1, 2, 3, 4, 5},
-	}, {
-		// Duplicate hashes
-		hashes:   []uint64{1, 2, 3, 4, 5, 1, 2, 3, 4, 5},
-		expected: []uint64{1, 2, 3, 4, 5},
-	}, {
-		// Has hash value larger than slots count, should sort by `hash % numSlots` first.
-		hashes:   []uint64{4, 9, 9, 3},
-		expected: []uint64{9, 3, 4},
-	}}
-
-	for _, tc := range testCases {
-		require.Equal(t, tc.expected, sortAndDedupHashes(tc.hashes, 8))
 	}
 }

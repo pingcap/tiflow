@@ -61,7 +61,8 @@ func (e *encoder) AppendRowChangedEvent(
 	}
 
 	result.IncRowsCount()
-	if result.Length() <= e.config.MaxMessageBytes {
+	length := result.Length()
+	if length <= e.config.MaxMessageBytes {
 		e.messages = append(e.messages, result)
 		return nil
 	}
@@ -69,7 +70,7 @@ func (e *encoder) AppendRowChangedEvent(
 	if e.config.LargeMessageHandle.Disabled() {
 		log.Error("Single message is too large for simple",
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
-			zap.Int("length", result.Length()),
+			zap.Int("length", length),
 			zap.Any("table", event.TableInfo.TableName))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
@@ -97,7 +98,7 @@ func (e *encoder) AppendRowChangedEvent(
 	if result.Length() <= e.config.MaxMessageBytes {
 		log.Warn("Single message is too large for simple, only encode handle key columns",
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
-			zap.Int("originLength", result.Length()),
+			zap.Int("originLength", length),
 			zap.Int("length", result.Length()),
 			zap.Any("table", event.TableInfo.TableName))
 		e.messages = append(e.messages, result)
@@ -113,11 +114,11 @@ func (e *encoder) AppendRowChangedEvent(
 
 // Build implement the RowEventEncoder interface
 func (e *encoder) Build() []*common.Message {
-	if len(e.messages) == 0 {
-		return nil
+	var result []*common.Message
+	if len(e.messages) != 0 {
+		result = e.messages
+		e.messages = nil
 	}
-	result := e.messages
-	e.messages = nil
 	return result
 }
 
@@ -130,10 +131,7 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 	value, err = common.Compress(e.config.ChangefeedID,
 		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return nil, err
-	}
-	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
+	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), err
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
@@ -168,28 +166,16 @@ type builder struct {
 
 // NewBuilder returns a new builder
 func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
-	var (
-		claimCheck *claimcheck.ClaimCheck
-		err        error
-	)
-	if config.LargeMessageHandle.EnableClaimCheck() {
-		claimCheck, err = claimcheck.New(ctx,
-			config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
-	m, err := newMarshaller(config)
+	claimCheck, err := claimcheck.New(ctx, config.LargeMessageHandle, config.ChangefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	m, err := newMarshaller(config)
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
 		marshaller: m,
-	}, nil
+	}, errors.Trace(err)
 }
 
 // Build implement the RowEventEncoderBuilder interface

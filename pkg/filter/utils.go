@@ -16,10 +16,10 @@ package filter
 import (
 	"fmt"
 
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -31,6 +31,8 @@ func isSysSchema(db string) bool {
 	// Tables in TiCDCSystemSchema should not be replicated by cdc.
 	case TiCDCSystemSchema:
 		return true
+	case LightningTaskInfoSchema:
+		return true
 	default:
 		return tifilter.IsSystemSchema(db)
 	}
@@ -40,15 +42,11 @@ func isSysSchema(db string) bool {
 // and returns an invalid rule error if the verification fails,
 // otherwise it will return a table filter.
 func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
-	var f tfilter.Filter
-	var err error
-	if len(cfg.Rules) != 0 {
-		rules := cfg.Rules
-		if len(rules) == 0 {
-			rules = []string{"*.*"}
-		}
-		f, err = tfilter.Parse(rules)
+	rules := cfg.Rules
+	if len(rules) == 0 {
+		rules = []string{"*.*"}
 	}
+	f, err := tfilter.Parse(rules)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, cfg)
 	}

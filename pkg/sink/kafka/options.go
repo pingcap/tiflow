@@ -150,6 +150,8 @@ type Options struct {
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 	Version           string
+	IsAssignedVersion bool
+	RequestVersion    int16
 	MaxMessageBytes   int
 	Compression       string
 	ClientID          string
@@ -246,6 +248,7 @@ func (o *Options) Apply(changefeedID model.ChangeFeedID,
 
 	if urlParameter.KafkaVersion != nil {
 		o.Version = *urlParameter.KafkaVersion
+		o.IsAssignedVersion = true
 	}
 
 	if urlParameter.MaxMessageBytes != nil {

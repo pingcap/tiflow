@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -29,7 +30,7 @@ const sourceIDName = "source_id"
 func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	// only nil in test case
 	if pdClient == nil {
-		return 1, nil
+		return config.DefaultTiDBSourceID, nil
 	}
 	// The default value of sourceID is 1,
 	// which means the sourceID is not changed by user.

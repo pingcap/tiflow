@@ -17,11 +17,11 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -31,14 +31,14 @@ import (
 
 type testOptimist struct{}
 
-var _ = Suite(&testOptimist{})
+var _ = check.Suite(&testOptimist{})
 
 // clear keys in etcd test cluster.
-func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
+func clearOptimistTestSourceInfoOperation(c *check.C) {
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), check.IsNil)
 }
 
-func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+func createTableInfo(c *check.C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	if err != nil {
 		c.Fatalf("fail to parse stmt, %v", err)
@@ -54,7 +54,7 @@ func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int6
 	return info
 }
 
-func (t *testOptimist) TestOptimist(c *C) {
+func (t *testOptimist) TestOptimist(c *check.C) {
 	defer clearOptimistTestSourceInfoOperation(c)
 
 	var (
@@ -95,116 +95,116 @@ func (t *testOptimist) TestOptimist(c *C) {
 	defer cancel()
 
 	tables := o.Tables()
-	c.Assert(len(tables), Equals, 0)
+	c.Assert(len(tables), check.Equals, 0)
 
 	// init with some source tables.
 	err := o.Init(sourceTables)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(stm, HasLen, 1)
-	c.Assert(stm[task], HasLen, 1)
-	c.Assert(stm[task][source], DeepEquals, o.tables)
+	c.Assert(err, check.IsNil)
+	c.Assert(stm, check.HasLen, 1)
+	c.Assert(stm[task], check.HasLen, 1)
+	c.Assert(stm[task][source], check.DeepEquals, o.tables)
 
 	tables = o.Tables()
-	c.Assert(len(tables), Equals, 4)
+	c.Assert(len(tables), check.Equals, 4)
 
 	// no info and operation in pending.
-	c.Assert(o.PendingInfo(), IsNil)
-	c.Assert(o.PendingOperation(), IsNil)
+	c.Assert(o.PendingInfo(), check.IsNil)
+	c.Assert(o.PendingOperation(), check.IsNil)
 
 	// put shard DDL info.
 	rev1, err := o.PutInfo(info1)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
 
 	// have info in pending.
 	info1c := o.PendingInfo()
-	c.Assert(info1c, NotNil)
-	c.Assert(*info1c, DeepEquals, info1)
+	c.Assert(info1c, check.NotNil)
+	c.Assert(*info1c, check.DeepEquals, info1)
 
 	// put the lock operation.
 	rev2, putted, err := optimism.PutOperation(etcdTestCli, false, op1, rev1)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
+	c.Assert(putted, check.IsTrue)
 
 	// wait for the lock operation.
 	op1c, err := o.GetOperation(ctx, info1, rev1)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	op1.Revision = rev2
-	c.Assert(op1c, DeepEquals, op1)
+	c.Assert(op1c, check.DeepEquals, op1)
 
 	// have operation in pending.
 	op1cc := o.PendingOperation()
-	c.Assert(op1cc, NotNil)
-	c.Assert(*op1cc, DeepEquals, op1)
+	c.Assert(op1cc, check.NotNil)
+	c.Assert(*op1cc, check.DeepEquals, op1)
 
 	// mark the operation as done.
-	c.Assert(o.DoneOperation(op1), IsNil)
+	c.Assert(o.DoneOperation(op1), check.IsNil)
 
 	// verify the operation and info.
 	ifm, _, err := optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm[task], HasLen, 1)
-	c.Assert(ifm[task][source], HasLen, 1)
-	c.Assert(ifm[task][source][info1.UpSchema], HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm[task], check.HasLen, 1)
+	c.Assert(ifm[task][source], check.HasLen, 1)
+	c.Assert(ifm[task][source][info1.UpSchema], check.HasLen, 1)
 	info1WithVer := info1
 	info1WithVer.Version = 1
 	info1WithVer.Revision = rev1
-	c.Assert(ifm[task][source][info1.UpSchema][info1.UpTable], DeepEquals, info1WithVer)
+	c.Assert(ifm[task][source][info1.UpSchema][info1.UpTable], check.DeepEquals, info1WithVer)
 	opc := op1c
 	opc.Done = true
 	opm, _, err := optimism.GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 1)
-	c.Assert(opm[task], HasLen, 1)
-	c.Assert(opm[task][source], HasLen, 1)
-	c.Assert(opm[task][source][op1.UpSchema], HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 1)
+	c.Assert(opm[task], check.HasLen, 1)
+	c.Assert(opm[task][source], check.HasLen, 1)
+	c.Assert(opm[task][source][op1.UpSchema], check.HasLen, 1)
 	// Revision is in DoneOperation, skip this check
 	opc.Revision = opm[task][source][op1.UpSchema][op1.UpTable].Revision
-	c.Assert(opm[task][source][op1.UpSchema][op1.UpTable], DeepEquals, opc)
+	c.Assert(opm[task][source][op1.UpSchema][op1.UpTable], check.DeepEquals, opc)
 
 	// no info and operation in pending now.
-	c.Assert(o.PendingInfo(), IsNil)
-	c.Assert(o.PendingOperation(), IsNil)
+	c.Assert(o.PendingInfo(), check.IsNil)
+	c.Assert(o.PendingOperation(), check.IsNil)
 
 	// handle `CREATE TABLE`.
 	rev3, err := o.AddTable(infoCreate)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Greater, rev2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Greater, rev2)
 
 	// handle `DROP TABLE`.
 	rev4, err := o.RemoveTable(infoDrop)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev3)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Greater, rev3)
 	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm[task][source][infoDrop.UpSchema], IsNil)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm[task][source][infoDrop.UpSchema], check.IsNil)
+	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], check.IsNil)
 
 	// put another info.
 	rev5, err := o.PutInfo(info2)
-	c.Assert(err, IsNil)
-	c.Assert(o.PendingInfo(), NotNil)
-	c.Assert(*o.PendingInfo(), DeepEquals, info2)
-	c.Assert(o.PendingOperation(), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(o.PendingInfo(), check.NotNil)
+	c.Assert(*o.PendingInfo(), check.DeepEquals, info2)
+	c.Assert(o.PendingOperation(), check.IsNil)
 
 	// put another lock operation.
 	rev6, putted, err := optimism.PutOperation(etcdTestCli, false, op2, rev5)
-	c.Assert(err, IsNil)
-	c.Assert(rev6, Greater, rev5)
-	c.Assert(putted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev6, check.Greater, rev5)
+	c.Assert(putted, check.IsTrue)
 	// wait for the lock operation.
 	_, err = o.GetOperation(ctx, info2, rev5)
-	c.Assert(err, IsNil)
-	c.Assert(o.PendingOperation(), NotNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(o.PendingOperation(), check.NotNil)
 	op2.Revision = rev6
-	c.Assert(*o.PendingOperation(), DeepEquals, op2)
+	c.Assert(*o.PendingOperation(), check.DeepEquals, op2)
 
 	// reset the optimist.
 	o.Reset()
-	c.Assert(o.PendingInfo(), IsNil)
-	c.Assert(o.PendingOperation(), IsNil)
+	c.Assert(o.PendingInfo(), check.IsNil)
+	c.Assert(o.PendingOperation(), check.IsNil)
 }

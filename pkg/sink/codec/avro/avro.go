@@ -26,7 +26,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -49,7 +49,8 @@ type BatchEncoder struct {
 }
 
 type avroEncodeInput struct {
-	columns  []*model.Column
+	*model.TableInfo
+	columns  []*model.ColumnData
 	colInfos []rowcodec.ColInfo
 }
 
@@ -82,11 +83,12 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		return nil, nil
 	}
 
-	keyColumns := &avroEncodeInput{
-		columns:  cols,
-		colInfos: colInfos,
+	keyColumns := avroEncodeInput{
+		TableInfo: e.TableInfo,
+		columns:   cols,
+		colInfos:  colInfos,
 	}
-	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, &e.TableInfo.TableName, e.TableInfo.Version, keyColumns)
+	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, e.TableInfo.TableName, e.TableInfo.Version, keyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -119,7 +121,7 @@ func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
 }
 
 func (a *BatchEncoder) getValueSchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
+	ctx context.Context, topic string, tableName model.TableName, tableVersion uint64, input avroEncodeInput,
 ) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
 		schema, err := a.value2AvroSchema(tableName, input)
@@ -139,7 +141,7 @@ func (a *BatchEncoder) getValueSchemaCodec(
 }
 
 func (a *BatchEncoder) getKeySchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns *avroEncodeInput,
+	ctx context.Context, topic string, tableName model.TableName, tableVersion uint64, keyColumns avroEncodeInput,
 ) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
 		schema, err := a.key2AvroSchema(tableName, keyColumns)
@@ -163,15 +165,16 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		return nil, nil
 	}
 
-	input := &avroEncodeInput{
-		columns:  e.GetColumns(),
-		colInfos: e.TableInfo.GetColInfosForRowChangedEvent(),
+	input := avroEncodeInput{
+		TableInfo: e.TableInfo,
+		columns:   e.Columns,
+		colInfos:  e.TableInfo.GetColInfosForRowChangedEvent(),
 	}
 	if len(input.columns) == 0 {
 		return nil, nil
 	}
 
-	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, &e.TableInfo.TableName, e.TableInfo.Version, input)
+	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.TableInfo.TableName, e.TableInfo.Version, input)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -214,13 +217,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
+		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
+		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
@@ -359,38 +362,39 @@ const (
 )
 
 var type2TiDBType = map[byte]string{
-	mysql.TypeTiny:       "INT",
-	mysql.TypeShort:      "INT",
-	mysql.TypeInt24:      "INT",
-	mysql.TypeLong:       "INT",
-	mysql.TypeLonglong:   "BIGINT",
-	mysql.TypeFloat:      "FLOAT",
-	mysql.TypeDouble:     "DOUBLE",
-	mysql.TypeBit:        "BIT",
-	mysql.TypeNewDecimal: "DECIMAL",
-	mysql.TypeTinyBlob:   "TEXT",
-	mysql.TypeMediumBlob: "TEXT",
-	mysql.TypeBlob:       "TEXT",
-	mysql.TypeLongBlob:   "TEXT",
-	mysql.TypeVarchar:    "TEXT",
-	mysql.TypeVarString:  "TEXT",
-	mysql.TypeString:     "TEXT",
-	mysql.TypeEnum:       "ENUM",
-	mysql.TypeSet:        "SET",
-	mysql.TypeJSON:       "JSON",
-	mysql.TypeDate:       "DATE",
-	mysql.TypeDatetime:   "DATETIME",
-	mysql.TypeTimestamp:  "TIMESTAMP",
-	mysql.TypeDuration:   "TIME",
-	mysql.TypeYear:       "YEAR",
+	mysql.TypeTiny:              "INT",
+	mysql.TypeShort:             "INT",
+	mysql.TypeInt24:             "INT",
+	mysql.TypeLong:              "INT",
+	mysql.TypeLonglong:          "BIGINT",
+	mysql.TypeFloat:             "FLOAT",
+	mysql.TypeDouble:            "DOUBLE",
+	mysql.TypeBit:               "BIT",
+	mysql.TypeNewDecimal:        "DECIMAL",
+	mysql.TypeTinyBlob:          "TEXT",
+	mysql.TypeMediumBlob:        "TEXT",
+	mysql.TypeBlob:              "TEXT",
+	mysql.TypeLongBlob:          "TEXT",
+	mysql.TypeVarchar:           "TEXT",
+	mysql.TypeVarString:         "TEXT",
+	mysql.TypeString:            "TEXT",
+	mysql.TypeEnum:              "ENUM",
+	mysql.TypeSet:               "SET",
+	mysql.TypeJSON:              "JSON",
+	mysql.TypeDate:              "DATE",
+	mysql.TypeDatetime:          "DATETIME",
+	mysql.TypeTimestamp:         "TIMESTAMP",
+	mysql.TypeDuration:          "TIME",
+	mysql.TypeYear:              "YEAR",
+	mysql.TypeTiDBVectorFloat32: "TiDBVECTORFloat32",
 }
 
-func getTiDBTypeFromColumn(col *model.Column) string {
-	tt := type2TiDBType[col.Type]
-	if col.Flag.IsUnsigned() && (tt == "INT" || tt == "BIGINT") {
+func getTiDBTypeFromColumn(col model.ColumnDataX) string {
+	tt := type2TiDBType[col.GetType()]
+	if col.GetFlag().IsUnsigned() && (tt == "INT" || tt == "BIGINT") {
 		return tt + " UNSIGNED"
 	}
-	if col.Flag.IsBinary() && tt == "TEXT" {
+	if col.GetFlag().IsBinary() && tt == "TEXT" {
 		return "BLOB"
 	}
 	return tt
@@ -439,67 +443,27 @@ func mysqlTypeFromTiDBType(tidbType string) byte {
 		result = mysql.TypeDuration
 	case "YEAR":
 		result = mysql.TypeYear
+	case "TiDBVECTORFloat32":
+		result = mysql.TypeTiDBVectorFloat32
 	default:
 		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
 	}
 	return result
 }
 
-const (
-	replacementChar = "_"
-	numberPrefix    = "_"
-)
-
-// sanitizeName escapes not permitted chars for avro
-// debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
-// https://avro.apache.org/docs/current/spec.html#names
-func sanitizeName(name string) string {
-	changed := false
-	var sb strings.Builder
-	for i, c := range name {
-		if i == 0 && (c >= '0' && c <= '9') {
-			sb.WriteString(numberPrefix)
-			sb.WriteRune(c)
-			changed = true
-		} else if !(c == '_' ||
-			('a' <= c && c <= 'z') ||
-			('A' <= c && c <= 'Z') ||
-			('0' <= c && c <= '9')) {
-			sb.WriteString(replacementChar)
-			changed = true
-		} else {
-			sb.WriteRune(c)
-		}
-	}
-
-	sanitizedName := sb.String()
-	if changed {
-		log.Warn(
-			"Name is potentially not safe for serialization, replace it",
-			zap.String("name", name),
-			zap.String("replacedName", sanitizedName),
-		)
-	}
-	return sanitizedName
-}
-
 // sanitizeTopic escapes ".", it may have special meanings for sink connectors
 func sanitizeTopic(name string) string {
-	return strings.ReplaceAll(name, ".", replacementChar)
+	return strings.ReplaceAll(name, ".", "_")
 }
 
-// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
-// /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
-// MySqlAntlrDdlParser.java#L374
-func escapeEnumAndSetOptions(option string) string {
-	option = strings.ReplaceAll(option, ",", "\\,")
-	option = strings.ReplaceAll(option, "\\'", "'")
-	option = strings.ReplaceAll(option, "''", "'")
-	return option
-}
-
+// <empty> | <name>[(<dot><name>)*]
 func getAvroNamespace(namespace string, schema string) string {
-	return sanitizeName(namespace) + "." + sanitizeName(schema)
+	ns := common.SanitizeName(namespace)
+	s := common.SanitizeName(schema)
+	if s != "" {
+		return ns + "." + s
+	}
+	return ns
 }
 
 type avroSchema struct {
@@ -558,30 +522,29 @@ func (a *BatchEncoder) schemaWithExtension(
 	return top
 }
 
-func (a *BatchEncoder) columns2AvroSchema(
-	tableName *model.TableName,
-	input *avroEncodeInput,
-) (*avroSchemaTop, error) {
+func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroEncodeInput) (*avroSchemaTop, error) {
 	top := &avroSchemaTop{
 		Tp:        "record",
-		Name:      sanitizeName(tableName.Table),
+		Name:      common.SanitizeName(tableName.Table),
 		Namespace: getAvroNamespace(a.namespace, tableName.Schema),
 		Fields:    nil,
 	}
-	for i, col := range input.columns {
-		if col == nil {
+	for _, col := range input.columns {
+		colx := model.GetColumnDataX(col, input.TableInfo)
+		if colx.ColumnData == nil {
 			continue
 		}
-		avroType, err := a.columnToAvroSchema(col, input.colInfos[i].Ft)
+
+		avroType, err := a.columnToAvroSchema(colx)
 		if err != nil {
 			return nil, err
 		}
 		field := make(map[string]interface{})
-		field["name"] = sanitizeName(col.Name)
+		field["name"] = common.SanitizeName(colx.GetName())
 
-		copied := *col
-		copied.Value = copied.Default
-		defaultValue, _, err := a.columnToAvroData(&copied, input.colInfos[i].Ft)
+		copied := colx
+		copied.ColumnData = &model.ColumnData{ColumnID: colx.ColumnID, Value: colx.GetDefaultValue()}
+		defaultValue, _, err := a.columnToAvroData(copied)
 		if err != nil {
 			log.Error("fail to get default value for avro schema")
 			return nil, errors.Trace(err)
@@ -589,14 +552,14 @@ func (a *BatchEncoder) columns2AvroSchema(
 		// goavro doesn't support set default value for logical type
 		// https://github.com/linkedin/goavro/issues/202
 		if _, ok := avroType.(avroLogicalTypeSchema); ok {
-			if col.Flag.IsNullable() {
+			if colx.GetFlag().IsNullable() {
 				field["type"] = []interface{}{"null", avroType}
 				field["default"] = nil
 			} else {
 				field["type"] = avroType
 			}
 		} else {
-			if col.Flag.IsNullable() {
+			if colx.GetFlag().IsNullable() {
 				// https://stackoverflow.com/questions/22938124/avro-field-default-values
 				if defaultValue == nil {
 					field["type"] = []interface{}{"null", avroType}
@@ -616,12 +579,9 @@ func (a *BatchEncoder) columns2AvroSchema(
 	return top, nil
 }
 
-func (a *BatchEncoder) value2AvroSchema(
-	tableName *model.TableName,
-	input *avroEncodeInput,
-) (string, error) {
+func (a *BatchEncoder) value2AvroSchema(tableName model.TableName, input avroEncodeInput) (string, error) {
 	if a.config.EnableRowChecksum {
-		sort.Sort(input)
+		sort.Sort(&input)
 	}
 
 	top, err := a.columns2AvroSchema(tableName, input)
@@ -644,10 +604,7 @@ func (a *BatchEncoder) value2AvroSchema(
 	return string(str), nil
 }
 
-func (a *BatchEncoder) key2AvroSchema(
-	tableName *model.TableName,
-	keyColumns *avroEncodeInput,
-) (string, error) {
+func (a *BatchEncoder) key2AvroSchema(tableName model.TableName, keyColumns avroEncodeInput) (string, error) {
 	top, err := a.columns2AvroSchema(tableName, keyColumns)
 	if err != nil {
 		return "", err
@@ -661,24 +618,24 @@ func (a *BatchEncoder) key2AvroSchema(
 	return string(str), nil
 }
 
-func (a *BatchEncoder) columns2AvroData(
-	input *avroEncodeInput,
-) (map[string]interface{}, error) {
+func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]interface{}, error) {
 	ret := make(map[string]interface{}, len(input.columns))
-	for i, col := range input.columns {
-		if col == nil {
+	for _, col := range input.columns {
+		colx := model.GetColumnDataX(col, input.TableInfo)
+		if colx.ColumnData == nil {
 			continue
 		}
-		data, str, err := a.columnToAvroData(col, input.colInfos[i].Ft)
+
+		data, str, err := a.columnToAvroData(colx)
 		if err != nil {
 			return nil, err
 		}
 
 		// https: //pkg.go.dev/github.com/linkedin/goavro/v2#Union
-		if col.Flag.IsNullable() {
-			ret[sanitizeName(col.Name)] = goavro.Union(str, data)
+		if colx.GetFlag().IsNullable() {
+			ret[common.SanitizeName(colx.GetName())] = goavro.Union(str, data)
 		} else {
-			ret[sanitizeName(col.Name)] = data
+			ret[common.SanitizeName(colx.GetName())] = data
 		}
 	}
 
@@ -686,12 +643,10 @@ func (a *BatchEncoder) columns2AvroData(
 	return ret, nil
 }
 
-func (a *BatchEncoder) columnToAvroSchema(
-	col *model.Column,
-	ft *types.FieldType,
-) (interface{}, error) {
+func (a *BatchEncoder) columnToAvroSchema(col model.ColumnDataX) (interface{}, error) {
 	tt := getTiDBTypeFromColumn(col)
-	switch col.Type {
+
+	switch col.GetType() {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
 		// BOOL/TINYINT/SMALLINT/MEDIUMINT
 		return avroSchema{
@@ -699,7 +654,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeLong: // INT
-		if col.Flag.IsUnsigned() {
+		if col.GetFlag().IsUnsigned() {
 			return avroSchema{
 				Type:       "long",
 				Parameters: map[string]string{tidbType: tt},
@@ -711,7 +666,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 		}, nil
 	case mysql.TypeLonglong: // BIGINT
 		t := "long"
-		if col.Flag.IsUnsigned() &&
+		if col.GetFlag().IsUnsigned() &&
 			a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
 			t = "string"
 		}
@@ -730,9 +685,9 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeBit:
-		displayFlen := ft.GetFlen()
+		displayFlen := col.GetColumnInfo().FieldType.GetFlen()
 		if displayFlen == -1 {
-			displayFlen, _ = mysql.GetDefaultFieldLengthAndDecimal(col.Type)
+			displayFlen, _ = mysql.GetDefaultFieldLengthAndDecimal(col.GetType())
 		}
 		return avroSchema{
 			Type: "bytes",
@@ -743,6 +698,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 		}, nil
 	case mysql.TypeNewDecimal:
 		if a.config.AvroDecimalHandlingMode == common.DecimalHandlingModePrecise {
+			ft := col.GetColumnInfo().FieldType
 			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
 			// length not specified, set it to system type default
@@ -777,7 +733,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 		mysql.TypeLongBlob,
 		mysql.TypeBlob:
 		t := "string"
-		if col.Flag.IsBinary() {
+		if col.GetFlag().IsBinary() {
 			t = "bytes"
 		}
 		return avroSchema{
@@ -785,9 +741,10 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeEnum, mysql.TypeSet:
-		es := make([]string, 0, len(ft.GetElems()))
-		for _, e := range ft.GetElems() {
-			e = escapeEnumAndSetOptions(e)
+		elems := col.GetColumnInfo().FieldType.GetElems()
+		es := make([]string, 0, len(elems))
+		for _, e := range elems {
+			e = common.EscapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
 		return avroSchema{
@@ -812,21 +769,23 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Type:       "int",
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
+	case mysql.TypeTiDBVectorFloat32:
+		return avroSchema{
+			Type:       "string",
+			Parameters: map[string]string{tidbType: tt},
+		}, nil
 	default:
-		log.Error("unknown mysql type", zap.Any("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Any("mysqlType", col.GetType()))
 		return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
 
-func (a *BatchEncoder) columnToAvroData(
-	col *model.Column,
-	ft *types.FieldType,
-) (interface{}, string, error) {
+func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
 	}
 
-	switch col.Type {
+	switch col.GetType() {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseInt(v, 10, 32)
@@ -835,7 +794,7 @@ func (a *BatchEncoder) columnToAvroData(
 			}
 			return int32(n), "int", nil
 		}
-		if col.Flag.IsUnsigned() {
+		if col.GetFlag().IsUnsigned() {
 			return int32(col.Value.(uint64)), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
@@ -845,18 +804,18 @@ func (a *BatchEncoder) columnToAvroData(
 			if err != nil {
 				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
-			if col.Flag.IsUnsigned() {
+			if col.GetFlag().IsUnsigned() {
 				return n, "long", nil
 			}
 			return int32(n), "int", nil
 		}
-		if col.Flag.IsUnsigned() {
+		if col.GetFlag().IsUnsigned() {
 			return int64(col.Value.(uint64)), "long", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeLonglong:
 		if v, ok := col.Value.(string); ok {
-			if col.Flag.IsUnsigned() {
+			if col.GetFlag().IsUnsigned() {
 				if a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
 					return v, "string", nil
 				}
@@ -872,7 +831,7 @@ func (a *BatchEncoder) columnToAvroData(
 			}
 			return n, "long", nil
 		}
-		if col.Flag.IsUnsigned() {
+		if col.GetFlag().IsUnsigned() {
 			if a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
@@ -922,7 +881,7 @@ func (a *BatchEncoder) columnToAvroData(
 		mysql.TypeBlob,
 		mysql.TypeMediumBlob,
 		mysql.TypeLongBlob:
-		if col.Flag.IsBinary() {
+		if col.GetFlag().IsBinary() {
 			if v, ok := col.Value.(string); ok {
 				return []byte(v), "bytes", nil
 			}
@@ -936,7 +895,7 @@ func (a *BatchEncoder) columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		elements := ft.GetElems()
+		elements := col.GetColumnInfo().FieldType.GetElems()
 		number := col.Value.(uint64)
 		enumVar, err := types.ParseEnumValue(elements, number)
 		if err != nil {
@@ -948,7 +907,7 @@ func (a *BatchEncoder) columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		elements := ft.GetElems()
+		elements := col.GetColumnInfo().FieldType.GetElems()
 		number := col.Value.(uint64)
 		setVar, err := types.ParseSetValue(elements, number)
 		if err != nil {
@@ -971,8 +930,13 @@ func (a *BatchEncoder) columnToAvroData(
 			return int32(n), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
+	case mysql.TypeTiDBVectorFloat32:
+		if vec, ok := col.Value.(types.VectorFloat32); ok {
+			return vec.String(), "string", nil
+		}
+		return nil, "", cerror.ErrAvroEncodeFailed
 	default:
-		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.GetType()))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }

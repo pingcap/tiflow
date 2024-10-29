@@ -15,7 +15,7 @@ package syncer
 
 import (
 	"github.com/pingcap/tidb/pkg/expression"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
@@ -181,14 +181,13 @@ func (g *ExprFilterGroup) ResetExprs(table *filter.Table) {
 // SkipDMLByExpression returns true when given row matches the expr, which means this row should be skipped.
 func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr expression.Expression, upstreamCols []*model.ColumnInfo) (bool, error) {
 	// TODO: add MetricsProxies
-	log.L().Debug("will evaluate the expression", zap.Stringer("expression", expr), zap.Any("raw row", row))
 	data, err := utils.AdjustBinaryProtocolForDatum(ctx, row, upstreamCols)
 	if err != nil {
 		return false, err
 	}
 	r := chunk.MutRowFromDatums(data).ToRow()
 
-	d, err := expr.Eval(ctx, r)
+	d, err := expr.Eval(ctx.GetExprCtx().GetEvalCtx(), r)
 	if err != nil {
 		return false, err
 	}
@@ -198,7 +197,7 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 // getSimpleExprOfTable returns an expression of given `expr` string, using the table structure that is tracked before.
 func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableInfo, logger log.Logger) (expression.Expression, error) {
 	// TODO: use upstream timezone?
-	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, ti)
+	e, err := expression.ParseSimpleExprWithTableInfo(ctx.GetExprCtx(), expr, ti)
 	if err != nil {
 		// if expression contains an unknown column, we return an expression that skips nothing
 		if plannererrors.ErrUnknownColumn.Equal(err) {

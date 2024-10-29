@@ -140,6 +140,17 @@ var (
 		"stop processor by admin command",
 		errors.RFCCodeText("CDC:ErrAdminStopProcessor"),
 	)
+	ErrCodeNilFunction = errors.Normalize(
+		"function is not initialized",
+		errors.RFCCodeText("CDC:ErrCodeNilFunction"),
+	)
+
+	// Errors caused by unexpected behavior from external systems
+	ErrTiDBUnexpectedJobMeta = errors.Normalize(
+		"unexpected `job_meta` from tidb",
+		errors.RFCCodeText("CDC:ErrTiDBUnexpectedJobMeta"),
+	)
+
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible = errors.Normalize(
 		"version is incompatible: %s",
@@ -201,7 +212,7 @@ var (
 		errors.RFCCodeText("CDC:ErrKafkaCreateTopic"),
 	)
 	ErrKafkaInvalidTopicExpression = errors.Normalize(
-		"invalid topic expression",
+		"invalid topic expression: %s ",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
 	ErrKafkaConfigNotFound = errors.Normalize(
@@ -328,6 +339,10 @@ var (
 		"MySQL txn error",
 		errors.RFCCodeText("CDC:ErrMySQLTxnError"),
 	)
+	ErrMySQLDuplicateEntry = errors.Normalize(
+		"MySQL duplicate entry error",
+		errors.RFCCodeText("CDC:ErrMySQLDuplicateEntry"),
+	)
 	ErrMySQLQueryError = errors.Normalize(
 		"MySQL query error",
 		errors.RFCCodeText("CDC:ErrMySQLQueryError"),
@@ -395,6 +410,10 @@ var (
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
+	)
+	ErrSinkIncompatibleConfig = errors.Normalize(
+		"incompatible configuration %s",
+		errors.RFCCodeText("CDC:ErrSinkIncompatibleConfig"),
 	)
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",
@@ -571,8 +590,7 @@ var (
 	)
 
 	ErrCorruptedDataMutation = errors.Normalize(
-		"Changefeed %s.%s stopped due to corrupted data mutation received. "+
-			"Corrupted mutation detail information %+v",
+		"Changefeed %s.%s stopped due to corrupted data mutation received",
 		errors.RFCCodeText("CDC:ErrCorruptedDataMutation"))
 
 	// server related errors

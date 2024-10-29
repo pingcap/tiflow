@@ -57,24 +57,26 @@ func (s CaptureState) String() string {
 
 // CaptureStatus represent capture's status.
 type CaptureStatus struct {
-	OwnerRev schedulepb.OwnerRevision
-	Epoch    schedulepb.ProcessorEpoch
-	State    CaptureState
-	Tables   []tablepb.TableStatus
-	ID       model.CaptureID
-	Addr     string
-	IsOwner  bool
+	OwnerRev     schedulepb.OwnerRevision
+	Epoch        schedulepb.ProcessorEpoch
+	State        CaptureState
+	Tables       []tablepb.TableStatus
+	ID           model.CaptureID
+	Addr         string
+	IsOwner      bool
+	changefeedID model.ChangeFeedID
 }
 
 func newCaptureStatus(
-	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
+	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool, changefeedID model.ChangeFeedID,
 ) *CaptureStatus {
 	return &CaptureStatus{
-		OwnerRev: rev,
-		State:    CaptureStateUninitialized,
-		ID:       id,
-		Addr:     addr,
-		IsOwner:  isOwner,
+		OwnerRev:     rev,
+		State:        CaptureStateUninitialized,
+		ID:           id,
+		Addr:         addr,
+		IsOwner:      isOwner,
+		changefeedID: changefeedID,
 	}
 }
 
@@ -84,6 +86,8 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	// Check epoch for initialized captures.
 	if c.State != CaptureStateUninitialized && c.Epoch.Epoch != epoch.Epoch {
 		log.Warn("schedulerv3: ignore heartbeat response",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("captureAddr", c.Addr),
 			zap.String("capture", c.ID),
 			zap.String("epoch", c.Epoch.Epoch),
@@ -96,12 +100,16 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
 		log.Info("schedulerv3: capture initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("capture", c.ID),
 			zap.String("captureAddr", c.Addr))
 	}
 	if resp.Liveness == model.LivenessCaptureStopping {
 		c.State = CaptureStateStopping
 		log.Info("schedulerv3: capture stopping",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("capture", c.ID),
 			zap.String("captureAddr", c.Addr))
 	}
@@ -214,6 +222,8 @@ func (c *CaptureManager) HandleMessage(
 			captureStatus, ok := c.Captures[msg.From]
 			if !ok {
 				log.Warn("schedulerv3: heartbeat response from unknown capture",
+					zap.String("namespace", c.changefeedID.Namespace),
+					zap.String("changefeed", c.changefeedID.ID),
 					zap.String("capture", msg.From))
 				continue
 			}
@@ -232,8 +242,10 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
 			c.Captures[id] = newCaptureStatus(
-				c.OwnerRev, id, info.AdvertiseAddr, c.ownerID == id)
+				c.OwnerRev, id, info.AdvertiseAddr, c.ownerID == id, c.changefeedID)
 			log.Info("schedulerv3: find a new capture",
+				zap.String("namespace", c.changefeedID.Namespace),
+				zap.String("changefeed", c.changefeedID.ID),
 				zap.String("captureAddr", info.AdvertiseAddr),
 				zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
@@ -248,6 +260,8 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 	for id, capture := range c.Captures {
 		if _, ok := aliveCaptures[id]; !ok {
 			log.Info("schedulerv3: removed a capture",
+				zap.String("namespace", c.changefeedID.Namespace),
+				zap.String("changefeed", c.changefeedID.ID),
 				zap.String("captureAddr", capture.Addr),
 				zap.String("capture", id))
 			delete(c.Captures, id)
@@ -276,6 +290,8 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 			c.changes.Init[id] = capture.Tables
 		}
 		log.Info("schedulerv3: all capture initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.Int("captureCount", len(c.Captures)))
 		c.initialized = true
 	}

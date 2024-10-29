@@ -20,11 +20,11 @@ import (
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
-var _ = Suite(&testMetaSuite{})
+var _ = check.Suite(&testMetaSuite{})
 
 type testMetaSuite struct{}
 
@@ -35,7 +35,7 @@ type MetaTestCase struct {
 	gset           mysql.GTIDSet
 }
 
-func (r *testMetaSuite) TestLocalMeta(c *C) {
+func (r *testMetaSuite) TestLocalMeta(c *check.C) {
 	dir := c.MkDir()
 
 	gset0, _ := gtid.ParserGTID("mysql", "")
@@ -75,27 +75,27 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	// load, but empty
 	lm := NewLocalMeta("mysql", dir)
 	err := lm.Load()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	uuid, pos := lm.Pos()
-	c.Assert(uuid, Equals, "")
-	c.Assert(pos, DeepEquals, minCheckpoint)
+	c.Assert(uuid, check.Equals, "")
+	c.Assert(pos, check.DeepEquals, minCheckpoint)
 	uuid, gset := lm.GTID()
-	c.Assert(uuid, Equals, "")
-	c.Assert(gset, DeepEquals, gset0)
+	c.Assert(uuid, check.Equals, "")
+	c.Assert(gset, check.DeepEquals, gset0)
 
 	err = lm.Save(minCheckpoint, nil)
-	c.Assert(err, NotNil)
+	c.Assert(err, check.NotNil)
 
 	err = lm.Flush()
-	c.Assert(err, NotNil)
+	c.Assert(err, check.NotNil)
 
 	dirty := lm.Dirty()
-	c.Assert(dirty, IsFalse)
+	c.Assert(dirty, check.IsFalse)
 
 	// set currentSubDir because lm.doFlush need it
 	currentUUID := "uuid.000001"
-	c.Assert(os.MkdirAll(path.Join(dir, currentUUID), 0o777), IsNil)
+	c.Assert(os.MkdirAll(path.Join(dir, currentUUID), 0o777), check.IsNil)
 	setLocalMetaWithCurrentUUID := func() {
 		lm = NewLocalMeta("mysql", dir)
 		lm.(*LocalMeta).currentSubDir = currentUUID
@@ -107,106 +107,106 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	latestGTIDStr := "85ab69d1-b21f-11e6-9c5e-64006a8978d2:45-57"
 	cs0 := cases[0]
 	adjusted, err := lm.AdjustWithStartPos(cs0.pos.Name, cs0.gset.String(), false, latestBinlogName, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(adjusted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(adjusted, check.IsTrue)
 	uuid, pos = lm.Pos()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(pos.Name, Equals, cs0.pos.Name)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(pos.Name, check.Equals, cs0.pos.Name)
 	uuid, gset = lm.GTID()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(gset.String(), Equals, "")
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(gset.String(), check.Equals, "")
 
 	// adjust to start pos with enableGTID
 	setLocalMetaWithCurrentUUID()
 	adjusted, err = lm.AdjustWithStartPos(cs0.pos.Name, cs0.gset.String(), true, latestBinlogName, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(adjusted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(adjusted, check.IsTrue)
 	uuid, pos = lm.Pos()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(pos.Name, Equals, cs0.pos.Name)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(pos.Name, check.Equals, cs0.pos.Name)
 	uuid, gset = lm.GTID()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(gset, DeepEquals, cs0.gset)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(gset, check.DeepEquals, cs0.gset)
 
 	// adjust to the last binlog if start pos is empty
 	setLocalMetaWithCurrentUUID()
 	adjusted, err = lm.AdjustWithStartPos("", cs0.gset.String(), false, latestBinlogName, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(adjusted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(adjusted, check.IsTrue)
 	uuid, pos = lm.Pos()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(pos.Name, Equals, latestBinlogName)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(pos.Name, check.Equals, latestBinlogName)
 	uuid, gset = lm.GTID()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(gset.String(), Equals, "")
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(gset.String(), check.Equals, "")
 
 	setLocalMetaWithCurrentUUID()
 	adjusted, err = lm.AdjustWithStartPos("", "", true, latestBinlogName, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(adjusted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(adjusted, check.IsTrue)
 	uuid, pos = lm.Pos()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(pos.Name, Equals, latestBinlogName)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(pos.Name, check.Equals, latestBinlogName)
 	uuid, gset = lm.GTID()
-	c.Assert(uuid, Equals, currentUUID)
-	c.Assert(gset.String(), Equals, latestGTIDStr)
+	c.Assert(uuid, check.Equals, currentUUID)
+	c.Assert(gset.String(), check.Equals, latestGTIDStr)
 
 	// reset
 	lm.(*LocalMeta).currentSubDir = ""
 
 	for _, cs := range cases {
 		err = lm.AddDir(cs.uuid, nil, nil, 0)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 
 		err = lm.Save(cs.pos, cs.gset)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 
 		currentUUID2, pos2 := lm.Pos()
-		c.Assert(currentUUID2, Equals, cs.uuidWithSuffix)
-		c.Assert(pos2, DeepEquals, cs.pos)
+		c.Assert(currentUUID2, check.Equals, cs.uuidWithSuffix)
+		c.Assert(pos2, check.DeepEquals, cs.pos)
 
 		currentUUID, gset = lm.GTID()
-		c.Assert(currentUUID, Equals, cs.uuidWithSuffix)
-		c.Assert(gset, DeepEquals, cs.gset)
+		c.Assert(currentUUID, check.Equals, cs.uuidWithSuffix)
+		c.Assert(gset, check.DeepEquals, cs.gset)
 
 		dirty = lm.Dirty()
-		c.Assert(dirty, IsTrue)
+		c.Assert(dirty, check.IsTrue)
 
 		currentDir := lm.Dir()
-		c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), IsTrue)
+		c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), check.IsTrue)
 	}
 
 	err = lm.Flush()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	dirty = lm.Dirty()
-	c.Assert(dirty, IsFalse)
+	c.Assert(dirty, check.IsFalse)
 
 	// try adjust to start pos again
 	csn1 := cases[len(cases)-1]
 	adjusted, err = lm.AdjustWithStartPos(cs0.pos.Name, cs0.gset.String(), false, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(adjusted, IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(adjusted, check.IsFalse)
 	uuid, pos = lm.Pos()
-	c.Assert(uuid, Equals, csn1.uuidWithSuffix)
-	c.Assert(pos.Name, Equals, csn1.pos.Name)
+	c.Assert(uuid, check.Equals, csn1.uuidWithSuffix)
+	c.Assert(pos.Name, check.Equals, csn1.pos.Name)
 	uuid, gset = lm.GTID()
-	c.Assert(uuid, Equals, csn1.uuidWithSuffix)
-	c.Assert(gset, DeepEquals, csn1.gset)
+	c.Assert(uuid, check.Equals, csn1.uuidWithSuffix)
+	c.Assert(gset, check.DeepEquals, csn1.gset)
 
 	// create a new LocalMeta, and load it
 	lm2 := NewLocalMeta("mysql", dir)
 	err = lm2.Load()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	lastCase := cases[len(cases)-1]
 
 	uuid, pos = lm2.Pos()
-	c.Assert(uuid, Equals, lastCase.uuidWithSuffix)
-	c.Assert(pos, DeepEquals, lastCase.pos)
+	c.Assert(uuid, check.Equals, lastCase.uuidWithSuffix)
+	c.Assert(pos, check.DeepEquals, lastCase.pos)
 	uuid, gset = lm2.GTID()
-	c.Assert(uuid, Equals, lastCase.uuidWithSuffix)
-	c.Assert(gset, DeepEquals, lastCase.gset)
+	c.Assert(uuid, check.Equals, lastCase.uuidWithSuffix)
+	c.Assert(gset, check.DeepEquals, lastCase.gset)
 
 	// another case for AddDir, specify pos and GTID
 	cs := MetaTestCase{
@@ -216,24 +216,24 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 		gset:           gset5,
 	}
 	err = lm.AddDir(cs.uuid, &cs.pos, cs.gset, 0)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	dirty = lm.Dirty()
-	c.Assert(dirty, IsFalse)
+	c.Assert(dirty, check.IsFalse)
 
 	currentUUID, pos = lm.Pos()
-	c.Assert(currentUUID, Equals, cs.uuidWithSuffix)
-	c.Assert(pos, DeepEquals, cs.pos)
+	c.Assert(currentUUID, check.Equals, cs.uuidWithSuffix)
+	c.Assert(pos, check.DeepEquals, cs.pos)
 
 	currentUUID, gset = lm.GTID()
-	c.Assert(currentUUID, Equals, cs.uuidWithSuffix)
-	c.Assert(gset, DeepEquals, cs.gset)
+	c.Assert(currentUUID, check.Equals, cs.uuidWithSuffix)
+	c.Assert(gset, check.DeepEquals, cs.gset)
 
 	currentDir := lm.Dir()
-	c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), IsTrue)
+	c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), check.IsTrue)
 }
 
-func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
+func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *check.C) {
 	var err error
 	lm := NewLocalMeta("mysql", "/FAKE_DIR")
 	uuidStr := "85ab69d1-b21f-11e6-9c5e-64006a8978d2"
@@ -243,7 +243,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 		mysql.Position{Name: "mysql-bin.000001", Pos: 234},
 		initGSet,
 	)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	ch1 := make(chan error)
 	ch2 := make(chan error)
@@ -289,7 +289,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 	close(pendingCh)
 	ch1Err := <-ch1
 	ch2Err := <-ch2
-	c.Assert(ch1Err, IsNil)
-	c.Assert(ch2Err, IsNil)
+	c.Assert(ch1Err, check.IsNil)
+	c.Assert(ch2Err, check.IsNil)
 	c.Logf("GTID string from the go routine: %s", gtidString)
 }

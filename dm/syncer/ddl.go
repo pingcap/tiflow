@@ -20,11 +20,11 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
@@ -47,6 +47,7 @@ import (
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -1085,12 +1086,12 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	})
 
 	// handle charset and collation
-	if err := tidbddl.ProcessColumnCharsetAndCollation(tidbmock.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
+	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
 		ddl.logger.Warn("process column charset and collation failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
 	// handle column options
-	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
 		ddl.logger.Warn("process column options failed", zap.Error(err))
 		return bf.AlterTable, err
 	}

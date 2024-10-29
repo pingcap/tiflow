@@ -15,6 +15,7 @@ package common
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,8 +30,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -43,6 +44,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -57,7 +59,7 @@ var (
 // CtlClient used to get master client for dmctl.
 type CtlClient struct {
 	mu           sync.RWMutex
-	tls          *toolutils.TLS
+	tlsConfig    *tls.Config
 	conn         *grpc.ClientConn
 	MasterClient pb.MasterClient  // exposed to be used in test
 	EtcdClient   *clientv3.Client // exposed to be used in export config
@@ -77,9 +79,13 @@ func (c *CtlClient) updateMasterClient() error {
 	}
 
 	endpoints := c.EtcdClient.Endpoints()
+	grpcTLS := grpc.WithInsecure()
+	if c.tlsConfig != nil {
+		grpcTLS = grpc.WithTransportCredentials(credentials.NewTLS(c.tlsConfig))
+	}
 	for _, endpoint := range endpoints {
 		//nolint:staticcheck
-		conn, err = grpc.Dial(utils.UnwrapScheme(endpoint), c.tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second), grpc.WithBlock(), grpc.WithTimeout(3*time.Second))
+		conn, err = grpc.Dial(utils.UnwrapScheme(endpoint), grpcTLS, grpc.WithBackoffMaxDelay(3*time.Second), grpc.WithBlock(), grpc.WithTimeout(3*time.Second))
 		if err == nil {
 			c.conn = conn
 			c.MasterClient = pb.NewMasterClient(conn)
@@ -158,7 +164,11 @@ func InitUtils(cfg *Config) error {
 
 // InitClient initializes dm-master client.
 func InitClient(addr string, securityCfg security.Security) error {
-	tls, err := toolutils.NewTLS(securityCfg.SSLCA, securityCfg.SSLCert, securityCfg.SSLKey, "", securityCfg.CertAllowedCN)
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(securityCfg.SSLCA),
+		util.WithCertAndKeyPath(securityCfg.SSLCert, securityCfg.SSLKey),
+		util.WithVerifyCommonName(securityCfg.CertAllowedCN),
+	)
 	if err != nil {
 		return terror.ErrCtlInvalidTLSCfg.Delegate(err)
 	}
@@ -169,14 +179,14 @@ func InitClient(addr string, securityCfg security.Security) error {
 		DialTimeout:          dialTimeout,
 		DialKeepAliveTime:    keepaliveTime,
 		DialKeepAliveTimeout: keepaliveTimeout,
-		TLS:                  tls.TLSConfig(),
+		TLS:                  tlsConfig,
 	})
 	if err != nil {
 		return err
 	}
 
 	GlobalCtlClient = &CtlClient{
-		tls:        tls,
+		tlsConfig:  tlsConfig,
 		EtcdClient: etcdClient,
 	}
 

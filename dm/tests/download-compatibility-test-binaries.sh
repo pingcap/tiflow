@@ -12,81 +12,116 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# download-compatibility-test-binaries.sh will
-# * download all the binaries you need for dm compatibility testing
+# download-compatibility-test-binaries.sh
+# Downloads all the binaries needed for dm compatibility testing
+#
+# Notice: This script is intended for Linux platforms only.
 
-# Notice:
-# Please don't try the script locally,
-# it downloads files for linux platform.
+set -euo pipefail
 
-set -o errexit
-set -o nounset
-set -o pipefail
+# Constants
+FILE_SERVER_URL="http://fileserver.pingcap.net"
+GITHUB_RELEASE_URL="https://github.com/github/gh-ost/releases/download/v1.1.0"
+TEMP_DIR="tmp"
+THIRD_BIN_DIR="third_bin"
+FINAL_BIN_DIR="bin"
 
-# See https://misc.flogisoft.com/bash/tip_colors_and_formatting.
-color-green() { # Green
+# Color output function
+color-green() {
 	echo -e "\x1B[1;32m${*}\x1B[0m"
 }
 
-function download() {
+# Download function
+download() {
 	local url=$1
 	local file_name=$2
 	local file_path=$3
 	if [[ -f "${file_path}" ]]; then
-		echo "file ${file_name} already exists, skip download"
+		echo "File ${file_name} already exists, skipping download"
 		return
 	fi
-	echo ">>>"
-	echo "download ${file_name} from ${url}"
+	echo ">>> Downloading ${file_name} from ${url}"
 	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
-# Specify the download branch.
-branch=$1
+function get_sha1() {
+	local repo="$1"
+	local branch="$2"
+	file_server_url="http://fileserver.pingcap.net"
+	sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	if [ $? -ne 0 ] || echo "$sha1" | grep -q "Error"; then
+		echo "Failed to get sha1 with repo ${repo} branch ${branch}: $sha1. use branch master to instead" >&2
+		branch=master
+		sha1=$(curl -s "${file_server_url}/download/refs/pingcap/${repo}/${branch}/sha1")
+	fi
+	echo $sha1
+}
 
-# PingCAP file server URL.
-file_server_url="http://fileserver.pingcap.net"
+# Extract function
+extract() {
+	local file_name=$1
+	local extract_dir=$2
+	local target_file=$3
+	tar -xz -C "${extract_dir}" "${target_file}" -f "${TEMP_DIR}/${file_name}"
+}
 
-# Get sha1 based on branch name.
-tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
+# Main function
+main() {
+	local default_branch=$1
 
-# All download links.
-tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-sync_diff_inspector_download_url="http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
-mydumper_download_url="http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
+	# Get SHA1 values, using environment variables if set, otherwise use default_branch
+	local tidb_branch=${TIDB_BRANCH:-$default_branch}
+	# Get TiDB SHA1
+	local tidb_sha1=$(curl "${FILE_SERVER_URL}/download/refs/pingcap/tidb/${tidb_branch}/sha1")
 
-gh_os_download_url="https://github.com/github/gh-ost/releases/download/v1.1.0/gh-ost-binary-linux-20200828140552.tar.gz"
-minio_download_url="${file_server_url}/download/minio.tar.gz"
+	# Define download URLs
+	local download_urls=(
+		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+		"http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
+		"http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
+		"${GITHUB_RELEASE_URL}/gh-ost-binary-linux-20200828140552.tar.gz"
+		"${FILE_SERVER_URL}/download/minio.tar.gz"
+	)
 
-# Some temporary dir.
-rm -rf tmp
-rm -rf third_bin
+	# Prepare directories
+	rm -rf "$TEMP_DIR" "$THIRD_BIN_DIR"
+	mkdir -p "$TEMP_DIR" "$THIRD_BIN_DIR" "$FINAL_BIN_DIR"
 
-mkdir -p third_bin
-mkdir -p tmp
-mkdir -p bin
+	color-green "Downloading binaries..."
 
-color-green "Download binaries..."
-download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
-tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
+	# Download and extract binaries
+	for url in "${download_urls[@]}"; do
+		local filename=$(basename "$url")
+		download "$url" "$filename" "${TEMP_DIR}/${filename}"
+		case "$filename" in
+		tidb-server.tar.gz)
+			extract "$filename" "$THIRD_BIN_DIR" "bin/tidb-server"
+			mv "${THIRD_BIN_DIR}/bin/tidb-server" "$THIRD_BIN_DIR/"
+			;;
+		tidb-enterprise-tools-nightly-linux-amd64.tar.gz)
+			extract "$filename" "$THIRD_BIN_DIR" "tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector"
+			mv "${THIRD_BIN_DIR}/tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector" "$THIRD_BIN_DIR/"
+			rm -rf "${THIRD_BIN_DIR}/tidb-enterprise-tools-nightly-linux-amd64"
+			;;
+		tidb-enterprise-tools-latest-linux-amd64.tar.gz)
+			extract "$filename" "$THIRD_BIN_DIR" "tidb-enterprise-tools-latest-linux-amd64/bin/mydumper"
+			mv "${THIRD_BIN_DIR}/tidb-enterprise-tools-latest-linux-amd64/bin/mydumper" "$THIRD_BIN_DIR/"
+			rm -rf "${THIRD_BIN_DIR}/tidb-enterprise-tools-latest-linux-amd64"
+			;;
+		minio.tar.gz | gh-ost-binary-linux-20200828140552.tar.gz)
+			tar -xz -C "$THIRD_BIN_DIR" -f "${TEMP_DIR}/${filename}"
+			;;
+		esac
+	done
 
-download "$sync_diff_inspector_download_url" "tidb-enterprise-tools-nightly-linux-amd64.tar.gz" "tmp/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
-tar -xz -C third_bin tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector -f tmp/tidb-enterprise-tools-nightly-linux-amd64.tar.gz
-mv third_bin/tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector third_bin/ && rm -rf third_bin/tidb-enterprise-tools-nightly-linux-amd64
-download "$mydumper_download_url" "tidb-enterprise-tools-latest-linux-amd64.tar.gz" "tmp/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
-tar -xz -C third_bin tidb-enterprise-tools-latest-linux-amd64/bin/mydumper -f tmp/tidb-enterprise-tools-latest-linux-amd64.tar.gz
-mv third_bin/tidb-enterprise-tools-latest-linux-amd64/bin/mydumper third_bin/ && rm -rf third_bin/tidb-enterprise-tools-latest-linux-amd64
-download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
-tar -xz -C third_bin -f tmp/minio.tar.gz
-download "$gh_os_download_url" "gh-ost-binary-linux-20200828140552.tar.gz" "tmp/gh-ost-binary-linux-20200828140552.tar.gz"
-tar -xz -C third_bin -f tmp/gh-ost-binary-linux-20200828140552.tar.gz
+	# Set permissions and move files
+	chmod a+x "${THIRD_BIN_DIR}"/*
+	rm -rf "$TEMP_DIR" "${FINAL_BIN_DIR}/bin"
+	mv "${THIRD_BIN_DIR}"/* "${FINAL_BIN_DIR}/"
+	rm -rf "$THIRD_BIN_DIR"
 
-chmod a+x third_bin/*
+	color-green "Download SUCCESS"
+}
 
-# Copy it to the bin directory in the root directory.
-rm -rf tmp
-mv third_bin/* ./bin
-rm -rf bin/bin
-rm -rf third_bin
-
-color-green "Download SUCCESS"
+# Run the main function
+main "$1"

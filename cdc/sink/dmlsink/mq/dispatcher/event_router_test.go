@@ -16,7 +16,7 @@ package dispatcher
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
@@ -402,4 +402,23 @@ func TestGetTopicForDDL(t *testing.T) {
 	for _, test := range tests {
 		require.Equal(t, test.expectedTopic, d.GetTopicForDDL(test.ddl))
 	}
+}
+
+func TestVerifyTables(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := newReplicaConfig4DispatcherTest()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	require.NoError(t, err)
+
+	cols := []*model.Column{
+		{
+			Name:  "id",
+			Value: 1,
+			Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+		},
+	}
+	tableInfo := model.BuildTableInfo("test_index_value", "table", cols, [][]int{{0}})
+	err = d.VerifyTables([]*model.TableInfo{tableInfo})
+	require.NoError(t, err)
 }

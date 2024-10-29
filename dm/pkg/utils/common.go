@@ -19,7 +19,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/expression/exprctx"
+	"github.com/pingcap/tidb/pkg/expression/sessionexpr"
+	infoschema "github.com/pingcap/tidb/pkg/infoschema/context"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/table"
@@ -150,6 +153,7 @@ func UnpackTableID(id string) *filter.Table {
 type session struct {
 	sessionctx.Context
 	vars                 *variable.SessionVars
+	exprctx              exprctx.ExprContext
 	values               map[fmt.Stringer]interface{}
 	builtinFunctionUsage map[string]uint32
 	mu                   sync.RWMutex
@@ -158,6 +162,10 @@ type session struct {
 // GetSessionVars implements the sessionctx.Context interface.
 func (se *session) GetSessionVars() *variable.SessionVars {
 	return se.vars
+}
+
+func (se *session) GetExprCtx() exprctx.ExprContext {
+	return se.exprctx
 }
 
 // SetValue implements the sessionctx.Context interface.
@@ -176,7 +184,7 @@ func (se *session) Value(key fmt.Stringer) interface{} {
 }
 
 // GetInfoSchema implements the sessionctx.Context interface.
-func (se *session) GetInfoSchema() sessionctx.InfoschemaMetaVersion {
+func (se *session) GetInfoSchema() infoschema.MetaOnlyInfoSchema {
 	return nil
 }
 
@@ -201,12 +209,13 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 			variables.TimeZone = loc
 		}
 	}
-
-	return &session{
+	sessionCtx := session{
 		vars:                 variables,
 		values:               make(map[fmt.Stringer]interface{}, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
+	sessionCtx.exprctx = sessionexpr.NewExprContext(&sessionCtx)
+	return &sessionCtx
 }
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.

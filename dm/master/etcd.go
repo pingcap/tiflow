@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -123,7 +123,10 @@ func prepareJoinEtcd(cfg *Config) error {
 		return nil
 	}
 
-	tlsCfg, err := toolutils.ToTLSConfig(cfg.SSLCA, cfg.SSLCert, cfg.SSLKey)
+	tlsCfg, err := util.NewTLSConfig(
+		util.WithCAPath(cfg.SSLCA),
+		util.WithCertAndKeyPath(cfg.SSLCert, cfg.SSLKey),
+	)
 	if err != nil {
 		return terror.ErrMasterJoinEmbedEtcdFail.Delegate(err, "generate tls config")
 	}

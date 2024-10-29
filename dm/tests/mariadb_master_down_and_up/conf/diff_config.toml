@@ -1,0 +1,34 @@
+check-thread-count = 4
+
+export-fix-sql = true
+
+check-struct-only = false
+
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["db_pessimistic.tb"]
+
+[routes.rule1]
+schema-pattern = "db_pessimistic"
+table-pattern = "tb*"
+target-schema = "db_pessimistic"
+target-table = "tb"
+
+[data-sources]
+[data-sources.mysql1]
+host = "127.0.0.1"
+port = 3307
+user = "root"
+password = "123456"
+route-rules = ["rule1"]
+
+[data-sources.tidb0]
+host = "127.0.0.1"
+port = 4000
+user = "root"
+password = ""

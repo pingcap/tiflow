@@ -14,10 +14,10 @@
 package pessimism
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
-func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
+func (t *testForEtcd) TestPutOperationDeleteInfo(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -30,88 +30,88 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 
 	// put info.
 	_, err := PutInfo(etcdTestCli, info)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// verify the info exists.
 	ifm, _, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task)
-	c.Assert(ifm[task][source], DeepEquals, info)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task)
+	c.Assert(ifm[task][source], check.DeepEquals, info)
 
 	// verify no operations exist.
 	opm, _, err := GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 0)
 
 	// put operation & delete info.
 	done, _, err := PutOperationDeleteExistInfo(etcdTestCli, op, info)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(done, check.IsTrue)
 
 	// verify no info exit.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 0)
 
 	// verify the operation exists.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 1)
-	c.Assert(opm, HasKey, task)
-	c.Assert(opm[task][source], DeepEquals, op)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 1)
+	c.Assert(opm, check.HasKey, task)
+	c.Assert(opm[task][source], check.DeepEquals, op)
 
 	// try to put operation & delete info again, succeed(to support reentrant).
 	done, _, err = PutOperationDeleteExistInfo(etcdTestCli, op, info)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(done, check.IsTrue)
 
 	// PUT info and operation.
 	_, err = PutInfo(etcdTestCli, info)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	_, _, err = PutOperations(etcdTestCli, true, op)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// verify the info exists.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task)
-	c.Assert(ifm[task][source], DeepEquals, info)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task)
+	c.Assert(ifm[task][source], check.DeepEquals, info)
 
 	// verify the operation exists.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 1)
-	c.Assert(opm, HasKey, task)
-	c.Assert(opm[task][source], DeepEquals, op)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 1)
+	c.Assert(opm, check.HasKey, task)
+	c.Assert(opm[task][source], check.DeepEquals, op)
 
 	// DELETE info and operation.
 	_, err = DeleteInfosOperations(etcdTestCli, []Info{info}, []Operation{op})
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// verify no info exit.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 0)
 
 	// verify no operations exist.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 0)
 
 	// put a done operation into etcd and try to delete operation again.
 	op.Done = true
 	_, _, err = PutOperations(etcdTestCli, true, op)
 	op.Done = false
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// try to put operation & delete info again, fail(operation not equal).
 	done, _, err = PutOperationDeleteExistInfo(etcdTestCli, op, info)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(done, check.IsFalse)
 
 	// DELETE info and operation.
 	_, err = DeleteInfosOperations(etcdTestCli, []Info{info}, []Operation{op})
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }

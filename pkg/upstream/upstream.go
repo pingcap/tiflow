@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -72,7 +73,6 @@ type Upstream struct {
 	session        *concurrency.Session
 
 	KVStorage   tidbkv.Storage
-	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
 	PDClock     pdutil.Clock
 	GCManager   gc.Manager
@@ -152,7 +152,8 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					},
 					MinConnectTimeout: 3 * time.Second,
 				}),
-			))
+			),
+			pd.WithForwardingOption(config.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)
@@ -190,8 +191,6 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 		return errors.Trace(err)
 	}
 
-	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.SecurityConfig)
-
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
@@ -226,11 +225,6 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 	go func() {
 		defer up.wg.Done()
 		up.PDClock.Run(ctx)
-	}()
-	up.wg.Add(1)
-	go func() {
-		defer up.wg.Done()
-		up.GrpcPool.RecycleConn(ctx)
 	}()
 
 	log.Info("upstream initialize successfully", zap.Uint64("upstreamID", up.ID))
@@ -284,9 +278,6 @@ func (up *Upstream) Close() {
 		}
 	}
 
-	if up.GrpcPool != nil {
-		up.GrpcPool.Close()
-	}
 	if up.RegionCache != nil {
 		up.RegionCache.Close()
 	}
@@ -415,18 +406,37 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: use client tls config for tidb connection if mutual tls is enabled.
-	if up.SecurityConfig != nil {
-		dsn.TLS, err = up.SecurityConfig.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
+	// Note: we use "preferred" here to make sure the connection is encrypted if possible. It is the same as the default
+	// behavior of mysql client, refer to: https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html.
+	dsn.TLSConfig = "preferred"
+
 	db, err := pmysql.GetTestDB(ctx, dsn, pmysql.CreateMySQLDBConn)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer db.Close()
-	// TODO: check authentication here if needed
-	return db.Ping()
+
+	rows, err := db.Query("SHOW STATUS LIKE '%Ssl_cipher'")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Warn("query Ssl_cipher close rows failed", zap.Error(err))
+		}
+		if rows.Err() != nil {
+			log.Warn("query Ssl_cipher rows has error", zap.Error(rows.Err()))
+		}
+	}()
+
+	var name, value string
+	err = rows.Scan(&name, &value)
+	if err != nil {
+		log.Warn("failed to get ssl cipher", zap.Error(err),
+			zap.String("username", dsn.User), zap.Uint64("upstreamID", up.ID))
+	}
+	log.Info("verify tidb user successfully", zap.String("username", dsn.User),
+		zap.String("sslCipherName", name), zap.String("sslCipherValue", value),
+		zap.Uint64("upstreamID", up.ID))
+	return nil
 }

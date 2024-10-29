@@ -17,13 +17,14 @@ import (
 	"context"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -130,6 +131,25 @@ type ddlManager struct {
 
 	BDRMode       bool
 	ddlResolvedTs model.Ts
+
+	bootstrapState bootstrapState
+	reportError    func(err error)
+}
+
+type bootstrapState int32
+
+const (
+	bootstrapNotStarted bootstrapState = iota
+	bootstrapInProgress
+	bootstrapFinished
+)
+
+func storeBootstrapState(addr *bootstrapState, state bootstrapState) {
+	atomic.StoreInt32((*int32)(addr), int32(state))
+}
+
+func loadBootstrapState(addr *bootstrapState) bootstrapState {
+	return bootstrapState(atomic.LoadInt32((*int32)(addr)))
 }
 
 func newDDLManager(
@@ -143,6 +163,8 @@ func newDDLManager(
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	bdrMode bool,
+	shouldSendAllBootstrapAtStart bool,
+	reportError func(err error),
 ) *ddlManager {
 	log.Info("owner create ddl manager",
 		zap.String("namespace", changefeedID.Namespace),
@@ -150,6 +172,11 @@ func newDDLManager(
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode))
+
+	bootstrap := bootstrapFinished
+	if shouldSendAllBootstrapAtStart {
+		bootstrap = bootstrapNotStarted
+	}
 
 	return &ddlManager{
 		changfeedID:     changefeedID,
@@ -164,7 +191,58 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		bootstrapState:  bootstrap,
+		reportError:     reportError,
 	}
+}
+
+func (m *ddlManager) isBootstrapped() bool {
+	return loadBootstrapState(&m.bootstrapState) == bootstrapFinished
+}
+
+// return true if bootstrapped
+func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*model.TableInfo) bool {
+	bootstrap := loadBootstrapState(&m.bootstrapState)
+	switch bootstrap {
+	case bootstrapFinished:
+		return true
+	case bootstrapInProgress:
+		return false
+	case bootstrapNotStarted:
+	}
+	storeBootstrapState(&m.bootstrapState, bootstrapInProgress)
+	start := time.Now()
+	go func() {
+		log.Info("start to send bootstrap messages",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)))
+		for idx, table := range currentTables {
+			if table.TableInfo.IsView() {
+				continue
+			}
+			ddlEvent := &model.DDLEvent{
+				TableInfo:   table,
+				IsBootstrap: true,
+			}
+			err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
+			if err != nil {
+				log.Error("send bootstrap message failed",
+					zap.Stringer("changefeed", m.changfeedID),
+					zap.Int("tables", len(currentTables)),
+					zap.Int("emitted", idx+1),
+					zap.Duration("duration", time.Since(start)),
+					zap.Error(err))
+				m.reportError(err)
+				return
+			}
+		}
+		storeBootstrapState(&m.bootstrapState, bootstrapFinished)
+		log.Info("send bootstrap messages finished",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)),
+			zap.Duration("cost", time.Since(start)))
+	}()
+	return m.isBootstrapped()
 }
 
 // tick the ddlHandler, it does the following things:
@@ -186,6 +264,12 @@ func (m *ddlManager) tick(
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
+	}
+
+	// before bootstrap finished, cannot send any event.
+	ok := m.trySendBootstrap(ctx, currentTables)
+	if !ok {
+		return nil, nil, nil
 	}
 
 	if m.executingDDL == nil {
@@ -223,24 +307,7 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
-			// TODO: find a better place to do this check
-			// check if the ddl event is belong to an ineligible table.
-			// If so, we should ignore it.
-			if !filter.IsSchemaDDL(event.Type) {
-				ignore, err := m.schema.
-					IsIneligibleTable(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
-				if err != nil {
-					return nil, nil, errors.Trace(err)
-				}
-				if ignore {
-					log.Warn("ignore the DDL event of ineligible table",
-						zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
-					continue
-				}
-			}
-
 			tableName := event.TableInfo.TableName
-			// Add all valid DDL events to the pendingDDLs.
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}
 
@@ -293,6 +360,13 @@ func (m *ddlManager) tick(
 					zap.Uint64("commitTs", nextDDL.CommitTs),
 					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
+				skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					m.cleanCache(cleanMsg)
+				}
 			}
 			err := m.executeDDL(ctx)
 			if err != nil {
@@ -356,14 +430,6 @@ func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
-		return nil
-	}
-	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if skip {
-		m.cleanCache(cleanMsg)
 		return nil
 	}
 
@@ -456,7 +522,20 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 			// barrier related physical tables
 			ids := getRelatedPhysicalTableIDs(ddl)
 			for _, id := range ids {
-				tableBarrierMap[id] = ddl.CommitTs
+				// The same physical table may have multiple related ddl events when calculating barrier.
+				// Example cases:
+				// 1. The logical id of the same partition table may change after change partition.
+				//	So the related ddls may be considered for different tables.
+				//  And they may be returned by `getAllTableNextDDL` at the same time.
+				// 2. The result of `getAllTableNextDDL` may influence the same physical tables as `ddlManager.justSentDDL`.
+				// So we always choose the min commitTs of all ddls related to the same physical table as the barrierTs.
+				if ts, ok := tableBarrierMap[id]; ok {
+					if ddl.CommitTs < ts {
+						tableBarrierMap[id] = ddl.CommitTs
+					}
+				} else {
+					tableBarrierMap[id] = ddl.CommitTs
+				}
 			}
 		}
 	}
@@ -487,8 +566,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	return barrier
 }
 
-// allTables returns all tables in the schema that
-// less or equal than the checkpointTs.
+// allTables returns all tables in the schema in current checkpointTs.
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
 	if m.tableInfoCache == nil {
 		ts := m.getSnapshotTs()

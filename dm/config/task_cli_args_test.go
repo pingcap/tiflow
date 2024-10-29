@@ -16,7 +16,7 @@ package config
 import (
 	"encoding/json"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
 type testStruct struct {
@@ -29,7 +29,7 @@ func (t *testStruct) ToJSON() string {
 	return string(cfg)
 }
 
-func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
+func (t *testConfig) TestTaskCliArgsDowngrade(c *check.C) {
 	s := testStruct{
 		TaskCliArgs: TaskCliArgs{"123", "1s", "1s"},
 		FutureField: "456",
@@ -37,30 +37,30 @@ func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
 	data := s.ToJSON()
 
 	expected := `{"start_time":"123","safe_mode_duration":"1s","wait_time_on_stop":"1s","future_field":"456"}`
-	c.Assert(data, Equals, expected)
+	c.Assert(data, check.Equals, expected)
 
 	afterDowngrade := &TaskCliArgs{}
-	c.Assert(afterDowngrade.Decode([]byte(data)), IsNil)
-	c.Assert(afterDowngrade.StartTime, Equals, "123")
+	c.Assert(afterDowngrade.Decode([]byte(data)), check.IsNil)
+	c.Assert(afterDowngrade.StartTime, check.Equals, "123")
 }
 
-func (t *testConfig) TestTaskCliArgsVerify(c *C) {
+func (t *testConfig) TestTaskCliArgsVerify(c *check.C) {
 	empty := TaskCliArgs{}
-	c.Assert(empty.Verify(), IsNil)
+	c.Assert(empty.Verify(), check.IsNil)
 	rightStartTime := TaskCliArgs{StartTime: "2006-01-02T15:04:05"}
-	c.Assert(rightStartTime.Verify(), IsNil)
+	c.Assert(rightStartTime.Verify(), check.IsNil)
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05"}
-	c.Assert(rightStartTime.Verify(), IsNil)
+	c.Assert(rightStartTime.Verify(), check.IsNil)
 	wrongStartTime := TaskCliArgs{StartTime: "15:04:05"}
-	c.Assert(wrongStartTime.Verify(), NotNil)
+	c.Assert(wrongStartTime.Verify(), check.NotNil)
 
 	rightSafeModeDuration := TaskCliArgs{SafeModeDuration: "1s"}
-	c.Assert(rightSafeModeDuration.Verify(), IsNil)
+	c.Assert(rightSafeModeDuration.Verify(), check.IsNil)
 	wrongSafeModeDuration := TaskCliArgs{SafeModeDuration: "1"}
-	c.Assert(wrongSafeModeDuration.Verify(), NotNil)
+	c.Assert(wrongSafeModeDuration.Verify(), check.NotNil)
 
 	rightWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1s"}
-	c.Assert(rightWaitTimeOnStop.Verify(), IsNil)
+	c.Assert(rightWaitTimeOnStop.Verify(), check.IsNil)
 	wrongWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1"}
-	c.Assert(wrongWaitTimeOnStop.Verify(), NotNil)
+	c.Assert(wrongWaitTimeOnStop.Verify(), check.NotNil)
 }

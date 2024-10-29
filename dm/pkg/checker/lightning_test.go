@@ -17,7 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
+	"github.com/pingcap/tidb/lightning/pkg/precheck"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -131,6 +131,32 @@ func TestClusterVersion(t *testing.T) {
 	require.Equal(t, StateFailure, result.Errors[0].Severity)
 
 	lightningMsg := "Cluster version check failed: TiNB version too old, required to be in [2.3.5, 3.0.0), found '2.1.0': [BR:Common:ErrVersionMismatch]version mismatch"
+	c.inner = mockPrecheckItem{msg: lightningMsg}
+	result = c.Check(ctx)
+	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, "", result.Extra)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, lightningMsg, result.Errors[0].ShortErr)
+	require.Equal(t, StateFailure, result.Errors[0].Severity)
+}
+
+func TestTableEmpty(t *testing.T) {
+	ctx := context.Background()
+	c := &LightningTableEmptyChecker{inner: mockPrecheckItem{pass: true}}
+	result := c.Check(ctx)
+	require.Equal(t, StateSuccess, result.State)
+	require.Len(t, result.Errors, 0)
+	require.Equal(t, "", result.Extra)
+
+	c.inner = mockPrecheckItem{err: errors.New("mock error")}
+	result = c.Check(ctx)
+	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, "", result.Extra)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, "mock error", result.Errors[0].ShortErr)
+	require.Equal(t, StateFailure, result.Errors[0].Severity)
+
+	lightningMsg := "table(s) [test.t1] are not empty"
 	c.inner = mockPrecheckItem{msg: lightningMsg}
 	result = c.Check(ctx)
 	require.Equal(t, StateFailure, result.State)

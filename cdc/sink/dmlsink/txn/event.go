@@ -16,7 +16,6 @@ package txn
 import (
 	"encoding/binary"
 	"hash/fnv"
-	"sort"
 	"strings"
 	"time"
 
@@ -41,51 +40,17 @@ func (e *txnEvent) OnConflictResolved() {
 	e.conflictResolved = time.Now()
 }
 
-// GenSortedDedupKeysHash implements causality.txnEvent interface.
-func (e *txnEvent) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
-	hashes := genTxnKeys(e.TxnCallbackableEvent.Event)
-
-	// Sort and dedup hashes.
-	// Sort hashes by `hash % numSlots` to avoid deadlock, and then dedup
-	// hashes, so the same txn will not check confict with the same hash twice to
-	// prevent potential cyclic self dependency in the causality dependency
-	// graph.
-	return sortAndDedupHashes(hashes, numSlots)
+// ConflictKeys implements causality.txnEvent interface.
+func (e *txnEvent) ConflictKeys() []uint64 {
+	return genTxnKeys(e.TxnCallbackableEvent.Event)
 }
 
-func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
-	if len(hashes) == 0 {
-		return nil
-	}
-
-	// Sort hashes by `hash % numSlots` to avoid deadlock.
-	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
-
-	// Dedup hashes
-	last := hashes[0]
-	j := 1
-	for i, hash := range hashes {
-		if i == 0 {
-			// skip first one, start checking duplication from 2nd one
-			continue
-		}
-		if hash == last {
-			continue
-		}
-		last = hash
-		hashes[j] = hash
-		j++
-	}
-	hashes = hashes[:j]
-
-	return hashes
-}
-
-// genTxnKeys returns hash keys for `txn`.
+// genTxnKeys returns deduplicated hash keys of a transaction.
 func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
+
 	hashRes := make(map[uint64]struct{}, len(txn.Rows))
 	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
@@ -108,7 +73,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.TableInfo.IndexColumnsOffset {
-			key := genKeyList(row.GetColumns(), iIdx, idxCol, row.PhysicalTableID)
+			key := genKeyList(row.Columns, row.TableInfo, iIdx, idxCol, row.GetTableID())
 			if len(key) == 0 {
 				continue
 			}
@@ -117,7 +82,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	}
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.TableInfo.IndexColumnsOffset {
-			key := genKeyList(row.GetPreColumns(), iIdx, idxCol, row.PhysicalTableID)
+			key := genKeyList(row.PreColumns, row.TableInfo, iIdx, idxCol, row.GetTableID())
 			if len(key) == 0 {
 				continue
 			}
@@ -127,28 +92,28 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	if len(keys) == 0 {
 		// use table ID as key if no key generated (no PK/UK),
 		// no concurrence for rows in the same table.
-		log.Debug("Use table id as the key", zap.Int64("tableID", row.PhysicalTableID))
+		log.Debug("Use table id as the key", zap.Int64("tableID", row.GetTableID()))
 		tableKey := make([]byte, 8)
-		binary.BigEndian.PutUint64(tableKey, uint64(row.PhysicalTableID))
+		binary.BigEndian.PutUint64(tableKey, uint64(row.GetTableID()))
 		keys = [][]byte{tableKey}
 	}
 	return keys
 }
 
-func genKeyList(
-	columns []*model.Column, iIdx int, colIdx []int, tableID int64,
-) []byte {
+func genKeyList(columns []*model.ColumnData, tb *model.TableInfo, iIdx int, colIdx []int, tableID int64) []byte {
 	var key []byte
 	for _, i := range colIdx {
+		col := model.GetColumnDataX(columns[i], tb)
+
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
 		// Because such as insert can't specify the generated value.
-		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
+		if col.ColumnData == nil || col.Value == nil || col.GetFlag().IsGeneratedColumn() {
 			return nil
 		}
 
-		val := model.ColumnValueString(columns[i].Value)
-		if columnNeeds2LowerCase(columns[i].Type, columns[i].Collation) {
+		val := model.ColumnValueString(col.Value)
+		if columnNeeds2LowerCase(col.GetType(), col.GetCollation()) {
 			val = strings.ToLower(val)
 		}
 

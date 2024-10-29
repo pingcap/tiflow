@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -55,6 +54,9 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
+	// emitBootstrap emits the table bootstrap event in a blocking way.
+	// It will return after the bootstrap event is sent.
+	emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
 }
@@ -122,17 +124,13 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 		return errors.Trace(err)
 	}
 	a.sink = s
-
-	if !util.GetOrZero(a.info.Config.EnableSyncPoint) {
-		return nil
-	}
 	return nil
 }
 
 func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
 	if util.GetOrZero(s.info.Config.EnableSyncPoint) && s.syncPointStore == nil {
 		syncPointStore, err := syncpointstore.NewSyncPointStore(
-			ctx, s.changefeedID, s.info.SinkURI, util.GetOrZero(s.info.Config.SyncPointRetention))
+			ctx, s.changefeedID, s.info.SinkURI, s.info.Config)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -433,11 +431,7 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 	// For example, it is needed to parse the following DDL query:
 	//  `alter table "t" add column "c" int default 1;`
 	// by adding `ANSI_QUOTES` to the SQL mode.
-	mode, err := mysql.GetSQLMode(s.info.Config.SQLMode)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	p.SetSQLMode(mode)
+	p.SetSQLMode(ddl.SQLMode)
 	stms, _, err := p.Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -476,4 +470,11 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 		zap.String("result", result))
 
 	return result, nil
+}
+
+func (s *ddlSinkImpl) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
+	if err := s.makeSinkReady(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	return s.sink.WriteDDLEvent(ctx, bootstrap)
 }

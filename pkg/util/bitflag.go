@@ -17,9 +17,9 @@ package util
 type Flag uint64
 
 // HasAll means has all flags
-func (f *Flag) HasAll(flags ...Flag) bool {
+func (f Flag) HasAll(flags ...Flag) bool {
 	for _, flag := range flags {
-		if flag&*f == 0 {
+		if flag&f == 0 {
 			return false
 		}
 	}
@@ -27,9 +27,9 @@ func (f *Flag) HasAll(flags ...Flag) bool {
 }
 
 // HasOne means has one of the flags
-func (f *Flag) HasOne(flags ...Flag) bool {
+func (f Flag) HasOne(flags ...Flag) bool {
 	for _, flag := range flags {
-		if flag&*f != 0 {
+		if flag&f != 0 {
 			return true
 		}
 	}

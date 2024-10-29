@@ -34,7 +34,7 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 
 	rev := schedulepb.OwnerRevision{Revision: 1}
 	epoch := schedulepb.ProcessorEpoch{Epoch: "test"}
-	c := newCaptureStatus(rev, "", "", true)
+	c := newCaptureStatus(rev, "", "", true, model.ChangeFeedID{})
 	require.Equal(t, CaptureStateUninitialized, c.State)
 	require.True(t, c.IsOwner)
 

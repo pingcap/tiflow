@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
-	"github.com/pingcap/tiflow/pkg/config"
+	pconfig "github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -66,7 +66,8 @@ type TableStats struct {
 type SinkManager struct {
 	changefeedID model.ChangeFeedID
 
-	changefeedInfo *model.ChangeFeedInfo
+	sinkURI string
+	config  *pconfig.ReplicaConfig
 
 	// up is the upstream and used to get the current pd time.
 	up *upstream.Upstream
@@ -126,37 +127,47 @@ type SinkManager struct {
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
 
+	// isMysqlBackend indicates whether the backend is MySQL compatible.
+	isMysqlBackend bool
+
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	metricsTableSinkFlushLagDuration prometheus.Observer
 }
 
 // New creates a new sink manager.
 func New(
 	changefeedID model.ChangeFeedID,
-	changefeedInfo *model.ChangeFeedInfo,
+	sinkURI string,
+	config *pconfig.ReplicaConfig,
 	up *upstream.Upstream,
 	schemaStorage entry.SchemaStorage,
 	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
+	isMysqlBackend bool,
 ) *SinkManager {
 	m := &SinkManager{
-		changefeedID:   changefeedID,
-		changefeedInfo: changefeedInfo,
-		up:             up,
-		schemaStorage:  schemaStorage,
-		sourceManager:  sourceManager,
-
+		changefeedID:        changefeedID,
+		up:                  up,
+		schemaStorage:       schemaStorage,
+		sourceManager:       sourceManager,
+		sinkURI:             sinkURI,
+		config:              config,
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 		sinkRetry:           retry.NewInfiniteErrorRetry(),
-
+		isMysqlBackend:      isMysqlBackend,
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+
+		metricsTableSinkFlushLagDuration: tablesinkmetrics.TableSinkFlushLagDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
-	totalQuota := changefeedInfo.Config.MemoryQuota
+	totalQuota := config.MemoryQuota
 	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
 		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
@@ -164,9 +175,9 @@ func New(
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
-		consistentMemoryUsage := changefeedInfo.Config.Consistent.MemoryUsage
+		consistentMemoryUsage := m.config.Consistent.MemoryUsage
 		if consistentMemoryUsage == nil {
-			consistentMemoryUsage = config.GetDefaultReplicaConfig().Consistent.MemoryUsage
+			consistentMemoryUsage = pconfig.GetDefaultReplicaConfig().Consistent.MemoryUsage
 		}
 
 		redoQuota := totalQuota * consistentMemoryUsage.MemoryQuotaPercentage / 100
@@ -196,7 +207,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			zap.Error(err))
 	}()
 
-	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
+	splitTxn := util.GetOrZero(m.config.Sink.TxnAtomicity).ShouldSplitTxn()
 
 	gcErrors := make(chan error, 16)
 	sinkErrors := make(chan error, 16)
@@ -285,6 +296,16 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Duration("cost", time.Since(start)))
+
+			// For duplicate entry error, we fast fail to restart changefeed.
+			if cerror.IsDupEntryError(err) {
+				return errors.Trace(err)
+			}
+
+			if m.isMysqlBackend {
+				// For MySQL backend, we should restart changefeed. Let owner to handle the error.
+				return errors.Trace(err)
+			}
 		}
 
 		// If the error is retryable, we should retry to re-establish the internal resources.
@@ -308,17 +329,11 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}
 }
 
-func (m *SinkManager) needsStuckCheck() bool {
-	m.sinkFactory.Lock()
-	defer m.sinkFactory.Unlock()
-	return m.sinkFactory.f != nil && m.sinkFactory.f.Category() == factory.CategoryMQ
-}
-
 func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
-	uri := m.changefeedInfo.SinkURI
-	cfg := m.changefeedInfo.Config
+	uri := m.sinkURI
+	cfg := m.config
 
 	if m.sinkFactory.f != nil {
 		return m.sinkFactory.errors, m.sinkFactory.version
@@ -379,19 +394,6 @@ func (m *SinkManager) clearSinkFactory() {
 		}
 		m.sinkFactory.errors = nil
 	}
-}
-
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bool) {
-	m.sinkFactory.Lock()
-	defer m.sinkFactory.Unlock()
-	if version == m.sinkFactory.version {
-		select {
-		case m.sinkFactory.errors <- err:
-		default:
-		}
-		return true
-	}
-	return false
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
@@ -819,7 +821,7 @@ func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
-func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs model.Ts) {
+func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs model.Ts) *tableSinkWrapper {
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		span,
@@ -827,7 +829,7 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 			if m.sinkFactory.TryLock() {
 				defer m.sinkFactory.Unlock()
 				if m.sinkFactory.f != nil {
-					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows)
+					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.up.PDClock, m.metricsTableSinkTotalRows, m.metricsTableSinkFlushLagDuration)
 					version = m.sinkFactory.version
 				}
 			}
@@ -847,7 +849,6 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
-		return
 	}
 	m.sinkMemQuota.AddTable(span)
 	m.redoMemQuota.AddTable(span)
@@ -857,6 +858,7 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 		zap.Stringer("span", &span),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("version", sinkWrapper.version))
+	return sinkWrapper
 }
 
 // StartTable sets the table(TableSink) state to replicating.
@@ -1000,25 +1002,6 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
-
-	advanceTimeoutInSec := util.GetOrZero(m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec)
-	if advanceTimeoutInSec <= 0 {
-		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
-	}
-	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
-
-	if m.needsStuckCheck() {
-		isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
-		if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
-			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Any("checkpointTs", checkpointTs),
-				zap.Float64("stuckCheck", stuckCheck.Seconds()),
-				zap.Uint64("factoryVersion", sinkVersion))
-		}
-	}
 
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.

@@ -26,6 +26,17 @@ type SorterConfig struct {
 
 	// Cache size of sorter in MB.
 	CacheSizeInMB uint64 `toml:"cache-size-in-mb" json:"cache-size-in-mb"`
+
+	// Deprecated: we don't use this field anymore.
+	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
+	// Deprecated: we don't use this field anymore.
+	MaxMemoryConsumption uint64 `toml:"max-memory-consumption" json:"max-memory-consumption"`
+	// Deprecated: we don't use this field anymore.
+	NumWorkerPoolGoroutine int `toml:"num-workerpool-goroutine" json:"num-workerpool-goroutine"`
+	// Deprecated: we don't use this field anymore .
+	NumConcurrentWorker int `toml:"num-concurrent-worker" json:"num-concurrent-worker"`
+	// Deprecated: we don't use this field anymore.
+	ChunkSizeLimit uint64 `toml:"chunk-size-limit" json:"chunk-size-limit"`
 }
 
 // ValidateAndAdjust validates and adjusts the sorter configuration

@@ -17,8 +17,8 @@ import (
 	"encoding/binary"
 
 	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -97,8 +97,19 @@ func adjustValueFromBinlogData(
 				}
 			}
 		case string:
+			isBinary := columns[i].GetType() == mysql.TypeString && mysql.HasBinaryFlag(columns[i].GetFlag())
 			isGBK := columns[i].GetCharset() == charset.CharsetGBK || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK
 			switch {
+			case isBinary:
+				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
+				d = []byte(v)
+				// if column is binary and value length is less than column length, we need to pad the value with 0x00
+				// ref: https://dev.mysql.com/doc/refman/8.0/en/binary-varbinary.html
+				valLen := columns[i].FieldType.GetFlen()
+				if valLen != types.UnspecifiedLength && valLen > len(v) {
+					padding := make([]byte, valLen-len(v))
+					d = append(d.([]byte), padding...)
+				}
 			case isGBK:
 				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
 				d = []byte(v)

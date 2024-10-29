@@ -19,8 +19,14 @@ set -eux
 # parameter 2: pd port
 pd_host=${1}
 pd_port=${2}
+is_tls=${3:-false}
 
-tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
+if [ "$is_tls" == "true" ]; then
+	tso=$(run_cdc_cli tso query --pd=https://${pd_host}:${pd_port})
+else
+	tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
+fi
+
 # make sure get tso only
 # the tso got above is:
 # "427768583921860609 PASS coverage: 2.7% of statements in github.com/pingcap/tiflow/..."

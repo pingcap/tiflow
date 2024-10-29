@@ -27,7 +27,7 @@ import (
 func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	t.Parallel()
 
-	sched := newBalanceScheduler(time.Duration(0), 3)
+	sched := newBalanceScheduler(time.Duration(0), 3, model.ChangeFeedID{})
 	sched.random = nil
 
 	// New capture "b" online
@@ -75,7 +75,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 func TestSchedulerBalanceTaskLimit(t *testing.T) {
 	t.Parallel()
 
-	sched := newBalanceScheduler(time.Duration(0), 2)
+	sched := newBalanceScheduler(time.Duration(0), 2, model.ChangeFeedID{})
 	sched.random = nil
 
 	// New capture "b" online
@@ -90,7 +90,7 @@ func TestSchedulerBalanceTaskLimit(t *testing.T) {
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 
-	sched = newBalanceScheduler(time.Duration(0), 1)
+	sched = newBalanceScheduler(time.Duration(0), 1, model.ChangeFeedID{})
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 }

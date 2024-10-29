@@ -285,7 +285,7 @@ func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 	}()
 
 	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup

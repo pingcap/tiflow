@@ -64,7 +64,7 @@ type SinkFactory struct {
 	category Category
 }
 
-// New creates a new SinkFactory by schema.
+// New creates a new SinkFactory by scheme.
 func New(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
@@ -79,8 +79,8 @@ func New(
 	}
 
 	s := &SinkFactory{}
-	schema := sink.GetScheme(sinkURI)
-	switch schema {
+	scheme := sink.GetScheme(sinkURI)
+	switch scheme {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			txn.DefaultConflictDetectorSlots)
@@ -112,7 +112,7 @@ func New(
 		bs := blackhole.NewDMLSink()
 		s.rowSink = bs
 		s.category = CategoryBlackhole
-	case sink.PulsarScheme, sink.PulsarSSLScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme, sink.PulsarHTTPScheme, sink.PulsarHTTPSScheme:
 		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			manager.NewPulsarTopicManager,
 			pulsarConfig.NewCreatorFactory, dmlproducer.NewPulsarDMLProducer)
@@ -123,7 +123,7 @@ func New(
 		s.category = CategoryMQ
 	default:
 		return nil,
-			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
 	}
 
 	return s, nil
@@ -132,16 +132,19 @@ func New(
 // CreateTableSink creates a TableSink by schema.
 func (s *SinkFactory) CreateTableSink(
 	changefeedID model.ChangeFeedID,
-	span tablepb.Span, startTs model.Ts,
+	span tablepb.Span,
+	startTs model.Ts,
+	PDClock pdutil.Clock,
 	totalRowsCounter prometheus.Counter,
+	flushLagDuration prometheus.Observer,
 ) tablesink.TableSink {
 	if s.txnSink != nil {
 		return tablesink.New(changefeedID, span, startTs, s.txnSink,
-			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs}, totalRowsCounter)
+			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs}, PDClock, totalRowsCounter, flushLagDuration)
 	}
 
 	return tablesink.New(changefeedID, span, startTs, s.rowSink,
-		&dmlsink.RowChangeEventAppender{}, totalRowsCounter)
+		&dmlsink.RowChangeEventAppender{}, PDClock, totalRowsCounter, flushLagDuration)
 }
 
 // CreateTableSinkForConsumer creates a TableSink by schema for consumer.
@@ -151,18 +154,21 @@ func (s *SinkFactory) CreateTableSink(
 func (s *SinkFactory) CreateTableSinkForConsumer(
 	changefeedID model.ChangeFeedID,
 	span tablepb.Span, startTs model.Ts,
-	totalRowsCounter prometheus.Counter,
 ) tablesink.TableSink {
 	if s.txnSink != nil {
 		return tablesink.New(changefeedID, span, startTs, s.txnSink,
 			// IgnoreStartTs is true because the consumer can
 			// **not** get the start ts of the row changed event.
 			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
-			totalRowsCounter)
+			pdutil.NewClock4Test(),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+			prometheus.NewHistogram(prometheus.HistogramOpts{}))
 	}
 
 	return tablesink.New(changefeedID, span, startTs, s.rowSink,
-		&dmlsink.RowChangeEventAppender{}, totalRowsCounter)
+		&dmlsink.RowChangeEventAppender{}, pdutil.NewClock4Test(),
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		prometheus.NewHistogram(prometheus.HistogramOpts{}))
 }
 
 // Close closes the sink.

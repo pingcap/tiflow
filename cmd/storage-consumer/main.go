@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -192,7 +191,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		stdCtx,
 		model.DefaultChangeFeedID(defaultChangefeedName),
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		replicaConfig,
 		errCh,
 		nil,
 	)
@@ -202,7 +201,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
-		downstreamURIStr, config.GetDefaultReplicaConfig())
+		downstreamURIStr, replicaConfig)
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
@@ -349,8 +348,7 @@ func (c *consumer) emitDMLEvents(
 				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					spanz.TableIDToComparableSpan(tableID),
-					row.CommitTs,
-					prometheus.NewCounter(prometheus.CounterOpts{}))
+					row.CommitTs)
 			}
 
 			_, ok := c.tableTsMap[tableID]
@@ -649,7 +647,7 @@ func main() {
 	if enableProfiling {
 		go func() {
 			server := &http.Server{
-				Addr:              ":6060",
+				Addr:              "127.0.0.1:6060",
 				ReadHeaderTimeout: 5 * time.Second,
 			}
 

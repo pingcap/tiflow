@@ -98,6 +98,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 	if err2 != nil {
 		// no enough privilege to check the user's connection number
 		result.State = StateWarning
+		// nolint
 		result.Errors = append(result.Errors, NewWarn(err2.ShortErr))
 		result.Instruction = err2.Instruction
 	} else {

@@ -14,7 +14,6 @@
 package metrics
 
 import (
-	"context"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -24,34 +23,37 @@ import (
 )
 
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context,
+func NewStatistics(
 	changefeed model.ChangeFeedID,
 	sinkType sink.Type,
 ) *Statistics {
+	s := sinkType.String()
 	statistics := &Statistics{
-		sinkType:     sinkType,
+		sinkType:     s,
 		captureAddr:  config.GetGlobalServerConfig().AdvertiseAddr,
 		changefeedID: changefeed,
 	}
 
-	namespcae := statistics.changefeedID.Namespace
+	namespace := statistics.changefeedID.Namespace
 	changefeedID := statistics.changefeedID.ID
-	s := sinkType.String()
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricTotalWriteBytesCnt = TotalWriteBytesCounter.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespcae, changefeedID, s)
+	statistics.metricExecDDLCount = ExecDDLCounter.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricTotalWriteBytesCnt = TotalWriteBytesCounter.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespace, changefeedID, s)
 	return statistics
 }
 
 // Statistics maintains some status and metrics of the Sink
 // Note: All methods of Statistics should be thread-safe.
 type Statistics struct {
-	sinkType     sink.Type
+	sinkType     string
 	captureAddr  string
 	changefeedID model.ChangeFeedID
 
+	// Counter for DDL Executed.
+	metricExecDDLCount prometheus.Counter
 	// Histogram for DDL Executing duration.
 	metricExecDDLHis prometheus.Observer
 	// Histogram for DML batch size.
@@ -95,13 +97,16 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 		return err
 	}
 	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
+	b.metricExecDDLCount.Inc()
 	return nil
 }
 
 // Close release some internal resources.
 func (b *Statistics) Close() {
-	ExecDDLHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
-	ExecBatchHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
-	LargeRowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
-	ExecutionErrorCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
+	ExecDDLCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
+	ExecDDLHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
+	ExecBatchHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
+	TotalWriteBytesCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
+	LargeRowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
+	ExecutionErrorCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID, b.sinkType)
 }

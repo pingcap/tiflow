@@ -78,6 +78,7 @@ type SortEngine interface {
 
 	// SlotsAndHasher returns how many slots contained by the Engine, and
 	// a hasher for table spans.
+	// The hasher should return a slot index for the given table span.
 	SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int)
 }
 
@@ -150,12 +151,10 @@ func (p Position) Compare(q Position) int {
 			return -1
 		} else if p.StartTs == q.StartTs {
 			return 0
-		} else {
-			return 1
 		}
-	} else {
 		return 1
 	}
+	return 1
 }
 
 // IsCommitFence indicates all transactions with same CommitTs are less than the position.

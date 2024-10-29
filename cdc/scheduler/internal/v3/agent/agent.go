@@ -214,7 +214,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 
 	outboundMessages = append(outboundMessages, responses...)
 
-	if err := a.sendMsgs(ctx, outboundMessages); err != nil {
+	if err = a.sendMsgs(ctx, outboundMessages); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -227,6 +227,8 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 		ok := a.liveness.Store(liveness)
 		if ok {
 			log.Info("schedulerv3: agent updates liveness",
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.String("old", currentLiveness.String()),
 				zap.String("new", liveness.String()))
 		}

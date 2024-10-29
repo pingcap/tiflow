@@ -379,17 +379,11 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		}
 	// all encoded as string
 	case mysql.TypeTimestamp:
-		location := "local"
-		timestamp := value.(string)
-		loc, err := time.LoadLocation(location)
+		// CAUTION: the timezone location should be the same as the ticdc server.
+		timestamp, err := convertTimezone(value.(string), "Local")
 		if err != nil {
 			return nil, err
 		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
-		if err != nil {
-			return nil, err
-		}
-		timestamp = t.UTC().Format("2006-01-02 15:04:05")
 		buf = appendLengthValue(buf, []byte(timestamp))
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
@@ -509,4 +503,25 @@ type lookupResponse struct {
 	Name     string `json:"name"`
 	SchemaID int    `json:"id"`
 	Schema   string `json:"schema"`
+}
+
+func convertTimezone(timestamp string, location string) (string, error) {
+	t, err := types.ParseTimestamp(types.StrictContext, timestamp)
+	if err != nil {
+		return "", err
+	}
+
+	loc, err := time.LoadLocation(location)
+	if err != nil {
+		log.Info("cannot load timezone location",
+			zap.String("location", location), zap.Error(err))
+		return "", err
+	}
+
+	err = t.ConvertTimeZone(loc, time.UTC)
+	if err != nil {
+		return "", err
+	}
+
+	return t.String(), nil
 }

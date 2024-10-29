@@ -29,16 +29,17 @@ import (
 func TestEncodeInsert(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
+	codec.config.DebeziumOutputOldValue = false
 
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -49,7 +50,17 @@ func TestEncodeInsert(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -60,8 +71,8 @@ func TestEncodeInsert(t *testing.T) {
 			},
 			"op": "c",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -84,8 +95,30 @@ func TestEncodeInsert(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":true,
+				"type":"int16"
+			}
+			],
+			"name": "test_cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -93,7 +126,7 @@ func TestEncodeInsert(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -106,7 +139,7 @@ func TestEncodeInsert(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -117,20 +150,20 @@ func TestEncodeInsert(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
@@ -192,7 +225,7 @@ func TestEncodeInsert(t *testing.T) {
 func TestEncodeUpdate(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -200,8 +233,8 @@ func TestEncodeUpdate(t *testing.T) {
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -216,7 +249,18 @@ func TestEncodeUpdate(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -229,8 +273,8 @@ func TestEncodeUpdate(t *testing.T) {
 			},
 			"op": "u",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -253,8 +297,31 @@ func TestEncodeUpdate(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":true,
+				"type":"int16"
+			}
+			],
+			"name": "test_cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -262,7 +329,7 @@ func TestEncodeUpdate(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -275,7 +342,7 @@ func TestEncodeUpdate(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -286,20 +353,20 @@ func TestEncodeUpdate(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
@@ -356,21 +423,68 @@ func TestEncodeUpdate(t *testing.T) {
 		}
 	}
 	`, buf.String())
+
+	codec.config.DebeziumOutputOldValue = false
+	codec.config.DebeziumDisableSchema = true
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 1
+		}
+	}
+	`, keyBuf.String())
+
+	buf.Reset()
+	err = codec.EncodeValue(e, buf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"source": {
+				"version": "2.4.0.Final",
+				"connector": "TiCDC",
+				"name": "test_cluster",
+				"ts_ms": 0,
+				"snapshot": "false",
+				"db": "test",
+				"table": "table1",
+				"server_id": 0,
+				"gtid": null,
+				"file": "",
+				"pos": 0,
+				"row": 0,
+				"thread": 0,
+				"query": null,
+				"commit_ts": 1,
+				"cluster_id": "test_cluster"
+			},
+			"ts_ms": 1701326309000,
+			"transaction": null,
+			"op": "u",
+			"after": { "tiny": 1 }
+		}
+	}
+	`, buf.String())
 }
 
 func TestEncodeDelete(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
+	codec.config.DebeziumOutputOldValue = false
 	codec.config.DebeziumDisableSchema = true
 
 	tableInfo := model.BuildTableInfo("test", "table1", []*model.Column{{
 		Name: "tiny",
 		Type: mysql.TypeTiny,
-		Flag: model.NullableFlag,
-	}}, nil)
+		Flag: model.NullableFlag | model.HandleKeyFlag | model.PrimaryKeyFlag,
+	}}, [][]int{{0}})
 	e := &model.RowChangedEvent{
 		CommitTs:  1,
 		TableInfo: tableInfo,
@@ -381,7 +495,18 @@ func TestEncodeDelete(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err := codec.EncodeRowChangedEvent(e, buf)
+	keyBuf := bytes.NewBuffer(nil)
+	err := codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		}
+	}
+	`, keyBuf.String())
+
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -392,8 +517,8 @@ func TestEncodeDelete(t *testing.T) {
 			"after": null,
 			"op": "d",
 			"source": {
-				"cluster_id": "test-cluster",
-				"name": "test-cluster",
+				"cluster_id": "test_cluster",
+				"name": "test_cluster",
 				"commit_ts": 1,
 				"connector": "TiCDC",
 				"db": "test",
@@ -416,8 +541,32 @@ func TestEncodeDelete(t *testing.T) {
 	`, buf.String())
 
 	codec.config.DebeziumDisableSchema = false
+
+	keyBuf.Reset()
+	err = codec.EncodeKey(e, keyBuf)
+	require.Nil(t, err)
+	require.JSONEq(t, `
+	{
+		"payload": {
+			"tiny": 2
+		},
+		"schema": {
+			"fields": [
+			{
+				"field":"tiny",
+				"optional":true,
+				"type":"int16"
+			}
+			],
+			"name": "test_cluster.test.table1.Key",
+			"optional": false,
+			"type":"struct"
+		}
+	}
+	`, keyBuf.String())
+
 	buf.Reset()
-	err = codec.EncodeRowChangedEvent(e, buf)
+	err = codec.EncodeValue(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `
 	{
@@ -425,7 +574,7 @@ func TestEncodeDelete(t *testing.T) {
 			"source": {
 				"version": "2.4.0.Final",
 				"connector": "TiCDC",
-				"name": "test-cluster",
+				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
 				"db": "test",
@@ -438,7 +587,7 @@ func TestEncodeDelete(t *testing.T) {
 				"thread": 0,
 				"query": null,
 				"commit_ts": 1,
-				"cluster_id": "test-cluster"
+				"cluster_id": "test_cluster"
 			},
 			"ts_ms": 1701326309000,
 			"transaction": null,
@@ -449,20 +598,20 @@ func TestEncodeDelete(t *testing.T) {
 		"schema": {
 			"type": "struct",
 			"optional": false,
-			"name": "test-cluster.test.table1.Envelope",
+			"name": "test_cluster.test.table1.Envelope",
 			"version": 1,
 			"fields": [
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "before",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
 				{
 					"type": "struct",
 					"optional": true,
-					"name": "test-cluster.test.table1.Value",
+					"name": "test_cluster.test.table1.Value",
 					"field": "after",
 					"fields": [{ "type": "int16", "optional": true, "field": "tiny" }]
 				},
@@ -524,7 +673,7 @@ func TestEncodeDelete(t *testing.T) {
 func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -542,19 +691,22 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }
 
 func BenchmarkEncodeLargeText(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -572,19 +724,22 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }
 
 func BenchmarkEncodeLargeBinary(b *testing.B) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
-		clusterID: "test-cluster",
+		clusterID: "test_cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
 	}
 	codec.config.DebeziumDisableSchema = true
@@ -603,11 +758,14 @@ func BenchmarkEncodeLargeBinary(b *testing.B) {
 		}}, tableInfo),
 	}
 
+	keyBuf := bytes.NewBuffer(nil)
 	buf := bytes.NewBuffer(nil)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
+		keyBuf.Reset()
 		buf.Reset()
-		codec.EncodeRowChangedEvent(e, buf)
+		codec.EncodeKey(e, keyBuf)
+		codec.EncodeValue(e, buf)
 	}
 }

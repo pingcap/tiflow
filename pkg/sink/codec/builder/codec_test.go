@@ -30,17 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	codecBenchmarkRowChanges = internal.CodecRowCases[1]
-
-	codecCraftEncodedRowChanges = []*common.Message{}
-	codecJSONEncodedRowChanges  = []*common.Message{}
-	codecPB1EncodedRowChanges   = []*common.Message{}
-	codecPB2EncodedRowChanges   = []*common.Message{}
-
-	codecTestSliceAllocator = craft.NewSliceAllocator(512)
-)
-
 func checkCompressedSize(messages []*common.Message) (int, int) {
 	var buff bytes.Buffer
 	writer := zlib.NewWriter(&buff)
@@ -68,7 +57,8 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 	t.Parallel()
 	t.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
 	t.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
-	for i, cs := range internal.CodecRowCases {
+	dmlCases := internal.NewDMLTestCases(t)
+	for i, cs := range dmlCases {
 		if len(cs) == 0 {
 			continue
 		}
@@ -109,6 +99,7 @@ func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 		RowId:     event.RowID,
 		Partition: 0,
 	}
+	// nolint
 	if b, err := key.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -117,6 +108,7 @@ func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 }
 
 func codecEncodeColumnPB(column *model.Column) *benchmark.Column {
+	codecTestSliceAllocator := craft.NewSliceAllocator(512)
 	return &benchmark.Column{
 		Name: column.Name,
 		Type: uint32(column.Type),
@@ -139,6 +131,7 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 		OldValue: codecEncodeColumnsPB(event.GetPreColumns()),
 		NewValue: codecEncodeColumnsPB(event.GetColumns()),
 	}
+	// nolint
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -174,7 +167,7 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 		converted.RowId = append(converted.RowId, event.RowID)
 		converted.Partition = append(converted.Partition, 0)
 	}
-
+	// nolint
 	if b, err := converted.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -189,6 +182,8 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 		Flag:  make([]uint32, len(columns)),
 		Value: make([][]byte, len(columns)),
 	}
+
+	codecTestSliceAllocator := craft.NewSliceAllocator(512)
 	for i, column := range columns {
 		converted.Name[i] = column.Name
 		converted.Type[i] = uint32(column.Type)
@@ -205,6 +200,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.GetPreColumns()))
 		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.GetColumns()))
 	}
+	// nolint
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
 	} else {
@@ -228,36 +224,15 @@ func codecEncodeRowCase(encoder codec.RowEventEncoder,
 	return nil, nil
 }
 
-func init() {
-	codecConfig := common.NewConfig(config.ProtocolOpen)
-	codecConfig.MaxMessageBytes = 8192
-	codecConfig.MaxBatchSize = 64
-
-	var err error
-	encoder := craft.NewBatchEncoder(codecConfig)
-	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
-		panic(err)
-	}
-
-	builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	encoder = builder.Build()
-	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
-		panic(err)
-	}
-	codecPB1EncodedRowChanges = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
-	codecPB2EncodedRowChanges = codecEncodeRowChangedPB2ToMessage(codecBenchmarkRowChanges)
-}
-
 func BenchmarkCraftEncoding(b *testing.B) {
 	codecConfig := common.NewConfig(config.ProtocolCraft)
 	codecConfig.MaxMessageBytes = 8192
 	codecConfig.MaxBatchSize = 64
 	allocator := craft.NewSliceAllocator(128)
 	encoder := craft.NewBatchEncoderWithAllocator(allocator, codecConfig)
+
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
@@ -271,39 +246,54 @@ func BenchmarkJsonEncoding(b *testing.B) {
 	builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
 	require.NoError(b, err)
 	encoder := builder.Build()
+
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkProtobuf1Encoding(b *testing.B) {
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
 	for i := 0; i < b.N; i++ {
 		_ = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkProtobuf2Encoding(b *testing.B) {
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
 	for i := 0; i < b.N; i++ {
 		_ = codecEncodeRowChangedPB2ToMessage(codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkCraftDecoding(b *testing.B) {
+	codecConfig := common.NewConfig(config.ProtocolCraft)
+	codecConfig.MaxMessageBytes = 8192
+	codecConfig.MaxBatchSize = 64
+	encoder := craft.NewBatchEncoder(codecConfig)
+
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
+	codecCraftEncodedRowChanges, err := codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
+	require.NoError(b, err)
 	allocator := craft.NewSliceAllocator(128)
 	for i := 0; i < b.N; i++ {
 		decoder := craft.NewBatchDecoderWithAllocator(allocator)
 		for _, message := range codecCraftEncodedRowChanges {
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
-			} else {
-				for {
-					if _, hasNext, err := decoder.HasNext(); err != nil {
-						panic(err)
-					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
-					} else {
-						break
-					}
+			}
+			for {
+				if _, hasNext, err := decoder.HasNext(); err != nil {
+					panic(err)
+				} else if hasNext {
+					_, _ = decoder.NextRowChangedEvent()
+				} else {
+					break
 				}
 			}
 		}
@@ -311,6 +301,17 @@ func BenchmarkCraftDecoding(b *testing.B) {
 }
 
 func BenchmarkJsonDecoding(b *testing.B) {
+	codecConfig := common.NewConfig(config.ProtocolCraft)
+	codecConfig.MaxMessageBytes = 8192
+	codecConfig.MaxBatchSize = 64
+	builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
+	require.NoError(b, err)
+
+	encoder := builder.Build()
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
+	codecJSONEncodedRowChanges, err := codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
+	require.NoError(b, err)
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
 			codecConfig := common.NewConfig(config.ProtocolOpen)
@@ -318,15 +319,14 @@ func BenchmarkJsonDecoding(b *testing.B) {
 			require.NoError(b, err)
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
-			} else {
-				for {
-					if _, hasNext, err := decoder.HasNext(); err != nil {
-						panic(err)
-					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
-					} else {
-						break
-					}
+			}
+			for {
+				if _, hasNext, err := decoder.HasNext(); err != nil {
+					panic(err)
+				} else if hasNext {
+					_, _ = decoder.NextRowChangedEvent()
+				} else {
+					break
 				}
 			}
 		}
@@ -353,7 +353,10 @@ func codecDecodeRowChangedPB1(columns []*benchmark.Column) []*model.Column {
 	return result
 }
 
-func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
+func benchmarkProtobuf1Decoding(b *testing.B) []*model.RowChangedEvent {
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
+	codecPB1EncodedRowChanges := codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
 	result := make([]*model.RowChangedEvent, 0, 4)
 	for _, message := range codecPB1EncodedRowChanges {
 		key := &benchmark.Key{}
@@ -380,7 +383,7 @@ func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
 
 func BenchmarkProtobuf1Decoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		for _, row := range benchmarkProtobuf1Decoding() {
+		for _, row := range benchmarkProtobuf1Decoding(b) {
 			_ = row
 		}
 	}
@@ -401,7 +404,10 @@ func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) []*model.Colum
 	return result
 }
 
-func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
+func benchmarkProtobuf2Decoding(b *testing.B) []*model.RowChangedEvent {
+	dmlCases := internal.NewDMLTestCases(b)
+	codecBenchmarkRowChanges := dmlCases[1]
+	codecPB2EncodedRowChanges := codecEncodeRowChangedPB2ToMessage(codecBenchmarkRowChanges)
 	result := make([]*model.RowChangedEvent, 0, 4)
 	for _, message := range codecPB2EncodedRowChanges {
 		keys := &benchmark.KeysColumnar{}
@@ -436,7 +442,7 @@ func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
 
 func BenchmarkProtobuf2Decoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		for _, row := range benchmarkProtobuf2Decoding() {
+		for _, row := range benchmarkProtobuf2Decoding(b) {
 			_ = row
 		}
 	}

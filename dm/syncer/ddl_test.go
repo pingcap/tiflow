@@ -21,7 +21,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -40,7 +40,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ = Suite(&testDDLSuite{})
+var _ = check.Suite(&testDDLSuite{})
 
 type testDDLSuite struct{}
 
@@ -58,7 +58,7 @@ func (s *testDDLSuite) newSubTaskCfg(dbCfg dbconfig.DBConfig) *config.SubTaskCon
 	}
 }
 
-func (s *testDDLSuite) TestAnsiQuotes(c *C) {
+func (s *testDDLSuite) TestAnsiQuotes(c *check.C) {
 	ansiQuotesCases := []string{
 		"create database `test`",
 		"create table `test`.`test`(id int)",
@@ -73,18 +73,18 @@ func (s *testDDLSuite) TestAnsiQuotes(c *C) {
 	mock.ExpectQuery("SHOW VARIABLES LIKE").
 		WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("sql_mode", "ANSI_QUOTES"))
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	parser, err := conn.GetParser(tcontext.Background(), conn.NewBaseDBForTest(db))
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	for _, sql := range ansiQuotesCases {
 		_, err = parser.ParseOneStmt(sql, "", "")
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 	}
 }
 
-func (s *testDDLSuite) TestDDLWithDashComments(c *C) {
+func (s *testDDLSuite) TestDDLWithDashComments(c *check.C) {
 	sql := `--
 -- this is a comment.
 --
@@ -92,10 +92,10 @@ CREATE TABLE test.test_table_with_c (id int);
 `
 	parser := parser.New()
 	_, err := parserpkg.Parse(parser, sql, "", "")
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (s *testDDLSuite) TestCommentQuote(c *C) {
+func (s *testDDLSuite) TestCommentQuote(c *check.C) {
 	sql := "ALTER TABLE schemadb.ep_edu_course_message_auto_reply MODIFY answer JSON COMMENT '回复的内容-格式为list，有两个字段：\"answerType\"：//''发送客服消息类型：1-文本消息，2-图片，3-图文链接''；  answer：回复内容';"
 	expectedSQL := "ALTER TABLE `schemadb`.`ep_edu_course_message_auto_reply` MODIFY COLUMN `answer` JSON COMMENT '回复的内容-格式为list，有两个字段：\"answerType\"：//''发送客服消息类型：1-文本消息，2-图片，3-图文链接''；  answer：回复内容'"
 
@@ -110,26 +110,26 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 		p:            parser.New(),
 	}
 	stmt, err := parseOneStmt(qec)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
-	c.Assert(syncer.genRouter(), IsNil)
+	c.Assert(syncer.genRouter(), check.IsNil)
 
 	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, sql := range qec.splitDDLs {
 		sqls, err := ddlWorker.processOneDDL(qec, sql)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
-	c.Assert(len(qec.appliedDDLs), Equals, 1)
-	c.Assert(qec.appliedDDLs[0], Equals, expectedSQL)
+	c.Assert(len(qec.appliedDDLs), check.Equals, 1)
+	c.Assert(qec.appliedDDLs[0], check.Equals, expectedSQL)
 }
 
-func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
+func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	// duplicate with pkg/parser
 	sqls := []string{
 		"create schema `s1`",
@@ -224,7 +224,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer.tctx = tctx
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
 		{
@@ -232,7 +232,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 			TargetSchema:  "xs1",
 		},
 	})
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	testEC := &eventContext{
 		tctx: tctx,
@@ -250,13 +250,13 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 			eventStatusVars: statusVars,
 		}
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		for _, sql2 := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql2)
-			c.Assert(err, IsNil)
+			c.Assert(err, check.IsNil)
 			for _, sql3 := range sqls {
 				if len(sql3) == 0 {
 					continue
@@ -264,17 +264,17 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 				qec.appliedDDLs = append(qec.appliedDDLs, sql3)
 			}
 		}
-		c.Assert(qec.appliedDDLs, DeepEquals, expectedSQLs[i])
-		c.Assert(targetSQLs[i], HasLen, len(qec.appliedDDLs))
+		c.Assert(qec.appliedDDLs, check.DeepEquals, expectedSQLs[i])
+		c.Assert(targetSQLs[i], check.HasLen, len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
 			ddlInfo, err2 := ddlWorker.genDDLInfo(qec, sql2)
-			c.Assert(err2, IsNil)
-			c.Assert(targetSQLs[i][j], Equals, ddlInfo.routedDDL)
+			c.Assert(err2, check.IsNil)
+			c.Assert(targetSQLs[i][j], check.Equals, ddlInfo.routedDDL)
 		}
 	}
 }
 
-func (s *testDDLSuite) TestParseOneStmt(c *C) {
+func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 	cases := []struct {
 		sql      string
 		isDDL    bool
@@ -358,16 +358,16 @@ func (s *testDDLSuite) TestParseOneStmt(c *C) {
 		qec.originSQL = cs.sql
 		stmt, err := parseOneStmt(qec)
 		if cs.hasError {
-			c.Assert(err, NotNil)
+			c.Assert(err, check.NotNil)
 		} else {
-			c.Assert(err, IsNil)
+			c.Assert(err, check.IsNil)
 		}
 		_, ok := stmt.(ast.DDLNode)
-		c.Assert(ok, Equals, cs.isDDL)
+		c.Assert(ok, check.Equals, cs.isDDL)
 	}
 }
 
-func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
+func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {
 	testCases := []struct {
 		sql      string
 		expected string
@@ -385,7 +385,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveGeneratedColumnSQL")))
 	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
-	c.Assert(syncer.genRouter(), IsNil)
+	c.Assert(syncer.genRouter(), check.IsNil)
 	p := parser.New()
 	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, tc := range testCases {
@@ -399,22 +399,22 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 			p:           p,
 		}
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql)
-			c.Assert(err, IsNil)
+			c.Assert(err, check.IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
 
-		c.Assert(len(qec.appliedDDLs), Equals, 1)
-		c.Assert(qec.appliedDDLs[0], Equals, tc.expected)
+		c.Assert(len(qec.appliedDDLs), check.Equals, 1)
+		c.Assert(qec.appliedDDLs[0], check.Equals, tc.expected)
 	}
 }
 
-func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
+func (s *testDDLSuite) TestResolveOnlineDDL(c *check.C) {
 	cases := []struct {
 		sql       string
 		expectSQL string
@@ -453,8 +453,8 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 
 	testEC := &eventContext{tctx: tctx}
 	cluster, err := conn.NewCluster()
-	c.Assert(err, IsNil)
-	c.Assert(cluster.Start(), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(cluster.Start(), check.IsNil)
 	mockClusterPort := cluster.Port
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
@@ -464,12 +464,12 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 	var qec *queryEventContext
 	for _, ca := range cases {
 		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
 		syncer.tctx = tctx
 		syncer.onlineDDL = plugin
-		c.Assert(plugin.Clear(tctx), IsNil)
-		c.Assert(syncer.genRouter(), IsNil)
+		c.Assert(plugin.Clear(tctx), check.IsNil)
+		c.Assert(syncer.genRouter(), check.IsNil)
 		qec = &queryEventContext{
 			eventContext: testEC,
 			ddlSchema:    "test",
@@ -478,26 +478,26 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		}
 		qec.originSQL = ca.sql
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		_, ok := stmt.(ast.DDLNode)
-		c.Assert(ok, IsTrue)
+		c.Assert(ok, check.IsTrue)
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql)
-			c.Assert(err, IsNil)
+			c.Assert(err, check.IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
 		if len(ca.expectSQL) != 0 {
-			c.Assert(qec.appliedDDLs, HasLen, 1)
-			c.Assert(qec.appliedDDLs[0], Equals, ca.expectSQL)
+			c.Assert(qec.appliedDDLs, check.HasLen, 1)
+			c.Assert(qec.appliedDDLs[0], check.Equals, ca.expectSQL)
 		}
 	}
 	cluster.Stop()
 }
 
-func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
+func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
 	cases := []struct {
 		onlineType string
 		trashName  string
@@ -534,21 +534,21 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 
 	ec := eventContext{tctx: tctx}
 	cluster, err := conn.NewCluster()
-	c.Assert(err, IsNil)
-	c.Assert(cluster.Start(), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(cluster.Start(), check.IsNil)
 	mockClusterPort := cluster.Port
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
 	dbCfg.Password = ""
 	cfg := s.newSubTaskCfg(dbCfg)
 	for _, ca := range cases {
 		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
-		c.Assert(syncer.genRouter(), IsNil)
+		c.Assert(syncer.genRouter(), check.IsNil)
 		syncer.onlineDDL = plugin
-		c.Assert(plugin.Clear(tctx), IsNil)
+		c.Assert(plugin.Clear(tctx), check.IsNil)
 
 		// ghost table
 		sql := fmt.Sprintf("ALTER TABLE `test`.`%s` ADD COLUMN `n` INT", ca.ghostname)
@@ -559,16 +559,16 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 		}
 		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 		sqls, err := ddlWorker.processOneDDL(qec, sql)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		table := ca.ghostname
 		matchRules := config.ShadowTableRules
 		if ca.matchGho {
-			c.Assert(sqls, HasLen, 0)
+			c.Assert(sqls, check.HasLen, 0)
 			table = ca.trashName
 			matchRules = config.TrashTableRules
 		} else {
-			c.Assert(sqls, HasLen, 1)
-			c.Assert(sqls[0], Equals, sql)
+			c.Assert(sqls, check.HasLen, 1)
+			c.Assert(sqls[0], check.Equals, sql)
 		}
 		sql = fmt.Sprintf("RENAME TABLE `test`.`t1` TO `test`.`%s`, `test`.`%s` TO `test`.`t1`", ca.trashName, ca.ghostname)
 		qec = &queryEventContext{
@@ -577,14 +577,14 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			p:            p,
 		}
 		sqls, err = ddlWorker.processOneDDL(qec, sql)
-		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), IsTrue)
-		c.Assert(sqls, HasLen, 0)
-		c.Assert(err, ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
+		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), check.IsTrue)
+		c.Assert(sqls, check.HasLen, 0)
+		c.Assert(err, check.ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
 	}
 	cluster.Stop()
 }
 
-func (s *testDDLSuite) TestDropSchemaInSharding(c *C) {
+func (s *testDDLSuite) TestDropSchemaInSharding(c *check.C) {
 	var (
 		targetTable = &filter.Table{
 			Schema: "target_db",
@@ -601,17 +601,17 @@ func (s *testDDLSuite) TestDropSchemaInSharding(c *C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	// nolint:dogsled
 	_, _, _, _, err := syncer.sgk.AddGroup(targetTable, []string{source1}, nil, true)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	// nolint:dogsled
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
-	c.Assert(err, IsNil)
-	c.Assert(syncer.sgk.Groups(), HasLen, 2)
+	c.Assert(err, check.IsNil)
+	c.Assert(syncer.sgk.Groups(), check.HasLen, 2)
 	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
-	c.Assert(pessimist.dropSchemaInSharding(tctx, sourceDB), IsNil)
-	c.Assert(syncer.sgk.Groups(), HasLen, 0)
+	c.Assert(pessimist.dropSchemaInSharding(tctx, sourceDB), check.IsNil)
+	c.Assert(syncer.sgk.Groups(), check.HasLen, 0)
 }
 
-func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
+func (s *testDDLSuite) TestClearOnlineDDL(c *check.C) {
 	var (
 		targetTable = &filter.Table{
 			Schema: "target_db",
@@ -634,17 +634,17 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 
 	// nolint:dogsled
 	_, _, _, _, err := syncer.sgk.AddGroup(targetTable, []string{source1}, nil, true)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	// nolint:dogsled
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
-	c.Assert(pessimist.clearOnlineDDL(tctx, targetTable), IsNil)
-	c.Assert(mock.toFinish, HasLen, 0)
+	c.Assert(pessimist.clearOnlineDDL(tctx, targetTable), check.IsNil)
+	c.Assert(mock.toFinish, check.HasLen, 0)
 }
 
-func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
+func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 	statusVarsArray := [][]byte{
 		{
 			4, 0, 0, 0, 0, 46, 0,
@@ -700,13 +700,13 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 				targetTables: []*filter.Table{tab},
 			}
 			stmt, err := p.ParseOneStmt(sql, "", "")
-			c.Assert(err, IsNil)
-			c.Assert(stmt, NotNil)
+			c.Assert(err, check.IsNil)
+			c.Assert(stmt, check.NotNil)
 			ddlInfo.stmtCache = stmt
 			ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
-			c.Assert(err, IsNil)
-			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
+			c.Assert(err, check.IsNil)
+			c.Assert(routedDDL, check.Equals, expectedSQLs[i][j])
 		}
 	}
 }

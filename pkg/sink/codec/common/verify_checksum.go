@@ -14,50 +14,86 @@
 package common
 
 import (
+	"context"
+	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.Column, expected uint32) error {
-	checksum, err := calculateChecksum(columns)
-	if err != nil {
-		return errors.Trace(err)
+func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
+	// if expected is 0, it means the checksum is not enabled, so we don't need to verify it.
+	// the data maybe restored by br, and the checksum is not enabled, so no expected here.
+	if event.Checksum.Current != 0 {
+		checksum, err := calculateChecksum(event.Columns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Current {
+			log.Error("current checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum), zap.Any("event", event))
+			for _, col := range event.Columns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("current checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Current)
+		}
 	}
-	if checksum != expected {
-		log.Error("checksum mismatch",
-			zap.Uint32("expected", expected),
-			zap.Uint32("actual", checksum))
-		return errors.New("checksum mismatch")
+	if event.Checksum.Previous != 0 {
+		checksum, err := calculateChecksum(event.PreColumns, event.TableInfo.Columns)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checksum != event.Checksum.Previous {
+			log.Error("previous checksum mismatch",
+				zap.Uint32("expected", event.Checksum.Previous),
+				zap.Uint32("actual", checksum), zap.Any("event", event))
+			for _, col := range event.PreColumns {
+				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
+					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+			}
+			return fmt.Errorf("previous checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Previous)
+		}
 	}
 
-	return nil
+	if db == nil {
+		return nil
+	}
+	// also query the upstream TiDB to get the columns-level checksum
+	return queryRowChecksum(context.Background(), db, event)
 }
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint32, error) {
+func calculateChecksum(columns []*model.ColumnData, columnInfo []*timodel.ColumnInfo) (uint32, error) {
 	var (
 		checksum uint32
 		err      error
 	)
 	buf := make([]byte, 0)
-	for _, col := range columns {
+	for idx, col := range columns {
 		if len(buf) > 0 {
 			buf = buf[:0]
 		}
-		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
+		buf, err = buildChecksumBytes(buf, col.Value, columnInfo[idx].GetType())
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -121,19 +157,20 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeEnum, TypeSet encoded as string
 	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case int64:
+			number = uint64(v)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, number)
 	case mysql.TypeBit:
-		var (
-			number uint64
-			err    error
-		)
+		var number uint64
 		switch v := value.(type) {
 		// TypeBit encoded as bytes for the avro protocol
 		case []byte:
-			number, err = BinaryLiteralToInt(v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			number = MustBinaryLiteralToInt(v)
 		// TypeBit encoded as uint64 for the simple protocol
 		case uint64:
 			number = v
@@ -151,19 +188,22 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
-		location := config.GetDefaultServerConfig().TZ
-		timestamp := value.(string)
-
-		loc, err := util.GetTimezone(location)
-		if err != nil {
-			return nil, errors.Trace(err)
+		location := "Local"
+		var ts string
+		switch data := value.(type) {
+		case map[string]interface{}:
+			ts = data["value"].(string)
+			location = data["location"].(string)
+		case string:
+			ts = data
 		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, loc)
+		ts, err := util.ConvertTimezone(ts, location)
 		if err != nil {
-			return nil, errors.Trace(err)
+			log.Panic("convert timestamp to timezone failed",
+				zap.String("timestamp", ts), zap.String("location", location),
+				zap.Error(err))
 		}
-		timestamp = t.UTC().Format("2006-01-02 15:04:05")
-		buf = appendLengthValue(buf, []byte(timestamp))
+		buf = appendLengthValue(buf, []byte(ts))
 	// all encoded as string
 	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		buf = appendLengthValue(buf, []byte(value.(string)))
@@ -176,6 +216,9 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// this should not happen, does not take into the checksum calculation.
 	case mysql.TypeNull, mysql.TypeGeometry:
 		// do nothing
+	case mysql.TypeTiDBVectorFloat32:
+		vec, _ := types.ParseVectorFloat32(value.(string))
+		buf = vec.SerializeTo(buf)
 	default:
 		return buf, errors.New("invalid type for the checksum calculation")
 	}

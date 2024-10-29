@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/common"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -37,13 +37,13 @@ func TestUpgrade(t *testing.T) {
 	suite.(*testForEtcd).testT = t
 	suiteForBigTxn.(*testForBigTxn).testT = t
 
-	TestingT(t)
+	check.TestingT(t)
 }
 
-func clearTestData(c *C) {
+func clearTestData(c *check.C) {
 	clearVersion := clientv3.OpDelete(common.ClusterVersionKey)
 	_, err := etcdTestCli.Txn(context.Background()).Then(clearVersion).Commit()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
 type testForEtcd struct {
@@ -55,29 +55,29 @@ type testForBigTxn struct {
 }
 
 var (
-	suite          = SerialSuites(&testForEtcd{})
-	suiteForBigTxn = SerialSuites(&testForBigTxn{})
+	suite          = check.SerialSuites(&testForEtcd{})
+	suiteForBigTxn = check.SerialSuites(&testForBigTxn{})
 )
 
-func (t *testForEtcd) SetUpSuite(c *C) {
+func (t *testForEtcd) SetUpSuite(c *check.C) {
 	mockCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
 	etcdTestCli = mockCluster.RandClient()
 }
 
-func (t *testForEtcd) TearDownSuite(c *C) {
+func (t *testForEtcd) TearDownSuite(c *check.C) {
 	mockCluster.Terminate(t.testT)
 }
 
-func (t *testForBigTxn) SetUpSuite(c *C) {
+func (t *testForBigTxn) SetUpSuite(c *check.C) {
 	bigTxnCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1, MaxTxnOps: 2048})
 	bigTxnTestCli = bigTxnCluster.RandClient()
 }
 
-func (t *testForBigTxn) TearDownSuite(c *C) {
+func (t *testForBigTxn) TearDownSuite(c *check.C) {
 	bigTxnCluster.Terminate(t.testT)
 }
 
-func (t *testForEtcd) TestTryUpgrade(c *C) {
+func (t *testForEtcd) TestTryUpgrade(c *check.C) {
 	defer clearTestData(c)
 
 	// mock upgrade functions.
@@ -95,26 +95,26 @@ func (t *testForEtcd) TestTryUpgrade(c *C) {
 
 	// no previous version exist, new cluster.
 	ver, rev1, err := GetVersion(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
-	c.Assert(ver.NotSet(), IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
+	c.Assert(ver.NotSet(), check.IsTrue)
 
 	// try to upgrade, run actual upgrade functions
-	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), IsNil)
+	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), check.IsNil)
 	ver, rev2, err := GetVersion(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
-	c.Assert(ver, DeepEquals, CurrentVersion)
-	c.Assert(mockVerNo, Equals, uint64(5))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
+	c.Assert(ver, check.DeepEquals, CurrentVersion)
+	c.Assert(mockVerNo, check.Equals, uint64(5))
 
 	// try to upgrade again, do nothing because the version is the same.
 	mockVerNo = 0
-	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), IsNil)
+	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), check.IsNil)
 	ver, rev3, err := GetVersion(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(ver, DeepEquals, CurrentVersion)
-	c.Assert(mockVerNo, Equals, uint64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(ver, check.DeepEquals, CurrentVersion)
+	c.Assert(mockVerNo, check.Equals, uint64(0))
 
 	// mock a newer current version.
 	oldCurrentVer := CurrentVersion
@@ -125,60 +125,60 @@ func (t *testForEtcd) TestTryUpgrade(c *C) {
 	CurrentVersion = newerVer
 
 	// try to upgrade, to a newer version, upgrade operations applied.
-	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), IsNil)
+	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), check.IsNil)
 	ver, rev4, err := GetVersion(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev3)
-	c.Assert(ver, DeepEquals, newerVer)
-	c.Assert(mockVerNo, Equals, currentInternalNo+1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Greater, rev3)
+	c.Assert(ver, check.DeepEquals, newerVer)
+	c.Assert(mockVerNo, check.Equals, currentInternalNo+1)
 
 	// try to upgrade, to an older version, do nothing.
 	mockVerNo = 0
 	CurrentVersion = oldCurrentVer
-	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), IsNil)
+	c.Assert(TryUpgrade(etcdTestCli, newUpgradeContext()), check.IsNil)
 	ver, rev5, err := GetVersion(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev5, Equals, rev4)
-	c.Assert(ver, DeepEquals, newerVer) // not changed.
-	c.Assert(mockVerNo, Equals, uint64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev5, check.Equals, rev4)
+	c.Assert(ver, check.DeepEquals, newerVer) // not changed.
+	c.Assert(mockVerNo, check.Equals, uint64(0))
 }
 
-func (t *testForEtcd) TestUpgradeToVer3(c *C) {
+func (t *testForEtcd) TestUpgradeToVer3(c *check.C) {
 	ctx := context.Background()
 	source := "source-1"
 	oldKey := common.UpstreamConfigKeyAdapterV1.Encode(source)
 	oldVal := "test"
 
 	_, err := etcdTestCli.Put(ctx, oldKey, oldVal)
-	c.Assert(err, IsNil)
-	c.Assert(upgradeToVer3(ctx, etcdTestCli), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(upgradeToVer3(ctx, etcdTestCli), check.IsNil)
 
 	newKey := common.UpstreamConfigKeyAdapter.Encode(source)
 	resp, err := etcdTestCli.Get(ctx, newKey)
-	c.Assert(err, IsNil)
-	c.Assert(resp.Kvs, HasLen, 1)
-	c.Assert(string(resp.Kvs[0].Value), Equals, oldVal)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Kvs, check.HasLen, 1)
+	c.Assert(string(resp.Kvs[0].Value), check.Equals, oldVal)
 
 	// test won't overwrite new value
 	newVal := "test2"
 	_, err = etcdTestCli.Put(ctx, newKey, newVal)
-	c.Assert(err, IsNil)
-	c.Assert(upgradeToVer3(ctx, etcdTestCli), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(upgradeToVer3(ctx, etcdTestCli), check.IsNil)
 	resp, err = etcdTestCli.Get(ctx, newKey)
-	c.Assert(err, IsNil)
-	c.Assert(resp.Kvs, HasLen, 1)
-	c.Assert(string(resp.Kvs[0].Value), Equals, newVal)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Kvs, check.HasLen, 1)
+	c.Assert(string(resp.Kvs[0].Value), check.Equals, newVal)
 
 	for i := 0; i < 500; i++ {
 		key := common.UpstreamConfigKeyAdapterV1.Encode(fmt.Sprintf("%s-%d", source, i))
 		val := fmt.Sprintf("%s-%d", oldVal, i)
 		_, err := etcdTestCli.Put(ctx, key, val)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 	}
-	c.Assert(upgradeToVer3(ctx, etcdTestCli), ErrorMatches, ".*too many operations in txn request.*")
+	c.Assert(upgradeToVer3(ctx, etcdTestCli), check.ErrorMatches, ".*too many operations in txn request.*")
 }
 
-func (t *testForBigTxn) TestUpgradeToVer3(c *C) {
+func (t *testForBigTxn) TestUpgradeToVer3(c *check.C) {
 	source := "source-1"
 	oldVal := "test"
 	ctx := context.Background()
@@ -187,7 +187,7 @@ func (t *testForBigTxn) TestUpgradeToVer3(c *C) {
 		key := common.UpstreamConfigKeyAdapterV1.Encode(fmt.Sprintf("%s-%d", source, i))
 		val := fmt.Sprintf("%s-%d", oldVal, i)
 		_, err := bigTxnTestCli.Put(ctx, key, val)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 	}
-	c.Assert(upgradeToVer3(ctx, bigTxnTestCli), IsNil)
+	c.Assert(upgradeToVer3(ctx, bigTxnTestCli), check.IsNil)
 }

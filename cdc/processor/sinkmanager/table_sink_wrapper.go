@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -76,7 +78,7 @@ type tableSinkWrapper struct {
 	receivedSorterResolvedTs atomic.Uint64
 
 	// replicateTs is the ts that the table sink has started to replicate.
-	replicateTs    model.Ts
+	replicateTs    atomic.Uint64
 	genReplicateTs func(ctx context.Context) (model.Ts, error)
 
 	// lastCleanTime indicates the last time the table has been cleaned.
@@ -87,6 +89,11 @@ type tableSinkWrapper struct {
 	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
 	rangeEventCountsMu sync.Mutex
+}
+
+// GetReplicaTs returns the replicate ts of the table sink.
+func (t *tableSinkWrapper) GetReplicaTs() model.Ts {
+	return t.replicateTs.Load()
 }
 
 type rangeEventCount struct {
@@ -131,42 +138,43 @@ func newTableSinkWrapper(
 
 	res.receivedSorterResolvedTs.Store(startTs)
 	res.barrierTs.Store(startTs)
+	res.replicateTs.Store(math.MaxUint64)
 	return res
 }
 
 func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err error) {
-	if t.replicateTs != 0 {
+	if t.replicateTs.Load() != math.MaxUint64 {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
 			zap.Stringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
-			zap.Uint64("oldReplicateTs", t.replicateTs),
+			zap.Uint64("oldReplicateTs", t.replicateTs.Load()),
 		)
 	}
 
 	// FIXME(qupeng): it can be re-fetched later instead of fails.
-	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+	ts, err := t.genReplicateTs(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	t.replicateTs.Store(ts)
 
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Stringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
-		zap.Uint64("replicateTs", t.replicateTs),
+		zap.Uint64("replicateTs", ts),
 	)
 
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	for {
-		old := t.receivedSorterResolvedTs.Load()
-		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
-			break
-		}
-	}
+	util.MustCompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, startTs)
+	// the barrierTs should always larger than or equal to the checkpointTs, so we need to update
+	// barrierTs before the checkpointTs is updated.
+	t.updateBarrierTs(startTs)
 	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
 		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
 		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
@@ -188,26 +196,14 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
-	for {
-		old := t.barrierTs.Load()
-		if ts <= old || t.barrierTs.CompareAndSwap(old, ts) {
-			break
-		}
-	}
+	util.MustCompareAndMonotonicIncrease(&t.barrierTs, ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	for {
-		old := t.receivedSorterResolvedTs.Load()
-		if ts <= old {
-			return
-		}
-		if t.receivedSorterResolvedTs.CompareAndSwap(old, ts) {
-			if t.state.Load() == tablepb.TableStatePreparing {
-				t.state.Store(tablepb.TableStatePrepared)
-			}
-			return
-		}
+	increased := util.CompareAndMonotonicIncrease(&t.receivedSorterResolvedTs, ts)
+	if increased && t.state.Load() == tablepb.TableStatePreparing {
+		// Update the state to `Prepared` when the receivedSorterResolvedTs is updated for the first time.
+		t.state.Store(tablepb.TableStatePrepared)
 	}
 }
 
@@ -392,14 +388,16 @@ func (t *tableSinkWrapper) checkTableSinkHealth() (err error) {
 // committed at downstream but we don't know. So we need to update `replicateTs`
 // of the table so that we can re-send those events later.
 func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
-	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+	ts, err := t.genReplicateTs(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	t.replicateTs.Store(ts)
 	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Uint64("replicateTs", t.replicateTs))
+		zap.Uint64("replicateTs", ts))
 	return nil
 }
 
@@ -453,25 +451,6 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound sorter.Position, min
 		t.rangeEventCounts = t.rangeEventCounts[idx:]
 	}
 	return shouldClean
-}
-
-func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint64) {
-	t.getCheckpointTs()
-
-	t.tableSink.RLock()
-	defer t.tableSink.RUnlock()
-	t.tableSink.innerMu.Lock()
-	defer t.tableSink.innerMu.Unlock()
-
-	// What these conditions mean:
-	// 1. the table sink has been associated with a valid sink;
-	// 2. its checkpoint hasn't been advanced for a while;
-	version := t.tableSink.version
-	advanced := t.tableSink.advanced
-	if version > 0 && time.Since(advanced) > stuckCheck {
-		return true, version
-	}
-	return false, uint64(0)
 }
 
 func handleRowChangedEvents(

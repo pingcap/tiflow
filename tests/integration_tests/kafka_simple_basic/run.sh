@@ -22,10 +22,13 @@ function run() {
 
 	cd $WORK_DIR
 
+	# upstream TiDB disable the cluster index
+	run_sql "set global tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	# upstream tidb cluster enable row level checksum
 	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	TOPIC_NAME="ticdc-simple-basic"
+	TOPIC_NAME="ticdc-simple-basic-$RANDOM"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
@@ -33,7 +36,7 @@ function run() {
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" -c "simple-basic"
 	sleep 5 # wait for changefeed to start
 
-	run_kafka_consumer $WORK_DIR $SINK_URI
+	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?" --config="$CUR/conf/changefeed.toml" 2>&1 &
 
 	# pre execute some ddls
 	run_sql_file $CUR/data/pre_ddl.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}

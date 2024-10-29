@@ -26,10 +26,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/atomic"
@@ -70,7 +68,8 @@ type dmlSink struct {
 	wg   sync.WaitGroup
 	dead chan struct{}
 
-	scheme string
+	scheme               string
+	outputRawChangeEvent bool
 }
 
 func newDMLSink(
@@ -84,20 +83,21 @@ func newDMLSink(
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	scheme string,
+	outputRawChangeEvent bool,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancelCause(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup)
 
 	s := &dmlSink{
-		id:          changefeedID,
-		protocol:    protocol,
-		adminClient: adminClient,
-		ctx:         ctx,
-		cancel:      cancel,
-		dead:        make(chan struct{}),
-		scheme:      scheme,
+		id:                   changefeedID,
+		protocol:             protocol,
+		adminClient:          adminClient,
+		ctx:                  ctx,
+		cancel:               cancel,
+		dead:                 make(chan struct{}),
+		scheme:               scheme,
+		outputRawChangeEvent: outputRawChangeEvent,
 	}
 	s.alive.transformer = transformer
 	s.alive.eventRouter = eventRouter
@@ -236,6 +236,6 @@ func (s *dmlSink) Dead() <-chan struct{} {
 }
 
 // Scheme returns the scheme of this sink.
-func (s *dmlSink) Scheme() string {
-	return s.scheme
+func (s *dmlSink) SchemeOption() (string, bool) {
+	return s.scheme, s.outputRawChangeEvent
 }

@@ -199,6 +199,9 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	pdAddr := f.GetPdAddr()
 	serverAddr := f.GetServerAddr()
 	if pdAddr == "" && serverAddr == "" {
+		if f.GetCredential().IsTLSEnabled() {
+			return "https://127.0.0.1:8300", nil
+		}
 		return "http://127.0.0.1:8300", nil
 	}
 	if pdAddr != "" && serverAddr != "" {

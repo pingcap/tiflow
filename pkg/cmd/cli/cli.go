@@ -45,7 +45,7 @@ func NewCmdCli() *cobra.Command {
 		}
 		util.InitSignalHandling(doneNotify, cancel)
 
-		util.CheckErr(cf.CompleteAuthParameters(cmd))
+		util.CheckErr(cf.CompleteClientAuthParameters(cmd))
 	}
 
 	// Construct the client construction factory.
@@ -57,6 +57,7 @@ func NewCmdCli() *cobra.Command {
 	cmds.AddCommand(newCmdProcessor(f))
 	cmds.AddCommand(newCmdTso(f))
 	cmds.AddCommand(newCmdUnsafe(f))
+	cmds.AddCommand(newConfigureCredentials())
 
 	return cmds
 }
