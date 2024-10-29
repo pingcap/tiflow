@@ -23,9 +23,11 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -50,10 +52,41 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	var err error
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
+		rows := make([]any, len(tableInfo.Columns))
 		for i, col := range cols {
+			info, exist := tableInfo.GetColumnInfo(col.ColumnID)
+			if !exist {
+				log.Error("get column info from ColumnID is not exist", zap.Int64("ColumnID", col.ColumnID))
+			}
+			rows[info.Offset] = col.Value
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
 			if err != nil {
+				log.Error("write Debezium field value meet error", zap.Error(err))
+				break
+			}
+		}
+		if !tableInfo.HasVirtualColumns() {
+			return
+		}
+
+		// add generate column
+		option := getBuildOption(tableInfo)
+		row := chunk.MutRowFromValues(rows...).ToRow()
+		for _, col := range tableInfo.Columns {
+			if model.IsColCDCVisible(col) {
+				continue
+			}
+			val, err := parseExpression(col.GeneratedExprString, tableInfo.TableInfo, option, row)
+			if err != nil {
+				log.Error("parse expression meet error", zap.Error(cerror.Trace(err)))
+				break
+			}
+			data := &model.ColumnData{ColumnID: col.ID, Value: val}
+			colx := model.GetColumnDataX(data, tableInfo)
+			err = c.writeDebeziumFieldValue(writer, colx, &col.FieldType)
+			if err != nil {
+				log.Error("write Debezium field value meet error", zap.Error(err))
 				break
 			}
 		}
@@ -176,11 +209,18 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				floatV, err := strconv.ParseFloat(v, 64)
+				t, err := time.Parse("2006-01-02", v)
 				if err != nil {
+					// For example, time may be invalid like 1000-00-00
+					// return nil, nil
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteInt64Field("default", 0)
+					} else {
+						writer.WriteNullField("default")
+					}
 					return
 				}
-				writer.WriteFloat64Field("default", floatV)
+				writer.WriteInt64Field("default", t.UTC().Unix()/60/60/24)
 			}
 		})
 
@@ -200,13 +240,19 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
+				t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+				// t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
+				if err != nil {
 					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
 						writer.WriteAnyField("default", 0)
 					}
 					return
 				}
-				writer.WriteStringField("default", v)
+				if ft.GetDecimal() <= 3 {
+					writer.WriteInt64Field("default", t.UnixMilli())
+				} else {
+					writer.WriteInt64Field("default", t.UnixMicro())
+				}
 			}
 		})
 
@@ -223,7 +269,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					return
 				}
 				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
-					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
 						writer.WriteAnyField("default", 0)
 					}
 					return
@@ -244,11 +290,24 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				floatV, err := strconv.ParseFloat(v, 64)
+				// t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
+				t, err := time.Parse("15:04:05.999999", v)
+				if err != nil {
+					// For example, time may be invalid like 1000-00-00
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						t = time.Unix(0, 0)
+					} else {
+						writer.WriteNullField("default")
+						return
+					}
+				}
+				str := t.AddDate(2006, 1, 2).UTC().Format("15:04:05.999999")
+				d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, str, ft.GetDecimal())
 				if err != nil {
 					return
 				}
-				writer.WriteFloat64Field("default", floatV)
+				writer.WriteInt64Field("default", d.Microseconds())
+
 			}
 		})
 
@@ -416,6 +475,13 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
+				if floatV < 70 {
+					// treats "DEFAULT 1" as 2001
+					floatV += 2000
+				} else if floatV < 100 {
+					//  treats "DEFAULT 99" as 1999
+					floatV += 1900
+				}
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -484,7 +550,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteBoolField(col.GetName(), v != 0)
 			return nil
 		} else {
-			// 10110000100001111
 			var buf [8]byte
 			binary.LittleEndian.PutUint64(buf[:], v)
 			numBytes := n / 8
@@ -588,7 +653,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				return nil
 			}
 		}
-		writer.WriteInt64Field(col.GetName(), t.Unix()/60/60/24)
+		writer.WriteInt64Field(col.GetName(), t.UTC().Unix()/60/60/24)
 		return nil
 
 	case mysql.TypeDatetime:
@@ -605,7 +670,8 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
+		t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+		// t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
 		if err != nil {
 			// For example, time may be 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
@@ -646,9 +712,10 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			// For example, time may be invalid like 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				t = time.Unix(0, 0)
+			} else {
+				writer.WriteNullField(col.GetName())
+				return nil
 			}
-			writer.WriteNullField(col.GetName())
-			return nil
 		}
 
 		str := t.UTC().Format("2006-01-02T15:04:05")
@@ -672,8 +739,8 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.Value,
 				col.GetName())
 		}
-
-		t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
+		t, err := time.Parse("15:04:05.999999", v)
+		// t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
 		if err != nil {
 			// For example, time may be invalid like 1000-00-00
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
@@ -908,6 +975,16 @@ func (c *dbzCodec) EncodeValue(
 						for i, col := range validCols {
 							colx := model.GetColumnDataX(col, e.TableInfo)
 							c.writeDebeziumFieldSchema(fieldsWriter, colx, colInfos[i].Ft)
+						}
+						if e.TableInfo.HasVirtualColumns() {
+							for _, colInfo := range e.TableInfo.Columns {
+								if model.IsColCDCVisible(colInfo) {
+									continue
+								}
+								data := &model.ColumnData{ColumnID: colInfo.ID}
+								colx := model.GetColumnDataX(data, e.TableInfo)
+								c.writeDebeziumFieldSchema(fieldsWriter, colx, &colInfo.FieldType)
+							}
 						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()

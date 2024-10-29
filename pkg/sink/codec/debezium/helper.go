@@ -16,21 +16,27 @@ package debezium
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/generatedexpr"
+	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
 type visiter struct {
-	columnsMap map[model.CIStr]*timodel.ColumnInfo
+	columnsMap map[pmodel.CIStr]*timodel.ColumnInfo
 }
 
 func (v *visiter) Enter(n ast.Node) (node ast.Node, skipChildren bool) {
@@ -99,6 +105,54 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 	}
 }
 
+func getBuildOption(tableInfo *model.TableInfo) expression.BuildOption {
+	colInfos := tableInfo.Columns
+	columns := make([]*expression.Column, 0, len(colInfos))
+	names := make([]*types.FieldName, 0, len(colInfos))
+	var uniqueID atomic.Int64
+	for i, col := range colInfos {
+		names = append(names, &types.FieldName{
+			OrigTblName: tableInfo.Name,
+			OrigColName: col.Name,
+			DBName:      pmodel.NewCIStr(tableInfo.GetSchemaName()),
+			TblName:     pmodel.NewCIStr(tableInfo.GetTableName()),
+			ColName:     col.Name,
+		})
+		newCol := &expression.Column{
+			RetType:  col.FieldType.Clone(),
+			ID:       col.ID,
+			UniqueID: uniqueID.Add(1),
+			Index:    col.Offset,
+			OrigName: names[i].String(),
+			IsHidden: col.Hidden,
+		}
+		columns = append(columns, newCol)
+	}
+	// Resolve virtual generated column.
+	schema := expression.NewSchema(columns...)
+	return expression.WithInputSchemaAndNames(schema, names, tableInfo.TableInfo)
+}
+
+func parseExpression(expr string, tblInfo *timodel.TableInfo, option expression.BuildOption, row chunk.Row) (any, error) {
+	node, err := generatedexpr.ParseExpression(expr)
+	if err != nil {
+		return nil, err
+	}
+	node, err = generatedexpr.SimpleResolveName(node, tblInfo)
+	if err != nil {
+		return nil, err
+	}
+	e, err := expression.BuildSimpleExpr(exprstatic.NewExprContext(), node, option, expression.WithAllowCastArray(true))
+	if err != nil {
+		return nil, err
+	}
+	d, err := e.Eval(exprstatic.NewEvalContext(), row)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetValue(), nil
+}
+
 func getColumns(sql string, columns []*timodel.ColumnInfo) []*timodel.ColumnInfo {
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, "", "")
@@ -106,7 +160,7 @@ func getColumns(sql string, columns []*timodel.ColumnInfo) []*timodel.ColumnInfo
 		log.Error("format query parse one stmt failed", zap.Error(err))
 	}
 
-	columnsMap := make(map[model.CIStr]*timodel.ColumnInfo, len(columns))
+	columnsMap := make(map[pmodel.CIStr]*timodel.ColumnInfo, len(columns))
 	for _, col := range columns {
 		columnsMap[col.Name] = col
 	}
