@@ -37,7 +37,7 @@ var (
 		Subsystem: subsystem,
 		Name:      "fsync_duration_seconds",
 		Help:      "The latency distributions of fsync called by redo writer",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 16),
 	}, []string{"namespace", "changefeed", "type"})
 
 	// RedoFlushAllDurationHistogram records the latency distributions of flushAll
@@ -47,7 +47,7 @@ var (
 		Subsystem: subsystem,
 		Name:      "flush_all_duration_seconds",
 		Help:      "The latency distributions of flushall called by redo writer",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 16),
 	}, []string{"namespace", "changefeed", "type"})
 
 	// RedoTotalRowsCountGauge records the total number of rows written to redo log.
@@ -64,7 +64,7 @@ var (
 		Subsystem: subsystem,
 		Name:      "write_log_duration_seconds",
 		Help:      "The latency distributions of writeLog called by redoManager",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 16),
 	}, []string{"namespace", "changefeed", "type"})
 
 	// RedoFlushLogDurationHistogram records the latency distributions of flushLog.
@@ -73,7 +73,7 @@ var (
 		Subsystem: subsystem,
 		Name:      "flush_log_duration_seconds",
 		Help:      "The latency distributions of flushLog called by redoManager",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 16),
 	}, []string{"namespace", "changefeed", "type"})
 
 	// RedoWorkerBusyRatio records the busy ratio of redo bgUpdateLog worker.
