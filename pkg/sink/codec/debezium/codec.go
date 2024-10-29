@@ -240,18 +240,18 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				t, err := time.Parse("2006-01-02 15:04:05.999999", v)
-				// t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 				if err != nil {
-					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
-						writer.WriteAnyField("default", 0)
-					}
+					return
+				}
+				gt, err := t.GoTime(time.UTC)
+				if err != nil {
 					return
 				}
 				if ft.GetDecimal() <= 3 {
-					writer.WriteInt64Field("default", t.UnixMilli())
+					writer.WriteInt64Field("default", gt.UnixMilli())
 				} else {
-					writer.WriteInt64Field("default", t.UnixMicro())
+					writer.WriteInt64Field("default", gt.UnixMicro())
 				}
 			}
 		})
@@ -290,24 +290,11 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				// t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
-				t, err := time.Parse("15:04:05.999999", v)
-				if err != nil {
-					// For example, time may be invalid like 1000-00-00
-					if mysql.HasNotNullFlag(ft.GetFlag()) {
-						t = time.Unix(0, 0)
-					} else {
-						writer.WriteNullField("default")
-						return
-					}
-				}
-				str := t.AddDate(2006, 1, 2).UTC().Format("15:04:05.999999")
-				d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, str, ft.GetDecimal())
+				d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 				if err != nil {
 					return
 				}
 				writer.WriteInt64Field("default", d.Microseconds())
-
 			}
 		})
 
@@ -670,23 +657,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 
-		t, err := time.Parse("2006-01-02 15:04:05.999999", v)
-		// t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 		if err != nil {
-			// For example, time may be 1000-00-00
-			if mysql.HasNotNullFlag(ft.GetFlag()) {
-				writer.WriteInt64Field(col.GetName(), 0)
-				return nil
-			}
-			writer.WriteNullField(col.GetName())
-			return nil
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
 		}
-
+		gt, err := t.GoTime(time.UTC)
+		if err != nil {
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
+		}
 		if ft.GetDecimal() <= 3 {
-			writer.WriteInt64Field(col.GetName(), t.UnixMilli())
-			return nil
+			writer.WriteInt64Field(col.GetName(), gt.UnixMilli())
+		} else {
+			writer.WriteInt64Field(col.GetName(), gt.UnixMicro())
 		}
-		writer.WriteInt64Field(col.GetName(), t.UnixMicro())
 		return nil
 
 	case mysql.TypeTimestamp:
@@ -739,19 +726,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.Value,
 				col.GetName())
 		}
-		t, err := time.Parse("15:04:05.999999", v)
-		// t, err := time.ParseInLocation("15:04:05.999999", v, c.config.TimeZone)
-		if err != nil {
-			// For example, time may be invalid like 1000-00-00
-			if mysql.HasNotNullFlag(ft.GetFlag()) {
-				t = time.Unix(0, 0)
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
-			}
-		}
-		str := t.AddDate(2006, 1, 2).UTC().Format("15:04:05.999999")
-		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, str, ft.GetDecimal())
+		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
@@ -1353,7 +1328,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 										// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
 										jWriter.WriteArrayField("enumValues", func() {
 											for _, ele := range elems {
-												jWriter.WriteStringElement(fmt.Sprintf("'%s'", common.EscapeEnumAndSetOptions(ele)))
+												jWriter.WriteStringElement(fmt.Sprintf("'%s'", ele))
 											}
 										})
 									} else {

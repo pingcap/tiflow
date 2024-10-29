@@ -201,9 +201,9 @@ func getLen(ft types.FieldType) int {
 	case mysql.TypeEnum:
 		return 1
 	case mysql.TypeLonglong, mysql.TypeInt24:
-		if mysql.HasNotNullFlag(ft.GetFlag()) {
-			return -1
-		}
+		// if mysql.HasNotNullFlag(ft.GetFlag()) {
+		// 	return -1
+		// }
 		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 		if flen != defaultFlen {
 			return flen
