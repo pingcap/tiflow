@@ -160,7 +160,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// prepare config to join an existing cluster
 	err = prepareJoinEtcd(s.cfg)
 	if err != nil {
-		return
+		return err
 	}
 	log.L().Info("config after join prepared", zap.Stringer("config", s.cfg))
 
@@ -173,7 +173,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
 	etcdCfg, err = s.cfg.genEmbedEtcdConfig(etcdCfg)
 	if err != nil {
-		return
+		return err
 	}
 
 	tlsConfig, err := util.NewTLSConfig(
@@ -191,7 +191,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	}
 	apiHandler, err := getHTTPAPIHandler(ctx, s.cfg.AdvertiseAddr, grpcTLS)
 	if err != nil {
-		return
+		return err
 	}
 
 	registerOnce.Do(metrics.RegistryMetrics)
@@ -232,6 +232,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// start embed etcd server, gRPC API server and HTTP (API, status and debug) server.
 	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, userHandles, 10*time.Second)
 	if err != nil {
+		// nolint:nakedret
 		return
 	}
 
@@ -239,6 +240,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// NOTE: we only use the local member's address now, but we can use all endpoints of the cluster if needed.
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tlsConfig)
 	if err != nil {
+		// nolint:nakedret
 		return
 	}
 
@@ -246,6 +248,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// TODO: s.cfg.Name -> address
 	s.election, err = election.NewElection(ctx, s.etcdClient, electionTTL, electionKey, s.cfg.Name, s.cfg.AdvertiseAddr, getLeaderBlockTime)
 	if err != nil {
+		// nolint:nakedret
 		return
 	}
 

@@ -556,8 +556,8 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
-	pkeyCols := make([]*Column, 0)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*ColumnData, []rowcodec.ColInfo) {
+	pkeyCols := make([]*ColumnData, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
 	var cols []*ColumnData
@@ -571,13 +571,38 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range cols {
 		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-			pkeyCols = append(pkeyCols, columnData2Column(col, tableInfo))
+			pkeyCols = append(pkeyCols, col)
 			pkeyColInfos = append(pkeyColInfos, colInfos[i])
 		}
 	}
 
 	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols, pkeyColInfos
+}
+
+// HandleKeyColDataXInfos returns the columnDataX(s) and colInfo(s) corresponding to the handle key(s)
+func (r *RowChangedEvent) HandleKeyColDataXInfos() ([]ColumnDataX, []rowcodec.ColInfo) {
+	pkeyColDataXs := make([]ColumnDataX, 0)
+	pkeyColInfos := make([]rowcodec.ColInfo, 0)
+
+	var cols []*ColumnData
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	tableInfo := r.TableInfo
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
+	for i, col := range cols {
+		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
+			pkeyColDataXs = append(pkeyColDataXs, GetColumnDataX(col, tableInfo))
+			pkeyColInfos = append(pkeyColInfos, colInfos[i])
+		}
+	}
+
+	// It is okay not to have handle keys, so the empty array is an acceptable result
+	return pkeyColDataXs, pkeyColInfos
 }
 
 // ApproximateBytes returns approximate bytes in memory consumed by the event.

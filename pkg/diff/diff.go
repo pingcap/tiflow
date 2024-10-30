@@ -211,14 +211,14 @@ func (t *TableDiff) adjustConfig() {
 }
 
 func (t *TableDiff) getTableInfo(ctx context.Context) error {
-	tableInfo, err := dbutiltest.GetTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
+	tableInfo, err := getTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.TargetTable.info = ignoreColumns(tableInfo, t.IgnoreColumns)
 
 	for _, sourceTable := range t.SourceTables {
-		tableInfo, err := dbutiltest.GetTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
+		tableInfo, err := getTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -851,6 +851,20 @@ func (t *TableDiff) UpdateSummaryInfo(ctx context.Context) chan bool {
 	return stopUpdateCh
 }
 
+// GetTableInfo returns table information.
+func getTableInfo(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string) (*model.TableInfo, error) {
+	createTableSQL, err := dbutil.GetCreateTableSQL(ctx, db, schemaName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	parser2, err := dbutil.GetParserForDB(ctx, db)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dbutiltest.GetTableInfoBySQL(createTableSQL, parser2)
+}
+
 func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.TableInfo, schema string) (sql string) {
 	switch tp {
 	case "replace":
@@ -978,26 +992,25 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 				cmp = 1
 			}
 			break
-		} else {
-			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
-			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v",
-					string(data1.Data), string(data2.Data), err1, err2)
-				return
-			}
-
-			if num1 == num2 {
-				continue
-			}
-
-			if num1 < num2 {
-				cmp = -1
-			} else if num1 > num2 {
-				cmp = 1
-			}
-			break
 		}
+		num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
+		num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
+		if err1 != nil || err2 != nil {
+			err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v",
+				string(data1.Data), string(data2.Data), err1, err2)
+			return
+		}
+
+		if num1 == num2 {
+			continue
+		}
+
+		if num1 < num2 {
+			cmp = -1
+		} else if num1 > num2 {
+			cmp = 1
+		}
+		break
 	}
 
 	return

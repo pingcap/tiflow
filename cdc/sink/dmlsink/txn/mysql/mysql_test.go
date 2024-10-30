@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
@@ -1697,7 +1698,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"
 	stmt, err := parser.New().ParseOneStmt(createSQL, "", "")
 	require.NoError(t, err)
-	ti, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	ti, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	row1 := sqlmodel.NewRowChange(table, table, []any{1, "a"}, []any{1, "aa"}, ti, ti, nil)

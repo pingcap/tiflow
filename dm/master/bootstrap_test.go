@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -47,7 +47,7 @@ type testMaster struct {
 	etcdTestCli     *clientv3.Client
 }
 
-var testSuite = SerialSuites(&testMaster{})
+var testSuite = check.SerialSuites(&testMaster{})
 
 func TestMaster(t *testing.T) {
 	err := log.InitLogger(&log.Config{})
@@ -63,11 +63,11 @@ func TestMaster(t *testing.T) {
 	s := testSuite.(*testMaster)
 	s.testT = t
 
-	TestingT(t)
+	check.TestingT(t)
 }
 
-func (t *testMaster) SetUpSuite(c *C) {
-	c.Assert(log.InitLogger(&log.Config{}), IsNil)
+func (t *testMaster) SetUpSuite(c *check.C) {
+	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	t.electionTTLBackup = electionTTL
@@ -76,31 +76,31 @@ func (t *testMaster) SetUpSuite(c *C) {
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
-func (t *testMaster) TearDownSuite(c *C) {
+func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
 	electionTTL = t.electionTTLBackup
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
-func (t *testMaster) SetUpTest(c *C) {
+func (t *testMaster) SetUpTest(c *check.C) {
 	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
 	t.etcdTestCli = t.testEtcdCluster.RandClient()
 	t.clearEtcdEnv(c)
 }
 
-func (t *testMaster) TearDownTest(c *C) {
+func (t *testMaster) TearDownTest(c *check.C) {
 	t.clearEtcdEnv(c)
 	t.testEtcdCluster.Terminate(t.testT)
 }
 
-func (t *testMaster) clearEtcdEnv(c *C) {
-	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), IsNil)
+func (t *testMaster) clearEtcdEnv(c *check.C) {
+	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
-func testDefaultMasterServerWithC(c *C) *Server {
+func testDefaultMasterServerWithC(c *check.C) *Server {
 	cfg := NewConfig()
 	err := cfg.FromContent(SampleConfig)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	cfg.DataDir = c.MkDir()
 	server := NewServer(cfg)
 	server.leader.Store(oneselfLeader)
@@ -109,7 +109,7 @@ func testDefaultMasterServerWithC(c *C) *Server {
 	return server
 }
 
-func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
+func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *check.C) {
 	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
@@ -121,8 +121,8 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 
 	// no source file exist.
 	cfgs, err := s.collectSourceConfigFilesV1Import(tctx)
-	c.Assert(err, IsNil)
-	c.Assert(cfgs, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfgs, check.HasLen, 0)
 
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
@@ -139,7 +139,7 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	password := os.Getenv("MYSQL_PSWD")
 
 	cfg1, err := config.SourceCfgFromYaml(config.SampleSourceConfig)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	// fix empty map after marshal/unmarshal becomes nil
 	cfg1.From.Adjust()
 	cfg1.Tracer = map[string]interface{}{}
@@ -149,36 +149,36 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	cfg1.From.User = user
 	cfg1.From.Password = password
 	cfg1.RelayDir = "relay-dir"
-	c.Assert(checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg1), IsNil) // adjust source config.
+	c.Assert(checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg1), check.IsNil) // adjust source config.
 	cfg2 := cfg1.Clone()
 	cfg2.SourceID = "mysql-replica-02"
 
 	// write into source files.
 	data1, err := cfg1.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "source1.yaml"), []byte(data1), 0o644), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "source1.yaml"), []byte(data1), 0o644), check.IsNil)
 	data2, err := cfg2.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "source2.yaml"), []byte(data2), 0o644), IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "source2.yaml"), []byte(data2), 0o644), check.IsNil)
 
 	// collect again, two configs exist.
 	cfgs, err = s.collectSourceConfigFilesV1Import(tctx)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	for _, cfg := range cfgs {
 		cfg.From.Session = nil
 	}
-	c.Assert(cfgs, HasLen, 2)
-	c.Assert(cfgs[cfg1.SourceID], DeepEquals, cfg1)
-	c.Assert(cfgs[cfg2.SourceID], DeepEquals, cfg2)
+	c.Assert(cfgs, check.HasLen, 2)
+	c.Assert(cfgs[cfg1.SourceID], check.DeepEquals, cfg1)
+	c.Assert(cfgs[cfg2.SourceID], check.DeepEquals, cfg2)
 
 	// put a invalid source file.
-	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "invalid.yaml"), []byte("invalid-source-data"), 0o644), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(s.cfg.V1SourcesPath, "invalid.yaml"), []byte("invalid-source-data"), 0o644), check.IsNil)
 	cfgs, err = s.collectSourceConfigFilesV1Import(tctx)
-	c.Assert(terror.ErrConfigYamlTransform.Equal(err), IsTrue)
-	c.Assert(cfgs, HasLen, 0)
+	c.Assert(terror.ErrConfigYamlTransform.Equal(err), check.IsTrue)
+	c.Assert(cfgs, check.HasLen, 0)
 }
 
-func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
+func (t *testMaster) TestWaitWorkersReadyV1Import(c *check.C) {
 	oldWaitWorkerV1Timeout := waitWorkerV1Timeout
 	defer func() {
 		waitWorkerV1Timeout = oldWaitWorkerV1Timeout
@@ -193,10 +193,10 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
-	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)
+	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), check.IsNil)
 
 	cfg1, err := config.SourceCfgFromYaml(config.SampleSourceConfig)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	cfg2 := cfg1.Clone()
 	cfg2.SourceID = "mysql-replica-02"
 	cfgs := map[string]*config.SourceConfig{
@@ -206,7 +206,7 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 
 	// no worker registered, timeout.
 	err = s.waitWorkersReadyV1Import(tctx, cfgs)
-	c.Assert(err, ErrorMatches, ".*wait for DM-worker instances timeout.*")
+	c.Assert(err, check.ErrorMatches, ".*wait for DM-worker instances timeout.*")
 
 	// register one worker.
 	req1 := &pb.RegisterWorkerRequest{
@@ -214,12 +214,12 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 		Address: "127.0.0.1:8262",
 	}
 	resp1, err := s.RegisterWorker(ctx, req1)
-	c.Assert(err, IsNil)
-	c.Assert(resp1.Result, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp1.Result, check.IsTrue)
 
 	// still timeout because no enough workers.
 	err = s.waitWorkersReadyV1Import(tctx, cfgs)
-	c.Assert(err, ErrorMatches, ".*wait for DM-worker instances timeout.*")
+	c.Assert(err, check.ErrorMatches, ".*wait for DM-worker instances timeout.*")
 
 	// register another worker.
 	go func() {
@@ -229,15 +229,15 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 			Address: "127.0.0.1:8263",
 		}
 		resp2, err2 := s.RegisterWorker(ctx, req2)
-		c.Assert(err2, IsNil)
-		c.Assert(resp2.Result, IsTrue)
+		c.Assert(err2, check.IsNil)
+		c.Assert(resp2.Result, check.IsTrue)
 	}()
 
 	err = s.waitWorkersReadyV1Import(tctx, cfgs)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 }
 
-func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
+func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *check.C) {
 	var (
 		worker1Name = "worker-1"
 		worker1Addr = "127.0.0.1:8262"
@@ -250,37 +250,37 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 	)
 
 	cfg11 := config.NewSubTaskConfig()
-	c.Assert(cfg11.Decode(config.SampleSubtaskConfig, true), IsNil)
+	c.Assert(cfg11.Decode(config.SampleSubtaskConfig, true), check.IsNil)
 	cfg11.Dir = "./dump_data"
 	cfg11.ChunkFilesize = "64"
 	cfg11.Name = taskName1
 	cfg11.SourceID = sourceID1
-	c.Assert(cfg11.Adjust(true), IsNil) // adjust again after manually modified some items.
+	c.Assert(cfg11.Adjust(true), check.IsNil) // adjust again after manually modified some items.
 	data11, err := cfg11.Toml()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	data11 = strings.ReplaceAll(data11, `chunk-filesize = "64"`, `chunk-filesize = 64`) // different type between v1.0.x and v2.0.x.
 
 	cfg12, err := cfg11.Clone()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	cfg12.SourceID = sourceID2
 	data12, err := cfg12.Toml()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	data12 = strings.ReplaceAll(data12, `chunk-filesize = "64"`, `chunk-filesize = 64`)
 
 	cfg21, err := cfg11.Clone()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	cfg21.Dir = "./dump_data"
 	cfg21.Name = taskName2
-	c.Assert(cfg21.Adjust(true), IsNil)
+	c.Assert(cfg21.Adjust(true), check.IsNil)
 	data21, err := cfg21.Toml()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	data21 = strings.ReplaceAll(data21, `chunk-filesize = "64"`, `chunk-filesize = 64`)
 
 	cfg22, err := cfg21.Clone()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	cfg22.SourceID = sourceID2
 	data22, err := cfg22.Toml()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	data22 = strings.ReplaceAll(data22, `chunk-filesize = "64"`, `chunk-filesize = 64`)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -290,20 +290,20 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
-	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)
+	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), check.IsNil)
 
 	// no workers exist, no config and status need to get.
 	cfgs, stages, err := s.getSubtaskCfgsStagesV1Import(tctx)
-	c.Assert(err, IsNil)
-	c.Assert(cfgs, HasLen, 0)
-	c.Assert(stages, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfgs, check.HasLen, 0)
+	c.Assert(stages, check.HasLen, 0)
 
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
 	mockWCli1 := pbmock.NewMockWorkerClient(ctrl)
 	mockWCli2 := pbmock.NewMockWorkerClient(ctrl)
-	c.Assert(s.scheduler.AddWorker(worker1Name, worker1Addr), IsNil)
-	c.Assert(s.scheduler.AddWorker(worker2Name, worker2Addr), IsNil)
+	c.Assert(s.scheduler.AddWorker(worker1Name, worker1Addr), check.IsNil)
+	c.Assert(s.scheduler.AddWorker(worker2Name, worker2Addr), check.IsNil)
 	s.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWCli1))
 	s.scheduler.SetWorkerClientForTest(worker2Name, newMockRPCClient(mockWCli2))
 
@@ -355,21 +355,21 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 
 	// all workers return valid config and stage.
 	cfgs, stages, err = s.getSubtaskCfgsStagesV1Import(tctx)
-	c.Assert(err, IsNil)
-	c.Assert(cfgs, HasLen, 2)
-	c.Assert(stages, HasLen, 2)
-	c.Assert(cfgs[taskName1], HasLen, 2)
-	c.Assert(cfgs[taskName2], HasLen, 2)
-	c.Assert(cfgs[taskName1][sourceID1], DeepEquals, *cfg11)
-	c.Assert(cfgs[taskName1][sourceID2], DeepEquals, *cfg12)
-	c.Assert(cfgs[taskName2][sourceID1], DeepEquals, *cfg21)
-	c.Assert(cfgs[taskName2][sourceID2], DeepEquals, *cfg22)
-	c.Assert(stages[taskName1], HasLen, 2)
-	c.Assert(stages[taskName2], HasLen, 2)
-	c.Assert(stages[taskName1][sourceID1], Equals, pb.Stage_Running)
-	c.Assert(stages[taskName1][sourceID2], Equals, pb.Stage_Running)
-	c.Assert(stages[taskName2][sourceID1], Equals, pb.Stage_Paused)
-	c.Assert(stages[taskName2][sourceID2], Equals, pb.Stage_Running)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfgs, check.HasLen, 2)
+	c.Assert(stages, check.HasLen, 2)
+	c.Assert(cfgs[taskName1], check.HasLen, 2)
+	c.Assert(cfgs[taskName2], check.HasLen, 2)
+	c.Assert(cfgs[taskName1][sourceID1], check.DeepEquals, *cfg11)
+	c.Assert(cfgs[taskName1][sourceID2], check.DeepEquals, *cfg12)
+	c.Assert(cfgs[taskName2][sourceID1], check.DeepEquals, *cfg21)
+	c.Assert(cfgs[taskName2][sourceID2], check.DeepEquals, *cfg22)
+	c.Assert(stages[taskName1], check.HasLen, 2)
+	c.Assert(stages[taskName2], check.HasLen, 2)
+	c.Assert(stages[taskName1][sourceID1], check.Equals, pb.Stage_Running)
+	c.Assert(stages[taskName1][sourceID2], check.Equals, pb.Stage_Running)
+	c.Assert(stages[taskName2][sourceID1], check.Equals, pb.Stage_Paused)
+	c.Assert(stages[taskName2][sourceID2], check.Equals, pb.Stage_Running)
 
 	// one of workers return invalid config.
 	mockWCli1.EXPECT().OperateV1Meta(
@@ -417,9 +417,9 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 		},
 	}, nil)
 	cfgs, stages, err = s.getSubtaskCfgsStagesV1Import(tctx)
-	c.Assert(err, ErrorMatches, ".*fail to get subtask config and stage.*")
-	c.Assert(cfgs, HasLen, 0)
-	c.Assert(stages, HasLen, 0)
+	c.Assert(err, check.ErrorMatches, ".*fail to get subtask config and stage.*")
+	c.Assert(cfgs, check.HasLen, 0)
+	c.Assert(stages, check.HasLen, 0)
 }
 
 func checkAndNoAdjustSourceConfigMock(ctx context.Context, cfg *config.SourceConfig) error {

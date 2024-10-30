@@ -88,10 +88,10 @@ func (s *testHelper) getTk() *testkit.TestKit {
 }
 
 // getCurrentMeta return the current meta snapshot
-func (s *testHelper) getCurrentMeta() *timeta.Meta {
+func (s *testHelper) getCurrentMeta() timeta.Reader {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
-	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+	return timeta.NewReader(s.storage.GetSnapshot(ver))
 }
 
 // close closes the helper

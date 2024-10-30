@@ -99,12 +99,11 @@ func newMockDDLJobPuller(
 	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
-		ts := helper.GetCurrentMeta().StartTS
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
 			kvStorage,
-			ts,
+			0,
 			false,
 			model.DefaultChangeFeedID("test"),
 			util.RoleTester,
