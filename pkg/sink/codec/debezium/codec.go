@@ -71,13 +71,13 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 		}
 
 		// add generate column
-		option := getBuildOption(tableInfo)
+		options := getBuildOptions(tableInfo)
 		row := chunk.MutRowFromValues(rows...).ToRow()
 		for _, col := range tableInfo.Columns {
 			if model.IsColCDCVisible(col) {
 				continue
 			}
-			val, err := parseExpression(col.GeneratedExprString, tableInfo.TableInfo, option, row)
+			val, err := parseExpression(col.GeneratedExprString, tableInfo.TableInfo, row, options)
 			if err != nil {
 				log.Error("parse expression meet error", zap.Error(cerror.Trace(err)))
 				break

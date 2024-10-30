@@ -105,10 +105,11 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 	}
 }
 
-func getBuildOption(tableInfo *model.TableInfo) expression.BuildOption {
+func getBuildOptions(tableInfo *model.TableInfo) []expression.BuildOption {
 	colInfos := tableInfo.Columns
 	columns := make([]*expression.Column, 0, len(colInfos))
 	names := make([]*types.FieldName, 0, len(colInfos))
+	options := make([]expression.BuildOption, 0, 2)
 	var uniqueID atomic.Int64
 	for i, col := range colInfos {
 		names = append(names, &types.FieldName{
@@ -130,10 +131,12 @@ func getBuildOption(tableInfo *model.TableInfo) expression.BuildOption {
 	}
 	// Resolve virtual generated column.
 	schema := expression.NewSchema(columns...)
-	return expression.WithInputSchemaAndNames(schema, names, tableInfo.TableInfo)
+	options = append(options, expression.WithInputSchemaAndNames(schema, names, tableInfo.TableInfo))
+	options = append(options, expression.WithAllowCastArray(true))
+	return options
 }
 
-func parseExpression(expr string, tblInfo *timodel.TableInfo, option expression.BuildOption, row chunk.Row) (any, error) {
+func parseExpression(expr string, tblInfo *timodel.TableInfo, row chunk.Row, options []expression.BuildOption) (any, error) {
 	node, err := generatedexpr.ParseExpression(expr)
 	if err != nil {
 		return nil, err
@@ -142,7 +145,7 @@ func parseExpression(expr string, tblInfo *timodel.TableInfo, option expression.
 	if err != nil {
 		return nil, err
 	}
-	e, err := expression.BuildSimpleExpr(exprstatic.NewExprContext(), node, option, expression.WithAllowCastArray(true))
+	e, err := expression.BuildSimpleExpr(exprstatic.NewExprContext(), node, options...)
 	if err != nil {
 		return nil, err
 	}
