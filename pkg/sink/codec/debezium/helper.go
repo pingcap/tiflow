@@ -106,6 +106,7 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 }
 
 func getBuildOptions(tableInfo *model.TableInfo) []expression.BuildOption {
+func getBuildOptions(tableInfo *model.TableInfo) []expression.BuildOption {
 	colInfos := tableInfo.Columns
 	columns := make([]*expression.Column, 0, len(colInfos))
 	names := make([]*types.FieldName, 0, len(colInfos))
