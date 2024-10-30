@@ -154,13 +154,10 @@ func MySQLType2JavaType(mysqlType byte, isBinary bool) JavaSQLType {
 // MySQLType2JdbcType converts the mysql protocol types to jdbc type
 func MySQLType2JdbcType(mysqlType byte, isBinary bool) JavaSQLType {
 	switch mysqlType {
-	case mysql.TypeTiny:
+	case mysql.TypeTiny, mysql.TypeShort:
 		return JavaSQLTypeSMALLINT
 
-	case mysql.TypeShort:
-		return JavaSQLTypeSMALLINT
-
-	case mysql.TypeLong:
+	case mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
 		return JavaSQLTypeINTEGER
 
 	case mysql.TypeFloat:
@@ -184,22 +181,13 @@ func MySQLType2JdbcType(mysqlType byte, isBinary bool) JavaSQLType {
 	case mysql.TypeLonglong:
 		return JavaSQLTypeBIGINT
 
-	case mysql.TypeInt24:
-		return JavaSQLTypeINTEGER
-
 	case mysql.TypeDate, mysql.TypeNewDate:
 		return JavaSQLTypeDATE
 
 	case mysql.TypeDuration:
 		return JavaSQLTypeTIME
 
-	case mysql.TypeYear:
-		return JavaSQLTypeINTEGER
-
-	case mysql.TypeEnum:
-		return JavaSQLTypeCHAR
-
-	case mysql.TypeSet:
+	case mysql.TypeEnum, mysql.TypeSet:
 		return JavaSQLTypeCHAR
 
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
