@@ -14,6 +14,7 @@
 package common
 
 import (
+	"github.com/pingcap/tiflow/pkg/sink"
 	"net/url"
 	"strconv"
 
@@ -47,6 +48,7 @@ type Config struct {
 	AvroBigintUnsignedHandlingMode string
 
 	// for sinking to cloud storage
+	IsStorageScheme      bool
 	Delimiter            string
 	Quote                string
 	NullString           string
@@ -162,6 +164,7 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 	}
 
+	c.IsStorageScheme = sink.IsStorageScheme(sinkURI.Scheme)
 	c.DeleteOnlyHandleKeyColumns = !config.EnableOldValue
 	return nil
 }

@@ -350,6 +350,10 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
+	if c.config.IsStorageScheme && len(c.config.Terminator) > 0 {
+		value = append(value, c.config.Terminator...)
+	}
+
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
