@@ -805,3 +805,12 @@ func TestNeedRestrictedSQLExecutor(t *testing.T) {
 	err = tracker.Exec(ctx, "testdb", parseSQL(t, p, `alter table testdb.t modify column a int not null;`))
 	require.NoError(t, err)
 }
+
+func TestMustNotUseMockStore(t *testing.T) {
+	ctx := context.Background()
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.Nil(t, tracker.se.GetStore(), "see https://github.com/pingcap/tiflow/issues/5334")
+}
