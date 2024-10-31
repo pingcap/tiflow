@@ -240,13 +240,21 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
+				if v == "CURRENT_TIMESTAMP" {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
 				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 				if err != nil {
 					writer.WriteInt64Field("default", 0)
 					return
 				}
+				if t.Compare(types.MinTimestamp) < 0 {
+					return
+				}
 				gt, err := t.GoTime(time.UTC)
 				if err != nil {
+					writer.WriteInt64Field("default", 0)
 					return
 				}
 				if ft.GetDecimal() <= 3 {
@@ -508,6 +516,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			return nil
 		}
 		col.Value = col.GetDefaultValue()
+		log.Info("writedefaltvalue", zap.Any("val", col.Value))
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
@@ -648,21 +657,27 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// Debezium behavior from doc:
 		// > Such columns are converted into epoch milliseconds or microseconds based on the
 		// > column's precision by using UTC.
-
-		// TODO: For Default Value = CURRENT_TIMESTAMP, the result is incorrect.
 		v, ok := col.Value.(string)
+		log.Error("err val", zap.Any("v", v))
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for datetime column %s",
 				col.Value,
 				col.GetName())
 		}
-
+		if v == "CURRENT_TIMESTAMP" {
+			writer.WriteInt64Field(col.GetName(), 0)
+			return nil
+		}
 		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
+		}
+		if t.Compare(types.MinTimestamp) < 0 {
+			writer.WriteNullField(col.GetName())
+			return nil
 		}
 		gt, err := t.GoTime(time.UTC)
 		if err != nil {
@@ -1326,6 +1341,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 									}
 									elems := col.GetElems()
 									if len(elems) != 0 {
+										log.Info("GetElems", zap.Any("o", col.GetElems()))
 										// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
 										jWriter.WriteArrayField("enumValues", func() {
 											for _, ele := range elems {

@@ -24,7 +24,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/charset"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -40,22 +39,19 @@ type visiter struct {
 }
 
 func (v *visiter) Enter(n ast.Node) (node ast.Node, skipChildren bool) {
+	return n, false
+}
+
+func (v *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
 	switch col := n.(type) {
 	case *ast.ColumnDef:
 		c := v.columnsMap[col.Name.Name]
 		if col.Options != nil {
 			parseOptions(col.Options, c)
 		}
-		if col.Tp.GetCharset() != "" {
-			c.SetCharset(col.Tp.GetCharset())
-		}
 		parseType(c, col)
 		c.Comment = ""
 	}
-	return n, false
-}
-
-func (v *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
 	return n, true
 }
 
@@ -99,8 +95,6 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 					log.Error("failed to set default value")
 				}
 			}
-		case ast.ColumnOptionCollate:
-			c.SetCollate(option.StrValue)
 		}
 	}
 }
@@ -158,7 +152,7 @@ func parseExpression(expr string, tblInfo *timodel.TableInfo, row chunk.Row, opt
 
 func getColumns(sql string, columns []*timodel.ColumnInfo) []*timodel.ColumnInfo {
 	p := parser.New()
-	stmt, err := p.ParseOneStmt(sql, "", "")
+	stmt, err := p.ParseOneStmt(sql, mysql.DefaultCharset, mysql.DefaultCollationName)
 	if err != nil {
 		log.Error("format query parse one stmt failed", zap.Error(err))
 	}
@@ -175,12 +169,10 @@ func getCharset(ft types.FieldType) string {
 	if ft.GetCharset() == "binary" {
 		return ""
 	}
+	log.Error("getCharset", zap.Any("v", ft.GetCharset()), zap.Any("vv", ft.GetCollate()))
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeString, mysql.TypeVarchar,
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeEnum, mysql.TypeSet:
-		if ft.GetCollate() == "utf8_unicode_ci" {
-			return charset.CharsetUTF8MB4
-		}
 		return ft.GetCharset()
 	}
 	return ""
@@ -192,11 +184,8 @@ func getLen(ft types.FieldType) int {
 	if flen == 0 {
 		return -1
 	}
-	// if mysql.HasUnsignedFlag(ft.GetFlag()) && ft.GetType() != mysql.TypeBit {
-	// 	return -1
-	// }
 	switch ft.GetType() {
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
+	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
 		return decimal
 	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal, mysql.TypeSet,
 		mysql.TypeVarString, mysql.TypeTiDBVectorFloat32:
@@ -210,12 +199,12 @@ func getLen(ft types.FieldType) int {
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeLong, mysql.TypeInt24:
+	case mysql.TypeLong, mysql.TypeShort:
 		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeTiny, mysql.TypeShort:
+	case mysql.TypeTiny, mysql.TypeInt24:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			return -1
 		}

@@ -75,7 +75,7 @@ func readAndParseSQLText(sqlFilePath string) []ast.StmtNode {
 	return statements
 }
 
-func runAllTestCases(dir string) bool {
+func runAllTestCases(dir, dbConnMySQL, dbConnTiDB string) bool {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -89,10 +89,10 @@ func runAllTestCases(dir string) bool {
 	if err != nil {
 		logger.Panic("Failed to read test case directory", zap.String("dir", dir), zap.Error(err))
 	}
-
 	for _, path := range files {
 		logger.Info("Run", zap.String("case", path))
-		failed := runTestCase(path)
+		failed := runTestCase(path, dbConnMySQL, dbConnTiDB)
+
 		if failed {
 			logger.Info("failed", zap.String("case", path))
 			return false
@@ -114,33 +114,19 @@ func runAllTestCases(dir string) bool {
 	return nFailed == 0
 }
 
-func resetDB(db *DBHelper) {
-	db.MustExec("drop database if exists `" + *dbName + "`;")
-	db.MustExec("create database `" + *dbName + "`;")
-	db.MustExec("use `" + *dbName + "`;")
+func resetDB() {
+	runSingleQuery("drop database if exists `"+*dbName+"`;", false)
+	runSingleQuery("create database `"+*dbName+"`;", false)
+	runSingleQuery("use `"+*dbName+"`;", false)
 }
 
-func runTestCase(testCasePath string) bool {
-	resetDB(dbMySQL)
-	resetDB(dbTiDB)
-	// consume reset DB events
-	for i := 0; i < 2; i++ {
-		wg := &sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			if _, _, err := fetchNextCDCRecord(readerDebezium, KindMySQL, timeOut); err != nil {
-				logger.Error("fetch record failed", zap.Error(err))
-			}
-			wg.Done()
-		}()
-		go func() {
-			if _, _, err := fetchNextCDCRecord(readerTiCDC, KindTiDB, timeOut); err != nil {
-				logger.Error("fetch record failed", zap.Error(err))
-			}
-			wg.Done()
-		}()
-		wg.Wait()
-	}
+func runTestCase(testCasePath, dbConnMySQL, dbConnTiDB string) bool {
+	dbMySQL = prepareDBConn(KindMySQL, dbConnMySQL)
+	defer dbMySQL.MustClose()
+	dbTiDB = prepareDBConn(KindTiDB, dbConnTiDB)
+	defer dbTiDB.MustClose()
+
+	resetDB()
 
 	statementKindsToWaitCDCRecord := map[string]bool{
 		"Delete":         true,

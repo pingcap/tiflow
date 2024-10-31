@@ -50,10 +50,13 @@ CREATE TABLE customers (
 
 
 INSERT INTO customers
-VALUES (default,"Sally","Thomas","sally.thomas@acme.com"),
-       (default,"George","Bailey","gbailey@foobar.com"),
-       (default,"Edward","Walker","ed@walker.com"),
-       (default,"Anne","Kretchmar","annek@noanswer.org");
+VALUES (default,"Sally","Thomas","sally.thomas@acme.com");
+INSERT INTO customers
+VALUES (default,"George","Bailey","gbailey@foobar.com");
+INSERT INTO customers
+VALUES (default,"Edward","Walker","ed@walker.com");
+INSERT INTO customers
+VALUES (default,"Anne","Kretchmar","annek@noanswer.org");
 
 -- Create some very simple orders
 CREATE TABLE orders (
@@ -67,11 +70,15 @@ CREATE TABLE orders (
 ) AUTO_INCREMENT = 10001;
 
 INSERT INTO orders
-VALUES (default, '2016-01-16', 1001, 1, 102),
-       (default, '2016-01-17', 1002, 2, 105),
-       (default, '2016-02-18', 1004, 3, 109),
-       (default, '2016-02-19', 1002, 2, 106),
-       (default, '2016-02-21', 1003, 1, 107);
+VALUES (default, '2016-01-16', 1001, 1, 102);
+INSERT INTO orders
+VALUES (default, '2016-01-17', 1002, 2, 105);
+INSERT INTO orders
+VALUES (default, '2016-02-18', 1004, 3, 109);
+INSERT INTO orders
+VALUES (default, '2016-02-19', 1002, 2, 106);
+INSERT INTO orders
+VALUES (default, '2016-02-21', 1003, 1, 107);
 
 
 -- DBZ-342 handle TIME values that exceed the value range of java.sql.Time

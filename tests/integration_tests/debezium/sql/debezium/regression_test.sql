@@ -95,10 +95,13 @@ CREATE TABLE connector_test.customers (
   email VARCHAR(255) NOT NULL UNIQUE KEY
 ) AUTO_INCREMENT=1001;
 INSERT INTO connector_test.customers
-VALUES (default,"Sally","Thomas","sally.thomas@acme.com"),
-       (default,"George","Bailey","gbailey@foobar.com"),
-       (default,"Edward","Walker","ed@walker.com"),
-       (default,"Anne","Kretchmar","annek@noanswer.org");
+VALUES (default,"Sally","Thomas","sally.thomas@acme.com");
+INSERT INTO connector_test.customers
+VALUES (default,"George","Bailey","gbailey@foobar.com");
+INSERT INTO connector_test.customers
+VALUES (default,"Edward","Walker","ed@walker.com");
+INSERT INTO connector_test.customers
+VALUES (default,"Anne","Kretchmar","annek@noanswer.org");
 
 -- DBZ-147 handle decimal value
 CREATE TABLE dbz_147_decimalvalues (
