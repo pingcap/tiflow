@@ -56,12 +56,12 @@ var (
 	}, []string{"namespace", "changefeed"})
 
 	// CloudStorageWorkerBusyRatio records the busy ratio of CloudStorage bgUpdateLog worker.
-	CloudStorageWorkerBusyRatioCounter = prometheus.NewCounterVec(
+	CloudStorageWorkerBusyRatio = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "cloud_storage_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for cloud storage sink dml worker.",
+			Help:      "Busy ratio for cloud storage sink dml worker.",
 		}, []string{"namespace", "changefeed", "id"})
 )
 
@@ -71,5 +71,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(CloudStorageFileCountGauge)
 	registry.MustRegister(CloudStorageWriteDurationHistogram)
 	registry.MustRegister(CloudStorageFlushDurationHistogram)
-	registry.MustRegister(CloudStorageWorkerBusyRatioCounter)
+	registry.MustRegister(CloudStorageWorkerBusyRatio)
 }

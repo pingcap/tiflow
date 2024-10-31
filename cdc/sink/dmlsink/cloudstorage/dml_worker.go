@@ -130,7 +130,7 @@ func newDMLWorker(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricFlushDuration: mcloudstorage.CloudStorageFlushDurationHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsWorkerBusyRatio: mcloudstorage.CloudStorageWorkerBusyRatioCounter.
+		metricsWorkerBusyRatio: mcloudstorage.CloudStorageWorkerBusyRatio.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID, strconv.Itoa(id)),
 	}
 
@@ -158,19 +158,16 @@ func (d *dmlWorker) run(ctx context.Context) error {
 // flushMessages flushed messages of active tables to cloud storage.
 // active tables are those tables that have received events after the last flush.
 func (d *dmlWorker) flushMessages(ctx context.Context) error {
-	var flushTimeSlice, totalTimeSlice time.Duration
-	overseerTicker := time.NewTicker(d.config.FlushInterval * 2)
+	var flushTimeSlice time.Duration
+	overseerDuration := d.config.FlushInterval * 2
+	overseerTicker := time.NewTicker(overseerDuration)
 	defer overseerTicker.Stop()
-	startToWork := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case now := <-overseerTicker.C:
-			totalTimeSlice = now.Sub(startToWork)
-			busyRatio := flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000
-			d.metricsWorkerBusyRatio.Add(busyRatio)
-			startToWork = now
+		case <-overseerTicker.C:
+			d.metricsWorkerBusyRatio.Add(flushTimeSlice.Seconds())
 			flushTimeSlice = 0
 		case batchedTask := <-d.toBeFlushedCh:
 			if atomic.LoadUint64(&d.isClosed) == 1 {

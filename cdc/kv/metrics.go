@@ -149,7 +149,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "region_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for region worker.",
+			Help:      "Busy ratio for region worker.",
 		}, []string{"namespace", "changefeed", "table", "store", "type"})
 	workerChannelSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{

@@ -67,11 +67,11 @@ func TestWriterWrite(t *testing.T) {
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
 			metricWriteBytes: common.RedoWriteBytesGauge.
-				WithLabelValues("default", "test-cf"),
+				WithLabelValues("default", "test-cf", redo.RedoRowLogFileType),
 			metricFsyncDuration: common.RedoFsyncDurationHistogram.
-				WithLabelValues("default", "test-cf"),
+				WithLabelValues("default", "test-cf", redo.RedoRowLogFileType),
 			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-				WithLabelValues("default", "test-cf"),
+				WithLabelValues("default", "test-cf", redo.RedoRowLogFileType),
 			uuidGenerator: uuidGen,
 		}
 
@@ -158,11 +158,11 @@ func TestWriterWrite(t *testing.T) {
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
 			metricWriteBytes: common.RedoWriteBytesGauge.
-				WithLabelValues("default", "test-cf11"),
+				WithLabelValues("default", "test-cf11", redo.RedoRowLogFileType),
 			metricFsyncDuration: common.RedoFsyncDurationHistogram.
-				WithLabelValues("default", "test-cf11"),
+				WithLabelValues("default", "test-cf11", redo.RedoRowLogFileType),
 			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-				WithLabelValues("default", "test-cf11"),
+				WithLabelValues("default", "test-cf11", redo.RedoRowLogFileType),
 			uuidGenerator: uuidGen,
 		}
 
@@ -253,11 +253,11 @@ func TestNewFileWriter(t *testing.T) {
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
 		metricWriteBytes: common.RedoWriteBytesGauge.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		metricFsyncDuration: common.RedoFsyncDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		uuidGenerator: uuidGen,
 	}
 	w.running.Store(true)
@@ -310,11 +310,11 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 		},
 		uint64buf: make([]byte, 8),
 		metricWriteBytes: common.RedoWriteBytesGauge.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		metricFsyncDuration: common.RedoFsyncDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoRowLogFileType),
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
@@ -377,11 +377,11 @@ func TestRotateFileWithoutFileAllocator(t *testing.T) {
 		},
 		uint64buf: make([]byte, 8),
 		metricWriteBytes: common.RedoWriteBytesGauge.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoDDLLogFileType),
 		metricFsyncDuration: common.RedoFsyncDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoDDLLogFileType),
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-			WithLabelValues("default", "test"),
+			WithLabelValues("default", "test", redo.RedoDDLLogFileType),
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
