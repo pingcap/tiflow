@@ -14,7 +14,6 @@
 package common
 
 import (
-	"github.com/pingcap/tiflow/pkg/sink"
 	"net/url"
 	"strconv"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
