@@ -196,9 +196,7 @@ func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
 }
 
-var (
-	enabledRedactLog atomic.Value
-)
+var enabledRedactLog atomic.Value
 
 func init() {
 	SetRedactLog(false)
