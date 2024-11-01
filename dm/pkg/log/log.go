@@ -202,17 +202,17 @@ func init() {
 	SetRedactLog(false)
 }
 
-// IsRedactLogEnabled indicates whether the log desensitization is enabled
+// IsRedactLogEnabled indicates whether the log desensitization is enabled.
 func IsRedactLogEnabled() bool {
 	return enabledRedactLog.Load().(bool)
 }
 
-// SetRedactLog sets enabledRedactLog
+// SetRedactLog sets enabledRedactLog.
 func SetRedactLog(enabled bool) {
 	enabledRedactLog.Store(enabled)
 }
 
-// RedactString receives string argument and return omitted information if redact log enabled
+// RedactString receives string argument and return omitted information if redact log enabled.
 func RedactString(arg string) string {
 	if IsRedactLogEnabled() {
 		return "?"
