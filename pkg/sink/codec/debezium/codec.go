@@ -215,8 +215,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					// return nil, nil
 					if mysql.HasNotNullFlag(ft.GetFlag()) {
 						writer.WriteInt64Field("default", 0)
-					} else {
-						writer.WriteNullField("default")
 					}
 					return
 				}
@@ -250,6 +248,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					return
 				}
 				if t.Compare(types.MinTimestamp) < 0 {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteInt64Field("default", 0)
+					}
 					return
 				}
 				gt, err := t.GoTime(time.UTC)
@@ -277,13 +278,31 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+				if err != nil {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+				if t.Compare(types.MinTimestamp) < 0 {
 					if mysql.HasNotNullFlag(ft.GetFlag()) {
-						writer.WriteAnyField("default", 0)
+						writer.WriteStringField("default", "1970-01-01T00:00:00Z")
 					}
 					return
 				}
-				writer.WriteStringField("default", v)
+				gt, err := t.GoTime(time.UTC)
+				if err != nil {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+
+				str := gt.UTC().Format("2006-01-02T15:04:05")
+				fsp := ft.GetDecimal()
+				if fsp > 0 {
+					tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
+					str = str + tmp[:1+fsp]
+				}
+				str += "Z"
+				writer.WriteStringField("default", str)
 			}
 		})
 
@@ -419,7 +438,11 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 
 	case mysql.TypeFloat:
 		writer.WriteObjectElement(func() {
-			writer.WriteStringField("type", "float")
+			if ft.GetDecimal() != -1 {
+				writer.WriteStringField("type", "double")
+			} else {
+				writer.WriteStringField("type", "float")
+			}
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
 			if col.GetDefaultValue() != nil {
@@ -676,7 +699,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				err)
 		}
 		if t.Compare(types.MinTimestamp) < 0 {
-			writer.WriteNullField(col.GetName())
+			if mysql.HasNotNullFlag(ft.GetFlag()) {
+				writer.WriteInt64Field(col.GetName(), 0)
+			} else {
+				writer.WriteNullField(col.GetName())
+			}
 			return nil
 		}
 		gt, err := t.GoTime(time.UTC)
@@ -709,22 +736,27 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.Value,
 				col.GetName())
 		}
-
-		t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 		if err != nil {
-			// For example, time may be invalid like 1000-00-00
-			if mysql.HasNotNullFlag(ft.GetFlag()) {
-				t = time.Unix(0, 0)
-			} else {
-				writer.WriteNullField(col.GetName())
-				return nil
-			}
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
+		}
+		if t.Compare(types.MinTimestamp) < 0 {
+			writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			return nil
+		}
+		gt, err := t.GoTime(time.UTC)
+		if err != nil {
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
 		}
 
-		str := t.UTC().Format("2006-01-02T15:04:05")
+		str := gt.Format("2006-01-02T15:04:05")
 		fsp := ft.GetDecimal()
 		if fsp > 0 {
-			tmp := fmt.Sprintf(".%06d", t.Nanosecond()/1000)
+			tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
 			str = str + tmp[:1+fsp]
 		}
 		str += "Z"

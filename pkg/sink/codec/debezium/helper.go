@@ -67,6 +67,7 @@ func extractValue(expr ast.ExprNode) any {
 
 func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 	ft := col.Tp
+	log.Error("parseType", zap.Any("flen", ft.GetFlen()), zap.Any("decimal", ft.GetDecimal()))
 	switch ft.GetType() {
 	case mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeTimestamp:
 		c.SetDecimal(ft.GetDecimal())
@@ -179,8 +180,10 @@ func getCharset(ft types.FieldType) string {
 }
 
 func getLen(ft types.FieldType) int {
+	defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
+	log.Error("flen", zap.Any("defaultFlen", defaultFlen), zap.Any("flen", flen), zap.Any("decimal", decimal))
 	if flen == 0 {
 		return -1
 	}
@@ -195,20 +198,17 @@ func getLen(ft types.FieldType) int {
 	case mysql.TypeEnum:
 		return 1
 	case mysql.TypeLonglong:
-		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeLong, mysql.TypeShort:
-		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
-		if flen != defaultFlen {
-			return flen
-		}
-	case mysql.TypeTiny, mysql.TypeInt24:
+	case mysql.TypeLong, mysql.TypeTiny, mysql.TypeInt24, mysql.TypeShort:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			return -1
 		}
-		defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
+		if flen != defaultFlen {
+			return flen
+		}
+	case mysql.TypeFloat, mysql.TypeDouble:
 		if flen != defaultFlen {
 			return flen
 		}
@@ -218,7 +218,7 @@ func getLen(ft types.FieldType) int {
 
 func getScale(ft types.FieldType) float64 {
 	switch ft.GetType() {
-	case mysql.TypeNewDecimal:
+	case mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeDouble:
 		return float64(ft.GetDecimal())
 	}
 	return -1
@@ -241,7 +241,7 @@ func getSuffix(ft types.FieldType) string {
 	}
 
 	switch ft.GetType() {
-	case mysql.TypeDouble, mysql.TypeFloat:
+	case mysql.TypeDouble:
 		// 1. flen Not Default, decimal Not Default -> Valid
 		// 2. flen Not Default, decimal Default (-1) -> Invalid
 		// 3. flen Default, decimal Not Default -> Valid
