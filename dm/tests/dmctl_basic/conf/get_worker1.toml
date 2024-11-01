@@ -16,3 +16,4 @@ ssl-key = ""
 ssl-ca-base64 = ""
 ssl-key-base64 = ""
 ssl-cert-base64 = ""
+redact-info-log = false

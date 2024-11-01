@@ -66,6 +66,7 @@ function diff_get_config() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"config worker worker1 --path $dm_worker1_conf" \
 		"\"result\": true" 1
+	cat $dm_worker1_conf
 	diff $dm_worker1_conf $cur/conf/get_worker1.toml || exit 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
