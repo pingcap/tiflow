@@ -787,23 +787,33 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
 		isUnsigned := col.GetFlag().IsUnsigned()
+		maxValue := types.GetMaxValue(ft)
+		minValue := types.GetMinValue(ft)
 		switch v := col.Value.(type) {
-		case uint64, uint32:
+		case uint64:
 			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type %T for unsigned int column %s",
 					col.Value,
 					col.GetName())
 			}
-			writer.WriteAnyField(col.GetName(), v)
-		case int64, int32:
+			if v > maxValue.GetUint64() {
+				writer.WriteAnyField(col.GetName(), -1)
+			} else {
+				writer.WriteUint64Field(col.GetName(), v)
+			}
+		case int64:
 			if isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type %T for int column %s",
 					col.Value,
 					col.GetName())
 			}
-			writer.WriteAnyField(col.GetName(), v)
+			if v < minValue.GetInt64() || v > maxValue.GetInt64() {
+				writer.WriteAnyField(col.GetName(), -1)
+			} else {
+				writer.WriteInt64Field(col.GetName(), v)
+			}
 		case string:
 			if isUnsigned {
 				t, err := strconv.ParseUint(v, 10, 64)
@@ -812,7 +822,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 						"unexpected column value type string for unsigned int column %s",
 						col.GetName())
 				}
-				writer.WriteUint64Field(col.GetName(), t)
+				if t > maxValue.GetUint64() {
+					writer.WriteAnyField(col.GetName(), -1)
+				} else {
+					writer.WriteUint64Field(col.GetName(), t)
+				}
 			} else {
 				t, err := strconv.ParseInt(v, 10, 64)
 				if err != nil {
@@ -820,7 +834,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 						"unexpected column value type string for int column %s",
 						col.GetName())
 				}
-				writer.WriteInt64Field(col.GetName(), t)
+				if t < minValue.GetInt64() || t > maxValue.GetInt64() {
+					writer.WriteAnyField(col.GetName(), -1)
+				} else {
+					writer.WriteInt64Field(col.GetName(), t)
+				}
 			}
 		}
 		return nil

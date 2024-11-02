@@ -1,13 +1,3 @@
-DROP TABLE IF EXISTS ticketmonster.Booking;
-DROP TABLE IF EXISTS ticketmonster.Appearance;
-DROP TABLE IF EXISTS ticketmonster.Section;
-DROP TABLE IF EXISTS ticketmonster.TicketCategory;
-DROP TABLE IF EXISTS ticketmonster.TicketPriceGuide;
-DROP TABLE IF EXISTS ticketmonster.SectionAllocation;
-DROP TABLE IF EXISTS ticketmonster.Ticket;
-DROP DATABASE IF EXISTS ticketmonster;
-CREATE DATABASE ticketmonster;
-USE ticketmonster;
 CREATE TABLE `Appearance` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `event_id` bigint(20) DEFAULT NULL,
@@ -17,6 +7,7 @@ CREATE TABLE `Appearance` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `UKb2ol0eoqtadvfoxhsnqcajgqa` (`event_id`,`venue_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=latin1;
+
 CREATE TABLE `Booking` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `cancellationCode` varchar(255) NOT NULL,
@@ -26,6 +17,7 @@ CREATE TABLE `Booking` (
   `performance_name` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=latin1;
+
 CREATE TABLE `Section` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `description` varchar(255) NOT NULL,
@@ -37,6 +29,7 @@ CREATE TABLE `Section` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `UKruosqireipse41rdsuvhqj050` (`name`,`venue_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=latin1;
+
 CREATE TABLE `SectionAllocation` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `allocated` longblob,
@@ -50,6 +43,14 @@ CREATE TABLE `SectionAllocation` (
   KEY `FK60388cvbhb1xyrdhhe546t6dl` (`section_id`),
   CONSTRAINT `FK60388cvbhb1xyrdhhe546t6dl` FOREIGN KEY (`section_id`) REFERENCES `Section` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=latin1;
+
+CREATE TABLE `TicketCategory` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `description` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UK_43455ipnchbn6r4bg8pviai3g` (`description`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+
 CREATE TABLE `Ticket` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `price` float NOT NULL,
@@ -66,12 +67,7 @@ CREATE TABLE `Ticket` (
   CONSTRAINT `FK88jejylfnpfqcslai19n4naqf` FOREIGN KEY (`ticketCategory_id`) REFERENCES `TicketCategory` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
   CONSTRAINT `FKolbt9u28gyshci6ek9ep0rl5d` FOREIGN KEY (`tickets_id`) REFERENCES `Booking` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=latin1;
-CREATE TABLE `TicketCategory` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `description` varchar(255) NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `UK_43455ipnchbn6r4bg8pviai3g` (`description`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+
 CREATE TABLE `TicketPriceGuide` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `price` float NOT NULL,
