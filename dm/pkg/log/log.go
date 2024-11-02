@@ -220,7 +220,7 @@ func RedactString(arg string) string {
 	return arg
 }
 
-// ZapRedactString receives string argument and return omitted information in zap.Field if redact log enabled
+// ZapRedactString receives string argument and return omitted information in zap.Field if redact log enabled.
 func ZapRedactString(key, arg string) zap.Field {
 	return zap.String(key, RedactString(arg))
 }
