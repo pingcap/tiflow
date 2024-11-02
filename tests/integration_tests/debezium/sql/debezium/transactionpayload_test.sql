@@ -1,7 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE:  transactionpayload_test
--- ----------------------------------------------------------------------------------------------------------------
-
 -- Create and populate our products using a single insert with many rows
 CREATE TABLE products (
                           id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,

@@ -67,7 +67,6 @@ func extractValue(expr ast.ExprNode) any {
 
 func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 	ft := col.Tp
-	log.Error("parseType", zap.Any("flen", ft.GetFlen()), zap.Any("decimal", ft.GetDecimal()))
 	switch ft.GetType() {
 	case mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeTimestamp:
 		c.SetDecimal(ft.GetDecimal())
@@ -170,7 +169,6 @@ func getCharset(ft types.FieldType) string {
 	if ft.GetCharset() == "binary" {
 		return ""
 	}
-	log.Error("getCharset", zap.Any("v", ft.GetCharset()), zap.Any("vv", ft.GetCollate()))
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeString, mysql.TypeVarchar,
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeEnum, mysql.TypeSet:
@@ -183,18 +181,19 @@ func getLen(ft types.FieldType) int {
 	defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
-	log.Error("flen", zap.Any("defaultFlen", defaultFlen), zap.Any("flen", flen), zap.Any("decimal", decimal))
 	if flen == 0 {
 		return -1
 	}
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
 		return decimal
-	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal, mysql.TypeSet,
+	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal,
 		mysql.TypeVarString, mysql.TypeTiDBVectorFloat32:
 		return flen
 	case mysql.TypeYear:
 		return flen
+	case mysql.TypeSet:
+		return 2*len(ft.GetElems()) - 1
 	case mysql.TypeEnum:
 		return 1
 	case mysql.TypeLonglong:
@@ -269,18 +268,15 @@ func getSuffix(ft types.FieldType) string {
 
 func getExpressionAndName(ft types.FieldType) (string, string) {
 	prefix := strings.ToUpper(types.TypeToStr(ft.GetType(), ft.GetCharset()))
-	ft.CompactStr()
 	switch ft.GetType() {
-	case mysql.TypeYear, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeNewDecimal:
+	case mysql.TypeYear, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal:
 		return prefix, prefix
 	}
 	cs := prefix + getSuffix(ft)
-	suf := ""
-	flag := ft.GetFlag()
-
-	if mysql.HasZerofillFlag(flag) {
+	var suf string
+	if mysql.HasZerofillFlag(ft.GetFlag()) {
 		suf = " UNSIGNED ZEROFILL"
-	} else if mysql.HasUnsignedFlag(flag) {
+	} else if mysql.HasUnsignedFlag(ft.GetFlag()) {
 		suf = " UNSIGNED"
 	}
 	return cs + suf, prefix + suf

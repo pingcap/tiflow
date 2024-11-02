@@ -302,17 +302,6 @@ CREATE LOGFILE GROUP lf_group_name_2 ADD UNDOFILE 'my_undo_file'
     INITIAL_SIZE = 9999 WAIT COMMENT = 'some bogus comment'
     ENGINE NDB;
     
-CREATE DEFINER = 'admin'@'localhost' PROCEDURE account_count()
-    BEGIN
-      SELECT 'Number of accounts:', COUNT(*) FROM mysql.user;
-    END;
-
-CREATE DEFINER = 'admin'@'localhost' FUNCTION account_count() RETURNS INT
-    SQL SECURITY INVOKER
-    BEGIN
-      SELECT 'Number of accounts:', COUNT(*) FROM mysql.user;
-    END;
-
 CREATE SERVER server_1
     FOREIGN DATA WRAPPER mysql
     OPTIONS (USER 'Remote', HOST '192.168.1.106', DATABASE 'test');

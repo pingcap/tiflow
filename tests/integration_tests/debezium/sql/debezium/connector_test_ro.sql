@@ -1,7 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE:  connector_test_ro
--- ----------------------------------------------------------------------------------------------------------------
-
 -- Create and populate our products using a single insert with many rows
 CREATE TABLE Products (
   PRIMARY KEY (id),

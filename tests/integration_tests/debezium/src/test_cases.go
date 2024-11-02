@@ -221,16 +221,23 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 								for _, col := range columns["columns"].([]any) {
 									col := col.(map[string]any)
 									switch col["typeName"].(string) {
-									case "INT":
-										if col["length"] == 11 {
+									case "INT", "INT UNSIGNED":
+										if col["length"] == 11.0 {
 											col["length"] = nil
 										}
-									case "INTEGER":
-										if col["length"] == 11 {
+									case "INTEGER", "INTEGER UNSIGNED":
+										if col["length"] == 11.0 {
 											col["length"] = nil
 										}
 										col["typeName"] = replaceString(col["typeName"], "INTEGER", "INT")
 										col["typeExpression"] = replaceString(col["typeExpression"], "INTEGER", "INT")
+									case "BIGINT":
+										if col["length"] == 20.0 {
+											col["length"] = nil
+										}
+									case "CHAR BINARY":
+										col["typeName"] = replaceString(col["typeName"], "CHAR BINARY", "CHAR")
+										col["typeExpression"] = replaceString(col["typeExpression"], "CHAR BINARY", "CHAR")
 									case "NUMERIC":
 										col["typeName"] = replaceString(col["typeName"], "NUMERIC", "DECIMAL")
 										col["typeExpression"] = replaceString(col["typeExpression"], "NUMERIC", "DECIMAL")
