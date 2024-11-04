@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/generatedexpr"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -200,10 +201,14 @@ func getLen(ft types.FieldType) int {
 		return 2*len(ft.GetElems()) - 1
 	case mysql.TypeEnum:
 		return 1
-	case mysql.TypeLonglong, mysql.TypeTiny, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort:
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
-			flen -= 1
+			defaultFlen -= 1
 		}
+		if flen != defaultFlen {
+			return flen
+		}
+	case mysql.TypeLonglong:
 		if flen != defaultFlen {
 			return flen
 		}
@@ -280,4 +285,25 @@ func getExpressionAndName(ft types.FieldType) (string, string) {
 		suf = " UNSIGNED"
 	}
 	return cs + suf, prefix + suf
+}
+
+func getValue(col model.ColumnDataX) any {
+	if col.Value == nil {
+		return col.GetDefaultValue()
+	}
+	return col.Value
+}
+
+func getDBTableName(e *model.DDLEvent) (string, string) {
+	if e.TableInfo == nil {
+		return "", ""
+	}
+	return e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName()
+}
+
+func getSchemaTopicName(namespace string, schema string, table string) string {
+	return fmt.Sprintf("%s.%s.%s",
+		common.SanitizeName(namespace),
+		common.SanitizeName(schema),
+		common.SanitizeTopicName(table))
 }

@@ -235,6 +235,14 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 										if col["length"] == 20.0 {
 											col["length"] = nil
 										}
+									case "BIT":
+										if col["length"] == 1.0 {
+											col["length"] = nil
+										}
+									case "CHAR":
+										if col["length"] == 1.0 {
+											col["length"] = nil
+										}
 									case "CHAR BINARY":
 										col["typeName"] = replaceString(col["typeName"], "CHAR BINARY", "CHAR")
 										col["typeExpression"] = replaceString(col["typeExpression"], "CHAR BINARY", "CHAR")

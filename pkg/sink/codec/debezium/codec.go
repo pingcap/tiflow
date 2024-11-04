@@ -278,6 +278,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
+				if v == "CURRENT_TIMESTAMP" {
+					return
+				}
 				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 				if err != nil {
 					writer.WriteInt64Field("default", 0)
@@ -294,8 +297,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					writer.WriteInt64Field("default", 0)
 					return
 				}
-
-				str := gt.UTC().Format("2006-01-02T15:04:05")
+				str := gt.Format("2006-01-02T15:04:05")
 				fsp := ft.GetDecimal()
 				if fsp > 0 {
 					tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
@@ -533,18 +535,15 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	col model.ColumnDataX,
 	ft *types.FieldType,
 ) error {
-	if col.Value == nil {
-		if col.GetDefaultValue() == nil {
-			writer.WriteNullField(col.GetName())
-			return nil
-		}
-		col.Value = col.GetDefaultValue()
-		log.Info("writedefaltvalue", zap.Any("val", col.Value))
+	value := getValue(col)
+	if value == nil {
+		writer.WriteNullField(col.GetName())
+		return nil
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
 		var v uint64
-		switch val := col.Value.(type) {
+		switch val := value.(type) {
 		case uint64:
 			v = val
 		case string:
@@ -583,7 +582,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		isBinary := col.GetFlag().IsBinary()
-		switch v := col.Value.(type) {
+		switch v := value.(type) {
 		case []byte:
 			if !isBinary {
 				writer.WriteStringField(col.GetName(), common.UnsafeBytesToString(v))
@@ -599,11 +598,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeEnum:
-		v, ok := col.Value.(uint64)
+		v, ok := value.(uint64)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for enum column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 
@@ -617,11 +616,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeSet:
-		v, ok := col.Value.(uint64)
+		v, ok := value.(uint64)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for set column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 
@@ -635,14 +634,13 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeNewDecimal:
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for decimal column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		floatV, err := strconv.ParseFloat(v, 64)
 		if err != nil {
 			return cerror.WrapError(
@@ -653,25 +651,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeDate, mysql.TypeNewDate:
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for date column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		t, err := time.Parse("2006-01-02", v)
 		if err != nil {
 			// For example, time may be invalid like 1000-00-00
 			// return nil, nil
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
-				return nil
 			} else {
 				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			return nil
 		}
 		writer.WriteInt64Field(col.GetName(), t.UTC().Unix()/60/60/24)
 		return nil
@@ -680,12 +676,12 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// Debezium behavior from doc:
 		// > Such columns are converted into epoch milliseconds or microseconds based on the
 		// > column's precision by using UTC.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		log.Error("err val", zap.Any("v", v))
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for datetime column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 		if v == "CURRENT_TIMESTAMP" {
@@ -729,31 +725,38 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// > based on the server (or session's) current time zone. The time zone will be queried from
 		// > the server by default. If this fails, it must be specified explicitly by the database
 		// > connectionTimeZone MySQL configuration option.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for timestamp column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+		if v == "CURRENT_TIMESTAMP" {
+			writer.WriteNullField(col.GetName())
+			return nil
+		}
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
 		if t.Compare(types.MinTimestamp) < 0 {
-			writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			if col.Value == nil {
+				writer.WriteNullField(col.GetName())
+			} else {
+				writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			}
 			return nil
 		}
-		gt, err := t.GoTime(time.UTC)
+		gt, err := t.GoTime(c.config.TimeZone)
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
-		str := gt.Format("2006-01-02T15:04:05")
+		str := gt.UTC().Format("2006-01-02T15:04:05")
 		fsp := ft.GetDecimal()
 		if fsp > 0 {
 			tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
@@ -767,11 +770,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// Debezium behavior from doc:
 		// > Represents the time value in microseconds and does not include
 		// > time zone information. MySQL allows M to be in the range of 0-6.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for time column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
@@ -789,12 +792,12 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		isUnsigned := col.GetFlag().IsUnsigned()
 		maxValue := types.GetMaxValue(ft)
 		minValue := types.GetMinValue(ft)
-		switch v := col.Value.(type) {
+		switch v := value.(type) {
 		case uint64:
 			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type %T for unsigned int column %s",
-					col.Value,
+					value,
 					col.GetName())
 			}
 			if v > maxValue.GetUint64() {
@@ -806,7 +809,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			if isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type %T for int column %s",
-					col.Value,
+					value,
 					col.GetName())
 			}
 			if v < minValue.GetInt64() || v > maxValue.GetInt64() {
@@ -844,7 +847,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeDouble, mysql.TypeFloat:
-		if v, ok := col.Value.(string); ok {
+		if v, ok := value.(string); ok {
 			val, err := strconv.ParseFloat(v, 64)
 			if err != nil {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
@@ -853,23 +856,23 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			}
 			writer.WriteFloat64Field(col.GetName(), val)
 		} else {
-			writer.WriteAnyField(col.GetName(), col.Value)
+			writer.WriteAnyField(col.GetName(), value)
 		}
 		return nil
 
 	case mysql.TypeTiDBVectorFloat32:
-		v, ok := col.Value.(types.VectorFloat32)
+		v, ok := value.(types.VectorFloat32)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for unsigned vector column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 		writer.WriteStringField(col.GetName(), v.String())
 		return nil
 	}
 
-	writer.WriteAnyField(col.GetName(), col.Value)
+	writer.WriteAnyField(col.GetName(), value)
 	return nil
 }
 
@@ -1935,18 +1938,4 @@ func (c *dbzCodec) EncodeCheckpointEvent(
 		}
 	})
 	return err
-}
-
-func getDBTableName(e *model.DDLEvent) (string, string) {
-	if e.TableInfo == nil {
-		return "", ""
-	}
-	return e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName()
-}
-
-func getSchemaTopicName(namespace string, schema string, table string) string {
-	return fmt.Sprintf("%s.%s.%s",
-		common.SanitizeName(namespace),
-		common.SanitizeName(schema),
-		common.SanitizeTopicName(table))
 }

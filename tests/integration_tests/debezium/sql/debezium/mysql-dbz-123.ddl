@@ -4,8 +4,8 @@ CREATE TABLE `DBZ123` (
   `External_ID` varchar(255) NOT NULL,
   `Name` varchar(255) NOT NULL,
   `Is_Enabled` bit(1) NOT NULL DEFAULT b'1',
-  -- BLOB, TEXT, GEOMETRY or JSON column 'binaryRepresentation' can't have a default value
-  -- `binaryRepresentation` BLOB NOT NULL DEFAULT x'cafe',
+  /* BLOB, TEXT, GEOMETRY or JSON column 'binaryRepresentation' can't have a default value
+  `binaryRepresentation` BLOB NOT NULL DEFAULT x'cafe', */
   `BonusFactor` decimal(19,8) NOT NULL,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `game_unq` (`Provider_ID`,`External_ID`)

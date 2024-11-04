@@ -170,7 +170,6 @@ Commented out because Debezium produce wrong result:
 "col_1":-3020400147483,
 "col_5":-3020399048576,
 "col_6":-3020399048576,
-*/
 INSERT INTO t_time VALUES (
   '-838:59:59.000000',
   '-838:59:59.000000',
@@ -179,6 +178,8 @@ INSERT INTO t_time VALUES (
   '-838:59:59.000000',
   6
 );
+*/
+
 /*
 ----------------------------------------------------------------------
 -- TIMESTAMP type
@@ -275,10 +276,10 @@ CREATE TABLE t_varchar(
   Note: There is a bug of Debezium that it does not recognize
   VARCHAR(..) CHARACTER SET BINARY as binary type
   when the table is created AFTER the connector.
-  */
 
   col_bin       VARCHAR(64)
                 CHARACTER SET BINARY,
+  */
 
   pk            INT PRIMARY KEY
 );
