@@ -196,7 +196,7 @@ func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
 }
 
-var enabledRedactLog atomic.Value
+var enabledRedactLog atomic.Bool
 
 func init() {
 	SetRedactLog(false)
@@ -204,7 +204,7 @@ func init() {
 
 // IsRedactLogEnabled indicates whether the log desensitization is enabled.
 func IsRedactLogEnabled() bool {
-	return enabledRedactLog.Load().(bool)
+	return enabledRedactLog.Load()
 }
 
 // SetRedactLog sets enabledRedactLog.
