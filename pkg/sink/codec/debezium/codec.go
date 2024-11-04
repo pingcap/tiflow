@@ -605,7 +605,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				value,
 				col.GetName())
 		}
-
 		enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.
@@ -623,7 +622,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				value,
 				col.GetName())
 		}
-
 		setVar, err := types.ParseSetValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.

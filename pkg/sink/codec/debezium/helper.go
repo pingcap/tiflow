@@ -182,9 +182,9 @@ func getLen(ft types.FieldType) int {
 	defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
-	if flen == 0 {
-		return -1
-	}
+	// if flen == 0 {
+	// 	return -1
+	// }
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
 		return decimal

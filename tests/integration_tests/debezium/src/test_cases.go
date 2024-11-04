@@ -48,6 +48,16 @@ var (
 	msgValue = "value"
 )
 
+var defaultLength = map[string]float64{
+	"INTEGER":          11,
+	"INT":              11,
+	"INTEGER UNSIGNED": 10,
+	"INT UNSIGNED":     10,
+	"BIGINT":           20,
+	"BIT":              1,
+	"CHAR":             1,
+}
+
 func parseSQLText(data string) (res []ast.StmtNode, warns []error, err error) {
 	p := parser.New()
 	statements, warns, err := p.Parse(data, "utf8mb4", "utf8mb4_bin")
@@ -220,29 +230,17 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 							if columns, ok := table.(map[string]any); ok {
 								for _, col := range columns["columns"].([]any) {
 									col := col.(map[string]any)
-									switch col["typeName"].(string) {
-									case "INT", "INT UNSIGNED":
-										if col["length"] == 11.0 {
+									v := col["typeName"].(string)
+									switch v {
+									case "INT", "INT UNSIGNED", "INTEGER", "INTEGER UNSIGNED", "BIGINT", "BIT", "CHAR":
+										if col["length"] == defaultLength[v] {
 											col["length"] = nil
 										}
+									}
+									switch v {
 									case "INTEGER", "INTEGER UNSIGNED":
-										if col["length"] == 11.0 {
-											col["length"] = nil
-										}
 										col["typeName"] = replaceString(col["typeName"], "INTEGER", "INT")
 										col["typeExpression"] = replaceString(col["typeExpression"], "INTEGER", "INT")
-									case "BIGINT":
-										if col["length"] == 20.0 {
-											col["length"] = nil
-										}
-									case "BIT":
-										if col["length"] == 1.0 {
-											col["length"] = nil
-										}
-									case "CHAR":
-										if col["length"] == 1.0 {
-											col["length"] = nil
-										}
 									case "CHAR BINARY":
 										col["typeName"] = replaceString(col["typeName"], "CHAR BINARY", "CHAR")
 										col["typeExpression"] = replaceString(col["typeExpression"], "CHAR BINARY", "CHAR")

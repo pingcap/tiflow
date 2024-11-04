@@ -21,6 +21,7 @@ curl -i -X POST \
     "database.port": "3306",
     "database.user": "debezium",
     "database.password": "dbz",
+    "database.encoding": "UTF-8",
     "database.server.id": "184054",
     "topic.prefix": "default",
     "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
