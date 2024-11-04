@@ -244,3 +244,515 @@ func genMetaFile(t *testing.T, dir string, meta *common.LogMeta) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 }
+
+func TestLogHeapLess(t *testing.T) {
+	tests := []struct {
+		name   string
+		h      logHeap
+		i      int
+		j      int
+		expect bool
+	}{
+		{
+			name: "Delete before Update",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Update before Insert",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 1,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Update before Delete",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 1,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: false,
+		},
+		{
+			name: "Update before Update",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 1,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 4,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Delete before Insert",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 1,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Same type of operations, different commit ts",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 200,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Same type of operations, same commit ts, different startTs",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								StartTs:  80,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								StartTs:  90,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+		{
+			name: "Same type of operations, same commit ts",
+			h: logHeap{
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 2,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					data: &model.RedoLog{
+						Type: model.RedoLogTypeRow,
+						RedoRow: model.RedoRowChangedEvent{
+							Row: &model.RowChangedEvent{
+								CommitTs: 100,
+								Table: &model.TableName{
+									Schema:      "test",
+									Table:       "table",
+									TableID:     1,
+									IsPartition: false,
+								},
+								PreColumns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 1,
+									},
+								},
+								Columns: []*model.Column{
+									{
+										Name:  "col-1",
+										Value: 1,
+									}, {
+										Name:  "col-2",
+										Value: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			i:      0,
+			j:      1,
+			expect: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.h.Less(tt.i, tt.j); got != tt.expect {
+				t.Errorf("logHeap.Less() = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}

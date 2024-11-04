@@ -62,7 +62,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
-		&entry.MockMountGroup{}, sortEngine, false)
+		&entry.MockMountGroup{}, sortEngine, sourcemanager.PullerSplitUpdateModeNone, false)
 	go func() { _ = sm.Run(ctx) }()
 
 	// To avoid refund or release panics.

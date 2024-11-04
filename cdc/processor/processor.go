@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -42,6 +43,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -190,13 +193,13 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	p.sinkManager.r.AddTable(
+	table := p.sinkManager.r.AddTable(
 		span, startTs, p.changefeed.Info.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
 
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -353,11 +356,9 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	span tablepb.Span, sinkStats sinkmanager.TableStats,
 ) tablepb.Stats {
 	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
-	now, _ := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
-		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
 		BarrierTs:   sinkStats.BarrierTs,
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
@@ -628,6 +629,45 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	return true
 }
 
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
+// getPullerSplitUpdateMode returns how to split update kv entries at puller.
+//
+// If the sinkURI is not mysql compatible, it returns PullerSplitUpdateModeNone
+// which means don't split any update kv entries at puller;
+// If the sinkURI is mysql compatible, it has the following two cases:
+//  1. if the user config safe mode in sink module, it returns PullerSplitUpdateModeAlways,
+//     which means split all update kv entries at puller;
+//  2. if the user does not config safe mode in sink module, it returns PullerSplitUpdateModeAtStart,
+//     which means split update kv entries whose commitTS is older than the replicate ts of sink.
+func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return sourcemanager.PullerSplitUpdateModeNone, nil
+	}
+	// must be mysql sink
+	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, err
+	}
+	if isSinkInSafeMode {
+		return sourcemanager.PullerSplitUpdateModeAlways, nil
+	}
+	return sourcemanager.PullerSplitUpdateModeAtStart, nil
+}
+
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if p.initialized {
@@ -684,15 +724,24 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.changefeed.Info.SinkURI, p.changefeed.Info.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, p.changefeed.Info.Config.BDRMode)
+		sortEngine, pullerSplitUpdateMode,
+		p.changefeed.Info.Config.BDRMode)
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.changefeed.Info, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.spawn(stdCtx)
 

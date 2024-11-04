@@ -20,6 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -562,4 +563,67 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	result, err = trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
+}
+
+var ukUpdatedEvent = &RowChangedEvent{
+	PreColumns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value",
+		},
+	},
+
+	Columns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value-updated",
+		},
+	},
+}
+
+func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
+	txn := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
+	}
+
+	outputRawChangeEvent := true
+	notOutputRawChangeEvent := false
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme, notOutputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 2)
+
+	txn = &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
+
+	txn2 := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent, ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, outputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
+	require.NoError(t, err)
+	require.Len(t, txn2.Rows, 2)
 }

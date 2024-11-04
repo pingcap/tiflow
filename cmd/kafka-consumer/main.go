@@ -437,7 +437,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			return nil, errors.Trace(err)
 		}
 		c.eventRouter = eventRouter
-
 	}
 
 	c.sinks = make([]*partitionSinks, kafkaPartitionNum)
@@ -449,10 +448,14 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			partitionNo: i,
 		}
 	}
+	sinkReplicaConfig := replicaConfig
+	if sinkReplicaConfig == nil {
+		sinkReplicaConfig = config.GetDefaultReplicaConfig()
+	}
 	f, err := eventsinkfactory.New(
 		ctx,
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		sinkReplicaConfig,
 		errChan,
 		nil,
 	)
@@ -475,7 +478,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		sinkReplicaConfig,
 	)
 	if err != nil {
 		cancel()

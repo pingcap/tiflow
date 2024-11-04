@@ -531,6 +531,11 @@ error = '''
 MySQL connection error
 '''
 
+["CDC:ErrMySQLDuplicateEntry"]
+error = '''
+MySQL duplicate entry error
+'''
+
 ["CDC:ErrMySQLInvalidConfig"]
 error = '''
 MySQL config invalid
@@ -809,6 +814,11 @@ serve http error
 ["CDC:ErrServerIsNotReady"]
 error = '''
 cdc server is not ready
+'''
+
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
 '''
 
 ["CDC:ErrSinkInvalidConfig"]

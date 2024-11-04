@@ -27,6 +27,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *model.RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+type SplitUpdateKVEntry func(raw *model.RawKVEntry) (*model.RawKVEntry, *model.RawKVEntry, error)
+
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper interface {
 	// Start the puller and send internal errors into `errChan`.
@@ -49,6 +55,8 @@ type WrapperImpl struct {
 	startTs    model.Ts
 	bdrMode    bool
 
+	shouldSplitKVEntry model.ShouldSplitKVEntry
+
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// eg is used to wait the puller to exit.
@@ -62,13 +70,15 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
 ) Wrapper {
 	return &WrapperImpl{
-		changefeed: changefeed,
-		span:       span,
-		tableName:  tableName,
-		startTs:    startTs,
-		bdrMode:    bdrMode,
+		changefeed:         changefeed,
+		span:               span,
+		tableName:          tableName,
+		startTs:            startTs,
+		bdrMode:            bdrMode,
+		shouldSplitKVEntry: shouldSplitKVEntry,
 	}
 }
 
@@ -127,8 +137,18 @@ func (n *WrapperImpl) Start(
 				if rawKV == nil {
 					continue
 				}
-				pEvent := model.NewPolymorphicEvent(rawKV)
-				eventSortEngine.Add(n.span, pEvent)
+				if n.shouldSplitKVEntry(rawKV) {
+					deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(rawKV)
+					if err != nil {
+						return err
+					}
+					deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+					insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+					eventSortEngine.Add(n.span, deleteEvent, insertEvent)
+				} else {
+					pEvent := model.NewPolymorphicEvent(rawKV)
+					eventSortEngine.Add(n.span, pEvent)
+				}
 			}
 		}
 	})

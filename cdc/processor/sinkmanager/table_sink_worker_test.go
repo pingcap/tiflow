@@ -129,7 +129,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
-		&entry.MockMountGroup{}, sortEngine, false)
+		&entry.MockMountGroup{}, sortEngine, sourcemanager.PullerSplitUpdateModeNone, false)
 	go func() { sm.Run(ctx) }()
 
 	// To avoid refund or release panics.

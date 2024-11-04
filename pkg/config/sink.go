@@ -310,42 +310,52 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
-	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
-	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
-	MaxMessageBytes              *int         `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
-	Compression                  *string      `toml:"compression" json:"compression,omitempty"`
-	KafkaClientID                *string      `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
-	AutoCreateTopic              *bool        `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
-	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
-	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
-	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
-	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
-	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
-	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
-	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
-	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
-	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
-	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
-	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
-	SASLOAuthClientID            *string      `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
-	SASLOAuthClientSecret        *string      `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
-	SASLOAuthTokenURL            *string      `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
-	SASLOAuthScopes              []string     `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
-	SASLOAuthGrantType           *string      `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
-	SASLOAuthAudience            *string      `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
-	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
-	CA                           *string      `toml:"ca" json:"ca,omitempty"`
-	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
-	Key                          *string      `toml:"key" json:"key,omitempty"`
-	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
-	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+	PartitionNum                 *int32                    `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16                    `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string                   `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int                      `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string                   `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string                   `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool                     `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string                   `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string                   `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string                   `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int                      `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string                   `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string                   `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string                   `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string                   `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string                   `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string                   `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string                   `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret        *string                   `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes              []string                  `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string                   `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+	EnableTLS                    *bool                     `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string                   `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string                   `toml:"cert" json:"cert,omitempty"`
+	Key                          *string                   `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
+	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 
-	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
+	if k == nil || k.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *k.OutputRawChangeEvent
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -388,6 +398,17 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *CloudStorageConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
@@ -492,21 +513,41 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Validate that protocol is compatible with the scheme. For testing purposes,
-	// any protocol should be legal for blackhole.
-	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(s.Protocol)
-		if err != nil {
-			return err
-		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
-	}
-
 	log.Info("succeed to parse parameter from sink uri",
 		zap.String("protocol", s.Protocol),
 		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+
+	// Check that protocol config is compatible with the scheme.
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+	}
+	// For testing purposes, any protocol should be legal for blackhole.
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
+		return s.ValidateProtocol(sinkURI.Scheme)
+	}
+	return nil
+}
+
+// ValidateProtocol validates the protocol configuration.
+func (s *SinkConfig) ValidateProtocol(scheme string) error {
+	protocol, err := ParseSinkProtocolFromString(s.Protocol)
+	if err != nil {
+		return err
+	}
+
+	outputRawChangeEvent := false
+	switch scheme {
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
+	default:
+		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
+	}
+
+	if outputRawChangeEvent {
+		// TODO: return error if we do not need to keep backward compatibility.
+		log.Warn(fmt.Sprintf("TiCDC will not split the update pk/uk events if output-raw-change-event is true(scheme: %s, protocol: %s).", scheme, protocol))
+	}
 	return nil
 }
 
