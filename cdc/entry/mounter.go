@@ -735,7 +735,8 @@ func (m *mounter) mountRowKVEntry(
 
 		if !matched {
 			log.Error("previous columns checksum mismatch",
-				zap.Uint32("checksum", preChecksum), zap.Any("tableInfo", tableInfo),
+				zap.Uint32("checksum", preChecksum),
+				zap.Any("tableInfo", tableInfo), zap.Any("columnInfos", columnInfos),
 				zap.Any("preCols", preCols), zap.Any("rawCols", preRawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
@@ -762,7 +763,8 @@ func (m *mounter) mountRowKVEntry(
 		}
 		if !matched {
 			log.Error("current columns checksum mismatch",
-				zap.Uint32("checksum", currentChecksum), zap.Any("tableInfo", tableInfo),
+				zap.Uint32("checksum", currentChecksum),
+				zap.Any("tableInfo", tableInfo), zap.Any("columnInfos", columnInfos),
 				zap.Any("cols", cols), zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.

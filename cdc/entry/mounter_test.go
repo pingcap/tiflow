@@ -1043,6 +1043,46 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyChecksumRenameTable(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	replicaConfig.Integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.Tk().MustExec("set global tidb_enable_row_level_checksum = 1")
+
+	_ = helper.DDL2Event("create database uds2")
+	helper.Tk().MustExec("use uds2")
+
+	_ = helper.DDL2Event(`create table if not exists index_Data24 (
+		object_id INT PRIMARY KEY,
+		version INT,
+		guid VARCHAR(150),
+		reference_id BIGINT)`)
+
+	event := helper.DML2Event(
+		`insert into index_Data24 values (198594, 67475500, 'Ym9iZmp1bmlpZ3JjamFmeWdkcWxxbW95am5ydWZhYnJhYmNjY2lsZ25jcGNxYnFwcnlpYW1sdGpzeHhlanp0ZHJweWFnY2R3bW1yamRmamhoYXR2enh1b3Zra2t1cG14eXR1a3dpb3V1eHFjZ2o=', -922337203685477580)`,
+		"uds2", "index_Data24")
+	require.NotNil(t, event)
+
+	_ = helper.DDL2Event(`CREATE TABLE IF NOT EXISTS index_Data24_v2 (
+		object_id bigint(20) unsigned NOT NULL,
+		reference_id bigint(20) DEFAULT NULL,
+		guid varbinary(767) DEFAULT NULL,
+		new_field bigint(20) AUTO_INCREMENT,
+		version int(11) unsigned NOT NULL,
+		PRIMARY KEY (object_id),
+		KEY IndexOnReferenceId (reference_id),
+		KEY IndexOnGuid (guid),
+		KEY IndexOnNewField (new_field))`)
+
+	_ = helper.DDL2Event("drop table index_Data24")
+
+	_ = helper.DDL2Event("rename table index_Data24_v2 to index_Data24")
+}
+
 func TestVerifyChecksumHasNullFields(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
