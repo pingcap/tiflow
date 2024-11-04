@@ -15,6 +15,7 @@ package sourcemanager
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -220,10 +221,17 @@ func (m *SourceManager) Close() {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
+
+	var wg sync.WaitGroup
 	m.pullers.Range(func(span tablepb.Span, value interface{}) bool {
-		value.(pullerwrapper.Wrapper).Close()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value.(pullerwrapper.Wrapper).Close()
+		}()
 		return true
 	})
+	wg.Wait()
 	log.Info("All pullers have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
