@@ -150,8 +150,6 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
-	// checksumKey is only used to calculate raw checksum if necessary.
-	checksumKey := raw.Key
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, err
@@ -196,6 +194,12 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		if bytes.HasPrefix(key, recordPrefix) {
+			recordID, err := tablecodec.DecodeRowKey(raw.Key)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			baseInfo.RecordID = recordID
+
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -203,7 +207,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			if rowKV == nil {
 				return nil, nil
 			}
-			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, checksumKey, raw.ApproximateDataSize())
+			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, recordID, raw.ApproximateDataSize())
 			if err != nil {
 				return nil, err
 			}
@@ -236,23 +240,17 @@ func (m *mounter) unmarshalRowKVEntry(
 	rawOldValue []byte,
 	base baseKVEntry,
 ) (*rowKVEntry, error) {
-	recordID, err := tablecodec.DecodeRowKey(rawKey)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	base.RecordID = recordID
-
 	var (
 		row, preRow           map[int64]types.Datum
 		rowExist, preRowExist bool
 	)
 
-	row, rowExist, err = m.decodeRow(rawValue, recordID, tableInfo, false)
+	row, rowExist, err := m.decodeRow(rawValue, base.RecordID, tableInfo, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	preRow, preRowExist, err = m.decodeRow(rawOldValue, recordID, tableInfo, true)
+	preRow, preRowExist, err = m.decodeRow(rawOldValue, base.RecordID, tableInfo, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -603,7 +601,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 
 func verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder,
-	key kv.Key, tz *time.Location,
+	handle kv.Handle, tz *time.Location,
 ) (uint32, bool, error) {
 	expected, ok := decoder.GetChecksum()
 	if !ok {
@@ -629,10 +627,10 @@ func verifyRawBytesChecksum(
 		datums = append(datums, &datum)
 		columnIDs = append(columnIDs, columnID)
 	}
-	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, key, nil)
+	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, handle, nil)
 	if err != nil {
 		log.Error("calculate raw checksum failed",
-			zap.Any("tz", tz), zap.Any("key", key), zap.Any("columns", columns), zap.Error(err))
+			zap.Any("tz", tz), zap.Any("handle", handle.String()), zap.Any("columns", columns), zap.Error(err))
 		return 0, false, errors.Trace(err)
 	}
 	if obtained == expected {
@@ -642,7 +640,7 @@ func verifyRawBytesChecksum(
 	log.Error("raw bytes checksum mismatch",
 		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained),
 		zap.Any("tableInfo", tableInfo), zap.Any("columns", columns),
-		zap.Any("key", key), zap.Any("tz", tz))
+		zap.Any("handle", handle.String()), zap.Any("tz", tz))
 
 	return expected, false, nil
 }
@@ -652,7 +650,7 @@ func verifyRawBytesChecksum(
 func (m *mounter) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
 	columns []*model.ColumnData, rawColumns []types.Datum,
-	key kv.Key, isPreRow bool,
+	handle kv.Handle, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
@@ -673,7 +671,7 @@ func (m *mounter) verifyChecksum(
 		// since the table schema does not contain complete column information.
 		return m.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
 	case 1:
-		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
+		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, handle, m.tz)
 		if err != nil {
 			return 0, false, errors.Trace(err)
 		}
@@ -694,7 +692,7 @@ func (m *mounter) verifyChecksum(
 }
 
 func (m *mounter) mountRowKVEntry(
-	tableInfo *model.TableInfo, row *rowKVEntry, key kv.Key, dataSize int64,
+	tableInfo *model.TableInfo, row *rowKVEntry, handle kv.Handle, dataSize int64,
 ) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
 		rawRow      model.RowChangedDatums
@@ -728,7 +726,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, handle, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -756,7 +754,7 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, handle, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
