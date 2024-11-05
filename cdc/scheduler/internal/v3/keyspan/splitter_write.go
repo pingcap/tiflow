@@ -191,11 +191,12 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 				regionCounts = append(regionCounts, lastSpanRegionCount)
 				weights = append(weights, lastSpanWriteWeight)
 				writeKeys = append(writeKeys, lastSpanWriteKey)
+				spanStartIndex = len(regions)
 				break
 			}
 			// If the restWeight is larger than writeLimitPerSpan,
 			// then we need to update the restSpans.
-			restSpans = int(restWeight) / int(writeLimitPerSpan)
+			restSpans = int(restWeight)/int(writeLimitPerSpan) + 1
 		}
 
 		// If the restRegions is less than equal to restSpans,
@@ -236,6 +237,32 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 			regionCount = 0
 			spanStartIndex = i + 1
 		}
+	}
+	if spanStartIndex != len(regions) {
+		spans = append(spans, tablepb.Span{
+			TableID:  tableID,
+			StartKey: tablepb.Key(decodeKey(regions[spanStartIndex].StartKey)),
+			EndKey:   tablepb.Key(decodeKey(regions[len(regions)-1].EndKey)),
+		})
+		lastSpanRegionCount := len(regions) - spanStartIndex
+		lastSpanWriteWeight := uint64(0)
+		lastSpanWriteKey := uint64(0)
+		for j := spanStartIndex; j < len(regions); j++ {
+			lastSpanWriteKey += regions[j].WrittenKeys
+			lastSpanWriteWeight += regions[j].WrittenKeys
+		}
+		regionCounts = append(regionCounts, lastSpanRegionCount)
+		weights = append(weights, lastSpanWriteWeight)
+		writeKeys = append(writeKeys, lastSpanWriteKey)
+
+		log.Warn("some regions are added to the last span",
+			zap.Int("spanStartIndex", spanStartIndex),
+			zap.Int("regionsLength", len(regions)),
+			zap.Int("restSpans", restSpans),
+			zap.Int64("restWeight", restWeight),
+			zap.Any("prevSpan", spans[len(spans)-2]),
+			zap.Any("lastSpan", spans[len(spans)-1]),
+		)
 	}
 	return &splitRegionsInfo{
 		RegionCounts: regionCounts,
