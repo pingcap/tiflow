@@ -238,6 +238,7 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 			spanStartIndex = i + 1
 		}
 	}
+	// All regions should be processed and append to spans
 	if spanStartIndex != len(regions) {
 		spans = append(spans, tablepb.Span{
 			TableID:  tableID,
