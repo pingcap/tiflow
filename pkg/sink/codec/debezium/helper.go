@@ -182,25 +182,14 @@ func getLen(ft types.FieldType) int {
 	defaultFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 	decimal := ft.GetDecimal()
 	flen := ft.GetFlen()
-	// if flen == 0 {
-	// 	return -1
-	// }
 	switch ft.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
 		return decimal
-	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString,
-		mysql.TypeVarString, mysql.TypeTiDBVectorFloat32:
+	case mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTiDBVectorFloat32,
+		mysql.TypeLonglong, mysql.TypeFloat, mysql.TypeDouble:
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeNewDecimal:
-		return flen
-	case mysql.TypeYear:
-		return flen
-	case mysql.TypeSet:
-		return 2*len(ft.GetElems()) - 1
-	case mysql.TypeEnum:
-		return 1
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			defaultFlen -= 1
@@ -208,14 +197,12 @@ func getLen(ft types.FieldType) int {
 		if flen != defaultFlen {
 			return flen
 		}
-	case mysql.TypeLonglong:
-		if flen != defaultFlen {
-			return flen
-		}
-	case mysql.TypeFloat, mysql.TypeDouble:
-		if flen != defaultFlen {
-			return flen
-		}
+	case mysql.TypeYear, mysql.TypeNewDecimal:
+		return flen
+	case mysql.TypeSet:
+		return 2*len(ft.GetElems()) - 1
+	case mysql.TypeEnum:
+		return 1
 	}
 	return -1
 }

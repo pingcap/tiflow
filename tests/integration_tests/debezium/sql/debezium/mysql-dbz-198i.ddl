@@ -1,3 +1,4 @@
+set @@foreign_key_checks=0;
 create database `NextTimeTable`;
 use `NextTimeTable`;
 create table NextTimeTable.REFERENCED (
@@ -12,10 +13,11 @@ create table `NextTimeTable`.`TIMETABLE_SUBJECT_GROUP_MAPPING` (
      CONSTRAINT `FK69atxmt7wrwpb4oekyravsx9l` FOREIGN KEY (`SUBJECT_ID`) REFERENCES `NextTimeTable`.`REFERENCED`(`SUBJECT_ID`)
      );
 
-/* Alter the table, but the parser doesn't really keep track of indexes or foreign keys and should ignore those expressions
 Alter table `NextTimeTable`.`TIMETABLE_SUBJECT_GROUP_MAPPING`
-drop column `SUBJECT_ID`,
-drop index `FK69atxmt7wrwpb4oekyravsx9l`,
-drop foreign key `FK69atxmt7wrwpb4oekyravsx9l`; */
+drop foreign key `FK69atxmt7wrwpb4oekyravsx9l`;
+Alter table `NextTimeTable`.`TIMETABLE_SUBJECT_GROUP_MAPPING`
+drop index `FK69atxmt7wrwpb4oekyravsx9l`;
+Alter table `NextTimeTable`.`TIMETABLE_SUBJECT_GROUP_MAPPING`
+drop column `SUBJECT_ID`;
 
 create table `NextTimeTable`.`table1` ( pk1 int not null PRIMARY KEY, `id` int not null, `other` int );

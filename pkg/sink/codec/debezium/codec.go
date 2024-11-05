@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -675,7 +674,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// > Such columns are converted into epoch milliseconds or microseconds based on the
 		// > column's precision by using UTC.
 		v, ok := value.(string)
-		log.Error("err val", zap.Any("v", v))
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for datetime column %s",
@@ -798,7 +796,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 					value,
 					col.GetName())
 			}
-			if v > maxValue.GetUint64() {
+			if ft.GetType() == mysql.TypeLonglong && v == maxValue.GetUint64() || v > maxValue.GetUint64() {
 				writer.WriteAnyField(col.GetName(), -1)
 			} else {
 				writer.WriteUint64Field(col.GetName(), v)
@@ -823,7 +821,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 						"unexpected column value type string for unsigned int column %s",
 						col.GetName())
 				}
-				if t > maxValue.GetUint64() {
+				if ft.GetType() == mysql.TypeLonglong && t == maxValue.GetUint64() || t > maxValue.GetUint64() {
 					writer.WriteAnyField(col.GetName(), -1)
 				} else {
 					writer.WriteUint64Field(col.GetName(), t)
@@ -1392,7 +1390,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 									}
 									elems := col.GetElems()
 									if len(elems) != 0 {
-										log.Info("GetElems", zap.Any("o", col.GetElems()))
 										// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
 										jWriter.WriteArrayField("enumValues", func() {
 											for _, ele := range elems {
