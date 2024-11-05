@@ -1,6 +1,6 @@
 # Specify the image architecture explicitly,
 # otherwise it will not work correctly on other architectures.
-FROM amd64/centos:centos7 as downloader
+FROM amd64/centos:centos7 as downloader // TODO: 更换镜像
 
 USER root
 WORKDIR /root/download
@@ -11,7 +11,7 @@ RUN ./download-integration-test-binaries.sh master
 RUN ls ./bin
 
 # Download go into /usr/local dir.
-ENV GOLANG_VERSION 1.19
+ENV GOLANG_VERSION 1.23
 ENV GOLANG_DOWNLOAD_URL https://dl.google.com/go/go$GOLANG_VERSION.linux-amd64.tar.gz
 ENV GOLANG_DOWNLOAD_SHA256 464b6b66591f6cf055bc5df90a9750bf5fbc9d038722bb84a9d56a2bea974be6
 RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
@@ -19,11 +19,12 @@ RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
 	&& tar -C /usr/local -xzf golang.tar.gz \
 	&& rm golang.tar.gz
 
-FROM amd64/centos:centos7
+FROM amd64/centos:centos7 // TODO: 更换镜像
 
 USER root
 WORKDIR /root
 
+// TODO: 更新并测试下列包
 # Installing dependencies.
 RUN yum install -y \
 	git \
