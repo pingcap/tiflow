@@ -50,9 +50,11 @@ var (
 
 var defaultLength = map[string]float64{
 	"INTEGER":          11,
-	"INT":              11,
 	"INTEGER UNSIGNED": 10,
+	"INT":              11,
 	"INT UNSIGNED":     10,
+	"TINYINT":          4,
+	"TINYINT UNSIGNED": 3,
 	"BIGINT":           20,
 	"BIT":              1,
 	"CHAR":             1,
@@ -232,7 +234,8 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 									col := col.(map[string]any)
 									v := col["typeName"].(string)
 									switch v {
-									case "INT", "INT UNSIGNED", "INTEGER", "INTEGER UNSIGNED", "BIGINT", "BIT", "CHAR":
+									case "INT", "INT UNSIGNED", "INTEGER", "INTEGER UNSIGNED", "TINYINT", "TINYINT UNSIGNED", "BIGINT",
+										"BIT", "CHAR":
 										if col["length"] == defaultLength[v] {
 											col["length"] = nil
 										}
@@ -241,9 +244,6 @@ func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) 
 									case "INTEGER", "INTEGER UNSIGNED":
 										col["typeName"] = replaceString(col["typeName"], "INTEGER", "INT")
 										col["typeExpression"] = replaceString(col["typeExpression"], "INTEGER", "INT")
-									case "CHAR BINARY":
-										col["typeName"] = replaceString(col["typeName"], "CHAR BINARY", "CHAR")
-										col["typeExpression"] = replaceString(col["typeExpression"], "CHAR BINARY", "CHAR")
 									case "NUMERIC":
 										col["typeName"] = replaceString(col["typeName"], "NUMERIC", "DECIMAL")
 										col["typeExpression"] = replaceString(col["typeExpression"], "NUMERIC", "DECIMAL")
