@@ -3,6 +3,7 @@ log-level = "debug"
 log-file = "/tmp/dm_test/dmctl_basic/worker2/log/dm-worker.log"
 log-format = "text"
 log-rotate = ""
+redact-info-log = false
 join = "http://127.0.0.1:8261"
 worker-addr = "0.0.0.0:8263"
 advertise-addr = "127.0.0.1:8263"

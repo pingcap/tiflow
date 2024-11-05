@@ -121,7 +121,7 @@ func (conn *DBConn) QuerySQL(
 					ctx.L().Warn("query statement too slow",
 						zap.Duration("cost time", cost),
 						zap.String("query", utils.TruncateString(query, -1)),
-						zap.String("argument", utils.TruncateInterface(args, -1)))
+						log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 				}
 			}
 			return ret, err
@@ -130,7 +130,7 @@ func (conn *DBConn) QuerySQL(
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("query statement failed after retry",
 			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)),
+			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)),
 			log.ShortError(err))
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 					ctx.L().Warn("execute transaction too slow",
 						zap.Duration("cost time", cost),
 						zap.String("query", utils.TruncateInterface(queries, -1)),
-						zap.String("argument", utils.TruncateInterface(args, -1)))
+						log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 				}
 			}
 			return ret, err
@@ -203,7 +203,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("execute statements failed after retry",
 			zap.String("queries", utils.TruncateInterface(queries, -1)),
-			zap.String("arguments", utils.TruncateInterface(args, -1)),
+			log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
 			log.ShortError(err))
 		return ret.(int), err
 	}
