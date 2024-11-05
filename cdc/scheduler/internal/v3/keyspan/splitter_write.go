@@ -254,8 +254,7 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 		regionCounts = append(regionCounts, lastSpanRegionCount)
 		weights = append(weights, lastSpanWriteWeight)
 		writeKeys = append(writeKeys, lastSpanWriteKey)
-
-		log.Warn("some regions are added to the last span",
+		log.Warn("some regions are added to the last span, it should not appear",
 			zap.Int("spanStartIndex", spanStartIndex),
 			zap.Int("regionsLength", len(regions)),
 			zap.Int("restSpans", restSpans),
