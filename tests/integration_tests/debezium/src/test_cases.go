@@ -103,12 +103,7 @@ func runAllTestCases(dir, dbConnMySQL, dbConnTiDB string) bool {
 	}
 	for _, path := range files {
 		logger.Info("Run", zap.String("case", path))
-		failed := runTestCase(path, dbConnMySQL, dbConnTiDB)
-
-		if failed {
-			logger.Info("failed", zap.String("case", path))
-			return false
-		}
+		runTestCase(path, dbConnMySQL, dbConnTiDB)
 	}
 
 	if nFailed > 0 {
@@ -132,7 +127,7 @@ func resetDB() {
 	runSingleQuery("use `"+*dbName+"`;", false)
 }
 
-func runTestCase(testCasePath, dbConnMySQL, dbConnTiDB string) bool {
+func runTestCase(testCasePath, dbConnMySQL, dbConnTiDB string) {
 	dbMySQL = prepareDBConn(KindMySQL, dbConnMySQL)
 	defer dbMySQL.MustClose()
 	dbTiDB = prepareDBConn(KindTiDB, dbConnTiDB)
@@ -152,7 +147,6 @@ func runTestCase(testCasePath, dbConnMySQL, dbConnTiDB string) bool {
 		"DropTable":      true,
 	}
 
-	hasError := false
 	stmtAsts := readAndParseSQLText(testCasePath)
 	for _, stmt := range stmtAsts {
 		query := strings.TrimSpace(stmt.Text())
@@ -166,10 +160,8 @@ func runTestCase(testCasePath, dbConnMySQL, dbConnTiDB string) bool {
 			nPassed++
 		} else {
 			nFailed++
-			hasError = true
 		}
 	}
-	return hasError
 }
 
 func fetchNextCDCRecord(reader *kafka.Reader, kind Kind, timeout time.Duration) (map[string]any, map[string]any, error) {

@@ -21,7 +21,6 @@ curl -i -X POST \
     "database.port": "3306",
     "database.user": "debezium",
     "database.password": "dbz",
-    "database.encoding": "UTF-8",
     "database.server.id": "184054",
     "topic.prefix": "default",
     "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
@@ -31,8 +30,7 @@ curl -i -X POST \
     "transforms.x.regex": "(.*)",
     "transforms.x.replacement":"output_debezium",
     "binary.handling.mode": "base64",
-    "decimal.handling.mode": "double",
-    "time.zone": "UTC"
+    "decimal.handling.mode": "double"
   }
 }
 EOF
