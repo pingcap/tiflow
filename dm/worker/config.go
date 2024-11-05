@@ -66,7 +66,11 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
+<<<<<<< HEAD
 	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", true, "whether to enable the log redaction")
+=======
+	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", false, "whether to enable the log redaction")
+>>>>>>> 5c7d6830db (*(dm): add redact log config for dm worker (#11709))
 	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 	// NOTE: add `advertise-addr` for dm-master if needed.
 	fs.StringVar(&cfg.Join, "join", "", `join to an existing cluster (usage: dm-master cluster's "${master-addr}")`)
