@@ -799,7 +799,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			if ft.GetType() == mysql.TypeLonglong && v == maxValue.GetUint64() || v > maxValue.GetUint64() {
 				writer.WriteAnyField(col.GetName(), -1)
 			} else {
-				writer.WriteUint64Field(col.GetName(), v)
+				writer.WriteInt64Field(col.GetName(), int64(v))
 			}
 		case int64:
 			if isUnsigned {
@@ -824,7 +824,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				if ft.GetType() == mysql.TypeLonglong && t == maxValue.GetUint64() || t > maxValue.GetUint64() {
 					writer.WriteAnyField(col.GetName(), -1)
 				} else {
-					writer.WriteUint64Field(col.GetName(), t)
+					writer.WriteInt64Field(col.GetName(), int64(t))
 				}
 			} else {
 				t, err := strconv.ParseInt(v, 10, 64)

@@ -194,6 +194,9 @@ func getLen(ft types.FieldType) int {
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			defaultFlen -= 1
 		}
+		if ft.GetType() == mysql.TypeTiny && mysql.HasZerofillFlag(ft.GetFlag()) {
+			defaultFlen += 1
+		}
 		if flen != defaultFlen {
 			return flen
 		}
