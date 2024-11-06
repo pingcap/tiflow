@@ -52,7 +52,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y curl docker-compose
-          docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
+          sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
           curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
           curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
