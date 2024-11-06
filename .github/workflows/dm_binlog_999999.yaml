@@ -2,7 +2,7 @@ name: DM Binlog 999999
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
