@@ -114,7 +114,8 @@ func buildPebbleOption(cfg *config.DBConfig) (opts *pebble.Options) {
 	opts.DisableWAL = false // Delete range requires WAL.
 	opts.MaxOpenFiles = cfg.MaxOpenFiles / cfg.Count
 	opts.MaxConcurrentCompactions = 6
-	opts.L0CompactionThreshold = cfg.CompactionL0Trigger
+	opts.L0CompactionThreshold = 4 // Default for PebbleDB.
+	opts.L0CompactionFileThreshold = cfg.CompactionL0Trigger
 	opts.L0StopWritesThreshold = cfg.WriteL0PauseTrigger
 	opts.LBaseMaxBytes = 64 << 20 // 64 MB
 	opts.MemTableSize = cfg.WriterBufferSize
