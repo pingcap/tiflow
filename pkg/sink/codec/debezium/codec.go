@@ -26,7 +26,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -60,30 +59,6 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 			rows[info.Offset] = col.Value
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
-			if err != nil {
-				log.Error("write Debezium field value meet error", zap.Error(err))
-				break
-			}
-		}
-		if !tableInfo.HasVirtualColumns() {
-			return
-		}
-
-		// add generate column
-		options := getBuildOptions(tableInfo)
-		row := chunk.MutRowFromValues(rows...).ToRow()
-		for _, col := range tableInfo.Columns {
-			if model.IsColCDCVisible(col) {
-				continue
-			}
-			val, err := parseExpression(col.GeneratedExprString, tableInfo.TableInfo, row, options)
-			if err != nil {
-				log.Error("parse expression meet error", zap.Error(cerror.Trace(err)))
-				break
-			}
-			data := &model.ColumnData{ColumnID: col.ID, Value: val}
-			colx := model.GetColumnDataX(data, tableInfo)
-			err = c.writeDebeziumFieldValue(writer, colx, &col.FieldType)
 			if err != nil {
 				log.Error("write Debezium field value meet error", zap.Error(err))
 				break

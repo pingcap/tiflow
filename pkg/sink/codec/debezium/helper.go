@@ -16,11 +16,8 @@ package debezium
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/expression"
-	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -28,8 +25,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
-	"github.com/pingcap/tidb/pkg/util/chunk"
-	"github.com/pingcap/tidb/pkg/util/generatedexpr"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
@@ -96,57 +91,6 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 			}
 		}
 	}
-}
-
-func getBuildOptions(tableInfo *model.TableInfo) []expression.BuildOption {
-	colInfos := tableInfo.Columns
-	columns := make([]*expression.Column, 0, len(colInfos))
-	names := make([]*types.FieldName, 0, len(colInfos))
-	options := make([]expression.BuildOption, 0, 2)
-	var uniqueID atomic.Int64
-	for i, col := range colInfos {
-		names = append(names, &types.FieldName{
-			OrigTblName: tableInfo.Name,
-			OrigColName: col.Name,
-			DBName:      pmodel.NewCIStr(tableInfo.GetSchemaName()),
-			TblName:     pmodel.NewCIStr(tableInfo.GetTableName()),
-			ColName:     col.Name,
-		})
-		newCol := &expression.Column{
-			RetType:  col.FieldType.Clone(),
-			ID:       col.ID,
-			UniqueID: uniqueID.Add(1),
-			Index:    col.Offset,
-			OrigName: names[i].String(),
-			IsHidden: col.Hidden,
-		}
-		columns = append(columns, newCol)
-	}
-	// Resolve virtual generated column.
-	schema := expression.NewSchema(columns...)
-	options = append(options, expression.WithInputSchemaAndNames(schema, names, tableInfo.TableInfo))
-	options = append(options, expression.WithAllowCastArray(true))
-	return options
-}
-
-func parseExpression(expr string, tblInfo *timodel.TableInfo, row chunk.Row, options []expression.BuildOption) (any, error) {
-	node, err := generatedexpr.ParseExpression(expr)
-	if err != nil {
-		return nil, err
-	}
-	node, err = generatedexpr.SimpleResolveName(node, tblInfo)
-	if err != nil {
-		return nil, err
-	}
-	e, err := expression.BuildSimpleExpr(exprstatic.NewExprContext(), node, options...)
-	if err != nil {
-		return nil, err
-	}
-	d, err := e.Eval(exprstatic.NewEvalContext(), row)
-	if err != nil {
-		return nil, err
-	}
-	return d.GetValue(), nil
 }
 
 func parseColumns(sql string, columns []*timodel.ColumnInfo) {
