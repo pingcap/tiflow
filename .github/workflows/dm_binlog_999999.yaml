@@ -1,6 +1,8 @@
 name: DM Binlog 999999
 
 on:
+  pull_request:
+    types: [opened]
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -48,6 +50,8 @@ jobs:
 
       - name: Setup CI environment
         run: |
+          apt-get update
+          apt-get install -y curl docker-compose
           docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
           curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
