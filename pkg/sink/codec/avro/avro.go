@@ -95,7 +95,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	if !e.IsDelete() {
 		res, err := a.avroEncode(ctx, e, topic, false)
 		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err), zap.Any("event", e))
 			return errors.Trace(err)
 		}
 
@@ -112,7 +112,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	res, err := a.avroEncode(ctx, e, topic, true)
 	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
