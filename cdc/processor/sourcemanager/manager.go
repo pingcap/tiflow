@@ -32,6 +32,16 @@ import (
 
 const defaultMaxBatchSize = 256
 
+// PullerSplitUpdateMode is the mode to split update events in puller.
+type PullerSplitUpdateMode int32
+
+// PullerSplitUpdateMode constants.
+const (
+	PullerSplitUpdateModeNone    PullerSplitUpdateMode = 0
+	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
+)
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ctx   context.Context
@@ -50,10 +60,10 @@ type SourceManager struct {
 	pullers spanz.SyncMap
 	// Used to collect errors in running.
 	errChan chan error
+	// Used to specify the behavior of splitting update events in puller.
+	splitUpdateMode PullerSplitUpdateMode
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-
-	safeModeAtStart bool
 
 	// pullerWrapperCreator is used to create a puller wrapper.
 	// Only used for testing.
@@ -72,8 +82,8 @@ func New(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
-	safeModeAtStart bool,
 ) *SourceManager {
 	return &SourceManager{
 		ready:                make(chan struct{}),
@@ -82,8 +92,8 @@ func New(
 		mg:                   mg,
 		engine:               engine,
 		errChan:              make(chan error, 16),
+		splitUpdateMode:      splitUpdateMode,
 		bdrMode:              bdrMode,
-		safeModeAtStart:      safeModeAtStart,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapper,
 	}
 }
@@ -117,7 +127,21 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+		if raw == nil || !raw.IsUpdate() {
+			return false
+		}
+		switch m.splitUpdateMode {
+		case PullerSplitUpdateModeNone:
+			return false
+		case PullerSplitUpdateModeAlways:
+			return true
+		case PullerSplitUpdateModeAtStart:
+			return isOldUpdateKVEntry(raw, getReplicaTs)
+		default:
+			log.Panic("Unknown split update mode", zap.Int32("mode", int32(m.splitUpdateMode)))
+		}
+		log.Panic("Shouldn't reach here")
+		return false
 	}
 	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(m.ctx, m.up, m.engine, m.errChan)

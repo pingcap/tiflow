@@ -332,6 +332,10 @@ var (
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
 	)
+	ErrSinkIncompatibleConfig = errors.Normalize(
+		"incompatible configuration %s",
+		errors.RFCCodeText("CDC:ErrSinkIncompatibleConfig"),
+	)
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
