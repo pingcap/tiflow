@@ -1378,9 +1378,8 @@ func (c *dbzCodec) EncodeDDLEvent(
 							}
 						})
 						jWriter.WriteArrayField("columns", func() {
-							columns := getColumns(e.Query, e.TableInfo.Columns)
-							// columns := e.TableInfo.Columns
-							for pos, col := range columns {
+							parseColumns(e.Query, e.TableInfo.Columns)
+							for pos, col := range e.TableInfo.Columns {
 								jWriter.WriteObjectElement(func() {
 									flag := col.GetFlag()
 									jdbcType := internal.MySQLType2JdbcType(col.GetType(), mysql.HasBinaryFlag(flag))

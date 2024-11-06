@@ -51,7 +51,7 @@ func (v *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
 			parseOptions(col.Options, c)
 		}
 		parseType(c, col)
-		c.Comment = ""
+		c.Comment = "" // disable comment
 	}
 	return n, true
 }
@@ -86,15 +86,13 @@ func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 	for _, option := range options {
 		switch option.Tp {
-		case ast.ColumnOptionDefaultValue, ast.ColumnOptionComment:
+		case ast.ColumnOptionDefaultValue:
 			defaultValue := extractValue(option.Expr)
 			if defaultValue == nil {
 				continue
 			}
-			if option.Tp == ast.ColumnOptionDefaultValue {
-				if err := c.SetOriginDefaultValue(defaultValue); err != nil {
-					log.Error("failed to set default value")
-				}
+			if err := c.SetOriginDefaultValue(defaultValue); err != nil {
+				log.Error("failed to set default value")
 			}
 		}
 	}
@@ -151,7 +149,7 @@ func parseExpression(expr string, tblInfo *timodel.TableInfo, row chunk.Row, opt
 	return d.GetValue(), nil
 }
 
-func getColumns(sql string, columns []*timodel.ColumnInfo) []*timodel.ColumnInfo {
+func parseColumns(sql string, columns []*timodel.ColumnInfo) {
 	p := parser.New()
 	stmt, err := p.ParseOneStmt(sql, mysql.DefaultCharset, mysql.DefaultCollationName)
 	if err != nil {
@@ -163,7 +161,6 @@ func getColumns(sql string, columns []*timodel.ColumnInfo) []*timodel.ColumnInfo
 		columnsMap[col.Name] = col
 	}
 	stmt.Accept(&visiter{columnsMap: columnsMap})
-	return columns
 }
 
 func getCharset(ft types.FieldType) string {
