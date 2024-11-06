@@ -217,6 +217,14 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					}
 					return
 				}
+				year := t.Year()
+				if year < 70 {
+					// treats "0018" as 2018
+					t = t.AddDate(2000, 0, 0)
+				} else if year < 100 {
+					//  treats "0099" as 1999
+					t = t.AddDate(1900, 0, 0)
+				}
 				writer.WriteInt64Field("default", t.UTC().Unix()/60/60/24)
 			}
 		})
@@ -246,16 +254,20 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					writer.WriteInt64Field("default", 0)
 					return
 				}
-				if t.Compare(types.MinTimestamp) < 0 {
+				gt, err := t.GoTime(time.UTC)
+				if err != nil {
 					if mysql.HasNotNullFlag(ft.GetFlag()) {
 						writer.WriteInt64Field("default", 0)
 					}
 					return
 				}
-				gt, err := t.GoTime(time.UTC)
-				if err != nil {
-					writer.WriteInt64Field("default", 0)
-					return
+				year := gt.Year()
+				if year < 70 {
+					// treats "0018" as 2018
+					gt = gt.AddDate(2000, 0, 0)
+				} else if year < 100 {
+					//  treats "0099" as 1999
+					gt = gt.AddDate(1900, 0, 0)
 				}
 				if ft.GetDecimal() <= 3 {
 					writer.WriteInt64Field("default", gt.UnixMilli())
@@ -666,6 +678,15 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			}
 			return nil
 		}
+		year := t.Year()
+		if year < 70 {
+			// treats "0018" as 2018
+			t = t.AddDate(2000, 0, 0)
+		} else if year < 100 {
+			//  treats "0099" as 1999
+			t = t.AddDate(1900, 0, 0)
+		}
+
 		writer.WriteInt64Field(col.GetName(), t.UTC().Unix()/60/60/24)
 		return nil
 
@@ -690,7 +711,8 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-		if t.Compare(types.MinTimestamp) < 0 {
+		gt, err := t.GoTime(time.UTC)
+		if err != nil {
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
 			} else {
@@ -698,11 +720,13 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			}
 			return nil
 		}
-		gt, err := t.GoTime(time.UTC)
-		if err != nil {
-			return cerror.WrapError(
-				cerror.ErrDebeziumEncodeFailed,
-				err)
+		year := gt.Year()
+		if year < 70 {
+			// treats "0018" as 2018
+			gt = gt.AddDate(2000, 0, 0)
+		} else if year < 100 {
+			//  treats "0099" as 1999
+			gt = gt.AddDate(1900, 0, 0)
 		}
 		if ft.GetDecimal() <= 3 {
 			writer.WriteInt64Field(col.GetName(), gt.UnixMilli())
@@ -1375,8 +1399,8 @@ func (c *dbzCodec) EncodeDDLEvent(
 										v, ok := col.DefaultValue.(string)
 										if ok {
 											if strings.ToUpper(v) == "CURRENT_TIMESTAMP" {
+												// https://debezium.io/documentation/reference/3.0/connectors/mysql.html#mysql-temporal-types
 												jWriter.WriteAnyField("defaultValueExpression", "1970-01-01 00:00:00")
-												// jWriter.WriteAnyField("defaultValueExpression", "CURRENT_TIMESTAMP")
 											} else if v == "<nil>" {
 												jWriter.WriteNullField("defaultValueExpression")
 											} else if col.DefaultValueBit != nil {
