@@ -418,5 +418,7 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
+replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20241107102212-43ae6ab5b3e0
+
 // tls10server=1
 godebug tlsrsakex=1
