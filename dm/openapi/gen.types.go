@@ -28,9 +28,13 @@ const (
 const (
 	TaskTaskModeAll TaskTaskMode = "all"
 
+	TaskTaskModeDump TaskTaskMode = "dump"
+
 	TaskTaskModeFull TaskTaskMode = "full"
 
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
+
+	TaskTaskModeLoadSync TaskTaskMode = "load&sync"
 )
 
 // Defines values for TaskFullMigrateConfAnalyze.
