@@ -176,6 +176,42 @@ function test_relay() {
 
 }
 
+function test_dump_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump TASK"
+	prepare_database
+
+	task_name="test-dump"
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+	# get source status success
+
+	# create task success: not valid task create request
+	openapi_task_check "create_task_failed"
+		
+	# create success
+	openapi_task_check "create_dump_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 1
+
+	init_shard_data
+
+	# start success
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Finished\"" 1		
+
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: SHARD TASK SUCCESS"
+
+}
+
 function test_shard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SHARD TASK"
 	prepare_database
@@ -1034,6 +1070,8 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
+	test_dump_task
+	exit 0
 	test_relay
 	test_source
 
