@@ -313,13 +313,8 @@ func TestSanitizeName(t *testing.T) {
 		"_1ColumnNameStartWithNumber",
 		sanitizeName("1ColumnNameStartWithNumber"),
 	)
-<<<<<<< HEAD
 	require.Equal(t, "A_B", sanitizeName("A.B"))
 	require.Equal(t, "columnNameWith__", sanitizeName("columnNameWith中文"))
-=======
-	require.Equal(t, "A_B", common.SanitizeName("A.B"))
-	require.Equal(t, "columnNameWith__", common.SanitizeName("columnNameWith中文"))
->>>>>>> 64decf6220 (mounter(ticdc): calculate raw bytes checksum by using handle (#11720))
 }
 
 func TestGetAvroNamespace(t *testing.T) {
