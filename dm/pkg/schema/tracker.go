@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"strings"
 	"sync"
 
@@ -146,7 +147,6 @@ func (tr *Tracker) Init(
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
-	dsSession.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
 	downTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
 		se:             dsSession,
@@ -481,17 +481,16 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	// suppress ErrTooLongKey
-	dt.se.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
 	// support drop PK
 	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
 	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
 	defer func() {
-		dt.se.ClearValue(ddl.SuppressErrorTooLongKeyKey)
 		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
 	}()
 
-	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
+	// suppress ErrTooLongKey
+	metaBuildCtx := ddl.NewMetaBuildContextWithSctx(dt.se, metabuild.WithSuppressTooLongIndexErr(true))
+	ti, err := ddl.BuildTableInfoWithStmt(metaBuildCtx, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}

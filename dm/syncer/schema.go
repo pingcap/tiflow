@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"regexp"
 	"strings"
 
@@ -132,7 +133,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("overwrite --flush to true for operate-schema")
 		}
 
-		ti, err2 := ddl2.BuildTableInfoFromAST(stmt)
+		ti, err2 := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt)
 		if err2 != nil {
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}

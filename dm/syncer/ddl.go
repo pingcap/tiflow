@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"strings"
 	"time"
 
@@ -1085,7 +1086,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	})
 
 	// handle charset and collation
-	if err := tidbddl.ProcessColumnCharsetAndCollation(tidbmock.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
+	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
 		ddl.logger.Warn("process column charset and collation failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
