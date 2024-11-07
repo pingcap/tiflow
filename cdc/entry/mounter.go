@@ -633,8 +633,6 @@ func verifyRawBytesChecksum(
 		return 0, false, errors.Trace(err)
 	}
 	if obtained == expected {
-		log.Info("raw bytes checksum matched", zap.Int("version", decoder.ChecksumVersion()),
-			zap.Uint32("expected", expected), zap.Uint32("obtained", obtained))
 		return expected, true, nil
 	}
 
