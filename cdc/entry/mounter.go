@@ -200,7 +200,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			}
 			baseInfo.RecordID = recordID
 
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -235,7 +235,6 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 
 func (m *mounter) unmarshalRowKVEntry(
 	tableInfo *model.TableInfo,
-	rawKey []byte,
 	rawValue []byte,
 	rawOldValue []byte,
 	base baseKVEntry,
