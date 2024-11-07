@@ -69,7 +69,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20240924080114-4a3e17f5e62d
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20241106150256-0a8a35b8eb2a
+	github.com/pingcap/tidb v1.1.0-beta.0.20241107131230-e2505e95a03c
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20241014034929-94b2ac04a0c4
 	github.com/prometheus/client_golang v1.20.5
@@ -417,8 +417,6 @@ replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-replace github.com/pingcap/tidb => github.com/3AceShowHand/tidb v1.1.0-beta.0.20241107102212-43ae6ab5b3e0
 
 // tls10server=1
 godebug tlsrsakex=1
