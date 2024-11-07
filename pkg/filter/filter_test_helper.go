@@ -64,7 +64,8 @@ func newTestHelper(t *testing.T) *testHelper {
 // ddlToJob executes the DDL stmt and returns the DDL job
 func (s *testHelper) ddlToJob(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.getCurrentMeta(), 1)
+	reader := s.getCurrentMeta()
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(reader.(*timeta.Mutator), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	// Set State from Synced to Done.
@@ -88,10 +89,10 @@ func (s *testHelper) getTk() *testkit.TestKit {
 }
 
 // getCurrentMeta return the current meta snapshot
-func (s *testHelper) getCurrentMeta() *timeta.Meta {
+func (s *testHelper) getCurrentMeta() timeta.Reader {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
-	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+	return timeta.NewReader(s.storage.GetSnapshot(ver))
 }
 
 // close closes the helper

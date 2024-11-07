@@ -109,7 +109,8 @@ func NewSchemaTestHelper(t testing.TB) *SchemaTestHelper {
 // DDL2Job executes the DDL stmt and returns the DDL job
 func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	reader := s.GetCurrentMeta()
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(reader.(*timeta.Mutator), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	// Set State from Synced to Done.
@@ -151,7 +152,8 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 // DDL statements.
 func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
+	reader := s.GetCurrentMeta()
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(reader.(*timeta.Mutator), jobCnt)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, jobCnt)
 	// Set State from Synced to Done.
@@ -209,7 +211,8 @@ func (s *SchemaTestHelper) getLastKeyValue(tableID int64) (key, value []byte) {
 // DDL2Event executes the DDL and return the corresponding event.
 func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	meta := s.GetCurrentMeta()
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(meta.(*timeta.Mutator), 1)
 	require.NoError(s.t, err)
 	require.Len(s.t, jobs, 1)
 	// Set State from Synced to Done.
@@ -267,10 +270,10 @@ func (s *SchemaTestHelper) Tk() *testkit.TestKit {
 }
 
 // GetCurrentMeta return the current meta snapshot
-func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
+func (s *SchemaTestHelper) GetCurrentMeta() timeta.Reader {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
-	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+	return timeta.NewReader(s.storage.GetSnapshot(ver))
 }
 
 // Close closes the helper
