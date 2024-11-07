@@ -1195,50 +1195,42 @@ func (c *dbzCodec) EncodeDDLEvent(
 
 	commitTime := oracle.GetTimeFromTS(e.CommitTs)
 	var changeType string
+	// puller's ShouldDiscardDDL has filter some ddls.
 	switch e.Type {
 	case timodel.ActionCreateSchema,
 		timodel.ActionCreateTable,
-		timodel.ActionCreatePlacementPolicy,
-		timodel.ActionCreateView,
-		timodel.ActionCreateSequence:
+		timodel.ActionCreateView:
 		changeType = "CREATE"
-	case timodel.ActionAlterTableAttributes,
-		timodel.ActionAlterTablePartitionAttributes,
-		timodel.ActionAlterPlacementPolicy,
-		timodel.ActionAlterTablePartitionPlacement,
-		timodel.ActionModifySchemaDefaultPlacement,
-		timodel.ActionAlterTablePlacement,
-		timodel.ActionAlterCacheTable,
+	case timodel.ActionAddColumn,
 		timodel.ActionModifyColumn,
+		timodel.ActionDropColumn,
+		timodel.ActionAlterTTLInfo,
+		timodel.ActionAlterTTLRemove,
+		timodel.ActionMultiSchemaChange,
+		timodel.ActionAddTablePartition,
+		timodel.ActionRemovePartitioning,
+		timodel.ActionReorganizePartition,
+		timodel.ActionExchangeTablePartition,
+		timodel.ActionAlterTablePartitioning,
+		timodel.ActionRecoverTable,
+		timodel.ActionTruncateTablePartition,
 		timodel.ActionRebaseAutoID,
 		timodel.ActionSetDefaultValue,
 		timodel.ActionModifyTableComment,
 		timodel.ActionModifyTableCharsetAndCollate,
 		timodel.ActionModifySchemaCharsetAndCollate,
-		timodel.ActionAlterSequence,
-		timodel.ActionAlterIndexVisibility,
-		timodel.ActionRenameTable,
 		timodel.ActionAddIndex,
+		timodel.ActionAlterIndexVisibility,
 		timodel.ActionRenameIndex,
-		timodel.ActionShardRowID,
 		timodel.ActionAddPrimaryKey,
-		timodel.ActionRepairTable,
-		timodel.ActionModifyTableAutoIDCache,
-		timodel.ActionRebaseAutoRandomBase,
-		timodel.ActionExchangeTablePartition,
-		timodel.ActionAlterCheckConstraint:
+		timodel.ActionRenameTable:
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,
-		timodel.ActionDropPlacementPolicy,
-		timodel.ActionDropColumn,
 		timodel.ActionDropIndex,
-		timodel.ActionDropForeignKey,
 		timodel.ActionDropView,
 		timodel.ActionDropTablePartition,
-		timodel.ActionDropPrimaryKey,
-		timodel.ActionDropSequence,
-		timodel.ActionDropCheckConstraint:
+		timodel.ActionDropPrimaryKey:
 		changeType = "DROP"
 	default:
 		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type, e.Query)
