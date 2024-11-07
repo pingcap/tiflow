@@ -50,13 +50,7 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	var err error
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
-		rows := make([]any, len(tableInfo.Columns))
 		for i, col := range cols {
-			info, exist := tableInfo.GetColumnInfo(col.ColumnID)
-			if !exist {
-				log.Error("get column info from ColumnID is not exist", zap.Int64("ColumnID", col.ColumnID))
-			}
-			rows[info.Offset] = col.Value
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
 			if err != nil {
@@ -81,16 +75,10 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 		if col.GetDefaultValue() != nil {
 			val, ok := col.GetDefaultValue().(string)
 			if !ok {
-				log.Error(
-					"GetDefaultValue meet error",
-					zap.Any("column", col.GetName()), zap.Error(err))
 				return
 			}
 			v, err = strconv.ParseUint(common.UnsafeStringToBinary(val), 2, 64)
 			if err != nil {
-				log.Error(
-					"parsing uint from bit meet error",
-					zap.Any("column", col.GetName()), zap.Error(err))
 				return
 			}
 		}
@@ -876,6 +864,109 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
+func (c *dbzCodec) writeSourceSchema(writer *util.JSONWriter) {
+	writer.WriteObjectElement(func() {
+		writer.WriteStringField("type", "struct")
+		writer.WriteArrayField("fields", func() {
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "version")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "connector")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "name")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "ts_ms")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("name", "io.debezium.data.Enum")
+				writer.WriteIntField("version", 1)
+				writer.WriteObjectField("parameters", func() {
+					writer.WriteStringField("allowed", "true,last,false,incremental")
+				})
+				writer.WriteStringField("default", "false")
+				writer.WriteStringField("field", "snapshot")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "db")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "sequence")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "table")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "server_id")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "gtid")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "file")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "pos")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int32")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "row")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "thread")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "query")
+			})
+			// Below are extra TiDB fields
+			// writer.WriteObjectElement(func() {
+			// 	writer.WriteStringField("type", "int64")
+			// 	writer.WriteBoolField("optional", false)
+			// 	writer.WriteStringField("field", "commit_ts")
+			// })
+			// writer.WriteObjectElement(func() {
+			// 	writer.WriteStringField("type", "string")
+			// 	writer.WriteBoolField("optional", false)
+			// 	writer.WriteStringField("field", "cluster_id")
+			// })
+		})
+		writer.WriteBoolField("optional", false)
+		writer.WriteStringField("name", "io.debezium.connector.mysql.Source")
+		writer.WriteStringField("field", "source")
+	})
+}
+
 // EncodeKey encode RowChangedEvent into key message
 func (c *dbzCodec) EncodeKey(
 	e *model.RowChangedEvent,
@@ -1048,106 +1139,7 @@ func (c *dbzCodec) EncodeValue(
 							jWriter.WriteRaw(fieldsJSON)
 						})
 					})
-					jWriter.WriteObjectElement(func() {
-						jWriter.WriteStringField("type", "struct")
-						jWriter.WriteArrayField("fields", func() {
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "version")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "connector")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "name")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "ts_ms")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("name", "io.debezium.data.Enum")
-								jWriter.WriteIntField("version", 1)
-								jWriter.WriteObjectField("parameters", func() {
-									jWriter.WriteStringField("allowed", "true,last,false,incremental")
-								})
-								jWriter.WriteStringField("default", "false")
-								jWriter.WriteStringField("field", "snapshot")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "db")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "sequence")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "table")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "server_id")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "gtid")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "file")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "pos")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int32")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "row")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "thread")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "query")
-							})
-							// Below are extra TiDB fields
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "int64")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "commit_ts")
-							// })
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "string")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "cluster_id")
-							// })
-						})
-						jWriter.WriteBoolField("optional", false)
-						jWriter.WriteStringField("name", "io.debezium.connector.mysql.Source")
-						jWriter.WriteStringField("field", "source")
-					})
+					c.writeSourceSchema(jWriter)
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "string")
 						jWriter.WriteBoolField("optional", false)
@@ -1430,10 +1422,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 								})
 							}
 						})
-						// if e.TableInfo.Comment != "" {
-						// 	jWriter.WriteStringField("comment", e.TableInfo.Comment)
-						// } else {
-						// }
 						jWriter.WriteNullField("comment")
 
 						// Custom attribute metadata for each table change.
@@ -1454,106 +1442,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 				jWriter.WriteIntField("version", 1)
 				jWriter.WriteStringField("name", "io.debezium.connector.mysql.SchemaChangeValue")
 				jWriter.WriteArrayField("fields", func() {
-					jWriter.WriteObjectElement(func() {
-						jWriter.WriteStringField("field", "source")
-						jWriter.WriteStringField("name", "io.debezium.connector.mysql.Source")
-						jWriter.WriteBoolField("optional", false)
-						jWriter.WriteStringField("type", "struct")
-						jWriter.WriteArrayField("fields", func() {
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "version")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "connector")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "name")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "ts_ms")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "int64")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "snapshot")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteObjectField("parameters", func() {
-									jWriter.WriteStringField("allowed", "true,last,false,incremental")
-								})
-								jWriter.WriteStringField("default", "false")
-								jWriter.WriteStringField("name", "io.debezium.data.Enum")
-								jWriter.WriteIntField("version", 1)
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "db")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "sequence")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "table")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "server_id")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "int64")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "gtid")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "file")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "string")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "pos")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "int64")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "row")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("type", "int32")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "thread")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "int64")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("field", "query")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("type", "string")
-							})
-							// Below are extra TiDB fields
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "int64")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "commit_ts")
-							// })
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "string")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "cluster_id")
-							// })
-						})
-					})
+					c.writeSourceSchema(jWriter)
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("field", "ts_ms")
 						jWriter.WriteBoolField("optional", false)
