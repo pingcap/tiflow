@@ -1202,8 +1202,6 @@ func (c *dbzCodec) EncodeDDLEvent(
 	case timodel.ActionAddColumn,
 		timodel.ActionModifyColumn,
 		timodel.ActionDropColumn,
-		timodel.ActionAlterTTLInfo,
-		timodel.ActionAlterTTLRemove,
 		timodel.ActionMultiSchemaChange,
 		timodel.ActionAddTablePartition,
 		timodel.ActionRemovePartitioning,

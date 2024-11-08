@@ -43,14 +43,10 @@ ALTER TABLE bar CHARACTER SET = utf8mb4 COLLATE utf8mb4_unicode_ci;
 /* Modify DATABASE charset */
 ALTER DATABASE foo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-/* TTL */
 CREATE TABLE t1 (
   PK INT PRIMARY KEY,
   COL INT
-) TTL = `created_at` + INTERVAL 3 MONTH;
-ALTER TABLE t1 TTL = `created_at` + INTERVAL 1 MONTH;
-ALTER TABLE t1 TTL_ENABLE = 'OFF';
-ALTER TABLE t1 REMOVE TTL;
+);
 
 /* MultiSchemaChange */
 ALTER TABLE test.t1 
