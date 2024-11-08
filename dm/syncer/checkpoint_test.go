@@ -516,7 +516,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.NoError(t, err)
 	createNode, err := parser.ParseOneStmt("create table tbl1(id int)", "", "")
 	require.NoError(t, err)
-	ti, err := tidbddl.BuildTableInfoFromAST(createNode.(*ast.CreateTableStmt))
+	ti, err := tidbddl.BuildTableInfoFromAST(metabuild.NewContext(), createNode.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	tp1 := tablePoint{ti: ti}

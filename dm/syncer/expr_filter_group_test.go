@@ -494,7 +494,7 @@ create table t (
 
 	stmt, err := parseSQL(tableStr)
 	require.NoError(t, err)
-	tableInfo, err := ddl2.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	tableInfo, err := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	for i, c := range cases {
