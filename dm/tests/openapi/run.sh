@@ -239,7 +239,7 @@ function test_dump_and_sync_load_task() {
 	# start load&sync task success
 	openapi_task_check "start_task_success" $task_name ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test-load-sync" 100 \
+		"query-status test-load-sync" \
 		"\"stage\": \"Running\"" 1
 	
 	insert_sync_data
