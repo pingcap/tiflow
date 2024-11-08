@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -32,7 +33,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"go.uber.org/zap"
 )
 
@@ -211,14 +211,14 @@ func (t *TableDiff) adjustConfig() {
 }
 
 func (t *TableDiff) getTableInfo(ctx context.Context) error {
-	tableInfo, err := dbutiltest.GetTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
+	tableInfo, err := getTableInfo(ctx, t.TargetTable.Conn, t.TargetTable.Schema, t.TargetTable.Table)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	t.TargetTable.info = ignoreColumns(tableInfo, t.IgnoreColumns)
 
 	for _, sourceTable := range t.SourceTables {
-		tableInfo, err := dbutiltest.GetTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
+		tableInfo, err := getTableInfo(ctx, sourceTable.Conn, sourceTable.Schema, sourceTable.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -849,6 +849,20 @@ func (t *TableDiff) UpdateSummaryInfo(ctx context.Context) chan bool {
 	}()
 
 	return stopUpdateCh
+}
+
+// GetTableInfo returns table information.
+func getTableInfo(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string) (*model.TableInfo, error) {
+	createTableSQL, err := dbutil.GetCreateTableSQL(ctx, db, schemaName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	parser2, err := dbutil.GetParserForDB(ctx, db)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dbutiltest.GetTableInfoBySQL(createTableSQL, parser2)
 }
 
 func generateDML(tp string, data map[string]*dbutil.ColumnData, table *model.TableInfo, schema string) (sql string) {
