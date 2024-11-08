@@ -77,7 +77,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if !ok {
 				return
 			}
-			v, err = strconv.ParseUint(common.UnicodeToBinary(val), 2, 64)
+			v, err = strconv.ParseUint(common.UTF8ToBinary(val), 2, 64)
 			if err != nil {
 				return
 			}
@@ -521,7 +521,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		case uint64:
 			v = val
 		case string:
-			hexValue, err := strconv.ParseUint(common.UnicodeToBinary(val), 2, 64)
+			hexValue, err := strconv.ParseUint(common.UTF8ToBinary(val), 2, 64)
 			if err != nil {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type string for bit column %s, error:%s",
@@ -1360,7 +1360,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 											} else if v == "<nil>" {
 												jWriter.WriteNullField("defaultValueExpression")
 											} else if col.DefaultValueBit != nil {
-												jWriter.WriteStringField("defaultValueExpression", common.UnicodeToBinary(v))
+												jWriter.WriteStringField("defaultValueExpression", common.UTF8ToBinary(v))
 											} else {
 												jWriter.WriteStringField("defaultValueExpression", v)
 											}
