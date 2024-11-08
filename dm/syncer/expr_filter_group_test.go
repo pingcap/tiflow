@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
 	context2 "github.com/pingcap/tidb/pkg/expression/exprctx"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
