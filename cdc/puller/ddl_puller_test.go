@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/meta"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -99,7 +99,7 @@ func newMockDDLJobPuller(
 	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
-		ts := helper.GetCurrentMeta().StartTS
+		ts := helper.GetCurrentMeta().(*meta.Mutator).StartTS
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
@@ -532,16 +532,6 @@ func TestHandleJob(t *testing.T) {
 		job := &timodel.Job{
 			Type:       timodel.ActionFlashbackCluster,
 			BinlogInfo: &timodel.HistoryInfo{},
-			Args: []interface{}{
-				998,
-				map[string]interface{}{},
-				true,         /* tidb_gc_enable */
-				variable.On,  /* tidb_enable_auto_analyze */
-				variable.Off, /* tidb_super_read_only */
-				0,            /* totalRegions */
-				0,            /* startTS */
-				0,            /* commitTS */
-			},
 		}
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)

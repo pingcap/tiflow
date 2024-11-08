@@ -27,6 +27,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -516,7 +517,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.NoError(t, err)
 	createNode, err := parser.ParseOneStmt("create table tbl1(id int)", "", "")
 	require.NoError(t, err)
-	ti, err := tidbddl.BuildTableInfoFromAST(createNode.(*ast.CreateTableStmt))
+	ti, err := tidbddl.BuildTableInfoFromAST(metabuild.NewContext(), createNode.(*ast.CreateTableStmt))
 	require.NoError(t, err)
 
 	tp1 := tablePoint{ti: ti}

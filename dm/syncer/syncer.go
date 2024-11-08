@@ -852,7 +852,7 @@ func (s *Syncer) getDBInfoFromDownstream(tctx *tcontext.Context, sourceTable, ta
 		}
 	}
 
-	chs, coll, err := tidbddl.ResolveCharsetCollation(nil, charsetOpt)
+	chs, coll, err := tidbddl.ResolveCharsetCollation([]ast.CharsetOpt{charsetOpt}, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
