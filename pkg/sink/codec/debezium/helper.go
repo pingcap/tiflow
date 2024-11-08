@@ -45,7 +45,9 @@ func (v *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
 		if col.Options != nil {
 			parseOptions(col.Options, c)
 		}
-		parseType(c, col)
+		if col.Tp != nil {
+			parseType(c, col)
+		}
 		c.Comment = "" // disable comment
 	}
 	return n, true
