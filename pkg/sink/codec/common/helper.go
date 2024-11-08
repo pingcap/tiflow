@@ -393,15 +393,15 @@ func UnsafeStringToBytes(s string) []byte {
 	))
 }
 
-// UnsafeStringToBinary create binary string from string without copying
-func UnsafeStringToBinary(s string) string {
+// UnicodeToBinary create binary string from unicode string
+func UnicodeToBinary(unicodes string) string {
 	var result string
-	bs := UnsafeStringToBytes(escapeBackslash(s))
-	if len(bs) >= 1 {
-		result += fmt.Sprintf("%b", bs[0])
+	unicodes = escapeBackslash(unicodes)
+	if len(unicodes) >= 1 {
+		result += fmt.Sprintf("%b", unicodes[0])
 	}
-	for i := 1; i < len(bs); i++ {
-		result += fmt.Sprintf("%08b", bs[i])
+	for i := 1; i < len(unicodes); i++ {
+		result += fmt.Sprintf("%08b", unicodes[i])
 	}
 	return result
 }
