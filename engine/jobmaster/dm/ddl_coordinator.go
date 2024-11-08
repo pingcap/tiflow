@@ -15,11 +15,11 @@ package dm
 
 import (
 	"context"
-	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"strings"
 	"sync"
 
 	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"

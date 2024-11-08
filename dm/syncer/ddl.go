@@ -15,13 +15,13 @@ package syncer
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"strings"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
