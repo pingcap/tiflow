@@ -392,14 +392,3 @@ func UnsafeStringToBytes(s string) []byte {
 		}{s, len(s)},
 	))
 }
-
-func escapeBackslash(s string) string {
-	var sb strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' {
-			continue
-		}
-		sb.WriteByte(s[i])
-	}
-	return sb.String()
-}

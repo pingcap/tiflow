@@ -10,7 +10,7 @@ INSERT INTO foo VALUES (2, 2);
 INSERT INTO foo VALUES (3, 3);
 
 /* Update PK */
-UPDATE foo SET PK = 5 COL = 5 WHERE COL = 3;
+UPDATE foo SET PK = 5, COL = 5 WHERE COL = 3;
 SELECT * FROM foo WHERE COL = 3;
 
 /* Update Multiple Rows */
