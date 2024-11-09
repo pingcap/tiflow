@@ -14,6 +14,7 @@
 package debezium
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -107,6 +108,18 @@ func parseColumns(sql string, columns []*timodel.ColumnInfo) {
 		columnsMap[col.Name] = col
 	}
 	stmt.Accept(&visiter{columnsMap: columnsMap})
+}
+
+func parseBit(s string, n int) string {
+	var result string
+	if len(s) > 0 {
+		// Leading zeros may be omitted
+		result = fmt.Sprintf("%0*b", n%8, s[0])
+	}
+	for i := 1; i < len(s); i++ {
+		result += fmt.Sprintf("%08b", s[i])
+	}
+	return result
 }
 
 func getCharset(ft types.FieldType) string {
@@ -218,6 +231,16 @@ func getExpressionAndName(ft types.FieldType) (string, string) {
 		suf = " UNSIGNED"
 	}
 	return cs + suf, prefix + suf
+}
+
+func getBitFromUint64(n int, v uint64) []byte {
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], v)
+	numBytes := n / 8
+	if n%8 != 0 {
+		numBytes += 1
+	}
+	return buf[:numBytes]
 }
 
 func getValue(col model.ColumnDataX) any {

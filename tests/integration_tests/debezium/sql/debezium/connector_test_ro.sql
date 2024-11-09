@@ -9,15 +9,23 @@ CREATE TABLE Products (
 ALTER TABLE Products AUTO_INCREMENT = 101;
 
 INSERT INTO Products
-VALUES (default,"scooter","Small 2-wheel scooter",3.14),
-       (default,"car battery","12V car battery",8.1),
-       (default,"12-pack drill bits","12-pack of drill bits with sizes ranging from #40 to #3",0.8),
-       (default,"hammer","12oz carpenter's hammer",0.75),
-       (default,"hammer2","14oz carpenter's hammer",8.75E-1),
-       (default,"hammer3","16oz carpenter's hammer",1.0),
-       (default,"rocks","box of assorted rocks",5.3),
-       (default,"jacket","water resistent black wind breaker",0.1),
-       (default,"spare tire","24 inch spare tire",22.2);
+VALUES (default,"scooter","Small 2-wheel scooter",3.14);
+INSERT INTO Products
+VALUES (default,"car battery","12V car battery",8.1);
+INSERT INTO Products
+VALUES (default,"12-pack drill bits","12-pack of drill bits with sizes ranging from #40 to #3",0.8);
+INSERT INTO Products
+VALUES (default,"hammer","12oz carpenter's hammer",0.75);
+INSERT INTO Products
+VALUES (default,"hammer2","14oz carpenter's hammer",8.75E-1);
+INSERT INTO Products
+VALUES (default,"hammer3","16oz carpenter's hammer",1.0);
+INSERT INTO Products
+VALUES (default,"rocks","box of assorted rocks",5.3);
+INSERT INTO Products
+VALUES (default,"jacket","water resistent black wind breaker",0.1);
+INSERT INTO Products
+VALUES (default,"spare tire","24 inch spare tire",22.2);
 
 -- Create and populate the products on hand using multiple inserts
 CREATE TABLE products_on_hand (

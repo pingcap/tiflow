@@ -393,16 +393,6 @@ func UnsafeStringToBytes(s string) []byte {
 	))
 }
 
-// UTF8ToBinary create binary string from UTF-8 string
-func UTF8ToBinary(s string) string {
-	var result string
-	s = escapeBackslash(s)
-	for i := 0; i < len(s); i++ {
-		result += fmt.Sprintf("%08b", s[i])
-	}
-	return result
-}
-
 func escapeBackslash(s string) string {
 	var sb strings.Builder
 	for i := 0; i < len(s); i++ {

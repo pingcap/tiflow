@@ -74,24 +74,6 @@ ALTER TABLE t2 REORGANIZE PARTITION p31,p32,p33,p2 INTO (PARTITION p21 VALUES LE
 ALTER TABLE t2 TRUNCATE PARTITION p0;
 ALTER TABLE t2 DROP PARTITION p0;
 
-/* EXCHANGE PARTITION */
-CREATE TABLE e (
-    id INT NOT NULL,
-    fname VARCHAR(30),
-    lname VARCHAR(30)
-)
-    PARTITION BY RANGE (id) (
-        PARTITION p0 VALUES LESS THAN (50),
-        PARTITION p1 VALUES LESS THAN (100),
-        PARTITION p2 VALUES LESS THAN (150),
-        PARTITION p3 VALUES LESS THAN (MAXVALUE)
-);
--- Debezium output is nil
--- INSERT INTO e VALUES (1669, "Jim", "Smith");
-CREATE TABLE e2 LIKE e;
-ALTER TABLE e2 REMOVE PARTITIONING;
-ALTER TABLE foo.e EXCHANGE PARTITION p0 WITH TABLE foo.e2;
-
 /* ALTER INDEX visibility */
 CREATE TABLE t3 (
   i INT,
@@ -117,20 +99,38 @@ ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
 
 /* PK */
 /*
-Adding a new column and setting it to the PRIMARY KEY is not supported.
-https://docs.pingcap.com/tidb/stable/sql-statement-add-column#mysql-compatibility
-ALTER TABLE t4 ADD COLUMN `id` INT(10) primary KEY;
+  Adding a new column and setting it to the PRIMARY KEY is not supported.
+  https://docs.pingcap.com/tidb/stable/sql-statement-add-column#mysql-compatibility
+  ALTER TABLE t4 ADD COLUMN `id` INT(10) primary KEY;
 */
 /* 
-Dropping primary key columns or columns covered by the composite index is not supported.
-https://docs.pingcap.com/tidb/stable/sql-statement-drop-column#mysql-compatibility
-ALTER TABLE t4 DROP PRIMARY KEY;
+  Dropping primary key columns or columns covered by the composite index is not supported.
+  https://docs.pingcap.com/tidb/stable/sql-statement-drop-column#mysql-compatibility
+  ALTER TABLE t4 DROP PRIMARY KEY;
 */
 
-/* DROP and recover */
-DROP TABLE t1;
--- Debezium does not support
--- RECOVER TABLE t1;
+/* EXCHANGE PARTITION */
+CREATE TABLE t5 (
+    id INT NOT NULL PRIMARY KEY,
+    fname VARCHAR(30),
+    lname VARCHAR(30)
+)
+    PARTITION BY RANGE (id) (
+        PARTITION p0 VALUES LESS THAN (50),
+        PARTITION p1 VALUES LESS THAN (100),
+        PARTITION p2 VALUES LESS THAN (150),
+        PARTITION p3 VALUES LESS THAN (MAXVALUE)
+);
+INSERT INTO t5 VALUES (1669, "Jim", "Smith");
+CREATE TABLE t6 LIKE t5;
+ALTER TABLE t6 REMOVE PARTITIONING;
+ALTER TABLE foo.t5 EXCHANGE PARTITION p0 WITH TABLE foo.t6;
+
+/* 
+  Debezium does not support recover table.
+  DROP TABLE t1;
+  RECOVER TABLE t1;
+*/
 
 DROP TABLE foo.bar;
 DROP DATABASE IF EXISTS foo;

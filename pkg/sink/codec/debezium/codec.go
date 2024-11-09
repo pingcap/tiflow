@@ -15,7 +15,6 @@ package debezium
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"strconv"
@@ -77,7 +76,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if !ok {
 				return
 			}
-			v, err = strconv.ParseUint(common.UTF8ToBinary(val), 2, 64)
+			v, err = strconv.ParseUint(parseBit(val, n), 2, 64)
 			if err != nil {
 				return
 			}
@@ -102,13 +101,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				})
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
-					var buf [8]byte
-					binary.LittleEndian.PutUint64(buf[:], v)
-					numBytes := n / 8
-					if n%8 != 0 {
-						numBytes += 1
-					}
-					c.writeBinaryField(writer, "default", buf[:numBytes]) // binary
+					c.writeBinaryField(writer, "default", getBitFromUint64(n, v)) // binary
 				}
 			})
 		}
@@ -516,12 +509,13 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
+		n := ft.GetFlen()
 		var v uint64
 		switch val := value.(type) {
 		case uint64:
 			v = val
 		case string:
-			hexValue, err := strconv.ParseUint(common.UTF8ToBinary(val), 2, 64)
+			hexValue, err := strconv.ParseUint(parseBit(val, n), 2, 64)
 			if err != nil {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type string for bit column %s, error:%s",
@@ -538,18 +532,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// BIT(1) → BOOLEAN
 		// BIT(>1) → BYTES		The byte[] contains the bits in little-endian form and is sized to
 		//						contain the specified number of bits.
-		n := ft.GetFlen()
 		if n == 1 {
 			writer.WriteBoolField(col.GetName(), v != 0)
 			return nil
 		} else {
-			var buf [8]byte
-			binary.LittleEndian.PutUint64(buf[:], v)
-			numBytes := n / 8
-			if n%8 != 0 {
-				numBytes += 1
-			}
-			c.writeBinaryField(writer, col.GetName(), buf[:numBytes])
+			c.writeBinaryField(writer, col.GetName(), getBitFromUint64(n, v))
 			return nil
 		}
 
@@ -1219,14 +1206,12 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionAddIndex,
 		timodel.ActionAlterIndexVisibility,
 		timodel.ActionRenameIndex,
-		timodel.ActionRenameTable:
-		// timodel.ActionAlterTTLInfo
-		// timodel.ActionAlterTTLRemove
-		// timodel.ActionRecoverTable,
-		// timodel.ActionAddPrimaryKey,
-		// timodel.ActionDropPrimaryKey,
-		// timodel.ActionAddForeignKey,
-		// timodel.ActionDropForeignKey
+		timodel.ActionRenameTable,
+		timodel.ActionRecoverTable,
+		timodel.ActionAddPrimaryKey,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionAlterTTLInfo,
+		timodel.ActionAlterTTLRemove:
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,
@@ -1366,7 +1351,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 											} else if v == "<nil>" {
 												jWriter.WriteNullField("defaultValueExpression")
 											} else if col.DefaultValueBit != nil {
-												jWriter.WriteStringField("defaultValueExpression", common.UTF8ToBinary(v))
+												jWriter.WriteStringField("defaultValueExpression", parseBit(v, col.GetFlen()))
 											} else {
 												jWriter.WriteStringField("defaultValueExpression", v)
 											}
