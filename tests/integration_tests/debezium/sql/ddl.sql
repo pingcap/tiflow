@@ -90,24 +90,19 @@ ALTER TABLE t3 ALTER INDEX i_idx INVISIBLE;
 RENAME TABLE t3 TO renam_t3;
 
 /* INDEX */
-CREATE TABLE t4 (col1 INT, col2 INT);
+CREATE TABLE t4 (col1 INT PRIMARY KEY, col2 INT);
 CREATE INDEX idx1 ON t4 ((col1 + col2));
 CREATE INDEX idx2 ON t4 ((col1 + col2), (col1 - col2), col1);
 DROP INDEX idx1 ON t4;
 ALTER TABLE t4 ADD INDEX ((col1 * 40) DESC);
 ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
 
-/* PK */
 /*
   Adding a new column and setting it to the PRIMARY KEY is not supported.
   https://docs.pingcap.com/tidb/stable/sql-statement-add-column#mysql-compatibility
   ALTER TABLE t4 ADD COLUMN `id` INT(10) primary KEY;
 */
-/* 
-  Dropping primary key columns or columns covered by the composite index is not supported.
-  https://docs.pingcap.com/tidb/stable/sql-statement-drop-column#mysql-compatibility
-  ALTER TABLE t4 DROP PRIMARY KEY;
-*/
+ALTER TABLE t4 DROP PRIMARY KEY;
 
 /* EXCHANGE PARTITION */
 CREATE TABLE t5 (
