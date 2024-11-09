@@ -56,8 +56,8 @@ CHANGE COL COL2 VARCHAR(255);
 
 /* PARTITION */
 CREATE TABLE t2 (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    year_col INT
+    id INT NOT NULL,
+    year_col INT NOT NULL
 )
 PARTITION BY RANGE (year_col) (
     PARTITION p0 VALUES LESS THAN (1991),
@@ -65,12 +65,14 @@ PARTITION BY RANGE (year_col) (
     PARTITION p2 VALUES LESS THAN (1999)
 );
 ALTER TABLE t2 ADD PARTITION (PARTITION p3 VALUES LESS THAN (2002));
-ALTER TABLE t2 REORGANIZE PARTITION n0 INTO (
-    PARTITION p0 VALUES LESS THAN (1991),
-    PARTITION p3 VALUES LESS THAN (2002)
+ALTER TABLE t2 REORGANIZE PARTITION p3 INTO (
+    PARTITION p31 VALUES LESS THAN (2002),
+    PARTITION p32 VALUES LESS THAN (2005),
+    PARTITION p33 VALUES LESS THAN (2008)
 );
+ALTER TABLE t2 REORGANIZE PARTITION p31,p32,p33,p2 INTO (PARTITION p21 VALUES LESS THAN (2008));
 ALTER TABLE t2 TRUNCATE PARTITION p0;
-ALTER TABLE t2 DROP PARTITION p0, p1;
+ALTER TABLE t2 DROP PARTITION p0;
 
 /* EXCHANGE PARTITION */
 CREATE TABLE e (
@@ -84,14 +86,11 @@ CREATE TABLE e (
         PARTITION p2 VALUES LESS THAN (150),
         PARTITION p3 VALUES LESS THAN (MAXVALUE)
 );
-INSERT INTO e VALUES
-    (1669, "Jim", "Smith"),
-    (337, "Mary", "Jones"),
-    (16, "Frank", "White"),
-    (2005, "Linda", "Black");
+-- Debezium output is nil
+-- INSERT INTO e VALUES (1669, "Jim", "Smith");
 CREATE TABLE e2 LIKE e;
 ALTER TABLE e2 REMOVE PARTITIONING;
-ALTER TABLE e EXCHANGE PARTITION p0 WITH TABLE e2;
+ALTER TABLE foo.e EXCHANGE PARTITION p0 WITH TABLE foo.e2;
 
 /* ALTER INDEX visibility */
 CREATE TABLE t3 (
@@ -102,27 +101,36 @@ CREATE TABLE t3 (
 ) ENGINE = InnoDB;
 CREATE INDEX j_idx ON t3 (j) INVISIBLE;
 ALTER TABLE t3 ADD INDEX k_idx (k) INVISIBLE;
-ALTER TABLE t3 ALTER INDEX i_idx INVISIBLE;
 ALTER TABLE t3 ALTER INDEX i_idx VISIBLE;
+ALTER TABLE t3 ALTER INDEX i_idx INVISIBLE;
 
 /* RENAME TABLE */
 RENAME TABLE t3 TO renam_t3;
 
 /* INDEX */
-CREATE TABLE t4 (col1 INT, col2 INT, INDEX func_index ((ABS(col1))));
+CREATE TABLE t4 (col1 INT, col2 INT);
 CREATE INDEX idx1 ON t4 ((col1 + col2));
 CREATE INDEX idx2 ON t4 ((col1 + col2), (col1 - col2), col1);
 DROP INDEX idx1 ON t4;
 ALTER TABLE t4 ADD INDEX ((col1 * 40) DESC);
-ALTER TABLE t4 RENAME INDEX func_index TO new_func_index;
+ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
 
 /* PK */
-ALTER TABLE t4 ADD COLUMN `id` INT(10) unsigned primary KEY AUTO_INCREMENT;
+/*
+Adding a new column and setting it to the PRIMARY KEY is not supported.
+https://docs.pingcap.com/tidb/stable/sql-statement-add-column#mysql-compatibility
+ALTER TABLE t4 ADD COLUMN `id` INT(10) primary KEY;
+*/
+/* 
+Dropping primary key columns or columns covered by the composite index is not supported.
+https://docs.pingcap.com/tidb/stable/sql-statement-drop-column#mysql-compatibility
 ALTER TABLE t4 DROP PRIMARY KEY;
+*/
 
 /* DROP and recover */
 DROP TABLE t1;
-RECOVER TABLE t1;
+-- Debezium does not support
+-- RECOVER TABLE t1;
 
-DROP TABLE IF EXISTS bar;
+DROP TABLE foo.bar;
 DROP DATABASE IF EXISTS foo;

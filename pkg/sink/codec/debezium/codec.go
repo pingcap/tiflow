@@ -1194,6 +1194,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 
 	commitTime := oracle.GetTimeFromTS(e.CommitTs)
 	var changeType string
+	// refer to: https://docs.pingcap.com/tidb/dev/mysql-compatibility#ddl-operations
 	switch e.Type {
 	case timodel.ActionCreateSchema,
 		timodel.ActionCreateTable,
@@ -1208,8 +1209,8 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionReorganizePartition,
 		timodel.ActionExchangeTablePartition,
 		timodel.ActionAlterTablePartitioning,
-		timodel.ActionRecoverTable,
 		timodel.ActionTruncateTablePartition,
+		timodel.ActionDropTablePartition,
 		timodel.ActionRebaseAutoID,
 		timodel.ActionSetDefaultValue,
 		timodel.ActionModifyTableComment,
@@ -1218,15 +1219,19 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionAddIndex,
 		timodel.ActionAlterIndexVisibility,
 		timodel.ActionRenameIndex,
-		timodel.ActionAddPrimaryKey,
 		timodel.ActionRenameTable:
+		// timodel.ActionAlterTTLInfo
+		// timodel.ActionAlterTTLRemove
+		// timodel.ActionRecoverTable,
+		// timodel.ActionAddPrimaryKey,
+		// timodel.ActionDropPrimaryKey,
+		// timodel.ActionAddForeignKey,
+		// timodel.ActionDropForeignKey
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,
 		timodel.ActionDropIndex,
-		timodel.ActionDropView,
-		timodel.ActionDropTablePartition,
-		timodel.ActionDropPrimaryKey:
+		timodel.ActionDropView:
 		changeType = "DROP"
 	default:
 		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type, e.Query)
@@ -1335,6 +1340,9 @@ func (c *dbzCodec) EncodeDDLEvent(
 						jWriter.WriteArrayField("columns", func() {
 							parseColumns(e.Query, e.TableInfo.Columns)
 							for pos, col := range e.TableInfo.Columns {
+								if col.Hidden {
+									continue
+								}
 								jWriter.WriteObjectElement(func() {
 									flag := col.GetFlag()
 									jdbcType := internal.MySQLType2JdbcType(col.GetType(), mysql.HasBinaryFlag(flag))
