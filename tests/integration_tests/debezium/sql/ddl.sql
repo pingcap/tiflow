@@ -102,7 +102,11 @@ ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
   https://docs.pingcap.com/tidb/stable/sql-statement-add-column#mysql-compatibility
   ALTER TABLE t4 ADD COLUMN `id` INT(10) primary KEY;
 */
-ALTER TABLE t4 DROP PRIMARY KEY;
+/* 
+  Dropping primary key columns or columns covered by the composite index is not supported.
+  https://docs.pingcap.com/tidb/stable/sql-statement-drop-column#mysql-compatibility
+  ALTER TABLE t4 DROP PRIMARY KEY;
+*/
 
 /* EXCHANGE PARTITION */
 CREATE TABLE t5 (
