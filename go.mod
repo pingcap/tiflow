@@ -51,7 +51,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.3
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.17.1
+	github.com/klauspost/compress v1.17.8
 	github.com/labstack/gommon v0.3.0
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mailru/easyjson v0.7.7
