@@ -462,19 +462,16 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 // If any column does not exist, return false
 func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 	result := make([]int, 0, len(names))
-	columnNames := make(map[string]struct{}, len(names))
 	for _, name := range names {
-		columnNames[name] = struct{}{}
-	}
-	for _, col := range ti.Columns {
-		if col == nil {
-			continue
+		colID, ok := ti.nameToColID[name]
+		if !ok {
+			return nil, false
 		}
-		if _, ok := columnNames[col.Name.O]; ok {
-			result = append(result, col.Offset)
-			continue
+		offset, ok := ti.columnsOffset[colID]
+		if !ok {
+			return nil, false
 		}
-		return nil, false
+		result = append(result, offset)
 	}
 
 	return result, true
