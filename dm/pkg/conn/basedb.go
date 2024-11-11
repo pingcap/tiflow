@@ -247,7 +247,7 @@ func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...inter
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
 			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)))
+			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 	}
 	return d.DB.ExecContext(tctx.Ctx, query, args...)
 }
@@ -257,7 +257,7 @@ func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...inte
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",
 			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)))
+			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 	}
 	return d.DB.QueryContext(tctx.Ctx, query, args...)
 }
@@ -286,7 +286,7 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 			if tctx.L().Core().Enabled(zap.DebugLevel) {
 				tctx.L().Debug("exec in tx",
 					zap.String("query", utils.TruncateString(q, -1)),
-					zap.String("argument", utils.TruncateInterface(args[i], -1)))
+					log.ZapRedactString("argument", utils.TruncateInterface(args[i], -1)))
 			}
 			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
 				return nil, errors.Trace(err)
