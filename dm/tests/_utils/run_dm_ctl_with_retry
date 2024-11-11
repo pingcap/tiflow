@@ -8,14 +8,14 @@
 workdir=$1
 master_addr=$2
 cmd=$3
-retry_times=10  # Default retry times
+retry_times=10 # Default retry times
 
 # Validate retry_times is a number
 if [[ $4 =~ ^[0-9]+$ ]] && [[ $# -gt 4 ]]; then
-    retry_times=$4
-    shift 4
+	retry_times=$4
+	shift 4
 else
-    shift 3
+	shift 3
 fi
 
 PWD=$(pwd)

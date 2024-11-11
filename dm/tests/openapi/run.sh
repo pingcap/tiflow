@@ -203,7 +203,7 @@ function test_dump_task() {
 
 	# create task success: not valid task create request
 	openapi_task_check "create_task_failed"
-		
+
 	# create dump task success
 	openapi_task_check "create_dump_task_success"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -221,8 +221,8 @@ function test_dump_task() {
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" 100 \
-		"\"stage\": \"Finished\"" 1		
-	
+		"\"stage\": \"Finished\"" 1
+
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
 
