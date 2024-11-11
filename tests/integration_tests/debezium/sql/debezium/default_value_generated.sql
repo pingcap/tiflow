@@ -1,4 +1,4 @@
-/* only support stored generated column */
+/* see https://github.com/pingcap/tiflow/issues/11704 */
 CREATE TABLE GENERATED_TABLE (
   id int PRIMARY KEY,
   A SMALLINT UNSIGNED,
