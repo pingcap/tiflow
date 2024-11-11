@@ -1,3 +1,4 @@
+use `generate_column`;
 -- see https://github.com/pingcap/tiflow/issues/11704
 create table t2 (a int, b int as (a + 1) stored primary key);
 insert into t2(a) values (1),(2), (3),(4),(5),(6),(7);
