@@ -30,11 +30,6 @@ function init_dump_data() {
 	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4);"
 }
 
-function insert_sync_data() {
-
-	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (5,6),(7,8),(9,10);"
-}
-
 function init_shard_data() {
 	run_sql_source1 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
@@ -187,8 +182,8 @@ function test_relay() {
 
 }
 
-function test_dump_and_sync_load_task() {
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump TASK and load&sync TASK"
+function test_dump_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump TASK"
 	prepare_database
 
 	task_name="test-dump"
@@ -228,29 +223,8 @@ function test_dump_and_sync_load_task() {
 		"query-status $task_name" 100 \
 		"\"stage\": \"Finished\"" 1		
 	
-	task_name="test-load-sync"
-
-	# create load&sync task success
-	openapi_task_check "create_load_sync_task_success"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test-load-sync" \
-		"\"stage\": \"Stopped\"" 1
-
-	# start load&sync task success
-	openapi_task_check "start_task_success" $task_name ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test-load-sync" \
-		"\"stage\": \"Running\"" 1
-	
-	insert_sync_data
-
-	# check sync task status
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test-load-sync" \
-		"\"stage\": \"Running\"" 1
-	
 	clean_cluster_sources_and_tasks
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK and load&sync TASK"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
 
 }
 
@@ -1118,7 +1092,7 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
-	test_dump_and_sync_load_task
+	test_dump_task
 	test_task_templates
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
