@@ -385,10 +385,5 @@ func UnsafeBytesToString(b []byte) string {
 
 // UnsafeStringToBytes create byte slice from string without copying
 func UnsafeStringToBytes(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(
-		&struct {
-			string
-			Cap int
-		}{s, len(s)},
-	))
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
