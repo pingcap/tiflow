@@ -302,6 +302,9 @@ var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeDump: {
 		frameModel.WorkerDMDump,
 	},
+	dmconfig.ModeLoad: {
+		frameModel.WorkerDMLoad,
+	},
 	dmconfig.ModeLoadSync: {
 		frameModel.WorkerDMLoad,
 		frameModel.WorkerDMSync,
