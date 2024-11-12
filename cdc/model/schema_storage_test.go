@@ -329,18 +329,21 @@ func TestColumnsByNames(t *testing.T) {
 					O: "col2",
 				},
 				Offset: 1,
+				ID:     0,
 			},
 			{
 				Name: pmodel.CIStr{
 					O: "col1",
 				},
 				Offset: 0,
+				ID:     1,
 			},
 			{
 				Name: pmodel.CIStr{
 					O: "col3",
 				},
 				Offset: 2,
+				ID:     2,
 			},
 		},
 	}

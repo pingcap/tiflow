@@ -123,7 +123,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.virtualColumnCount = 0
 	for i, col := range ti.Columns {
-		ti.columnsOffset[col.ID] = i
+		ti.columnsOffset[col.ID] = col.Offset
 		pkIsHandle := false
 		if IsColCDCVisible(col) {
 			ti.nameToColID[col.Name.O] = col.ID
