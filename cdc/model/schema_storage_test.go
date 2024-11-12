@@ -321,30 +321,29 @@ func TestIndexByName(t *testing.T) {
 }
 
 func TestColumnsByNames(t *testing.T) {
-	tableInfo := &TableInfo{
-		TableInfo: &timodel.TableInfo{
-			Columns: []*timodel.ColumnInfo{
-				{
-					Name: timodel.CIStr{
-						O: "col2",
-					},
-					Offset: 1,
+	tidbTableInfo := &timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name: pmodel.CIStr{
+					O: "col2",
 				},
-				{
-					Name: timodel.CIStr{
-						O: "col1",
-					},
-					Offset: 0,
+				Offset: 1,
+			},
+			{
+				Name: pmodel.CIStr{
+					O: "col1",
 				},
-				{
-					Name: timodel.CIStr{
-						O: "col3",
-					},
-					Offset: 2,
+				Offset: 0,
+			},
+			{
+				Name: pmodel.CIStr{
+					O: "col3",
 				},
+				Offset: 2,
 			},
 		},
 	}
+	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
 
 	names := []string{"col1", "col2", "col3"}
 	offsets, ok := tableInfo.OffsetsByNames(names)
