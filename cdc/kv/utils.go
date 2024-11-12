@@ -27,9 +27,9 @@ import (
 )
 
 // GetSnapshotMeta returns tidb meta information
-func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) *meta.Meta {
+func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) meta.Reader {
 	snapshot := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
-	return meta.NewSnapshotMeta(snapshot)
+	return meta.NewReader(snapshot)
 }
 
 // CreateTiStore creates a tikv storage client

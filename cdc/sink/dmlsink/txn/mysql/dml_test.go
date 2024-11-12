@@ -18,7 +18,9 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -248,9 +250,42 @@ func TestPrepareUpdate(t *testing.T) {
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, "世界", 1, "你好"},
 		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1.0,-2,0.33,-4.4,55]")),
+				},
+			},
+			cols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+				},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
+			expectedArgs: []interface{}{1, "[1,2,3,4,5]", 1},
+		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		preDatas, info := model.Columns2ColumnDataForTest(tc.preCols)
+		datas, _ := model.Columns2ColumnDataForTest(tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, preDatas, datas, info, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -392,7 +427,8 @@ func TestPrepareDelete(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		preDatas, info := model.Columns2ColumnDataForTest(tc.preCols)
+		query, args := prepareDelete(tc.quoteTable, preDatas, info, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -601,9 +637,10 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "你好", 100},
 		},
 	}
-	for _, tc := range testCases {
-		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
-		require.Equal(t, tc.expectedColNames, colNames)
+	for i, tc := range testCases {
+		datas, info := model.Columns2ColumnDataForTest(tc.cols)
+		colNames, args := whereSlice(datas, info, tc.forceReplicate)
+		require.Equal(t, tc.expectedColNames, colNames, "case %d fails", i)
 		require.Equal(t, tc.expectedArgs, args)
 	}
 }
@@ -709,11 +746,29 @@ func TestMapReplace(t *testing.T) {
 				[]byte("你好,世界"),
 			},
 		},
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1.0,-2,0.3,-4.4,55]")),
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTiDBVectorFloat32,
+					Value: util.Must(types.ParseVectorFloat32("[1,2,3,4,5]")),
+				},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ",
+			expectedArgs:  []interface{}{"[1,-2,0.3,-4.4,55]", "[1,2,3,4,5]"},
+		},
 	}
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
 		for i := 0; i < 10; i++ {
-			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
+			datas, info := model.Columns2ColumnDataForTest(tc.cols)
+			query, args := prepareReplace(tc.quoteTable, datas, info, false, false)
 			require.Equal(t, tc.expectedQuery, query)
 			require.Equal(t, tc.expectedArgs, args)
 		}

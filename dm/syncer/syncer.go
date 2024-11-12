@@ -32,9 +32,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -374,11 +375,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	tctx := s.tctx.WithContext(ctx)
 	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
 	if err != nil {
-		return
+		return err
 	}
 	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 	if err != nil {
-		return
+		return err
 	}
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
@@ -851,7 +852,7 @@ func (s *Syncer) getDBInfoFromDownstream(tctx *tcontext.Context, sourceTable, ta
 		}
 	}
 
-	chs, coll, err := tidbddl.ResolveCharsetCollation(nil, charsetOpt)
+	chs, coll, err := tidbddl.ResolveCharsetCollation([]ast.CharsetOpt{charsetOpt}, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -881,8 +882,8 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	}
 	createStmt := createNode.(*ast.CreateTableStmt)
 	createStmt.IfNotExists = true
-	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
+	createStmt.Table.Schema = pmodel.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = pmodel.NewCIStr(sourceTable.Name)
 
 	// schema tracker sets non-clustered index, so can't handle auto_random.
 	for _, col := range createStmt.Cols {
@@ -1137,6 +1138,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 	if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete && job.tp != flush {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
+		// nolint:nakedret
 		return
 	}
 
@@ -1149,6 +1151,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
 		s.isTransactionEnd = true
+		// nolint:nakedret
 		return
 	case skip:
 		if job.eventHeader.EventType == replication.QUERY_EVENT {
@@ -1160,6 +1163,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 			s.saveGlobalPoint(job.location)
 		}
 		s.updateReplicationJobTS(job, skipJobIdx)
+		// nolint:nakedret
 		return
 	}
 
@@ -1176,13 +1180,14 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		// caller
 		s.isTransactionEnd = false
 		skipCheckFlush = true
+		// nolint:nakedret
 		return
 	case ddl:
 		s.jobWg.Wait()
 
 		// skip rest logic when downstream error
 		if s.execError.Load() != nil {
-			// nolint:nilerr
+			// nolint:nilerr,nakedret
 			return
 		}
 		s.updateReplicationJobTS(nil, ddlJobIdx) // clear ddl job ts because this ddl is already done.
@@ -1219,11 +1224,13 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		})
 		skipCheckFlush = true
 		err = s.flushCheckPoints()
+		// nolint:nakedret
 		return
 	case flush:
 		s.jobWg.Wait()
 		skipCheckFlush = true
 		err = s.flushCheckPoints()
+		// nolint:nakedret
 		return
 	case asyncFlush:
 		skipCheckFlush = true
@@ -1669,9 +1676,8 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
 				if testDuration.Seconds() == waitDuration.Seconds() {
 					panic("success check wait_time_on_stop !!!")
-				} else {
-					s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
 				}
+				s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
 			} else {
 				s.tctx.L().Error("checkWaitDuration error", zap.Error(testError))
 			}

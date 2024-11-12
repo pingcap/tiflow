@@ -22,7 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/infoschema"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
@@ -30,18 +30,8 @@ import (
 )
 
 func TestWriteDDLEvent(t *testing.T) {
-	dbIndex := 0
-	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
-		if dbIndex == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
@@ -66,7 +56,8 @@ func TestWriteDDLEvent(t *testing.T) {
 		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
+	GetDBConnImpl = dbConnFactory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -16,42 +16,42 @@ package mode
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 
-var _ = Suite(&testModeSuite{})
+var _ = check.Suite(&testModeSuite{})
 
 func TestSuite(t *testing.T) {
-	TestingT(t)
+	check.TestingT(t)
 }
 
 type testModeSuite struct{}
 
-func (t *testModeSuite) TestMode(c *C) {
+func (t *testModeSuite) TestMode(c *check.C) {
 	m := NewSafeMode()
-	c.Assert(m.Enable(), IsFalse)
+	c.Assert(m.Enable(), check.IsFalse)
 
 	tctx := tcontext.Background()
 	// Add 1
 	err := m.Add(tctx, 1)
-	c.Assert(err, IsNil)
-	c.Assert(m.Enable(), IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(m.Enable(), check.IsTrue)
 	err = m.Add(tctx, -1)
-	c.Assert(m.Enable(), IsFalse)
-	c.Assert(err, IsNil)
+	c.Assert(m.Enable(), check.IsFalse)
+	c.Assert(err, check.IsNil)
 
 	// Add n
 	err = m.Add(tctx, 101)
-	c.Assert(m.Enable(), IsTrue)
-	c.Assert(err, IsNil)
+	c.Assert(m.Enable(), check.IsTrue)
+	c.Assert(err, check.IsNil)
 	err = m.Add(tctx, -1)
-	c.Assert(m.Enable(), IsTrue)
-	c.Assert(err, IsNil)
+	c.Assert(m.Enable(), check.IsTrue)
+	c.Assert(err, check.IsNil)
 	err = m.Add(tctx, -100)
-	c.Assert(m.Enable(), IsFalse)
-	c.Assert(err, IsNil)
+	c.Assert(m.Enable(), check.IsFalse)
+	c.Assert(err, check.IsNil)
 
 	// IncrForTable
 	table := &filter.Table{
@@ -59,27 +59,27 @@ func (t *testModeSuite) TestMode(c *C) {
 		Name:   "table",
 	}
 	err = m.IncrForTable(tctx, table)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	err = m.IncrForTable(tctx, table) // re-Add
-	c.Assert(err, IsNil)
-	c.Assert(m.Enable(), IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(m.Enable(), check.IsTrue)
 	err = m.DescForTable(tctx, table)
-	c.Assert(err, IsNil)
-	c.Assert(m.Enable(), IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(m.Enable(), check.IsFalse)
 
 	// Add n + IncrForTable
 	err = m.Add(tctx, 100)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	err = m.IncrForTable(tctx, table)
-	c.Assert(err, IsNil)
-	c.Assert(m.Enable(), IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(m.Enable(), check.IsTrue)
 	err = m.Add(tctx, -100)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	err = m.DescForTable(tctx, table)
-	c.Assert(m.Enable(), IsFalse)
-	c.Assert(err, IsNil)
+	c.Assert(m.Enable(), check.IsFalse)
+	c.Assert(err, check.IsNil)
 
 	// Add becomes to negative
 	err = m.Add(tctx, -1)
-	c.Assert(err, NotNil)
+	c.Assert(err, check.NotNil)
 }

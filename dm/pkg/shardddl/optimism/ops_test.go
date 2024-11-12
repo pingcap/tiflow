@@ -14,10 +14,10 @@
 package optimism
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
-func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
+func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -34,52 +34,52 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 
 	// put info.
 	rev, err := PutInfo(etcdTestCli, info)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	ifm, _, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
 	infoWithVer := info
 	infoWithVer.Version = 1
 	infoWithVer.Revision = rev
-	c.Assert(ifm[task][source][upSchema][upTable], DeepEquals, infoWithVer)
+	c.Assert(ifm[task][source][upSchema][upTable], check.DeepEquals, infoWithVer)
 
 	// put operation.
 	rev, _, err = PutOperation(etcdTestCli, false, op, 0)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	opm, _, err := GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 1)
 	op.Revision = rev
-	c.Assert(opm[task][source][upSchema][upTable], DeepEquals, op)
+	c.Assert(opm[task][source][upSchema][upTable], check.DeepEquals, op)
 
 	// DELETE info and operation with version 0
 	_, deleted, err := DeleteInfosOperationsColumns(etcdTestCli, []Info{info}, []Operation{op}, genDDLLockID(info))
-	c.Assert(err, IsNil)
-	c.Assert(deleted, IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(deleted, check.IsFalse)
 
 	// data still exist
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 1)
 
 	// DELETE info and operation with version 1
 	_, deleted, err = DeleteInfosOperationsColumns(etcdTestCli, []Info{infoWithVer}, []Operation{op}, genDDLLockID(infoWithVer))
-	c.Assert(err, IsNil)
-	c.Assert(deleted, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(deleted, check.IsTrue)
 
 	// verify no info & operation exist.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 0)
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(opm, check.HasLen, 0)
 }
 
-func (t *testForEtcd) TestSourceTablesInfo(c *C) {
+func (t *testForEtcd) TestSourceTablesInfo(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -98,25 +98,25 @@ func (t *testForEtcd) TestSourceTablesInfo(c *C) {
 
 	// put source tables
 	rev1, err := PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
 
 	stm, rev2, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Equals, rev1)
-	c.Assert(stm, HasLen, 1)
-	c.Assert(stm[task], HasLen, 1)
-	c.Assert(stm[task][source], DeepEquals, st1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Equals, rev1)
+	c.Assert(stm, check.HasLen, 1)
+	c.Assert(stm[task], check.HasLen, 1)
+	c.Assert(stm[task][source], check.DeepEquals, st1)
 
 	// put/update source tables
 	rev4, err := PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Greater, rev1)
 
 	stm, rev5, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev5, Equals, rev4)
-	c.Assert(stm, HasLen, 1)
-	c.Assert(stm[task], HasLen, 1)
-	c.Assert(stm[task][source], DeepEquals, st2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev5, check.Equals, rev4)
+	c.Assert(stm, check.HasLen, 1)
+	c.Assert(stm[task], check.HasLen, 1)
+	c.Assert(stm[task][source], check.DeepEquals, st2)
 }

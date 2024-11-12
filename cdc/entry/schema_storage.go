@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -471,28 +471,33 @@ func (s *schemaStorage) BuildDDLEvents(
 	return ddlEvents, nil
 }
 
+// GetNewJobWithArgs returns a new job with the given args
+func GetNewJobWithArgs(job *timodel.Job, args timodel.JobArgs) (*timodel.Job, error) {
+	job.FillArgs(args)
+	bytes, err := job.Encode(true)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	encodedJob := &timodel.Job{}
+	if err = encodedJob.Decode(bytes); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return encodedJob, nil
+}
+
 // TODO: find a better way to refactor this function.
 // buildRenameEvents gets a list of DDLEvent from a rename tables DDL job.
 func (s *schemaStorage) buildRenameEvents(
 	ctx context.Context, job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	var (
-		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-		newTableNames, oldSchemaNames           []*timodel.CIStr
-		ddlEvents                               []*model.DDLEvent
-	)
-	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
-		&newTableNames, &oldTableIDs, &oldSchemaNames)
+	var ddlEvents []*model.DDLEvent
+	args, err := timodel.GetRenameTablesArgs(job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	multiTableInfos := job.BinlogInfo.MultipleTableInfos
-	if len(multiTableInfos) != len(oldSchemaIDs) ||
-		len(multiTableInfos) != len(newSchemaIDs) ||
-		len(multiTableInfos) != len(newTableNames) ||
-		len(multiTableInfos) != len(oldTableIDs) ||
-		len(multiTableInfos) != len(oldSchemaNames) {
+	if len(multiTableInfos) != len(args.RenameTableInfos) {
 		return nil, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 
@@ -502,13 +507,14 @@ func (s *schemaStorage) buildRenameEvents(
 	}
 
 	for i, tableInfo := range multiTableInfos {
-		newSchema, ok := preSnap.SchemaByID(newSchemaIDs[i])
+		info := args.RenameTableInfos[i]
+		newSchema, ok := preSnap.SchemaByID(info.NewSchemaID)
 		if !ok {
 			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
-				newSchemaIDs[i])
+				info.NewSchemaID)
 		}
 		newSchemaName := newSchema.Name.O
-		oldSchemaName := oldSchemaNames[i].O
+		oldSchemaName := info.OldSchemaName.O
 		event := new(model.DDLEvent)
 		preTableInfo, ok := preSnap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
@@ -516,7 +522,7 @@ func (s *schemaStorage) buildRenameEvents(
 				job.TableID)
 		}
 
-		tableInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
+		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
 		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
 		ddlEvents = append(ddlEvents, event)

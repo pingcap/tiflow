@@ -33,10 +33,11 @@ func newORMStorageAndMock(t *testing.T) (*ORMStorage, sqlmock.Sqlmock) {
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
 	db, err := ormUtil.NewGormDB(backendDB, "mysql")
 	require.NoError(t, err)
-	mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	mock.ExpectExec("CREATE TABLE `test` (`id` int(10) unsigned,`leader_id` text NOT NULL," +
+	// seems new version of GORM doesn't need this
+	// mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
+	//	"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
+	//	sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec("CREATE TABLE `test` (`id` int(10) unsigned AUTO_INCREMENT,`leader_id` text NOT NULL," +
 		"`record` text,`version` bigint(20) unsigned NOT NULL,PRIMARY KEY (`id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -49,8 +50,8 @@ func newORMStorageAndMock(t *testing.T) (*ORMStorage, sqlmock.Sqlmock) {
 func TestORMStorageGetEmptyRecord(t *testing.T) {
 	s, mock := newORMStorageAndMock(t)
 
-	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT 1").
-		WithArgs(1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}))
+	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT ?").
+		WithArgs(1, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}))
 	record, err := s.Get(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, &Record{}, record)
@@ -76,8 +77,8 @@ func TestORMStorageGetExistingRecord(t *testing.T) {
 	recordBytes, err := json.Marshal(expectedRecord)
 	require.NoError(t, err)
 
-	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT 1").
-		WithArgs(1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}).
+	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT ?").
+		WithArgs(1, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}).
 		AddRow(1, "id1", recordBytes, 1))
 	record, err := s.Get(context.Background())
 	require.NoError(t, err)
@@ -189,8 +190,8 @@ func TestORMStorageTxnWithLeaderCheck(t *testing.T) {
 	s, mock := newORMStorageAndMock(t)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT `leader_id` FROM `test` WHERE id = ? and leader_id = ? LIMIT 1 LOCK IN SHARE MODE").
-		WithArgs(leaderRowID, "leader1").WillReturnRows(sqlmock.NewRows([]string{"leader_id"}))
+	mock.ExpectQuery("SELECT `leader_id` FROM `test` WHERE id = ? and leader_id = ? LIMIT ? LOCK IN SHARE MODE").
+		WithArgs(leaderRowID, "leader1", 1).WillReturnRows(sqlmock.NewRows([]string{"leader_id"}))
 	mock.ExpectRollback()
 	doNothing := func(*gorm.DB) error {
 		return nil
@@ -199,11 +200,11 @@ func TestORMStorageTxnWithLeaderCheck(t *testing.T) {
 	require.ErrorIs(t, err, errors.ErrElectorNotLeader)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT `leader_id` FROM `test` WHERE id = ? and leader_id = ? LIMIT 1 LOCK IN SHARE MODE").
-		WithArgs(leaderRowID, "leader1").
+	mock.ExpectQuery("SELECT `leader_id` FROM `test` WHERE id = ? and leader_id = ? LIMIT ? LOCK IN SHARE MODE").
+		WithArgs(leaderRowID, "leader1", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"leader_id"}).AddRow("leader1"))
-	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT 1").
-		WithArgs(1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}))
+	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT ?").
+		WithArgs(1, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "leader_id", "record", "version"}))
 	mock.ExpectCommit()
 	doTxn := func(tx *gorm.DB) error {
 		_, err := s.Get(context.Background())

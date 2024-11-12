@@ -19,13 +19,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
@@ -33,18 +32,8 @@ import (
 )
 
 func TestWaitAsynExecDone(t *testing.T) {
-	var dbIndex int32 = 0
-	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			atomic.AddInt32(&dbIndex, 1)
-		}()
-		if atomic.LoadInt32(&dbIndex) == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
@@ -56,8 +45,14 @@ func TestWaitAsynExecDone(t *testing.T) {
 
 		// Case 1: there is a running add index job
 		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "sbtest0")).WillReturnRows(
-			sqlmock.NewRows([]string{"JOB_ID", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "STATE", "QUERY"}).
-				AddRow("1", "add index", "running", "1", "1", "running", "Create index idx1 on test.sbtest0(a)"),
+			sqlmock.NewRows([]string{
+				"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID",
+				"ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE",
+			}).AddRow(
+				1, "test", "sbtest0", "add index", "write reorganization", 1, 1, 0, time.Now(), nil, time.Now(), "running",
+			).AddRow(
+				2, "test", "sbtest0", "add index", "write reorganization", 1, 1, 0, time.Now(), time.Now(), time.Now(), "queueing",
+			),
 		)
 		// Case 2: there is no running add index job
 		// Case 3: no permission to query ddl_jobs, TiDB will return empty result
@@ -71,7 +66,8 @@ func TestWaitAsynExecDone(t *testing.T) {
 
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
+	GetDBConnImpl = dbConnFactory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -116,18 +112,8 @@ func TestWaitAsynExecDone(t *testing.T) {
 
 func TestAsyncExecAddIndex(t *testing.T) {
 	ddlExecutionTime := time.Second * 15
-	var dbIndex int32 = 0
-	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			atomic.AddInt32(&dbIndex, 1)
-		}()
-		if atomic.LoadInt32(&dbIndex) == 0 {
-			// test db
-			db, err := pmysql.MockTestDB()
-			require.Nil(t, err)
-			return db, nil
-		}
-		// normal db
+	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
@@ -145,7 +131,8 @@ func TestAsyncExecAddIndex(t *testing.T) {
 		mock.ExpectCommit()
 		mock.ExpectClose()
 		return db, nil
-	}
+	})
+	GetDBConnImpl = dbConnFactory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -175,4 +162,22 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	require.True(t, time.Since(start) < ddlExecutionTime)
 	require.True(t, time.Since(start) >= 10*time.Second)
 	sink.Close()
+}
+
+func TestNeedWaitAsyncExecDone(t *testing.T) {
+	sink := &DDLSink{
+		cfg: &pmysql.Config{
+			IsTiDB: false,
+		},
+	}
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+
+	sink.cfg.IsTiDB = true
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionTruncateTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropTable))
+	require.True(t, sink.needWaitAsyncExecDone(timodel.ActionDropIndex))
+
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTable))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTables))
+	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateSchema))
 }

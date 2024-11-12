@@ -22,8 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -99,12 +98,11 @@ func newMockDDLJobPuller(
 	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
-		ts := helper.GetCurrentMeta().StartTS
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
 			kvStorage,
-			ts,
+			0,
 			false,
 			model.DefaultChangeFeedID("test"),
 			util.RoleTester,
@@ -198,7 +196,6 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
-
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
 		require.False(t, skip)
@@ -533,16 +530,6 @@ func TestHandleJob(t *testing.T) {
 		job := &timodel.Job{
 			Type:       timodel.ActionFlashbackCluster,
 			BinlogInfo: &timodel.HistoryInfo{},
-			Args: []interface{}{
-				998,
-				map[string]interface{}{},
-				true,         /* tidb_gc_enable */
-				variable.On,  /* tidb_enable_auto_analyze */
-				variable.Off, /* tidb_super_read_only */
-				0,            /* totalRegions */
-				0,            /* startTS */
-				0,            /* commitTS */
-			},
 		}
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
@@ -566,7 +553,7 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
+	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
 	ddlJobPullerImpl.setResolvedTs(startTs)
@@ -696,7 +683,7 @@ func TestResolvedTsStuck(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
+	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
 	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)

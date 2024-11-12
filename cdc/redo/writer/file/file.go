@@ -104,11 +104,11 @@ func NewFileWriter(
 		storage:   extStorage,
 
 		metricFsyncDuration: common.RedoFsyncDurationHistogram.
-			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID, cfg.LogType),
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
-			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID, cfg.LogType),
 		metricWriteBytes: common.RedoWriteBytesGauge.
-			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID, cfg.LogType),
 	}
 	if w.op.GetUUIDGenerator != nil {
 		w.uuidGenerator = w.op.GetUUIDGenerator()
@@ -213,11 +213,11 @@ func (w *Writer) Close() error {
 	}
 
 	common.RedoFlushAllDurationHistogram.
-		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.LogType)
 	common.RedoFsyncDurationHistogram.
-		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.LogType)
 	common.RedoWriteBytesGauge.
-		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.LogType)
 
 	ctx, cancel := context.WithTimeout(context.Background(), redo.CloseTimeout)
 	defer cancel()
@@ -399,7 +399,6 @@ func (w *Writer) flushAndRotateFile() error {
 	if err != nil {
 		return nil
 	}
-
 	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 
 	return err

@@ -24,9 +24,11 @@ import (
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -114,8 +116,8 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			return "", terror.ErrSchemaTrackerInvalidCreateTableStmt.Generate(req.Schema)
 		}
 		// ensure correct table name.
-		stmt.Table.Schema = model.NewCIStr(req.Database)
-		stmt.Table.Name = model.NewCIStr(req.Table)
+		stmt.Table.Schema = pmodel.NewCIStr(req.Database)
+		stmt.Table.Name = pmodel.NewCIStr(req.Table)
 		stmt.IfNotExists = false // we must ensure drop the previous one.
 
 		var newCreateSQLBuilder strings.Builder
@@ -131,7 +133,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("overwrite --flush to true for operate-schema")
 		}
 
-		ti, err2 := ddl2.BuildTableInfoFromAST(stmt)
+		ti, err2 := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt)
 		if err2 != nil {
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}

@@ -16,7 +16,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"regexp"
 	"strings"
@@ -112,39 +111,14 @@ var defaultServerConfig = &ServerConfig{
 		CacheSizeInMB: 128, // By default, use 128M memory as sorter cache.
 	},
 	Security: &security.Credential{},
-	KVClient: &KVClientConfig{
-		EnableMultiplexing:   true,
-		WorkerConcurrent:     8,
-		GrpcStreamConcurrent: 1,
-		AdvanceIntervalInMs:  300,
-		FrontierConcurrent:   8,
-		WorkerPoolSize:       0, // 0 will use NumCPU() * 2
-		RegionScanLimit:      40,
-		// The default TiKV region election timeout is [10s, 20s],
-		// Use 1 minute to cover region leader missing.
-		RegionRetryDuration: TomlDuration(time.Minute),
-	},
+	KVClient: NewDefaultKVClientConfig(),
 	Debug: &DebugConfig{
-		DB: &DBConfig{
-			Count: 8,
-			// Following configs are optimized for write/read throughput.
-			// Users should not change them.
-			MaxOpenFiles:        10000,
-			BlockSize:           65536,
-			WriterBufferSize:    8388608,
-			Compression:         "snappy",
-			WriteL0PauseTrigger: math.MaxInt32,
-			CompactionL0Trigger: 16, // Based on a performance test on 4K tables.
-		},
+		DB:       NewDefaultDBConfig(),
 		Messages: defaultMessageConfig.Clone(),
 
 		Scheduler: NewDefaultSchedulerConfig(),
 		CDCV2:     &CDCV2{Enable: false},
-		Puller: &PullerConfig{
-			EnableResolvedTsStuckDetection: false,
-			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
-			LogRegionDetails:               false,
-		},
+		Puller:    NewDefaultPullerConfig(),
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

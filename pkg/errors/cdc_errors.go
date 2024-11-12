@@ -140,6 +140,17 @@ var (
 		"stop processor by admin command",
 		errors.RFCCodeText("CDC:ErrAdminStopProcessor"),
 	)
+	ErrCodeNilFunction = errors.Normalize(
+		"function is not initialized",
+		errors.RFCCodeText("CDC:ErrCodeNilFunction"),
+	)
+
+	// Errors caused by unexpected behavior from external systems
+	ErrTiDBUnexpectedJobMeta = errors.Normalize(
+		"unexpected `job_meta` from tidb",
+		errors.RFCCodeText("CDC:ErrTiDBUnexpectedJobMeta"),
+	)
+
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible = errors.Normalize(
 		"version is incompatible: %s",

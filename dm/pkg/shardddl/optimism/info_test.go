@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/common"
@@ -42,15 +42,15 @@ func TestInfo(t *testing.T) {
 
 	etcdTestCli = mockCluster.RandClient()
 
-	TestingT(t)
+	check.TestingT(t)
 }
 
 // clear keys in etcd test cluster.
-func clearTestInfoOperation(c *C) {
-	c.Assert(ClearTestInfoOperationColumn(etcdTestCli), IsNil)
+func clearTestInfoOperation(c *check.C) {
+	c.Assert(ClearTestInfoOperationColumn(etcdTestCli), check.IsNil)
 }
 
-func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+func createTableInfo(c *check.C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	if err != nil {
 		c.Fatalf("fail to parse stmt, %v", err)
@@ -68,9 +68,9 @@ func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int6
 
 type testForEtcd struct{}
 
-var _ = Suite(&testForEtcd{})
+var _ = check.Suite(&testForEtcd{})
 
-func (t *testForEtcd) TestInfoJSON(c *C) {
+func (t *testForEtcd) TestInfoJSON(c *check.C) {
 	i1 := NewInfo("test", "mysql-replica-1",
 		"db-1", "tbl-1", "db", "tbl", []string{
 			"ALTER TABLE tbl ADD COLUMN c1 INT",
@@ -78,18 +78,18 @@ func (t *testForEtcd) TestInfoJSON(c *C) {
 		}, nil, nil)
 
 	j, err := i1.toJSON()
-	c.Assert(err, IsNil)
-	c.Assert(j, Equals, `{"task":"test","source":"mysql-replica-1","up-schema":"db-1","up-table":"tbl-1","down-schema":"db","down-table":"tbl","ddls":["ALTER TABLE tbl ADD COLUMN c1 INT","ALTER TABLE tbl ADD COLUMN c2 INT"],"table-info-before":null,"table-info-after":null,"ignore-conflict":false}`)
-	c.Assert(j, Equals, i1.String())
+	c.Assert(err, check.IsNil)
+	c.Assert(j, check.Equals, `{"task":"test","source":"mysql-replica-1","up-schema":"db-1","up-table":"tbl-1","down-schema":"db","down-table":"tbl","ddls":["ALTER TABLE tbl ADD COLUMN c1 INT","ALTER TABLE tbl ADD COLUMN c2 INT"],"table-info-before":null,"table-info-after":null,"ignore-conflict":false}`)
+	c.Assert(j, check.Equals, i1.String())
 	j = i1.ShortString()
-	c.Assert(j, Equals, `{"task":"test","source":"mysql-replica-1","up-schema":"db-1","up-table":"tbl-1","down-schema":"db","down-table":"tbl","ddls":["ALTER TABLE tbl ADD COLUMN c1 INT","ALTER TABLE tbl ADD COLUMN c2 INT"],"table-before":"","table-after":"","is-deleted":false,"version":0,"revision":0,"ignore-conflict":false}`)
+	c.Assert(j, check.Equals, `{"task":"test","source":"mysql-replica-1","up-schema":"db-1","up-table":"tbl-1","down-schema":"db","down-table":"tbl","ddls":["ALTER TABLE tbl ADD COLUMN c1 INT","ALTER TABLE tbl ADD COLUMN c2 INT"],"table-before":"","table-after":"","is-deleted":false,"version":0,"revision":0,"ignore-conflict":false}`)
 
 	i2, err := infoFromJSON(j)
-	c.Assert(err, IsNil)
-	c.Assert(i2, DeepEquals, i1)
+	c.Assert(err, check.IsNil)
+	c.Assert(i2, check.DeepEquals, i1)
 }
 
-func (t *testForEtcd) TestEtcdInfoUpgrade(c *C) {
+func (t *testForEtcd) TestEtcdInfoUpgrade(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -118,27 +118,27 @@ func (t *testForEtcd) TestEtcdInfoUpgrade(c *C) {
 
 	// put the oldInfo
 	rev1, err := putOldInfo(etcdTestCli, oi11)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	rev2, err := putOldInfo(etcdTestCli, oi11)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// put another key and get again with 2 info.
 	rev3, err := putOldInfo(etcdTestCli, oi12)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Greater, rev2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Greater, rev2)
 
 	// get all infos.
 	ifm, rev4, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Equals, rev3)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm[task1], HasLen, 2)
-	c.Assert(ifm[task1][source1], HasLen, 1)
-	c.Assert(ifm[task1][source1][upSchema], HasLen, 1)
-	c.Assert(ifm[task1][source2], HasLen, 1)
-	c.Assert(ifm[task1][source2][upSchema], HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Equals, rev3)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm[task1], check.HasLen, 2)
+	c.Assert(ifm[task1][source1], check.HasLen, 1)
+	c.Assert(ifm[task1][source1][upSchema], check.HasLen, 1)
+	c.Assert(ifm[task1][source2], check.HasLen, 1)
+	c.Assert(ifm[task1][source2][upSchema], check.HasLen, 1)
 
 	i11WithVer := i11
 	i11WithVer.Version = 2
@@ -146,8 +146,8 @@ func (t *testForEtcd) TestEtcdInfoUpgrade(c *C) {
 	i12WithVer := i12
 	i12WithVer.Version = 1
 	i12WithVer.Revision = rev4
-	c.Assert(ifm[task1][source1][upSchema][upTable], DeepEquals, i11WithVer)
-	c.Assert(ifm[task1][source2][upSchema][upTable], DeepEquals, i12WithVer)
+	c.Assert(ifm[task1][source1][upSchema][upTable], check.DeepEquals, i11WithVer)
+	c.Assert(ifm[task1][source2][upSchema][upTable], check.DeepEquals, i12WithVer)
 
 	// start the watcher.
 	wch := make(chan Info, 10)
@@ -165,16 +165,16 @@ func (t *testForEtcd) TestEtcdInfoUpgrade(c *C) {
 	// version start from 1
 	// simulate v2.0.1 worker and v2.0.2 master
 	rev5, err := putOldInfo(etcdTestCli, oi21)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	infoWithVer := <-wch
 	i21WithVer := i21
 	i21WithVer.Version = 1
 	i21WithVer.Revision = rev5
-	c.Assert(infoWithVer, DeepEquals, i21WithVer)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(infoWithVer, check.DeepEquals, i21WithVer)
+	c.Assert(len(ech), check.Equals, 0)
 }
 
-func (t *testForEtcd) TestInfoEtcd(c *C) {
+func (t *testForEtcd) TestInfoEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -201,38 +201,38 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 
 	// put the same key twice.
 	rev1, err := PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	rev2, err := PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// get with only 1 info.
 	ifm, rev3, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm[task1], HasLen, 1)
-	c.Assert(ifm[task1][source1], HasLen, 1)
-	c.Assert(ifm[task1][source1][upSchema], HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm[task1], check.HasLen, 1)
+	c.Assert(ifm[task1][source1], check.HasLen, 1)
+	c.Assert(ifm[task1][source1][upSchema], check.HasLen, 1)
 	i11WithVer := i11
 	i11WithVer.Version = 2
 	i11WithVer.Revision = rev2
-	c.Assert(ifm[task1][source1][upSchema][upTable], DeepEquals, i11WithVer)
+	c.Assert(ifm[task1][source1][upSchema][upTable], check.DeepEquals, i11WithVer)
 
 	// put another key and get again with 2 info.
 	rev4, err := PutInfo(etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm[task1], HasLen, 2)
-	c.Assert(ifm[task1][source1][upSchema][upTable], DeepEquals, i11WithVer)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm[task1], check.HasLen, 2)
+	c.Assert(ifm[task1][source1][upSchema][upTable], check.DeepEquals, i11WithVer)
 	i12WithVer := i12
 	i12WithVer.Version = 1
 	i12WithVer.Revision = rev4
-	c.Assert(ifm[task1][source2][upSchema][upTable], DeepEquals, i12WithVer)
+	c.Assert(ifm[task1][source2][upSchema][upTable], check.DeepEquals, i12WithVer)
 
 	// start the watcher.
 	wch := make(chan Info, 10)
@@ -249,29 +249,29 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 	// put another key for a different task.
 	// version start from 1
 	rev5, err := PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	infoWithVer := <-wch
 	i21WithVer := i21
 	i21WithVer.Version = 1
 	i21WithVer.Revision = rev5
-	c.Assert(infoWithVer, DeepEquals, i21WithVer)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(infoWithVer, check.DeepEquals, i21WithVer)
+	c.Assert(len(ech), check.Equals, 0)
 
 	// put again
 	// version increase
 	rev6, err := PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	infoWithVer = <-wch
 	i21WithVer.Version++
 	i21WithVer.Revision = rev6
-	c.Assert(infoWithVer, DeepEquals, i21WithVer)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(infoWithVer, check.DeepEquals, i21WithVer)
+	c.Assert(len(ech), check.Equals, 0)
 
 	// delete i21.
 	deleteOp := deleteInfoOp(i21)
 	resp, err := etcdTestCli.Txn(context.Background()).Then(deleteOp).Commit()
-	c.Assert(err, IsNil)
-	c.Assert(resp.Succeeded, IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Succeeded, check.IsTrue)
 	select {
 	case err2 := <-ech:
 		c.Fatal(err2)
@@ -281,12 +281,12 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 	// put again
 	// version reset to 1
 	rev7, err := PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	infoWithVer = <-wch
 	i21WithVer.Version = 1
 	i21WithVer.Revision = rev7
-	c.Assert(infoWithVer, DeepEquals, i21WithVer)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(infoWithVer, check.DeepEquals, i21WithVer)
+	c.Assert(len(ech), check.Equals, 0)
 
 	watchCancel()
 	wg.Wait()
@@ -296,20 +296,20 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 	// delete i12.
 	deleteOp = deleteInfoOp(i12)
 	resp, err = etcdTestCli.Txn(context.Background()).Then(deleteOp).Commit()
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	// get again.
 	ifm, _, err = GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 2)
-	c.Assert(ifm, HasKey, task1)
-	c.Assert(ifm, HasKey, task2)
-	c.Assert(ifm[task1], HasLen, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 2)
+	c.Assert(ifm, check.HasKey, task1)
+	c.Assert(ifm, check.HasKey, task2)
+	c.Assert(ifm[task1], check.HasLen, 1)
 	i11WithVer.Revision = ifm[task1][source1][upSchema][upTable].Revision
-	c.Assert(ifm[task1][source1][upSchema][upTable], DeepEquals, i11WithVer)
-	c.Assert(ifm[task2], HasLen, 1)
+	c.Assert(ifm[task1][source1][upSchema][upTable], check.DeepEquals, i11WithVer)
+	c.Assert(ifm[task2], check.HasLen, 1)
 	i21WithVer.Revision = ifm[task2][source1][upSchema][upTable].Revision
-	c.Assert(ifm[task2][source1][upSchema][upTable], DeepEquals, i21WithVer)
+	c.Assert(ifm[task2][source1][upSchema][upTable], check.DeepEquals, i21WithVer)
 
 	// watch the deletion for i12.
 	wch = make(chan Info, 10)
@@ -319,12 +319,12 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 	cancel()
 	close(wch)
 	close(ech)
-	c.Assert(len(wch), Equals, 1)
+	c.Assert(len(wch), check.Equals, 1)
 	info := <-wch
 	i12c := i12
 	i12c.IsDeleted = true
-	c.Assert(info, DeepEquals, i12c)
-	c.Assert(len(ech), Equals, 0)
+	c.Assert(info, check.DeepEquals, i12c)
+	c.Assert(len(ech), check.Equals, 0)
 }
 
 func newOldInfo(task, source, upSchema, upTable, downSchema, downTable string,

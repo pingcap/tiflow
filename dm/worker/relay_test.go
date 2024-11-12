@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -33,7 +33,7 @@ import (
 
 type testRelay struct{}
 
-var _ = Suite(&testRelay{})
+var _ = check.Suite(&testRelay{})
 
 /*********** dummy relay log process unit, used only for testing *************/
 
@@ -143,7 +143,7 @@ func (d *DummyRelay) PurgeRelayDir() error {
 	return nil
 }
 
-func (t *testRelay) TestRelay(c *C) {
+func (t *testRelay) TestRelay(c *check.C) {
 	originNewRelay := relay.NewRelay
 	relay.NewRelay = NewDummyRelay
 	originNewPurger := relay.NewPurger
@@ -160,10 +160,10 @@ func (t *testRelay) TestRelay(c *C) {
 	cfg.MetaDir = dir
 
 	relayHolder := NewRealRelayHolder(cfg)
-	c.Assert(relayHolder, NotNil)
+	c.Assert(relayHolder, check.NotNil)
 
 	holder, ok := relayHolder.(*realRelayHolder)
-	c.Assert(ok, IsTrue)
+	c.Assert(ok, check.IsTrue)
 
 	t.testInit(c, holder)
 	t.testStart(c, holder)
@@ -172,54 +172,54 @@ func (t *testRelay) TestRelay(c *C) {
 	t.testStop(c, holder)
 }
 
-func (t *testRelay) testInit(c *C, holder *realRelayHolder) {
+func (t *testRelay) testInit(c *check.C, holder *realRelayHolder) {
 	ctx := context.Background()
 	_, err := holder.Init(ctx, nil)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	r, ok := holder.relay.(*DummyRelay)
-	c.Assert(ok, IsTrue)
+	c.Assert(ok, check.IsTrue)
 
 	initErr := errors.New("init error")
 	r.InjectInitError(initErr)
 	defer r.InjectInitError(nil)
 
 	_, err = holder.Init(ctx, nil)
-	c.Assert(err, ErrorMatches, ".*"+initErr.Error()+".*")
+	c.Assert(err, check.ErrorMatches, ".*"+initErr.Error()+".*")
 }
 
-func (t *testRelay) testStart(c *C, holder *realRelayHolder) {
-	c.Assert(holder.Stage(), Equals, pb.Stage_New)
-	c.Assert(holder.closed.Load(), IsFalse)
-	c.Assert(holder.Result(), IsNil)
+func (t *testRelay) testStart(c *check.C, holder *realRelayHolder) {
+	c.Assert(holder.Stage(), check.Equals, pb.Stage_New)
+	c.Assert(holder.closed.Load(), check.IsFalse)
+	c.Assert(holder.Result(), check.IsNil)
 
 	holder.Start()
-	c.Assert(waitRelayStage(holder, pb.Stage_Running, 5), IsTrue)
-	c.Assert(holder.Result(), IsNil)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(waitRelayStage(holder, pb.Stage_Running, 5), check.IsTrue)
+	c.Assert(holder.Result(), check.IsNil)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 
 	// test status
 	status := holder.Status(nil)
-	c.Assert(status.Stage, Equals, pb.Stage_Running)
-	c.Assert(status.Result, IsNil)
+	c.Assert(status.Stage, check.Equals, pb.Stage_Running)
+	c.Assert(status.Result, check.IsNil)
 
-	c.Assert(holder.Error(), IsNil)
+	c.Assert(holder.Error(), check.IsNil)
 
 	// test update and pause -> resume
 	t.testUpdate(c, holder)
-	c.Assert(holder.Stage(), Equals, pb.Stage_Paused)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(holder.Stage(), check.Equals, pb.Stage_Paused)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 
 	err := holder.Operate(context.Background(), pb.RelayOp_ResumeRelay)
-	c.Assert(err, IsNil)
-	c.Assert(waitRelayStage(holder, pb.Stage_Running, 10), IsTrue)
-	c.Assert(holder.Result(), IsNil)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(waitRelayStage(holder, pb.Stage_Running, 10), check.IsTrue)
+	c.Assert(holder.Result(), check.IsNil)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 }
 
-func (t *testRelay) testClose(c *C, holder *realRelayHolder) {
+func (t *testRelay) testClose(c *check.C, holder *realRelayHolder) {
 	r, ok := holder.relay.(*DummyRelay)
-	c.Assert(ok, IsTrue)
+	c.Assert(ok, check.IsTrue)
 	processResult := &pb.ProcessResult{
 		IsCanceled: true,
 		Errors: []*pb.ProcessError{
@@ -230,60 +230,60 @@ func (t *testRelay) testClose(c *C, holder *realRelayHolder) {
 	defer r.InjectProcessResult(pb.ProcessResult{})
 
 	holder.Close()
-	c.Assert(waitRelayStage(holder, pb.Stage_Paused, 10), IsTrue)
-	c.Assert(holder.Result(), DeepEquals, processResult)
-	c.Assert(holder.closed.Load(), IsTrue)
+	c.Assert(waitRelayStage(holder, pb.Stage_Paused, 10), check.IsTrue)
+	c.Assert(holder.Result(), check.DeepEquals, processResult)
+	c.Assert(holder.closed.Load(), check.IsTrue)
 
 	holder.Close()
-	c.Assert(holder.Stage(), Equals, pb.Stage_Paused)
-	c.Assert(holder.Result(), DeepEquals, processResult)
-	c.Assert(holder.closed.Load(), IsTrue)
+	c.Assert(holder.Stage(), check.Equals, pb.Stage_Paused)
+	c.Assert(holder.Result(), check.DeepEquals, processResult)
+	c.Assert(holder.closed.Load(), check.IsTrue)
 
 	// todo: very strange, and can't resume
 	status := holder.Status(nil)
-	c.Assert(status.Stage, Equals, pb.Stage_Stopped)
-	c.Assert(status.Result, IsNil)
+	c.Assert(status.Stage, check.Equals, pb.Stage_Stopped)
+	c.Assert(status.Result, check.IsNil)
 
 	errInfo := holder.Error()
-	c.Assert(errInfo.Msg, Equals, "relay stopped")
+	c.Assert(errInfo.Msg, check.Equals, "relay stopped")
 }
 
-func (t *testRelay) testPauseAndResume(c *C, holder *realRelayHolder) {
+func (t *testRelay) testPauseAndResume(c *check.C, holder *realRelayHolder) {
 	err := holder.Operate(context.Background(), pb.RelayOp_PauseRelay)
-	c.Assert(err, IsNil)
-	c.Assert(holder.Stage(), Equals, pb.Stage_Paused)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(holder.Stage(), check.Equals, pb.Stage_Paused)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 
 	err = holder.pauseRelay(context.Background(), pb.RelayOp_PauseRelay)
-	c.Assert(err, ErrorMatches, ".*current stage is Paused.*")
+	c.Assert(err, check.ErrorMatches, ".*current stage is Paused.*")
 
 	// test status
 	status := holder.Status(nil)
-	c.Assert(status.Stage, Equals, pb.Stage_Paused)
+	c.Assert(status.Stage, check.Equals, pb.Stage_Paused)
 
 	// test update
 	t.testUpdate(c, holder)
 
 	err = holder.Operate(context.Background(), pb.RelayOp_ResumeRelay)
-	c.Assert(err, IsNil)
-	c.Assert(waitRelayStage(holder, pb.Stage_Running, 10), IsTrue)
-	c.Assert(holder.Result(), IsNil)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(err, check.IsNil)
+	c.Assert(waitRelayStage(holder, pb.Stage_Running, 10), check.IsTrue)
+	c.Assert(holder.Result(), check.IsNil)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 
 	err = holder.Operate(context.Background(), pb.RelayOp_ResumeRelay)
-	c.Assert(err, ErrorMatches, ".*current stage is Running.*")
+	c.Assert(err, check.ErrorMatches, ".*current stage is Running.*")
 
 	// test status
 	status = holder.Status(nil)
-	c.Assert(status.Stage, Equals, pb.Stage_Running)
-	c.Assert(status.Result, IsNil)
+	c.Assert(status.Stage, check.Equals, pb.Stage_Running)
+	c.Assert(status.Result, check.IsNil)
 
 	// invalid operation
 	err = holder.Operate(context.Background(), pb.RelayOp_InvalidRelayOp)
-	c.Assert(err, ErrorMatches, ".*not supported.*")
+	c.Assert(err, check.ErrorMatches, ".*not supported.*")
 }
 
-func (t *testRelay) testUpdate(c *C, holder *realRelayHolder) {
+func (t *testRelay) testUpdate(c *check.C, holder *realRelayHolder) {
 	cfg := &config.SourceConfig{
 		From: dbconfig.DBConfig{
 			Host:     "127.0.0.1",
@@ -294,27 +294,27 @@ func (t *testRelay) testUpdate(c *C, holder *realRelayHolder) {
 	}
 
 	originStage := holder.Stage()
-	c.Assert(holder.Update(context.Background(), cfg), IsNil)
-	c.Assert(waitRelayStage(holder, originStage, 10), IsTrue)
-	c.Assert(holder.closed.Load(), IsFalse)
+	c.Assert(holder.Update(context.Background(), cfg), check.IsNil)
+	c.Assert(waitRelayStage(holder, originStage, 10), check.IsTrue)
+	c.Assert(holder.closed.Load(), check.IsFalse)
 
 	r, ok := holder.relay.(*DummyRelay)
-	c.Assert(ok, IsTrue)
+	c.Assert(ok, check.IsTrue)
 
 	err := errors.New("reload error")
 	r.InjectReloadError(err)
 	defer r.InjectReloadError(nil)
-	c.Assert(holder.Update(context.Background(), cfg), Equals, err)
+	c.Assert(holder.Update(context.Background(), cfg), check.Equals, err)
 }
 
-func (t *testRelay) testStop(c *C, holder *realRelayHolder) {
+func (t *testRelay) testStop(c *check.C, holder *realRelayHolder) {
 	err := holder.Operate(context.Background(), pb.RelayOp_StopRelay)
-	c.Assert(err, IsNil)
-	c.Assert(holder.Stage(), Equals, pb.Stage_Stopped)
-	c.Assert(holder.closed.Load(), IsTrue)
+	c.Assert(err, check.IsNil)
+	c.Assert(holder.Stage(), check.Equals, pb.Stage_Stopped)
+	c.Assert(holder.closed.Load(), check.IsTrue)
 
 	err = holder.Operate(context.Background(), pb.RelayOp_StopRelay)
-	c.Assert(err, ErrorMatches, ".*current stage is already stopped.*")
+	c.Assert(err, check.ErrorMatches, ".*current stage is already stopped.*")
 }
 
 func waitRelayStage(holder *realRelayHolder, expect pb.Stage, backoff int) bool {
