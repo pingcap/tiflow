@@ -25,9 +25,9 @@ import (
 
 // causality provides a simple mechanism to ensure correctness when we are running
 // DMLs concurrently.
-// As a table might have multiple keys, row changes might depend on other row changes,
-// together they form a dependency graph, only row changes without dependency can
-// run concurrently.
+// As a table might have one or multiple keys, row changes might depend on other
+// row changes, together they form a dependency graph, only row changes without
+// dependency can run concurrently.
 // currently, row changes from upstream are dispatched to DML workers by their keys,
 // including PK and UKs, to make sure row changes with same keys are dispatched to
 // the same worker, but this cannot handle dependencies cross row changes with different
@@ -40,8 +40,9 @@ import (
 //     we must at least wait all row changes related to (a=2, b=2) finish before
 //     dispatch it to worker 1, else data inconsistency might happen.
 //
-// causality is used to detect this kind of dependencies, and it will generate a conflict
-// job to wait all DMLs in DML workers are executed before we can continue dispatching.
+// causality is used to detect this kind of dependencies, and it will generate a
+// conflict job to wait all DMLs in DML workers are executed before we can continue
+// dispatching.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causality struct {
 	relation    *causalityRelation
