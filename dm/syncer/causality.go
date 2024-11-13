@@ -28,10 +28,10 @@ import (
 // As a table might have one or multiple keys, row changes might depend on other
 // row changes, together they form a dependency graph, only row changes without
 // dependency can run concurrently.
-// currently, row changes from upstream are dispatched to DML workers by their keys,
-// including PK and UKs, to make sure row changes with same keys are dispatched to
-// the same worker, but this cannot handle dependencies cross row changes with different
-// keys.
+// currently, row changes for a table from upstream are dispatched to DML workers
+// by their keys, including PK and UKs, to make sure row changes with same keys
+// are dispatched to the same worker, but this cannot handle dependencies cross
+// row changes with different keys.
 // suppose we have a table `t(a int unique, b int unique)`, and following row changes:
 //   - insert t(a=1, b=1), we put to worker 1
 //   - insert t(a=2, b=2), we put to worker 2
