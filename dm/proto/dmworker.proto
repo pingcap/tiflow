@@ -166,6 +166,8 @@ message SyncStatus {
     int64 totalRows = 15;
     int64 totalRps = 16;
     int64 recentRps = 17;
+    uint64 iOTotalBytes = 18;
+    uint64 dumpIOTotalBytes = 19;
 }
 
 // SourceStatus represents status for source runing on dm-worker
