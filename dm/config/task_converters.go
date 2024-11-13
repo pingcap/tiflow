@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -308,6 +310,11 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
 			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
 		}
+		// set syncer IO total bytes counter
+		subTaskCfg.IOTotalBytes = atomic.NewUint64(0)
+		subTaskCfg.DumpIOTotalBytes = atomic.NewUint64(0)
+		subTaskCfg.UUID = uuid.NewString()
+		subTaskCfg.DumpUUID = uuid.NewString()
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)
