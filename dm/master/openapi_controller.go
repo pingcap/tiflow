@@ -584,6 +584,8 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 				SyncerBinlogGtid:    syncerS.SyncerBinlogGtid,
 				TotalEvents:         syncerS.TotalEvents,
 				TotalTps:            syncerS.TotalTps,
+				IoTotalBytes:        syncerS.IOTotalBytes,
+				DumpIoTotalBytes:    syncerS.DumpIOTotalBytes,
 			}
 			if unResolvedGroups := syncerS.GetUnresolvedGroups(); len(unResolvedGroups) > 0 {
 				openapiSubTaskStatus.SyncStatus.UnresolvedGroups = make([]openapi.ShardingGroup, len(unResolvedGroups))
