@@ -46,11 +46,6 @@ jobs:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
-
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-
       - name: Build DM binary
         run: make dm_integration_test_build
 
@@ -63,6 +58,10 @@ jobs:
       - name: Run test cases
         run: |
           bash ./dm/tests/upstream_switch/case.sh
+
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
