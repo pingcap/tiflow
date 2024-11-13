@@ -499,6 +499,8 @@ type SyncStatus struct {
 
 	// sharding DDL which current is blocking
 	BlockingDdls        []string `json:"blocking_ddls"`
+	DumpIoTotalBytes    uint64   `json:"dump_io_total_bytes"`
+	IoTotalBytes        uint64   `json:"io_total_bytes"`
 	MasterBinlog        string   `json:"master_binlog"`
 	MasterBinlogGtid    string   `json:"master_binlog_gtid"`
 	RecentTps           int64    `json:"recent_tps"`

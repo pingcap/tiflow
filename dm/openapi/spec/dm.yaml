@@ -1500,6 +1500,12 @@ components:
         seconds_behind_master:
           type: integer
           format: int64
+        io_total_bytes:
+          type: integer
+          format: uint64
+        dump_io_total_bytes:
+          type: integer
+          format: uint64
       required:
         - "total_events"
         - "total_tps"
@@ -1513,6 +1519,8 @@ components:
         - "synced"
         - "binlog_type"
         - "seconds_behind_master"
+        - "io_total_bytes"
+        - "dump_io_total_bytes"
     DumpStatus:
       type: object
       description: "status of dump unit"
