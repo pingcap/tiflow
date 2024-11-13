@@ -46,11 +46,6 @@ jobs:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
-      - name: Setup containers
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/2.30.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          docker-compose -f ./dm/tests/upstream_switch/docker-compose.yml up -d
 
       - name: Setup tmate session
         if: ${{ failure() }}
@@ -62,6 +57,12 @@ jobs:
       - name: Run test cases
         run: |
           bash ./dm/tests/upstream_switch/case.sh
+
+      - name: Setup containers
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose -f ./dm/tests/upstream_switch/docker-compose.yml up -d
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
