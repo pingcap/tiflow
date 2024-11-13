@@ -288,7 +288,7 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 				return false
 			}
 		case dmconfig.ModeDump, dmconfig.ModeLoad, dmconfig.ModeLoadSync:
-			//passing through, as long as the stage is done
+			// passing through, as long as the stage is done
 		default:
 			return false
 		}
