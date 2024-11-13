@@ -48,6 +48,8 @@ jobs:
 
       - name: Setup containers
         run: |
+          sudo apt-get update
+          sudo apt-get install docker-compose-plugin
           docker-compose -f ./dm/tests/upstream_switch/docker-compose.yml up -d
 
       - name: Run test cases
