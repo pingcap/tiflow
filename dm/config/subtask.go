@@ -495,6 +495,8 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	if err != nil {
 		return nil, terror.ErrConfigTomlTransform.Delegate(err, "decode subtask config from data")
 	}
-
+	// Manually copy atomic values for atomic.Uint64 doesn't implement TOML marshaling interfaces
+	clone.IOTotalBytes = atomic.NewUint64(c.IOTotalBytes.Load())
+	clone.DumpIOTotalBytes = atomic.NewUint64(c.DumpIOTotalBytes.Load())
 	return clone, nil
 }
