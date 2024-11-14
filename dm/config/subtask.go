@@ -182,12 +182,12 @@ type SubTaskConfig struct {
 	// one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
-	UUID         string         `toml:"uuid" json:"uuid"`
+	UUID         string         `toml:"uuid" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"io-total-bytes" json:"io-total-bytes"`
 
 	// meter network usage from upstream
 	// e.g., pulling binlog
-	DumpUUID         string         `toml:"dump-uuid" json:"dump-uuid"`
+	DumpUUID         string         `toml:"dump-uuid" json:"-"`
 	DumpIOTotalBytes *atomic.Uint64 `toml:"dump-io-total-bytes" json:"dump-io-total-bytes"`
 }
 
