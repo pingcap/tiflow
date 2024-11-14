@@ -330,15 +330,7 @@ def create_load_task_success():
                     "table": "*",
                 },
                 "target": {"schema": "openapi", "table": "t"},
-            },
-            {
-                "source": {
-                    "source_name": SOURCE2_NAME,
-                    "schema": "openapi",
-                    "table": "*",
-                },
-                "target": {"schema": "openapi", "table": "t"},
-            },
+            }
         ],
         "source_config": {
             "full_migrate_conf": {
@@ -348,8 +340,7 @@ def create_load_task_success():
                 "consistency": "auto",
             },
             "source_conf": [
-                {"source_name": SOURCE1_NAME},
-                {"source_name": SOURCE2_NAME},
+                {"source_name": SOURCE1_NAME}
             ],
         },
     }
