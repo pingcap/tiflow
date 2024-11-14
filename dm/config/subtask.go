@@ -222,6 +222,10 @@ func (c *SubTaskConfig) String() string {
 }
 
 // Toml returns TOML format representation of config.
+// Note: The atomic.Uint64 fields (IOTotalBytes and DumpIOTotalBytes) are not
+// encoded in the TOML output because they do not implement the necessary
+// marshaling interfaces. As a result, these fields will not be included in
+// the TOML representation.
 func (c *SubTaskConfig) Toml() (string, error) {
 	var b bytes.Buffer
 	enc := toml.NewEncoder(&b)
@@ -242,6 +246,9 @@ func (c *SubTaskConfig) DecodeFile(fpath string, verifyDecryptPassword bool) err
 }
 
 // Decode loads config from file data.
+// Note: The atomic.Uint64 fields (IOTotalBytes and DumpIOTotalBytes) will not
+// be populated from the TOML data since they cannot be decoded by toml.Decode().
+// As a result, these fields will remain uninitialized (zero value) after decoding.
 func (c *SubTaskConfig) Decode(data string, verifyDecryptPassword bool) error {
 	if _, err := toml.Decode(data, c); err != nil {
 		return terror.ErrConfigTomlTransform.Delegate(err, "decode subtask config from data")
