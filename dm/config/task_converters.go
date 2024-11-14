@@ -103,6 +103,11 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
+		cfg.IOTotalBytes = atomic.NewUint64(0)
+		cfg.DumpIOTotalBytes = atomic.NewUint64(0)
+		cfg.UUID = uuid.NewString()
+		cfg.DumpUUID = uuid.NewString()
+
 		if err := cfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
 		}
