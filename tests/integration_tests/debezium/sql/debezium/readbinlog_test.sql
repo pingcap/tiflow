@@ -1,8 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE:  readbinlog_test
--- Database needs to be populated to break dependency between MetadataIT and MySqlConnectorIT.shouldValidateAcceptableConfiguration run order
--- ----------------------------------------------------------------------------------------------------------------
-
 CREATE TABLE person (
   name VARCHAR(255) primary key,
   birthdate DATE NULL,

@@ -1,6 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE:  unsigned_integer_test
--- ----------------------------------------------------------------------------------------------------------------
 -- The integration test for this database expects to scan all of the binlog events associated with this database
 -- without error or problems. The integration test does not modify any records in this database, so this script
 -- must contain all operations to these tables.

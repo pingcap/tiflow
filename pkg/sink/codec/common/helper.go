@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unsafe"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
@@ -300,9 +301,7 @@ const (
 )
 
 // EscapeEnumAndSetOptions escapes ",", "\" and "”"
-// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
-// /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
-// MySqlAntlrDdlParser.java#L374
+// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f/debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/MySqlAntlrDdlParser.java#L374
 func EscapeEnumAndSetOptions(option string) string {
 	option = strings.ReplaceAll(option, ",", "\\,")
 	option = strings.ReplaceAll(option, "\\'", "'")
@@ -377,4 +376,14 @@ func SanitizeTopicName(name string) string {
 		)
 	}
 	return sanitizedName
+}
+
+// UnsafeBytesToString create string from byte slice without copying
+func UnsafeBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+// UnsafeStringToBytes create byte slice from string without copying
+func UnsafeStringToBytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
