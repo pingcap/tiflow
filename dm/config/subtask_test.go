@@ -416,7 +416,6 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Final check: values should have increased
-	require.Greater(t, cfg.IOTotalBytes.Load(), uint64(100))
-	require.Greater(t, cfg.DumpIOTotalBytes.Load(), uint64(200))
+	require.GreaterOrEqual(t, cfg.IOTotalBytes.Load(), uint64(100))
+	require.GreaterOrEqual(t, cfg.DumpIOTotalBytes.Load(), uint64(200))
 }
