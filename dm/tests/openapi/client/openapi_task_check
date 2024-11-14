@@ -354,7 +354,7 @@ def create_load_task_success():
         },
     }
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
-    print("create_shard_task_success resp=", resp.json())
+    print("create_load_task_success resp=", resp.json())
     assert resp.status_code == 201
 
 def start_task_success(task_name, source_name):
