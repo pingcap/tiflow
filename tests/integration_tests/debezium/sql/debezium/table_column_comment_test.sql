@@ -1,7 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE: table_column_comment_test
--- ----------------------------------------------------------------------------------------------------------------
-
 CREATE TABLE dbz_4000_comment_test (
     id INT AUTO_INCREMENT NOT NULL COMMENT 'pk',
     name VARCHAR(255) NOT NULL COMMENT 'this is name column',
