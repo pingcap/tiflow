@@ -351,14 +351,14 @@ func TestFetchTZSetting(t *testing.T) {
 
 func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 	var (
-		uuid     string = "test-uuid"
-		dumpUuid string = "test-dump-uuid"
+		uuid     = "test-uuid"
+		dumpUUID = "test-dump-uuid"
 	)
 	cfg := &SubTaskConfig{
 		Name:             "test",
 		SourceID:         "source-1",
 		UUID:             uuid,
-		DumpUUID:         dumpUuid,
+		DumpUUID:         dumpUUID,
 		IOTotalBytes:     atomic.NewUint64(100),
 		DumpIOTotalBytes: atomic.NewUint64(200),
 	}
@@ -404,7 +404,7 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 			require.GreaterOrEqual(t, newCfg.IOTotalBytes.Load(), uint64(100))
 			require.GreaterOrEqual(t, newCfg.DumpIOTotalBytes.Load(), uint64(200))
 			require.Equal(t, newCfg.UUID, uuid)
-			require.Equal(t, newCfg.DumpUUID, dumpUuid)
+			require.Equal(t, newCfg.DumpUUID, dumpUUID)
 		}()
 
 		wg.Add(1)
