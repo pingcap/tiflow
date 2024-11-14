@@ -330,7 +330,6 @@ def create_load_task_success():
                     "table": "*",
                 },
                 "target": {"schema": "openapi", "table": "t"},
-                "binlog_filter_rule": ["rule-1"],
             },
             {
                 "source": {
@@ -339,7 +338,6 @@ def create_load_task_success():
                     "table": "*",
                 },
                 "target": {"schema": "openapi", "table": "t"},
-                "binlog_filter_rule": ["rule-2"],
             },
         ],
         "source_config": {
