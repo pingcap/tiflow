@@ -131,7 +131,7 @@ func (e *encodingWorkerGroup) Run(ctx context.Context) (err error) {
 			zap.String("namespace", e.changefeed.Namespace),
 			zap.String("changefeed", e.changefeed.ID),
 			zap.Error(err))
-		if err != nil && errors.Cause(err) != context.Canceled {
+		if err != nil {
 			e.closed <- err
 		}
 		close(e.closed)
