@@ -1833,6 +1833,7 @@ components:
             - "full"
             - "incremental"
             - "all"
+            - "dump"
         shard_mode:
           type: string
           description: the way to coordinate DDL
