@@ -73,7 +73,8 @@ type ddlJobPullerImpl struct {
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
-	schemaVersion int64
+	// schemaVersion is deprecated and will be removed in future versions.
+	schemaVersion int64 // Deprecated
 	filter        filter.Filter
 	// ddlTableInfo is initialized when receive the first concurrent DDL job.
 	ddlTableInfo *entry.DDLTableInfo
@@ -479,7 +480,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 	}
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
-	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
 	return p.checkIneligibleTableDDL(snap, job)
 }
