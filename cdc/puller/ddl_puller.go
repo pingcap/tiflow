@@ -74,7 +74,6 @@ type ddlJobPullerImpl struct {
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
-	schemaVersion int64
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
@@ -338,6 +337,23 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
+<<<<<<< HEAD
+=======
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() {
+		log.Info("ddl job finishedTs less than puller resolvedTs,"+
+			"discard the ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
+		return true, nil
+	}
+
+>>>>>>> b38183b086 (ddl_puller.go(ticdc): fix DDLs are ignored when schema versions are out of order (#11733))
 	defer func() {
 		if skip && err == nil {
 			log.Info("ddl job schema or table does not match, discard it",
@@ -454,7 +470,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	}
 
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
-	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
 	return p.checkIneligibleTableDDL(snap, job)
 }
