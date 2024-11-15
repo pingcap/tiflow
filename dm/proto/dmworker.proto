@@ -166,8 +166,8 @@ message SyncStatus {
     int64 totalRows = 15;
     int64 totalRps = 16;
     int64 recentRps = 17;
-    uint64 iOTotalBytes = 18;
-    uint64 dumpIOTotalBytes = 19;
+    uint64 ioTotalBytes = 18; // meter TCP io to downstream of the subtask 
+    uint64 dumpIOTotalBytes = 19; // meter TCP io from upstream of the subtask
 }
 
 // SourceStatus represents status for source runing on dm-worker

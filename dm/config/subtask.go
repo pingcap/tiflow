@@ -178,14 +178,16 @@ type SubTaskConfig struct {
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
-	// members below are injected by dataflow engine, UUID should be unique in
-	// one go runtime.
+	// members below are injected by dataflow engine
+	// UUID should be unique in one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
+	// It will meter TCP io usage to downstream of the subtask
 	UUID         string         `toml:"uuid" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"io-total-bytes" json:"io-total-bytes"`
 
-	// meter network usage from upstream
+	// DumpUUID as same as UUID
+	// DumpIOTotalBytes meter TCP io usage from upstream of the subtask, other same as IOTotalBytes
 	// e.g., pulling binlog
 	DumpUUID         string         `toml:"dump-uuid" json:"-"`
 	DumpIOTotalBytes *atomic.Uint64 `toml:"dump-io-total-bytes" json:"dump-io-total-bytes"`
