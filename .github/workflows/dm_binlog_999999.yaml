@@ -32,6 +32,9 @@ jobs:
         with:
           ref: refs/pull/${{ github.event.inputs.pr }}/head
 
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v1
+
       - name: Cache go modules
         uses: actions/cache@v2
         with:
@@ -52,6 +55,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y curl docker-compose
+          sudo service docker start  # Ensure Docker is running
           sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
           curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
@@ -61,7 +65,7 @@ jobs:
           chmod +x minio
           mv minio bin/
 
-      - name: change binlog sequence number to 999998
+      - name: Change binlog sequence number to 999998
         run: |
           while ! mysqladmin -h127.0.0.1 -P3306 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
             echo "wait mysql"
@@ -116,7 +120,7 @@ jobs:
           path: |
             ./logs
 
-      # send Slack notify if failed.
+      # Send Slack notification if failed.
       # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
       - name: Slack notification
         if: ${{ failure() }}
