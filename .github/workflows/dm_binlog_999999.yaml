@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: '1.23'
-          
       - name: Check out code
         uses: actions/checkout@v2
 
@@ -38,6 +37,11 @@ jobs:
 
       - name: Set DOCKER_HOST
         run: echo "export DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
+
+      - name: Install docker-compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
 
       - name: Cache go modules
         uses: actions/cache@v2
@@ -55,7 +59,7 @@ jobs:
       - name: Setup CI environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl docker-compose
+          sudo apt-get install -y curl
           sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
           curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
