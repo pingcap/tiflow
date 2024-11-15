@@ -268,6 +268,45 @@ def create_shard_task_success():
     print("create_shard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
+def create_dump_task_success():
+    task = {
+        "name": "test-dump",
+        "task_mode": "dump",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": "t"},
+            }
+        ],
+        "source_config": {
+            "full_migrate_conf": {
+                "export_threads": 4,
+                "import_threads": 16,
+                "data_dir": "./exported_data",
+                "consistency": "auto",
+            },
+            "incr_migrate_conf": {"repl_threads": 16, "repl_batch": 100},
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+            ],
+        }
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_dump_task_success resp=", resp.json())
+    assert resp.status_code == 201
 
 def start_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/start"
@@ -703,6 +742,7 @@ if __name__ == "__main__":
         "create_task_failed": create_task_failed,
         "create_noshard_task_success": create_noshard_task_success,
         "create_shard_task_success": create_shard_task_success,
+        "create_dump_task_success": create_dump_task_success,
         "create_incremental_task_with_gtid_success": create_incremental_task_with_gtid_success,
         "delete_task_failed": delete_task_failed,
         "delete_task_success": delete_task_success,
