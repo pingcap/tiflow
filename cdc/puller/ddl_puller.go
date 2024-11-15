@@ -73,8 +73,6 @@ type ddlJobPullerImpl struct {
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
-	// schemaVersion is deprecated and will be removed in future versions.
-	schemaVersion int64 // Deprecated
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
