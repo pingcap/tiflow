@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/google/uuid"
 	extstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -212,6 +213,14 @@ func (c *SubTaskConfig) GetFlagSet() *flag.FlagSet {
 // SetFlagSet writes back the flag set.
 func (c *SubTaskConfig) SetFlagSet(flagSet *flag.FlagSet) {
 	c.flagSet = flagSet
+}
+
+// InitIOCounters init io counter and uuid for syncer.
+func (c *SubTaskConfig) InitIOCounters() {
+	c.IOTotalBytes = atomic.NewUint64(0)
+	c.DumpIOTotalBytes = atomic.NewUint64(0)
+	c.UUID = uuid.NewString()
+	c.DumpUUID = uuid.NewString()
 }
 
 // String returns the config's json string.
