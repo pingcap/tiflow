@@ -549,7 +549,7 @@ define run_engine_unit_test
 	mkdir -p $(ENGINE_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(1) \
+	$(GOTESTNORACE) -timeout 5m -covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(1) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 endef
