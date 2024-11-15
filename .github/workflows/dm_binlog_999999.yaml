@@ -21,7 +21,6 @@ jobs:
         image: docker:19.03.12
         options: >-
           --privileged
-          --network host
     steps:
       - name: Set up Go env
         uses: actions/setup-go@v3
