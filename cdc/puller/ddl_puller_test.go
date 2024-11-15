@@ -551,6 +551,81 @@ func TestHandleJob(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, skip)
 	}
+
+	// Test finishedTs less than resolvedTs, the job will be skipped
+	{
+		recordResolvedTs := ddlJobPullerImpl.getResolvedTs()
+		// set a fake resolvedTs for test
+		fakeResolvedTs := uint64(100)
+		ddlJobPullerImpl.setResolvedTs(fakeResolvedTs)
+		// mock a job
+		job := &timodel.Job{
+			Type: timodel.ActionCreateTable,
+			BinlogInfo: &timodel.HistoryInfo{
+				FinishedTS: fakeResolvedTs - 1,
+			},
+		}
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+		// reset resolvedTs
+		ddlJobPullerImpl.setResolvedTs(recordResolvedTs)
+	}
+}
+
+func TestSchemaOutOfOrder(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+	startTs := uint64(10)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
+	// Create database
+	{
+		job := helper.DDL2Job("create database testschema")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+	}
+
+	// Create table
+	{
+		job := helper.DDL2Job("create table testschema.t1(id int primary key)")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("create table testschema.t2(id int primary key)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+	}
+
+	// Test schema versions out of order
+	{
+		recordResolvedTs := ddlJobPullerImpl.getResolvedTs()
+		// set a fake resolvedTs for test
+		fakeResolvedTs := uint64(100)
+		ddlJobPullerImpl.setResolvedTs(fakeResolvedTs)
+		// mock two jobs
+		job1 := helper.DDL2Job("alter table testschema.t1 add column x int")
+		job2 := helper.DDL2Job("alter table testschema.t1 add column y int")
+		job1.BinlogInfo.SchemaVersion = 1
+		job1.BinlogInfo.FinishedTS = fakeResolvedTs + 2
+		job2.BinlogInfo.SchemaVersion = 2
+		job2.BinlogInfo.FinishedTS = fakeResolvedTs + 1
+
+		skip, err := ddlJobPullerImpl.handleJob(job2)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		skip, err = ddlJobPullerImpl.handleJob(job1)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		// reset resolvedTs
+		ddlJobPullerImpl.setResolvedTs(recordResolvedTs)
+	}
 }
 
 func TestDDLPuller(t *testing.T) {
