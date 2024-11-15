@@ -287,7 +287,7 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 			if runningTask.Unit != frameModel.WorkerDMLoad {
 				return false
 			}
-		case dmconfig.ModeDump, dmconfig.ModeLoad, dmconfig.ModeLoadSync:
+		case dmconfig.ModeDump, dmconfig.ModeLoad:
 			// passing through, as long as the stage is done
 		default:
 			return false
