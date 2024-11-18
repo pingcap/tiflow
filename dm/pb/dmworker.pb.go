@@ -961,8 +961,10 @@ type SyncStatus struct {
 	TotalRows           int64            `protobuf:"varint,15,opt,name=totalRows,proto3" json:"totalRows,omitempty"`
 	TotalRps            int64            `protobuf:"varint,16,opt,name=totalRps,proto3" json:"totalRps,omitempty"`
 	RecentRps           int64            `protobuf:"varint,17,opt,name=recentRps,proto3" json:"recentRps,omitempty"`
-	IoTotalBytes        uint64           `protobuf:"varint,18,opt,name=ioTotalBytes,proto3" json:"ioTotalBytes,omitempty"`
-	DumpIOTotalBytes    uint64           `protobuf:"varint,19,opt,name=dumpIOTotalBytes,proto3" json:"dumpIOTotalBytes,omitempty"`
+	// meter TCP io to downstream of the subtask
+	IoTotalBytes uint64 `protobuf:"varint,18,opt,name=ioTotalBytes,proto3" json:"ioTotalBytes,omitempty"`
+	// meter TCP io from upstream of the subtask
+	DumpIOTotalBytes uint64 `protobuf:"varint,19,opt,name=dumpIOTotalBytes,proto3" json:"dumpIOTotalBytes,omitempty"`
 }
 
 func (m *SyncStatus) Reset()         { *m = SyncStatus{} }
