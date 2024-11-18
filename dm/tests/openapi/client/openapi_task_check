@@ -424,26 +424,14 @@ def get_task_io_counter_success(task_name, total):
     for item in data.get("data", []):
         unit = item.get("unit")
         sync_status = item.get("sync_status", {})
-        
         # Only validate I/O statistics if the unit is "Sync"
         if unit == "Sync":
             dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
             io_total_bytes = sync_status.get("io_total_bytes")
-            
-            if dump_io_total_bytes is None or io_total_bytes is None:
-                print("Validation failed for worker {}: Missing I/O statistics.".format(item.get('worker_name')))
-                continue
-            
-            if dump_io_total_bytes < 0:
-                print("Validation failed for worker {}: dump_io_total_bytes is negative: {}".format(item.get('worker_name'), dump_io_total_bytes))
-            
-            if io_total_bytes < 0:
-                print("Validation failed for worker {}: io_total_bytes is negative: {}".format(item.get('worker_name'), io_total_bytes))
-            
-            # Optionally, you can add more validation logic here
-            print("Worker {} - dump_io_total_bytes: {}, io_total_bytes: {}".format(item.get('worker_name'), dump_io_total_bytes, io_total_bytes))
+            assert dump_io_total_bytes is not None and io_total_bytes is not None
+            assert dump_io_total_bytes > 0 and io_total_bytes > 0
         else:
-            print("Skipping validation for worker {} as unit is not 'Sync'.".format(item.get('worker_name')))
+            print("Skipping validation for task stage is not 'Sync'.")
 
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
