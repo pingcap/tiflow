@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	//nolint:depguard
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"

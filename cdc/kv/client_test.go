@@ -1289,7 +1289,7 @@ func TestStreamSendWithError(t *testing.T) {
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
-	var requestIds sync.Map
+	var requestIDs sync.Map
 	<-server1Stopped
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv2 := newMockChangeDataService(t, ch2)
@@ -1300,7 +1300,7 @@ func TestStreamSendWithError(t *testing.T) {
 				log.Error("mock server error", zap.Error(err))
 				return
 			}
-			requestIds.Store(req.RegionId, req.RequestId)
+			requestIDs.Store(req.RegionId, req.RequestId)
 		}
 	}
 	// Reuse the same listen address as server 1
@@ -1314,8 +1314,8 @@ func TestStreamSendWithError(t *testing.T) {
 	// for more than one time, so we wait until the newly started server receives
 	// requests for both two regions.
 	err = retry.Do(context.Background(), func() error {
-		_, ok1 := requestIds.Load(regionID3)
-		_, ok2 := requestIds.Load(regionID4)
+		_, ok1 := requestIDs.Load(regionID3)
+		_, ok2 := requestIDs.Load(regionID4)
 		if ok1 && ok2 {
 			return nil
 		}
@@ -1323,8 +1323,8 @@ func TestStreamSendWithError(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	require.Nil(t, err)
-	reqID1, _ := requestIds.Load(regionID3)
-	reqID2, _ := requestIds.Load(regionID4)
+	reqID1, _ := requestIDs.Load(regionID3)
+	reqID2, _ := requestIDs.Load(regionID4)
 	initialized1 := mockInitializedEvent(regionID3, reqID1.(uint64))
 	initialized2 := mockInitializedEvent(regionID4, reqID2.(uint64))
 	ch2 <- initialized1
@@ -1686,7 +1686,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 		return defaultVersionGen()
 	}
 
-	var requestIds sync.Map
+	var requestIDs sync.Map
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv1 := newMockChangeDataService(t, ch1)
 	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
@@ -1696,7 +1696,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 				log.Error("mock server error", zap.Error(err))
 				return
 			}
-			requestIds.Store(req.RegionId, req.RequestId)
+			requestIDs.Store(req.RegionId, req.RequestId)
 		}
 	}
 	server1, addr1 := newMockService(ctx, t, srv1, wg)
@@ -1753,7 +1753,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 
 	require.Nil(t, err)
 	err = retry.Do(context.Background(), func() error {
-		_, ok := requestIds.Load(regionID)
+		_, ok := requestIDs.Load(regionID)
 		if ok {
 			return nil
 		}
@@ -1761,7 +1761,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	require.Nil(t, err)
-	reqID, _ := requestIds.Load(regionID)
+	reqID, _ := requestIDs.Load(regionID)
 	initialized := mockInitializedEvent(regionID, reqID.(uint64))
 	ch1 <- initialized
 	select {
@@ -2985,7 +2985,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	// Connection close for timeout
 	<-server1Stopped
 
-	var requestIds sync.Map
+	var requestIDs sync.Map
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv2 := newMockChangeDataService(t, ch2)
 	srv2.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
@@ -2995,7 +2995,7 @@ func testKVClientForceReconnect(t *testing.T) {
 				log.Error("mock server error", zap.Error(err))
 				return
 			}
-			requestIds.Store(req.RegionId, req.RequestId)
+			requestIDs.Store(req.RegionId, req.RequestId)
 		}
 	}
 	// Reuse the same listen addresss as server 1 to simulate TiKV handles the
@@ -3011,7 +3011,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	// to TiKV for more than one time, so we can't determine the correct requestID
 	// here, we must use the real request ID received by TiKV server
 	err = retry.Do(context.Background(), func() error {
-		_, ok := requestIds.Load(regionID3)
+		_, ok := requestIDs.Load(regionID3)
 		if ok {
 			return nil
 		}
@@ -3019,7 +3019,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(300), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	require.Nil(t, err)
-	requestID, _ := requestIds.Load(regionID3)
+	requestID, _ := requestIDs.Load(regionID3)
 
 	initialized = mockInitializedEvent(regionID3, requestID.(uint64))
 	ch2 <- initialized
@@ -3404,7 +3404,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
-	var requestIds sync.Map
+	var requestIDs sync.Map
 	var server1Stopped int32 = 0
 	server1StoppedCh := make(chan struct{})
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
@@ -3426,7 +3426,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 				log.Error("mock server error", zap.Error(err))
 				return
 			}
-			requestIds.Store(req.RegionId, req.RequestId)
+			requestIDs.Store(req.RegionId, req.RequestId)
 		}
 	}
 
@@ -3469,8 +3469,8 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	// for more than one time, so we wait until the newly started server receives
 	// requests for both two regions.
 	err = retry.Do(context.Background(), func() error {
-		_, ok1 := requestIds.Load(regionID3)
-		_, ok2 := requestIds.Load(regionID4)
+		_, ok1 := requestIDs.Load(regionID3)
+		_, ok2 := requestIDs.Load(regionID4)
 		if ok1 && ok2 {
 			return nil
 		}
@@ -3478,8 +3478,8 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	require.Nil(t, err)
-	reqID1, _ := requestIds.Load(regionID3)
-	reqID2, _ := requestIds.Load(regionID4)
+	reqID1, _ := requestIDs.Load(regionID3)
+	reqID2, _ := requestIDs.Load(regionID4)
 	initialized1 := mockInitializedEvent(regionID3, reqID1.(uint64))
 	initialized2 := mockInitializedEvent(regionID4, reqID2.(uint64))
 	ch1 <- initialized1
@@ -3515,7 +3515,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 				log.Error("mock server error", zap.Error(err))
 				return
 			}
-			requestIds.Store(req.RegionId, req.RequestId)
+			requestIDs.Store(req.RegionId, req.RequestId)
 		}
 	}
 	// Reuse the same listen address as server 1

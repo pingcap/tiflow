@@ -13,6 +13,7 @@
 
 package txn
 
+//nolint:depguard
 import "github.com/prometheus/client_golang/prometheus"
 
 // ---------- Metrics for txn sink and backends. ---------- //

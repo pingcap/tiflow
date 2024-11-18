@@ -190,7 +190,6 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 }
 
 type mockElection struct {
-	election
 	campaignRequestCh chan struct{}
 	campaignGrantCh   chan struct{}
 
@@ -217,9 +216,8 @@ func TestCampaignLiveness(t *testing.T) {
 		campaignGrantCh:   make(chan struct{}, 1),
 	}
 	cp := &captureImpl{
-		config:   config.GetDefaultServerConfig(),
-		info:     &model.CaptureInfo{ID: "test"},
-		election: me,
+		config: config.GetDefaultServerConfig(),
+		info:   &model.CaptureInfo{ID: "test"},
 	}
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 

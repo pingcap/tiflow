@@ -16,6 +16,7 @@ package model
 import (
 	"fmt"
 
+	//nolint:depguard
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )

@@ -154,6 +154,7 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 	n.id = genNextNodeID()
 
 	// `totalDependcies` and `resolvedList` must be initialized before depending on any targets.
+	//nolint:gosec
 	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
 	n.resolvedList = make([]int64, 0, n.totalDependencies)
 	for i := 0; i < int(n.totalDependencies); i++ {

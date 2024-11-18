@@ -94,9 +94,8 @@ func (e Expression) Substitute(schema, table string) string {
 		return "_"
 	} else if topicName == ".." {
 		return "__"
-	} else {
-		return topicName
 	}
+	return topicName
 }
 
 // IsHardCode checks whether a topic name is hard code or not.

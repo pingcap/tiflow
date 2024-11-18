@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	//nolint:depguard
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

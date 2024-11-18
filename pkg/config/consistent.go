@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 
+	//nolint:depguard
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
