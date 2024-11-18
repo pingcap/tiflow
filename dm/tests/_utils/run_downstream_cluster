@@ -34,7 +34,7 @@ EOF
 		--data-dir "$WORK_DIR/pd" &
 	# wait until PD is online...
 	i=0
-	while ! curl "http://$PD_ADDR/pd/api/v1/version"; do
+	while curl "http://$PD_ADDR/pd/api/v1/version"; do
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to start PD'
@@ -75,7 +75,7 @@ start_tidb() {
 		--log-file "$WORK_DIR/tidb.log" &
 
 	i=0
-	while ! curl "http://$TIDB_IP:10080/status"; do
+	while curl "http://$TIDB_IP:10080/status"; do
 		i=$((i + 1))
 		if [ "$i" -gt 50 ]; then
 			echo 'Failed to start TiDB'
