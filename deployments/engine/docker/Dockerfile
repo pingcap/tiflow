@@ -18,5 +18,3 @@ RUN make engine
 FROM ghcr.io/pingcap-qe/bases/tools-base:v1.9.2
 
 COPY --from=builder /dataflow-engine/bin/tiflow /tiflow
-
-RUN /tiflow -v
