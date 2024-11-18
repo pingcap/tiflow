@@ -86,7 +86,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")
-	unsafeGroup.Use(ownerMiddleware)
+	ownerGroup.Use(ownerMiddleware)
 	ownerGroup.POST("/resign", api.resignOwner)
 
 	// common APIs
