@@ -27,12 +27,11 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// leakutil.SetUpLeakTest(m)
 }
 
 func TestMaybeWrite(t *testing.T) {

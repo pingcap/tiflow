@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +26,7 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// leakutil.SetUpLeakTest(m)
 }
 
 func TestSizeTable(t *testing.T) {

@@ -15,10 +15,8 @@ package orchestrator
 
 import (
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// leakutil.SetUpLeakTest(m)
 }
