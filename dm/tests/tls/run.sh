@@ -42,9 +42,16 @@ EOF
 		--log-file "$WORK_DIR/tidb.log" 2>&1 &
 
 	sleep 5
-	ls -alh ./conf
+	ls -alh $cur/conf
 	# if execute failed, print tidb's log for debug
+	# openssl s_client -connect 127.0.0.1:4400 -CAfile /path/to/ca.pem -cert /path/to/dm.pem -key /path/to/dm.key
+	echo "test openssl"
+	openssl s_client -connect 127.0.0.1:4400 -CAfile $cur/conf/ca.pem -cert $cur/conf/dm.pem -key $cur/conf/dm.key
+	echo "show databases"
+	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 -E -e "SHOW DATABASES;"
+	echo "drop database1"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists tls" || (cat $WORK_DIR/tidb.log && exit 1)
+	echo "show databases2"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists dm_meta"
 }
 
