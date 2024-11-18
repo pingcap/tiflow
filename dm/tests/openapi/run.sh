@@ -281,8 +281,9 @@ function test_shard_task() {
 	# get illegal char task_status failed
 	openapi_task_check get_illegal_char_task_status_failed
 
-	# get task status success
+	# get task status and io counter success
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "get_task_io_counter_success" "$task_name" 2
 
 	# get task list
 	openapi_task_check "get_task_list" 1
@@ -342,8 +343,9 @@ function test_noshard_task() {
 	# get task status failed
 	openapi_task_check "get_task_status_failed" "not a task name"
 
-	# get task status success
+	# get task status and io counter success
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "get_task_io_counter_success" "$task_name" 2
 
 	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
@@ -405,6 +407,7 @@ function test_complex_operations_of_source_and_task() {
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "get_task_io_counter_success" "$task_name" 2
 
 	# do some complex operations
 	openapi_task_check "do_complex_operations" "$task_name"

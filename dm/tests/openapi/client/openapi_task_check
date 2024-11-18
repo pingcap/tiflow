@@ -413,6 +413,37 @@ def get_task_status_success(task_name, total):
     print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
 
+def get_task_io_counter_success(task_name, total):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("get_task_io_counter_success resp=", data)
+    assert data["total"] == int(total)
+
+    for item in data.get("data", []):
+        unit = item.get("unit")
+        sync_status = item.get("sync_status", {})
+        
+        # Only validate I/O statistics if the unit is "Sync"
+        if unit == "Sync":
+            dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
+            io_total_bytes = sync_status.get("io_total_bytes")
+            
+            if dump_io_total_bytes is None or io_total_bytes is None:
+                print(f"Validation failed for worker {item.get('worker_name')}: Missing I/O statistics.")
+                continue
+            
+            if dump_io_total_bytes < 0:
+                print(f"Validation failed for worker {item.get('worker_name')}: dump_io_total_bytes is negative: {dump_io_total_bytes}")
+            
+            if io_total_bytes < 0:
+                print(f"Validation failed for worker {item.get('worker_name')}: io_total_bytes is negative: {io_total_bytes}")
+            
+            print(f"Worker {item.get('worker_name')} - dump_io_total_bytes: {dump_io_total_bytes}, io_total_bytes: {io_total_bytes}")
+        else:
+            print(f"Skipping validation for worker {item.get('worker_name')} as unit is not 'Sync'.")
+
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
@@ -758,6 +789,7 @@ if __name__ == "__main__":
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "get_task_status_success_but_worker_meet_error": get_task_status_success_but_worker_meet_error,
+        "get_task_io_counter_success": get_task_io_counter_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
         "create_task_template_success": create_task_template_success,
         "create_task_template_failed": create_task_template_failed,
