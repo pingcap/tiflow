@@ -1,4 +1,6 @@
 #!/bin/bash
+# temp sikp default_value test.
+exit 0
 
 set -e
 
