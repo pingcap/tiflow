@@ -42,6 +42,7 @@ EOF
 		fi
 		sleep 3
 	done
+	echo 'Start PD success'
 }
 
 start_tikv() {
@@ -62,6 +63,7 @@ start_tikv() {
 		fi
 		sleep 5
 	done
+	echo 'Start TiKV success'
 }
 
 start_tidb() {
@@ -83,6 +85,7 @@ start_tidb() {
 		fi
 		sleep 3
 	done
+	echo 'Start TiDB success'
 }
 
 start_pd
