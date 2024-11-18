@@ -35,6 +35,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const defaultTimeout = 5 * time.Minute
+
 // GetExternalStorageFromURI creates a new storage.ExternalStorage from a uri.
 func GetExternalStorageFromURI(
 	ctx context.Context, uri string,
@@ -42,18 +44,18 @@ func GetExternalStorageFromURI(
 	return GetExternalStorage(ctx, uri, nil, DefaultS3Retryer())
 }
 
-// GetExternalStorageWithTimeout creates a new storage.ExternalStorage from a uri
+// GetExternalStorageWithDefaultTimeout creates a new storage.ExternalStorage from a uri
 // without retry. It is the caller's responsibility to set timeout to the context.
-func GetExternalStorageWithTimeout(
-	ctx context.Context, uri string, timeout time.Duration,
-) (storage.ExternalStorage, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (storage.ExternalStorage, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
-	s, err := GetExternalStorage(ctx, uri, nil, nil)
+	// total retry time is [1<<7, 1<<8] = [128, 256] + 30*6 = [308, 436] seconds
+	r := NewS3Retryer(7, 1*time.Second, 2*time.Second)
+	s, err := GetExternalStorage(ctx, uri, nil, r)
 
 	return &extStorageWithTimeout{
 		ExternalStorage: s,
-		timeout:         timeout,
+		timeout:         defaultTimeout,
 	}, err
 }
 
@@ -136,6 +138,17 @@ func DefaultS3Retryer() request.Retryer {
 			NumMaxRetries:    3,
 			MinRetryDelay:    1 * time.Second,
 			MinThrottleDelay: 2 * time.Second,
+		},
+	}
+}
+
+// NewS3Retryer creates a new s3 retryer.
+func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) request.Retryer {
+	return retryerWithLog{
+		DefaultRetryer: client.DefaultRetryer{
+			NumMaxRetries:    maxRetries,
+			MinRetryDelay:    minRetryDelay,
+			MinThrottleDelay: minThrottleDelay,
 		},
 	}
 }
