@@ -14,13 +14,11 @@ package executor
 
 import (
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
 // TODO: enable leak test in executor package
 //
 //nolint:unused
 func testMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// leakutil.SetUpLeakTest(m)
 }

@@ -14,12 +14,10 @@ package etcdkv
 
 import (
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
 // TODO: enable leak test in this package
 // nolint:unused
 func testMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// leakutil.SetUpLeakTest(m)
 }
