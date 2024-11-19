@@ -26,32 +26,29 @@ status-port = 10090
 
 [security]
 # set the path for certificates. Empty string means disabling secure connections.
-ssl-ca = "/dm/tiflow/dm/tests/tls/conf/ca.pem"
-ssl-cert = "/dm/tiflow/dm/tests/tls/conf/dm.pem"
-ssl-key = "/dm/tiflow/dm/tests/tls/conf/dm.key"
-cluster-ssl-ca = "/dm/tiflow/dm/tests/tls/conf/ca.pem"
-cluster-ssl-cert = "/dm/tiflow/dm/tests/tls/conf/dm.pem"
-cluster-ssl-key = "/dm/tiflow/dm/tests/tls/conf/dm.key"
+ssl-ca = "$cur/conf/ca.pem"
+ssl-cert = "$cur/conf/dm.pem"
+ssl-key = "$cur/conf/dm.key"
+cluster-ssl-ca = "$cur/conf/ca.pem"
+cluster-ssl-cert = "$cur/conf/dm.pem"
+cluster-ssl-key = "$cur/conf/dm.key"
 EOF
 
 	bin/tidb-server \
 		-P 4400 \
-		--path /dm/tidb \
+		--path $WORK_DIR/tidb \
 		--store unistore \
-		--config /dm/tidb-tls-config.toml \
-		--log-file "dm/tidb.log" 2>&1 &
+		--config $WORK_DIR/tidb-tls-config.toml \
+		--log-file "$WORK_DIR/tidb.log" 2>&1 &
 
 	sleep 5
-	ls -alh $cur/conf
-	# if execute failed, print tidb's log for debug
-	# openssl s_client -connect 127.0.0.1:4400 -CAfile /path/to/ca.pem -cert /path/to/dm.pem -key /path/to/dm.key
-	echo "test openssl"
-	openssl s_client -connect 127.0.0.1:4400 -CAfile $cur/conf/ca.pem -cert $cur/conf/dm.pem -key $cur/conf/dm.key
-	echo "show databases"
+
+	echo "show databases without TLS"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 -E -e "SHOW DATABASES;"
-	echo "drop database1"
+	echo "drop database tls with TLS"
+	# if execute failed, print tidb's log for debug
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists tls" || (cat $WORK_DIR/tidb.log && exit 1)
-	echo "show databases2"
+	echo "drop database dm_meta with TLS"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists dm_meta"
 }
 
