@@ -81,6 +81,7 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 	 	enumT enum('a', 'b', 'c') default 'b',
 	 	setT set('a', 'b', 'c') default 'c',
 	 	bitT bit(10) default b'1010101010',
+		vectorT vector(5),
 	 	jsonT json)`
 	ddlEvent := helper.DDL2Event(sql)
 
@@ -138,6 +139,7 @@ func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*mod
 		'a',
 		'b',
 		65,
+		'[1,2,3,4,5]',
 		'{"key1": "value1"}')`
 	insert := helper.DML2Event(sql, "test", "t")
 
@@ -217,5 +219,6 @@ var LargeTableColumns = map[string]interface{}{
 	"enumT":       []uint8("a"),
 	"setT":        []uint8("b"),
 	"bitT":        []uint8{65},
+	"vectorT":     []uint8("[1,2,3,4,5]"),
 	"jsonT":       []uint8("{\"key1\": \"value1\"}"),
 }

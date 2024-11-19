@@ -14,14 +14,14 @@
 package diff
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
-var _ = Suite(&testChunkSuite{})
+var _ = check.Suite(&testChunkSuite{})
 
 type testChunkSuite struct{}
 
-func (*testChunkSuite) TestChunkUpdate(c *C) {
+func (*testChunkSuite) TestChunkUpdate(c *check.C) {
 	chunk := &ChunkRange{
 		Bounds: []*Bound{
 			{
@@ -63,18 +63,18 @@ func (*testChunkSuite) TestChunkUpdate(c *C) {
 	for _, cs := range testCases {
 		newChunk := chunk.copyAndUpdate(cs.boundArgs[0], cs.boundArgs[1], cs.boundArgs[2])
 		conditions, args := newChunk.toString("")
-		c.Assert(conditions, Equals, cs.expectStr)
-		c.Assert(args, DeepEquals, cs.expectArgs)
+		c.Assert(conditions, check.Equals, cs.expectStr)
+		c.Assert(args, check.DeepEquals, cs.expectArgs)
 	}
 
 	// the origin chunk is not changed
 	conditions, args := chunk.toString("")
-	c.Assert(conditions, Equals, "((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))")
+	c.Assert(conditions, check.Equals, "((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))")
 	expectArgs := []string{"1", "1", "3", "2", "2", "4"}
-	c.Assert(args, DeepEquals, expectArgs)
+	c.Assert(args, check.DeepEquals, expectArgs)
 }
 
-func (*testChunkSuite) TestChunkToString(c *C) {
+func (*testChunkSuite) TestChunkToString(c *check.C) {
 	chunk := &ChunkRange{
 		Bounds: []*Bound{
 			{
@@ -100,16 +100,16 @@ func (*testChunkSuite) TestChunkToString(c *C) {
 	}
 
 	conditions, args := chunk.toString("")
-	c.Assert(conditions, Equals, "((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
+	c.Assert(conditions, check.Equals, "((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
 	expectArgs := []string{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"}
 	for i, arg := range args {
-		c.Assert(arg, Equals, expectArgs[i])
+		c.Assert(arg, check.Equals, expectArgs[i])
 	}
 
 	conditions, args = chunk.toString("latin1")
-	c.Assert(conditions, Equals, "((`a` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' > ?)) AND ((`a` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' <= ?))")
+	c.Assert(conditions, check.Equals, "((`a` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` COLLATE 'latin1' > ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' > ?)) AND ((`a` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` COLLATE 'latin1' < ?) OR (`a` = ? AND `b` = ? AND `c` COLLATE 'latin1' <= ?))")
 	expectArgs = []string{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"}
 	for i, arg := range args {
-		c.Assert(arg, Equals, expectArgs[i])
+		c.Assert(arg, check.Equals, expectArgs[i])
 	}
 }

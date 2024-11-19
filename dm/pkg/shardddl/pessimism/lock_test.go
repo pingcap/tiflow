@@ -14,15 +14,15 @@
 package pessimism
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type testLock struct{}
 
-var _ = Suite(&testLock{})
+var _ = check.Suite(&testLock{})
 
-func (t *testLock) TestLock(c *C) {
+func (t *testLock) TestLock(c *check.C) {
 	var (
 		ID      = "test-`foo`.`bar`"
 		task    = "test"
@@ -40,40 +40,40 @@ func (t *testLock) TestLock(c *C) {
 
 	// DDLs mismatch.
 	synced, remain, err := l1.TrySync(source1, DDLs[1:], []string{source1})
-	c.Assert(terror.ErrMasterShardingDDLDiff.Equal(err), IsTrue)
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
-	c.Assert(l1.Ready(), DeepEquals, map[string]bool{source1: false})
+	c.Assert(terror.ErrMasterShardingDDLDiff.Equal(err), check.IsTrue)
+	c.Assert(synced, check.IsFalse)
+	c.Assert(remain, check.Equals, 1)
+	c.Assert(l1.Ready(), check.DeepEquals, map[string]bool{source1: false})
 	synced, _ = l1.IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(l1.IsDone(source1), IsFalse)
-	c.Assert(l1.IsResolved(), IsFalse)
+	c.Assert(synced, check.IsFalse)
+	c.Assert(l1.IsDone(source1), check.IsFalse)
+	c.Assert(l1.IsResolved(), check.IsFalse)
 
 	// synced.
 	synced, remain, err = l1.TrySync(source1, DDLs, []string{source1})
-	c.Assert(err, IsNil)
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
-	c.Assert(l1.Ready(), DeepEquals, map[string]bool{source1: true})
+	c.Assert(err, check.IsNil)
+	c.Assert(synced, check.IsTrue)
+	c.Assert(remain, check.Equals, 0)
+	c.Assert(l1.Ready(), check.DeepEquals, map[string]bool{source1: true})
 	synced, _ = l1.IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(l1.IsDone(source1), IsFalse)
-	c.Assert(l1.IsResolved(), IsFalse)
+	c.Assert(synced, check.IsTrue)
+	c.Assert(l1.IsDone(source1), check.IsFalse)
+	c.Assert(l1.IsResolved(), check.IsFalse)
 
 	// mark done.
 	l1.MarkDone(source1)
-	c.Assert(l1.IsDone(source1), IsTrue)
-	c.Assert(l1.IsResolved(), IsTrue)
+	c.Assert(l1.IsDone(source1), check.IsTrue)
+	c.Assert(l1.IsResolved(), check.IsTrue)
 
 	// create the lock with 2 sources.
 	l2 := NewLock(ID, task, source1, DDLs, []string{source1, source2})
 
 	// join a new source.
 	synced, remain, err = l2.TrySync(source1, DDLs, []string{source2, source3})
-	c.Assert(err, IsNil)
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 2)
-	c.Assert(l2.Ready(), DeepEquals, map[string]bool{
+	c.Assert(err, check.IsNil)
+	c.Assert(synced, check.IsFalse)
+	c.Assert(remain, check.Equals, 2)
+	c.Assert(l2.Ready(), check.DeepEquals, map[string]bool{
 		source1: true,
 		source2: false,
 		source3: false,
@@ -81,60 +81,60 @@ func (t *testLock) TestLock(c *C) {
 
 	// sync other sources.
 	synced, remain, err = l2.TrySync(source2, DDLs, []string{})
-	c.Assert(err, IsNil)
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
-	c.Assert(l2.Ready(), DeepEquals, map[string]bool{
+	c.Assert(err, check.IsNil)
+	c.Assert(synced, check.IsFalse)
+	c.Assert(remain, check.Equals, 1)
+	c.Assert(l2.Ready(), check.DeepEquals, map[string]bool{
 		source1: true,
 		source2: true,
 		source3: false,
 	})
 	synced, remain, err = l2.TrySync(source3, DDLs, nil)
-	c.Assert(err, IsNil)
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
-	c.Assert(l2.Ready(), DeepEquals, map[string]bool{
+	c.Assert(err, check.IsNil)
+	c.Assert(synced, check.IsTrue)
+	c.Assert(remain, check.Equals, 0)
+	c.Assert(l2.Ready(), check.DeepEquals, map[string]bool{
 		source1: true,
 		source2: true,
 		source3: true,
 	})
 
 	// done none.
-	c.Assert(l2.IsDone(source1), IsFalse)
-	c.Assert(l2.IsDone(source2), IsFalse)
-	c.Assert(l2.IsDone(source3), IsFalse)
-	c.Assert(l2.IsResolved(), IsFalse)
+	c.Assert(l2.IsDone(source1), check.IsFalse)
+	c.Assert(l2.IsDone(source2), check.IsFalse)
+	c.Assert(l2.IsDone(source3), check.IsFalse)
+	c.Assert(l2.IsResolved(), check.IsFalse)
 
 	// done some.
 	l2.MarkDone(source1)
 	l2.MarkDone(source2)
-	c.Assert(l2.IsDone(source1), IsTrue)
-	c.Assert(l2.IsDone(source2), IsTrue)
-	c.Assert(l2.IsDone(source3), IsFalse)
-	c.Assert(l2.IsResolved(), IsFalse)
+	c.Assert(l2.IsDone(source1), check.IsTrue)
+	c.Assert(l2.IsDone(source2), check.IsTrue)
+	c.Assert(l2.IsDone(source3), check.IsFalse)
+	c.Assert(l2.IsResolved(), check.IsFalse)
 
 	// done all.
 	l2.MarkDone(source3)
-	c.Assert(l2.IsDone(source3), IsTrue)
-	c.Assert(l2.IsResolved(), IsTrue)
+	c.Assert(l2.IsDone(source3), check.IsTrue)
+	c.Assert(l2.IsResolved(), check.IsTrue)
 
 	// mark on not existing source has no effect.
 	l2.MarkDone("not-exist-source")
-	c.Assert(l2.IsResolved(), IsTrue)
+	c.Assert(l2.IsResolved(), check.IsTrue)
 
 	// create the lock with 2 sources.
 	l3 := NewLock(ID, task, source1, DDLs, []string{source1, source2})
 	l3.ForceSynced()
 	synced, remain = l3.IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
+	c.Assert(synced, check.IsTrue)
+	c.Assert(remain, check.Equals, 0)
 
 	// revert the synced stage.
 	l3.RevertSynced([]string{source2})
 	synced, remain = l3.IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	c.Assert(synced, check.IsFalse)
+	c.Assert(remain, check.Equals, 1)
 	ready := l3.Ready()
-	c.Assert(ready[source1], IsTrue)
-	c.Assert(ready[source2], IsFalse)
+	c.Assert(ready[source1], check.IsTrue)
+	c.Assert(ready[source2], check.IsFalse)
 }

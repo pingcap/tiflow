@@ -35,7 +35,7 @@ curl -i -X POST \
     "database.user": "debezium",
     "database.password": "dbz",
     "database.server.id": "184054",
-    "topic.prefix": "dbserver1",
+    "topic.prefix": "default",
     "schema.history.internal.kafka.bootstrap.servers": "127.0.0.1:9092",
     "schema.history.internal.kafka.topic": "schemahistory.test",
     "transforms": "x",
@@ -50,7 +50,7 @@ EOF
 
 start_tidb_cluster --workdir $WORK_DIR
 run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-run_cdc_cli changefeed create --sink-uri="kafka://127.0.0.1:9092/output_ticdc?protocol=debezium&kafka-version=2.4.0"
+run_cdc_cli changefeed create -c test --sink-uri="kafka://127.0.0.1:9092/output_ticdc?protocol=debezium&kafka-version=2.4.0" --config "$CUR/changefeed.toml"
 
 cd $CUR
 go run ./src

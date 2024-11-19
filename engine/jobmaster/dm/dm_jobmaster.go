@@ -434,6 +434,7 @@ func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerState) (f
 	status := frameModel.WorkerStatus{
 		State: code,
 	}
+	// nolint
 	if jobStatus, err := jm.QueryJobStatus(ctx, nil); err != nil {
 		return status, err
 	} else if bs, err := json.Marshal(jobStatus); err != nil {

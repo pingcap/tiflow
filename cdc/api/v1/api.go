@@ -520,7 +520,6 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 		retry.WithMaxTries(100),         // max retry duration is 1 minute
 		retry.WithBackoffBaseDelay(600), // default owner tick interval is 200ms
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
-
 	if err != nil {
 		_ = c.Error(err)
 		return

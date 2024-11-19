@@ -171,6 +171,11 @@ error = '''
 TiCDC cluster is unhealthy
 '''
 
+["CDC:ErrCodeNilFunction"]
+error = '''
+function is not initialized
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -219,6 +224,11 @@ credential not found: %s
 ["CDC:ErrDDLSchemaNotFound"]
 error = '''
 cannot find mysql.tidb_ddl_job schema
+'''
+
+["CDC:ErrDDLUnsupportType"]
+error = '''
+unsupport ddl type %s, query %s
 '''
 
 ["CDC:ErrDatumUnflatten"]
@@ -1004,6 +1014,11 @@ some tables are not eligible to replicate(%v), if you want to ignore these table
 ["CDC:ErrTargetTsBeforeStartTs"]
 error = '''
 fail to create changefeed because target-ts %d is earlier than start-ts %d
+'''
+
+["CDC:ErrTiDBUnexpectedJobMeta"]
+error = '''
+unexpected `job_meta` from tidb
 '''
 
 ["CDC:ErrTiKVEventFeed"]

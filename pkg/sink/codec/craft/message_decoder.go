@@ -16,19 +16,15 @@ package craft
 import (
 	"encoding/binary"
 	"math"
-	"unsafe"
 
 	"github.com/pingcap/errors"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
-
-// / create string from byte slice without copying
-func unsafeBytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
 
 // / Primitive type decoders
 func decodeUint8(bits []byte) ([]byte, byte, error) {
@@ -139,7 +135,7 @@ func decodeBytes(bits []byte) ([]byte, []byte, error) {
 func decodeString(bits []byte) ([]byte, string, error) {
 	bits, bytes, err := decodeBytes(bits)
 	if err == nil {
-		return bits, unsafeBytesToString(bytes), nil
+		return bits, common.UnsafeBytesToString(bytes), nil
 	}
 	return bits, "", errors.Trace(err)
 }
@@ -160,7 +156,7 @@ func decodeStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte
 
 	data := allocator.stringSlice(size)
 	for i := 0; i < size; i++ {
-		data[i] = unsafeBytesToString(newBits[:larray[i]])
+		data[i] = common.UnsafeBytesToString(newBits[:larray[i]])
 		newBits = newBits[larray[i]:]
 	}
 	return newBits, data, nil
@@ -184,7 +180,7 @@ func decodeNullableStringChunk(bits []byte, size int, allocator *SliceAllocator)
 		if larray[i] == -1 {
 			continue
 		}
-		s := unsafeBytesToString(newBits[:larray[i]])
+		s := common.UnsafeBytesToString(newBits[:larray[i]])
 		data[i] = &s
 		newBits = newBits[larray[i]:]
 	}
@@ -323,7 +319,7 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 	switch ty {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeJSON, mysql.TypeNewDecimal:
 		// value type for these mysql types are string
-		return unsafeBytesToString(bits), nil
+		return common.UnsafeBytesToString(bits), nil
 	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
 		// value type for thest mysql types are uint64
 		_, u64, err := decodeUvarint(bits)
@@ -353,6 +349,10 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 		fallthrough
 	case mysql.TypeGeometry:
 		return nil, nil
+	case mysql.TypeTiDBVectorFloat32:
+		if val, err := types.ParseVectorFloat32(string(bits)); err != nil {
+			return val, nil
+		}
 	}
 	return nil, nil
 }

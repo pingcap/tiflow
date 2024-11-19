@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timeta "github.com/pingcap/tidb/pkg/meta"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -110,7 +110,7 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 }
 
 // GetSchemaVersion returns the schema version of the meta.
-func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
+func GetSchemaVersion(meta timeta.Reader) (int64, error) {
 	// After we get the schema version at startTs, if the diff corresponding to that version does not exist,
 	// it means that the job is not committed yet, so we should subtract one from the version, i.e., version--.
 	version, err := meta.GetSchemaVersion()
@@ -130,7 +130,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
-	meta *timeta.Meta,
+	meta timeta.Reader,
 	currentTs uint64,
 	forceReplicate bool,
 	filter filter.Filter,
@@ -1084,28 +1084,27 @@ func (s *snapshot) alterPartitioning(job *timodel.Job) error {
 }
 
 func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
-	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []*timodel.CIStr
-	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
+	args, err := timodel.GetRenameTablesArgs(job)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(job.BinlogInfo.MultipleTableInfos) < len(newTableNames) {
+	if len(job.BinlogInfo.MultipleTableInfos) < len(args.RenameTableInfos) {
 		return cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 	// NOTE: should handle failures in halfway better.
-	for _, tableID := range oldTableIDs {
-		if err := s.dropTable(tableID, currentTs); err != nil {
+	for _, info := range args.RenameTableInfos {
+		if err := s.dropTable(info.TableID, currentTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
-		newSchema, ok := s.schemaByID(newSchemaIDs[i])
+		info := args.RenameTableInfos[i]
+		newSchema, ok := s.schemaByID(info.NewSchemaID)
 		if !ok {
-			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
+			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(info.NewSchemaID)
 		}
 		newSchemaName := newSchema.Name.O
-		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
+		tbInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 		err = s.createTable(tbInfo, currentTs)
 		if err != nil {
 			return errors.Trace(err)

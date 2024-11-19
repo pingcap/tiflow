@@ -27,9 +27,10 @@ import (
 	"github.com/pingcap/tidb/pkg/executor"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
@@ -269,7 +270,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// we can update the tidb config here
 	})
-	session.SetSchemaLease(0)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -1553,7 +1554,7 @@ func TestBuildTableInfo(t *testing.T) {
 	for i, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
-		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		originTI, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, tz)
@@ -1623,7 +1624,7 @@ func TestNewDMRowChange(t *testing.T) {
 	for _, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
-		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		originTI, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		cols := []*model.Column{
@@ -1682,4 +1683,13 @@ func TestFormatColVal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, float32(0), value)
 	require.NotZero(t, warn)
+
+	vector, _ := types.ParseVectorFloat32("[1,2,3,4,5]")
+	ftTypeVector := types.NewFieldType(mysql.TypeTiDBVectorFloat32)
+	col = &timodel.ColumnInfo{FieldType: *ftTypeVector}
+	datum.SetVectorFloat32(vector)
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, vector, value)
+	require.Zero(t, warn)
 }

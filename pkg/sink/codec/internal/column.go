@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -28,24 +29,23 @@ import (
 type Column struct {
 	Type byte `json:"t"`
 	// Deprecated: please use Flag instead.
-	WhereHandle *bool                `json:"h,omitempty"`
+	WhereHandle bool                 `json:"h,omitempty"`
 	Flag        model.ColumnFlagType `json:"f"`
 	Value       any                  `json:"v"`
 }
 
 // FromRowChangeColumn converts from a row changed column to a codec column.
-func (c *Column) FromRowChangeColumn(col *model.Column) {
-	c.Type = col.Type
-	c.Flag = col.Flag
+func (c *Column) FromRowChangeColumn(col model.ColumnDataX) {
+	c.Type = col.GetType()
+	c.Flag = col.GetFlag()
 	if c.Flag.IsHandleKey() {
-		whereHandle := true
-		c.WhereHandle = &whereHandle
+		c.WhereHandle = true
 	}
 	if col.Value == nil {
 		c.Value = nil
 		return
 	}
-	switch col.Type {
+	switch c.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		var str string
 		switch col.Value.(type) {
@@ -61,6 +61,8 @@ func (c *Column) FromRowChangeColumn(col *model.Column) {
 			str = str[1 : len(str)-1]
 		}
 		c.Value = str
+	case mysql.TypeTiDBVectorFloat32:
+		c.Value = col.Value.(types.VectorFloat32).String()
 	default:
 		c.Value = col.Value
 	}
@@ -98,8 +100,8 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 				zap.Any("col", c), zap.Error(err))
 		}
 		col.Value = uint64(val)
+	case mysql.TypeTiDBVectorFloat32:
 	default:
-		col.Value = c.Value
 	}
 	return col
 }

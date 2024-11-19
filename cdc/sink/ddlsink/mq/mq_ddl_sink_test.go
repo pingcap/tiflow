@@ -19,7 +19,7 @@ import (
 	"net/url"
 	"testing"
 
-	mm "github.com/pingcap/tidb/pkg/parser/model"
+	mm "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -290,4 +290,5 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolMaxwell))
 	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
 	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolSimple))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDebezium))
 }

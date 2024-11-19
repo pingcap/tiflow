@@ -24,17 +24,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
-func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
+func newBatchEncodeWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200).WithChangefeedID(id)
@@ -43,14 +41,13 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
 	encoderConcurrency := 4
-	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.EncoderConcurrency = &encoderConcurrency
 	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
-	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup), p
 }
 
-func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
+func newNonBatchEncodeWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
 	// 300 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300).WithChangefeedID(id)
@@ -59,11 +56,10 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
 	encoderConcurrency := 4
-	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.EncoderConcurrency = &encoderConcurrency
 	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
-	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup), p
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {
@@ -77,7 +73,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	worker, p := newNonBatchEncodeWorker(ctx, t)
+	worker, p := newNonBatchEncodeWorker(t)
 	defer worker.close()
 
 	key := model.TopicPartitionKey{
@@ -135,7 +131,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newBatchEncodeWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 	key := model.TopicPartitionKey{
 		Topic:     "test",
@@ -183,9 +179,7 @@ func TestBatchEncode_Group(t *testing.T) {
 		Topic:     "test1",
 		Partition: 2,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, _ := newBatchEncodeWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 
 	tableStatus := state.TableSinkSinking
@@ -285,9 +279,7 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 		Topic:     "test",
 		Partition: 2,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, _ := newBatchEncodeWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
@@ -359,7 +351,7 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	tableStatus := state.TableSinkSinking
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, p := newBatchEncodeWorker(ctx, t)
+	worker, p := newBatchEncodeWorker(t)
 	defer worker.close()
 
 	helper := entry.NewSchemaTestHelper(t)
@@ -477,7 +469,7 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newBatchEncodeWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 
 	var wg sync.WaitGroup
@@ -503,7 +495,7 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, p := newNonBatchEncodeWorker(ctx, t)
+	worker, p := newNonBatchEncodeWorker(t)
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
@@ -573,7 +565,7 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 
 func TestNonBatchEncodeWorker_Abort(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newBatchEncodeWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 
 	var wg sync.WaitGroup

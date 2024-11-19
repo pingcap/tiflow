@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro/v2"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -307,14 +307,14 @@ func TestAvroEnvelope(t *testing.T) {
 func TestSanitizeName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "normalColumnName123", sanitizeName("normalColumnName123"))
+	require.Equal(t, "normalColumnName123", common.SanitizeName("normalColumnName123"))
 	require.Equal(
 		t,
 		"_1ColumnNameStartWithNumber",
-		sanitizeName("1ColumnNameStartWithNumber"),
+		common.SanitizeName("1ColumnNameStartWithNumber"),
 	)
-	require.Equal(t, "A_B", sanitizeName("A.B"))
-	require.Equal(t, "columnNameWith__", sanitizeName("columnNameWith中文"))
+	require.Equal(t, "A_B", common.SanitizeName("A.B"))
+	require.Equal(t, "columnNameWith__", common.SanitizeName("columnNameWith中文"))
 }
 
 func TestGetAvroNamespace(t *testing.T) {
@@ -334,6 +334,12 @@ func TestGetAvroNamespace(t *testing.T) {
 		t,
 		"N_amespace.S_chema",
 		getAvroNamespace("N-amespace", "S.chema"),
+	)
+
+	require.Equal(
+		t,
+		"normalNamespace",
+		getAvroNamespace("normalNamespace", ""),
 	)
 }
 

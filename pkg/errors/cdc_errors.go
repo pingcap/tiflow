@@ -54,6 +54,10 @@ var (
 		"cannot find mysql.tidb_ddl_job schema",
 		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
 	)
+	ErrDDLUnsupportType = errors.Normalize(
+		"unsupport ddl type %s, query %s",
+		errors.RFCCodeText("CDC:ErrDDLUnsupportType"),
+	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
 		errors.RFCCodeText("CDC:ErrGRPCDialFailed"),
@@ -140,6 +144,17 @@ var (
 		"stop processor by admin command",
 		errors.RFCCodeText("CDC:ErrAdminStopProcessor"),
 	)
+	ErrCodeNilFunction = errors.Normalize(
+		"function is not initialized",
+		errors.RFCCodeText("CDC:ErrCodeNilFunction"),
+	)
+
+	// Errors caused by unexpected behavior from external systems
+	ErrTiDBUnexpectedJobMeta = errors.Normalize(
+		"unexpected `job_meta` from tidb",
+		errors.RFCCodeText("CDC:ErrTiDBUnexpectedJobMeta"),
+	)
+
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible = errors.Normalize(
 		"version is incompatible: %s",

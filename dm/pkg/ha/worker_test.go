@@ -14,23 +14,23 @@
 package ha
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
-func (t *testForEtcd) TestWorkerInfoJSON(c *C) {
+func (t *testForEtcd) TestWorkerInfoJSON(c *check.C) {
 	i1 := NewWorkerInfo("dm-worker-1", "192.168.0.100:8262")
 
 	j, err := i1.toJSON()
-	c.Assert(err, IsNil)
-	c.Assert(j, Equals, `{"name":"dm-worker-1","addr":"192.168.0.100:8262"}`)
-	c.Assert(j, Equals, i1.String())
+	c.Assert(err, check.IsNil)
+	c.Assert(j, check.Equals, `{"name":"dm-worker-1","addr":"192.168.0.100:8262"}`)
+	c.Assert(j, check.Equals, i1.String())
 
 	i2, err := workerInfoFromJSON(j)
-	c.Assert(err, IsNil)
-	c.Assert(i2, DeepEquals, i1)
+	c.Assert(err, check.IsNil)
+	c.Assert(i2, check.DeepEquals, i1)
 }
 
-func (t *testForEtcd) TestWorkerInfoEtcd(c *C) {
+func (t *testForEtcd) TestWorkerInfoEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -42,34 +42,34 @@ func (t *testForEtcd) TestWorkerInfoEtcd(c *C) {
 
 	// get without info.
 	ifm, _, err := GetAllWorkerInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(ifm, check.HasLen, 0)
 
 	// put two info.
 	rev1, err := PutWorkerInfo(etcdTestCli, info1)
-	c.Assert(err, IsNil)
-	c.Assert(rev1, Greater, int64(0))
+	c.Assert(err, check.IsNil)
+	c.Assert(rev1, check.Greater, int64(0))
 	rev2, err := PutWorkerInfo(etcdTestCli, info2)
-	c.Assert(err, IsNil)
-	c.Assert(rev2, Greater, rev1)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev2, check.Greater, rev1)
 
 	// get again, with two info.
 	ifm, rev3, err := GetAllWorkerInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev2)
-	c.Assert(ifm, HasLen, 2)
-	c.Assert(ifm[worker1], DeepEquals, info1)
-	c.Assert(ifm[worker2], DeepEquals, info2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev3, check.Equals, rev2)
+	c.Assert(ifm, check.HasLen, 2)
+	c.Assert(ifm[worker1], check.DeepEquals, info1)
+	c.Assert(ifm[worker2], check.DeepEquals, info2)
 
 	// delete info1.
 	rev4, err := DeleteWorkerInfoRelayConfig(etcdTestCli, worker1)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev3)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev4, check.Greater, rev3)
 
 	// get again, with only one info.
 	ifm, rev5, err := GetAllWorkerInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev5, Equals, rev4)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm[worker2], DeepEquals, info2)
+	c.Assert(err, check.IsNil)
+	c.Assert(rev5, check.Equals, rev4)
+	c.Assert(ifm, check.HasLen, 1)
+	c.Assert(ifm[worker2], check.DeepEquals, info2)
 }

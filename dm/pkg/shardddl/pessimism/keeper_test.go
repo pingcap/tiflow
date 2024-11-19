@@ -14,14 +14,14 @@
 package pessimism
 
 import (
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
 type testLockKeeper struct{}
 
-var _ = Suite(&testLockKeeper{})
+var _ = check.Suite(&testLockKeeper{})
 
-func (t *testLockKeeper) TestLockKeeper(c *C) {
+func (t *testLockKeeper) TestLockKeeper(c *check.C) {
 	var (
 		lk      = NewLockKeeper()
 		schema  = "foo"
@@ -38,47 +38,47 @@ func (t *testLockKeeper) TestLockKeeper(c *C) {
 
 	// lock with 2 sources.
 	lockID1, synced, remain, err := lk.TrySync(info11, []string{source1, source2})
-	c.Assert(err, IsNil)
-	c.Assert(lockID1, Equals, "task1-`foo`.`bar`")
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	c.Assert(err, check.IsNil)
+	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
+	c.Assert(synced, check.IsFalse)
+	c.Assert(remain, check.Equals, 1)
 	lockID1, synced, remain, err = lk.TrySync(info12, []string{source1, source2})
-	c.Assert(err, IsNil)
-	c.Assert(lockID1, Equals, "task1-`foo`.`bar`")
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
+	c.Assert(synced, check.IsTrue)
+	c.Assert(remain, check.Equals, 0)
 
 	// lock with only 1 source.
 	lockID2, synced, remain, err := lk.TrySync(info21, []string{source1})
-	c.Assert(err, IsNil)
-	c.Assert(lockID2, Equals, "task2-`foo`.`bar`")
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(lockID2, check.Equals, "task2-`foo`.`bar`")
+	c.Assert(synced, check.IsTrue)
+	c.Assert(remain, check.Equals, 0)
 
 	// find lock.
 	lock1 := lk.FindLock(lockID1)
-	c.Assert(lock1, NotNil)
-	c.Assert(lock1.ID, Equals, lockID1)
+	c.Assert(lock1, check.NotNil)
+	c.Assert(lock1.ID, check.Equals, lockID1)
 	lock2 := lk.FindLock(lockID2)
-	c.Assert(lock2, NotNil)
-	c.Assert(lock2.ID, Equals, lockID2)
+	c.Assert(lock2, check.NotNil)
+	c.Assert(lock2.ID, check.Equals, lockID2)
 	lockIDNotExists := "lock-not-exists"
-	c.Assert(lk.FindLock(lockIDNotExists), IsNil)
+	c.Assert(lk.FindLock(lockIDNotExists), check.IsNil)
 
 	// all locks.
 	locks := lk.Locks()
-	c.Assert(locks, HasLen, 2)
-	c.Assert(locks[lockID1], Equals, lock1) // compare pointer
-	c.Assert(locks[lockID2], Equals, lock2)
+	c.Assert(locks, check.HasLen, 2)
+	c.Assert(locks[lockID1], check.Equals, lock1) // compare pointer
+	c.Assert(locks[lockID2], check.Equals, lock2)
 
 	// remove lock.
-	c.Assert(lk.RemoveLock(lockID1), IsTrue)
-	c.Assert(lk.RemoveLock(lockIDNotExists), IsFalse)
-	c.Assert(lk.Locks(), HasLen, 1)
+	c.Assert(lk.RemoveLock(lockID1), check.IsTrue)
+	c.Assert(lk.RemoveLock(lockIDNotExists), check.IsFalse)
+	c.Assert(lk.Locks(), check.HasLen, 1)
 
 	// clear locks.
 	lk.Clear()
 
 	// no locks exist.
-	c.Assert(lk.Locks(), HasLen, 0)
+	c.Assert(lk.Locks(), check.HasLen, 0)
 }

@@ -22,7 +22,7 @@ curl -i -X POST \
     "database.user": "debezium",
     "database.password": "dbz",
     "database.server.id": "184054",
-    "topic.prefix": "dbserver1",
+    "topic.prefix": "default",
     "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
     "schema.history.internal.kafka.topic": "schemahistory.test",
     "transforms": "x",
@@ -41,9 +41,9 @@ tiup playground nightly --tiflash 0 --ticdc 1
 ```
 
 ```
-tiup cdc cli changefeed create \
-  --server=http://127.0.0.1:8300 \
-  --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium&kafka-version=2.4.0"
+tiup cdc cli changefeed create -c test \
+  --server=http://127.0.0.1:8300 --config changefeed.toml \
+  --sink-uri="kafka://127.0.0.1:9094/output_ticdc?protocol=debezium"
 ```
 
 ```

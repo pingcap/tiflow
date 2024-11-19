@@ -1,12 +1,13 @@
 linters:
   disable-all: true
+  # temp disable errcheck because of panic of lint check with go 1.23.
   enable:
     - asciicheck
     - bodyclose
     - depguard
     - dogsled
     - dupl
-    - errcheck
+    #- errcheck
     - exportloopref
     - gocritic
     - godot
@@ -83,6 +84,14 @@ linters-settings:
   govet:
     # report about shadowed variables
     check-shadowing: true
+  depguard:
+    rules:
+      main:
+        files:
+          - $all
+        deny:
+          - pkg: "github.com/juju/errors"
+            desc: error handling is allowed only by pingcap/errors
   revive:
     ignoreGeneratedHeader: false
     severity: "error"

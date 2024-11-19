@@ -15,27 +15,28 @@ package owner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-	config2 "github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
-func createDDLManagerForTest(t *testing.T) *ddlManager {
+func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *ddlManager {
 	startTs, checkpointTs := model.Ts(0), model.Ts(1)
 	changefeedID := model.DefaultChangeFeedID("ddl-manager-test")
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
-	cfg := config2.GetDefaultReplicaConfig()
+	cfg := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
@@ -51,7 +52,8 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
 		false,
-		false,
+		shouldSendAllBootstrapAtStart,
+		func(err error) {},
 	)
 	return res
 }
@@ -67,7 +69,7 @@ func newFakeDDLEvent(
 	}
 	info.TableInfo = &timodel.TableInfo{
 		ID:   tableID,
-		Name: timodel.NewCIStr(tableName),
+		Name: pmodel.NewCIStr(tableName),
 	}
 	return &model.DDLEvent{
 		TableInfo: info,
@@ -77,7 +79,7 @@ func newFakeDDLEvent(
 }
 
 func TestGetNextDDL(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	dm.executingDDL = newFakeDDLEvent(1,
 		"test_1", timodel.ActionDropColumn, 1)
 	require.Equal(t, dm.executingDDL, dm.getNextDDL())
@@ -95,7 +97,7 @@ func TestGetNextDDL(t *testing.T) {
 }
 
 func TestBarriers(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 
 	tableID1 := int64(1)
 	tableName1 := model.TableName{Table: "test_1", TableID: tableID1}
@@ -145,7 +147,7 @@ func TestBarriers(t *testing.T) {
 }
 
 func TestGetSnapshotTs(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	dm.startTs = 0
 	dm.checkpointTs = 1
 	require.Equal(t, dm.startTs, dm.getSnapshotTs())
@@ -166,11 +168,10 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := context.Background()
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
-	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []timodel.CIStr
+	var oldSchemaIDs, oldTableIDs []int64
 
 	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
 		mockDDLSink.ddlDone = false
@@ -211,29 +212,33 @@ func TestExecRenameTablesDDL(t *testing.T) {
 
 	require.Len(t, oldSchemaIDs, 2)
 	require.Len(t, oldTableIDs, 2)
-	newSchemaIDs = []int64{oldSchemaIDs[1], oldSchemaIDs[0]}
-	oldSchemaNames = []timodel.CIStr{
-		timodel.NewCIStr("test1"),
-		timodel.NewCIStr("test2"),
+	args := &timodel.RenameTablesArgs{
+		RenameTableInfos: []*timodel.RenameTableArgs{
+			{
+				OldSchemaID:   oldSchemaIDs[0],
+				NewSchemaID:   oldSchemaIDs[1],
+				NewTableName:  pmodel.NewCIStr("tb20"),
+				TableID:       oldTableIDs[0],
+				OldSchemaName: pmodel.NewCIStr("test1"),
+				OldTableName:  pmodel.NewCIStr("oldtb20"),
+			},
+			{
+				OldSchemaID:   oldSchemaIDs[1],
+				NewSchemaID:   oldSchemaIDs[0],
+				NewTableName:  pmodel.NewCIStr("tb10"),
+				TableID:       oldTableIDs[1],
+				OldSchemaName: pmodel.NewCIStr("test2"),
+				OldTableName:  pmodel.NewCIStr("oldtb10"),
+			},
+		},
 	}
-	newTableNames = []timodel.CIStr{
-		timodel.NewCIStr("tb20"),
-		timodel.NewCIStr("tb10"),
-	}
-	require.Len(t, newSchemaIDs, 2)
-	require.Len(t, oldSchemaNames, 2)
-	require.Len(t, newTableNames, 2)
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs, newTableNames,
-		oldTableIDs, oldSchemaNames,
-	}
-	rawArgs, err := json.Marshal(args)
-	require.Nil(t, err)
 	job := helper.DDL2Job(
 		"rename table test1.tb1 to test2.tb10, test2.tb2 to test1.tb20")
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
-	job.RawArgs = rawArgs
+	var err error
+	job, err = entry.GetNewJobWithArgs(job, args)
+	require.Nil(t, err)
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false
@@ -267,7 +272,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	defer helper.Close()
 
 	ctx := context.Background()
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
@@ -332,7 +337,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	defer helper.Close()
 
 	ctx := context.Background()
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
@@ -462,36 +467,44 @@ func TestIsGlobalDDL(t *testing.T) {
 	}
 }
 
-func TestCheckAndSendBootstrapMsgs(t *testing.T) {
+func TestTrySendBootstrap(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ddl1 := helper.DDL2Event("create table test.tb1(id int primary key)")
 	ddl2 := helper.DDL2Event("create table test.tb2(id int primary key)")
 
 	ctx := context.Background()
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	dm.schema = helper.SchemaStorage()
 	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
 
-	mockDDLSink := dm.ddlSink.(*mockDDLSink)
-	mockDDLSink.recordDDLHistory = true
+	mock := dm.ddlSink.(*mockDDLSink)
+	mock.recordDDLHistory = true
 
 	// do not send all bootstrap messages
-	send, err := dm.checkAndSendBootstrapMsgs(ctx)
-	require.Nil(t, err)
-	require.True(t, send)
-	require.False(t, dm.bootstraped)
-	require.Equal(t, 0, len(mockDDLSink.ddlHistory))
+	currentTables, err := dm.allTables(ctx)
+	require.Equal(t, 2, len(currentTables))
+	require.NoError(t, err)
+	ok := dm.trySendBootstrap(ctx, currentTables)
+	require.True(t, ok)
+	require.True(t, dm.isBootstrapped())
+	require.Equal(t, 0, len(mock.ddlHistory))
 
 	// send all bootstrap messages -> tb1 and tb2
-	dm.shouldSendAllBootstrapAtStart = true
-	send, err = dm.checkAndSendBootstrapMsgs(ctx)
-	require.Nil(t, err)
-	require.True(t, send)
-	require.True(t, dm.bootstraped)
-	require.Equal(t, 2, len(mockDDLSink.ddlHistory))
-	require.True(t, mockDDLSink.ddlHistory[0].IsBootstrap)
-	require.True(t, mockDDLSink.ddlHistory[1].IsBootstrap)
-	require.Equal(t, ddl1.TableInfo.TableName, mockDDLSink.ddlHistory[0].TableInfo.TableName)
-	require.Equal(t, ddl2.TableInfo.TableName, mockDDLSink.ddlHistory[1].TableInfo.TableName)
+	dm = createDDLManagerForTest(t, true)
+	mock = dm.ddlSink.(*mockDDLSink)
+	mock.recordDDLHistory = true
+	dm.schema = helper.SchemaStorage()
+	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
+
+	_ = dm.trySendBootstrap(ctx, currentTables)
+	require.Eventually(t, func() bool {
+		return dm.trySendBootstrap(ctx, currentTables)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	require.Equal(t, 2, len(mock.ddlHistory))
+	require.True(t, mock.ddlHistory[0].IsBootstrap)
+	require.True(t, mock.ddlHistory[1].IsBootstrap)
+	require.Equal(t, ddl1.TableInfo.TableName, mock.ddlHistory[0].TableInfo.TableName)
+	require.Equal(t, ddl2.TableInfo.TableName, mock.ddlHistory[1].TableInfo.TableName)
 }

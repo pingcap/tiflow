@@ -1,16 +1,16 @@
 module github.com/pingcap/tiflow
 
-go 1.21
+go 1.23
 
 require (
 	cloud.google.com/go/storage v1.39.1
-	github.com/BurntSushi/toml v1.4.0
+	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/IBM/sarama v1.41.2
 	github.com/KimMachineGun/automemlimit v0.2.4
 	github.com/VividCortex/mysqlerr v1.0.0
 	github.com/apache/pulsar-client-go v0.11.0
-	github.com/aws/aws-sdk-go v1.50.0
+	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aws/aws-sdk-go-v2 v1.19.1
 	github.com/aws/aws-sdk-go-v2/config v1.18.30
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.29
@@ -32,7 +32,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
-	github.com/go-mysql-org/go-mysql v1.7.1-0.20240507075657-2bd4573edde2
+	github.com/go-mysql-org/go-mysql v1.9.1
 	github.com/go-oauth2/oauth2/v4 v4.5.2
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.1
@@ -56,7 +56,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.17.8
+	github.com/klauspost/compress v1.17.9
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mailru/easyjson v0.7.7
@@ -67,21 +67,21 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
-	github.com/pingcap/kvproto v0.0.0-20240620063548-118a4cab53e4
+	github.com/pingcap/kvproto v0.0.0-20240924080114-4a3e17f5e62d
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20240722024203-504960d51b2a
+	github.com/pingcap/tidb v1.1.0-beta.0.20241107131230-e2505e95a03c
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20240722015532-8edd4ed54376
-	github.com/prometheus/client_golang v1.19.1
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20241014034929-94b2ac04a0c4
+	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
-	github.com/shirou/gopsutil/v3 v3.24.4
+	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
@@ -89,9 +89,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20240703095801-d73cc1ed6503
+	github.com/tikv/client-go/v2 v2.0.8-0.20241023023120-691e80ae0ea9
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20240717053728-5ec6af403019
+	github.com/tikv/pd/client v0.0.0-20241016064947-b70107ec31e6
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -110,24 +110,25 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8
-	golang.org/x/net v0.27.0
-	golang.org/x/oauth2 v0.21.0
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.22.0
-	golang.org/x/text v0.16.0
-	golang.org/x/time v0.5.0
+	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
+	golang.org/x/net v0.30.0
+	golang.org/x/oauth2 v0.23.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.26.0
+	golang.org/x/text v0.19.0
+	golang.org/x/time v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240515191416-fc5f0ca64291
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
-	gorm.io/driver/mysql v1.4.5
-	gorm.io/gorm v1.24.5
+	gorm.io/driver/mysql v1.5.7
+	gorm.io/gorm v1.25.11
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
 require (
+	cloud.google.com/go/kms v1.15.8 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
@@ -158,7 +159,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-resty/resty/v2 v2.11.0 // indirect
 	github.com/goccy/go-reflect v1.2.0 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -172,6 +173,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/ks3sdklib/aws-sdk-go v1.2.9 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/lance6716/pebble v0.0.0-20241104073946-6f55c09bd183 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -227,7 +229,7 @@ require (
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/glue v1.58.1
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bits-and-blooms/bitset v1.4.0 // indirect
+	github.com/bits-and-blooms/bitset v1.14.3 // indirect
 	github.com/blacktear23/go-proxyprotocol v1.0.6 // indirect
 	github.com/cakturk/go-netstat v0.0.0-20200220111822-e5b49efee7a5 // indirect
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
@@ -250,7 +252,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
-	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
+	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect
 	github.com/eapache/go-resiliency v1.4.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
@@ -272,10 +274,10 @@ require (
 	github.com/golang/glog v1.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/pprof v0.0.0-20240117000934-35fc243c5815 // indirect
+	github.com/google/pprof v0.0.0-20241001023024-f4c0cfd0cf1d // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
-	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
@@ -309,7 +311,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mattn/go-sqlite3 v2.0.1+incompatible // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
@@ -321,25 +323,25 @@ require (
 	github.com/opentracing/basictracer-go v1.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
-	github.com/petermattis/goid v0.0.0-20231207134359-e60b3f734c67 // indirect
+	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
-	github.com/pingcap/badger v1.5.1-0.20230103063557-828f39b09b6d // indirect
+	github.com/pingcap/badger v1.5.1-0.20241015064302-38533b6cbf8d // indirect
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
-	github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50 // indirect
+	github.com/pingcap/tipb v0.0.0-20241008083645-0bcddae67837 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
-	github.com/prometheus/common v0.55.0 // indirect
+	github.com/prometheus/common v0.57.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
-	github.com/sasha-s/go-deadlock v0.3.1 // indirect
+	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
@@ -380,10 +382,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
-	golang.org/x/crypto v0.25.0 // indirect
-	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/term v0.22.0
-	golang.org/x/tools v0.22.0 // indirect
+	golang.org/x/crypto v0.28.0 // indirect
+	golang.org/x/mod v0.21.0 // indirect
+	golang.org/x/term v0.25.0
+	golang.org/x/tools v0.26.0 // indirect
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
@@ -398,7 +400,7 @@ require (
 )
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
-replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
+replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1.0
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
@@ -410,10 +412,11 @@ replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
 replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
 
-replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
-
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
 // Please remove these dependencies.
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
+
+// tls10server=1
+godebug tlsrsakex=1

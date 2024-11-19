@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -140,14 +140,14 @@ func rowChangeToMsg(
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
-		value.Delete = rowChangeColumns2CodecColumns(e.GetPreColumns(), onlyHandleKeyColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, e.TableInfo, onlyHandleKeyColumns)
 		if onlyHandleKeyColumns && len(value.Delete) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
 		}
 	} else if e.IsUpdate() {
-		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, e.TableInfo, largeMessageOnlyHandleKeyColumns)
 		if config.OpenOutputOldValue {
-			value.PreColumns = rowChangeColumns2CodecColumns(e.GetPreColumns(), largeMessageOnlyHandleKeyColumns)
+			value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, e.TableInfo, largeMessageOnlyHandleKeyColumns)
 		}
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 ||
 			(len(value.PreColumns) == 0 && config.OpenOutputOldValue)) {
@@ -157,7 +157,7 @@ func rowChangeToMsg(
 			value.dropNotUpdatedColumns()
 		}
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.GetColumns(), largeMessageOnlyHandleKeyColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, e.TableInfo, largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the insert event")
 		}
@@ -198,18 +198,16 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	return e
 }
 
-func rowChangeColumns2CodecColumns(cols []*model.Column, onlyHandleKeyColumns bool) map[string]internal.Column {
+func rowChangeColumns2CodecColumns(cols []*model.ColumnData, tb *model.TableInfo, onlyHandleKeyColumns bool) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
-		if col == nil {
-			continue
-		}
-		if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
-			continue
-		}
+        colx := model.GetColumnDataX(col, tb)
+        if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
+            continue
+        }
 		c := internal.Column{}
-		c.FromRowChangeColumn(col)
-		jsonCols[col.Name] = c
+		c.FromRowChangeColumn(colx)
+		jsonCols[colx.GetName()] = c
 	}
 	if len(jsonCols) == 0 {
 		return nil

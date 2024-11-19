@@ -16,20 +16,20 @@ package diff
 import (
 	"container/heap"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 )
 
-var _ = Suite(&testMergerSuite{})
+var _ = check.Suite(&testMergerSuite{})
 
 type testMergerSuite struct{}
 
-func (s *testMergerSuite) TestMerge(c *C) {
+func (s *testMergerSuite) TestMerge(c *check.C) {
 	createTableSQL := "create table test.test(id int(24), name varchar(24), age int(24), primary key(id, name));"
 	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
 	ids := []string{"3", "2", "2", "4", "1", "NULL"}
@@ -60,7 +60,7 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		rowData := heap.Pop(rowDatas).(RowData)
 		id := string(rowData.Data["id"].Data)
 		name := string(rowData.Data["name"].Data)
-		c.Assert(id, Equals, expectIDs[i])
-		c.Assert(name, Equals, expectNames[i])
+		c.Assert(id, check.Equals, expectIDs[i])
+		c.Assert(name, check.Equals, expectNames[i])
 	}
 }

@@ -40,7 +40,7 @@ jobs:
       - name: Set up Go env
         uses: actions/setup-go@v3
         with:
-          go-version: '1.21'
+          go-version: '1.23'
       - name: Print Go version
         run: go version
 
@@ -67,8 +67,19 @@ jobs:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
-      - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.4.0
+      - name: install k3s
+        run: |
+          curl -fsSL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 \
+            "${k3s_disable_command:---disable}" metrics-server \
+            "${k3s_disable_command:---disable}" traefik \
+            --flannel-backend=none \
+            --docker
+        shell: bash
+
+      - name: Export KUBECONFIG environment variable
+        run: |
+          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
+        shell: bash
 
       - name: Print cluster information
         run: |
@@ -96,12 +107,7 @@ jobs:
           cp -r $GITHUB_WORKSPACE/dm/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
           docker build -f $GITHUB_WORKSPACE/dm/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
           docker image list
-
-      # Load DM docker image into KIND, see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
-      - name: Load DM docker image into KIND
-        run: |
-          kind load docker-image dm:chaos --name chart-testing
-
+      
       # Set up upstream instances
       - name: Set up sources
         run: |
@@ -252,18 +258,21 @@ jobs:
       - name: Wait for chaos test case complete
         run: |
           $GITHUB_WORKSPACE/dm/chaos/scripts/check-case.sh
+      
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "dm-"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log || true
-          kind export logs ./logs/kind --name chart-testing
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "dm-"|xargs -I{} kubectl cp {}:/log/{}.log ./logs/{}.log || true
           sudo chown -R runner ./logs
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
       - name: Upload logs
         continue-on-error: true
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: chaos-base-logs.${{ matrix.chaos-obj }}

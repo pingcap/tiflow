@@ -436,12 +436,14 @@ func collectCfgs(dir string) (sourceCfgs []string, taskCfgs []string, relayWorke
 	if utils.IsDirExists(sourceDir) {
 		if sourceCfgs, err = collectDirCfgs(sourceDir); err != nil {
 			common.PrintLinesf("fail to collect source config files from source configs directory `%s`", sourceDir)
+			// nolint:nakedret
 			return
 		}
 	}
 	if utils.IsDirExists(taskDir) {
 		if taskCfgs, err = collectDirCfgs(taskDir); err != nil {
 			common.PrintLinesf("fail to collect task config files from task configs directory `%s`", taskDir)
+			// nolint:nakedret
 			return
 		}
 	}
@@ -449,11 +451,13 @@ func collectCfgs(dir string) (sourceCfgs []string, taskCfgs []string, relayWorke
 		content, err = common.GetFileContent(relayWorkersFile)
 		if err != nil {
 			common.PrintLinesf("fail to read relay workers config `%s`", relayWorkersFile)
+			// nolint:nakedret
 			return
 		}
 		err = json.Unmarshal(content, &relayWorkers)
 		if err != nil {
 			common.PrintLinesf("fail to unmarshal relay workers config `%s`", relayWorkersFile)
+			// nolint:nakedret
 			return
 		}
 	}
