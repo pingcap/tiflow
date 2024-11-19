@@ -16,6 +16,7 @@ package config
 import (
 	"testing"
 
+	//nolint:depguard
 	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 

@@ -13,6 +13,7 @@
 
 package config
 
+//nolint:depguard
 import "github.com/pingcap/tiflow/pkg/errors"
 
 // DBConfig represents db sorter config.

@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	//nolint:depguard
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

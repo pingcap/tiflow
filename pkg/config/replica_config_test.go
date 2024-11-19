@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	//nolint:depguard
 	"github.com/aws/aws-sdk-go/aws"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"

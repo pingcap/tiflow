@@ -122,6 +122,7 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	}}, msgs)
 }
 
+//nolint:unparam
 func newCoordinator(
 	captureID model.CaptureID,
 	changefeedID model.ChangeFeedID,

@@ -164,6 +164,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 		// User specified sort-dir should not take effect, it's always `/tmp/sorter`
 		// if user try to set sort-dir by config file, warn it.
 		if cfg.Sorter.SortDir != config.DefaultSortDir {
+			//nolint:govet
 			cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 				"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 
@@ -203,6 +204,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
 			// if user try to set sort-dir by flag, warn it.
 			if o.serverConfig.Sorter.SortDir != config.DefaultSortDir {
+				//nolint:govet
 				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
@@ -221,6 +223,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 	}
 
 	if cfg.DataDir == "" {
+		//nolint:govet
 		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
 	}

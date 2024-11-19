@@ -14,6 +14,7 @@
 package config
 
 import (
+	//nolint:depguard
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )

@@ -14,6 +14,7 @@
 package config
 
 import (
+	//nolint:depguard
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/util/table-filter"
 )

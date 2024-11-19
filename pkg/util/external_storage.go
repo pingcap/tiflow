@@ -22,7 +22,7 @@ import (
 	"time"
 
 	gcsStorage "cloud.google.com/go/storage"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -234,11 +234,8 @@ func IsNotExistInExtStorage(err error) bool {
 		return true
 	}
 
-	var errResp *azblob.StorageError
-	if internalErr, ok := err.(*azblob.InternalError); ok && internalErr.As(&errResp) {
-		if errResp.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
-			return true
-		}
+	if bloberror.HasCode(err, bloberror.BlobNotFound) {
+		return true
 	}
 	return false
 }

@@ -46,7 +46,6 @@ deployments/ticdc/docker-compose/logs
 
 # Binary file when running intergration test
 integration/integration
-tests/utils/cdc_state_checker/cdc_state_checker
 
 *.tmp
 

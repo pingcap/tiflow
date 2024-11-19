@@ -16,6 +16,7 @@ package config
 import (
 	"time"
 
+	//nolint:depguard
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
 )

@@ -104,11 +104,11 @@ func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 		RowId:     event.RowID,
 		Partition: 0,
 	}
-	if b, err := key.Marshal(); err != nil {
+	b, err := key.Marshal()
+	if err != nil {
 		panic(err)
-	} else {
-		return b
 	}
+	return b
 }
 
 func codecEncodeColumnPB(column *model.Column) *benchmark.Column {
@@ -133,11 +133,11 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 		OldValue: codecEncodeColumnsPB(event.PreColumns),
 		NewValue: codecEncodeColumnsPB(event.Columns),
 	}
-	if b, err := rowChanged.Marshal(); err != nil {
+	b, err := rowChanged.Marshal()
+	if err != nil {
 		panic(err)
-	} else {
-		return b
 	}
+	return b
 }
 
 func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*common.Message {
@@ -169,11 +169,11 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 		converted.Partition = append(converted.Partition, 0)
 	}
 
-	if b, err := converted.Marshal(); err != nil {
+	b, err := converted.Marshal()
+	if err != nil {
 		panic(err)
-	} else {
-		return b
 	}
+	return b
 }
 
 func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
@@ -198,11 +198,11 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.PreColumns))
 		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.Columns))
 	}
-	if b, err := rowChanged.Marshal(); err != nil {
+	b, err := rowChanged.Marshal()
+	if err != nil {
 		panic(err)
-	} else {
-		return b
 	}
+	return b
 }
 
 func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
@@ -281,15 +281,14 @@ func BenchmarkCraftDecoding(b *testing.B) {
 		for _, message := range codecCraftEncodedRowChanges {
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
-			} else {
-				for {
-					if _, hasNext, err := decoder.HasNext(); err != nil {
-						panic(err)
-					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
-					} else {
-						break
-					}
+			}
+			for {
+				if _, hasNext, err := decoder.HasNext(); err != nil {
+					panic(err)
+				} else if hasNext {
+					_, _ = decoder.NextRowChangedEvent()
+				} else {
+					break
 				}
 			}
 		}
@@ -304,15 +303,14 @@ func BenchmarkJsonDecoding(b *testing.B) {
 			require.NoError(b, err)
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
-			} else {
-				for {
-					if _, hasNext, err := decoder.HasNext(); err != nil {
-						panic(err)
-					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
-					} else {
-						break
-					}
+			}
+			for {
+				if _, hasNext, err := decoder.HasNext(); err != nil {
+					panic(err)
+				} else if hasNext {
+					_, _ = decoder.NextRowChangedEvent()
+				} else {
+					break
 				}
 			}
 		}

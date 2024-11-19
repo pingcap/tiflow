@@ -50,9 +50,8 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 		return e.Val
 	} else if e.Resolved != nil {
 		return e.Resolved
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // ResolvedSpans guarantees all the KV value event

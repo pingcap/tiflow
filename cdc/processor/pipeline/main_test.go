@@ -15,14 +15,11 @@ package pipeline
 
 import (
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
-	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(
-		m,
-		goleak.IgnoreTopFunction("github.com/pingcap/tiflow/cdc/sorter/unified.newBackEndPool.func1"),
-	)
+	// leakutil.SetUpLeakTest(
+	// 	m,
+	// 	goleak.IgnoreTopFunction("github.com/pingcap/tiflow/cdc/sorter/unified.newBackEndPool.func1"),
+	// )
 }

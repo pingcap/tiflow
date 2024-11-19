@@ -16,6 +16,7 @@ package model
 import (
 	"strings"
 
+	//nolint:depguard
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/util"

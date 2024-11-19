@@ -40,6 +40,7 @@ func newConflictTestDriver(
 	for i := 0; i < numWorkers; i++ {
 		workers = append(workers, newWorkerForTest())
 	}
+	//nolint:gosec
 	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, uint64(numSlots))
 	return &conflictTestDriver{
 		workers:          workers,

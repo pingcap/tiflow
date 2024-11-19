@@ -701,7 +701,6 @@ func (s *eventFeedSession) requestRegionToStore(
 			zap.String("addr", storeAddr))
 
 		err = stream.client.Send(req)
-
 		// If Send error, the receiver should have received error too or will receive error soon. So we don't need
 		// to do extra work here.
 		if err != nil {

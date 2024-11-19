@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	//nolint:depguard
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"

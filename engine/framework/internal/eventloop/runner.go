@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	//nolint:depguard
 	"github.com/pingcap/log"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
 	"github.com/pingcap/tiflow/engine/pkg/clock"

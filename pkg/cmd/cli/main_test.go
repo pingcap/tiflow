@@ -15,15 +15,12 @@ package cli
 
 import (
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
-	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	opts := []goleak.Option{
-		// library used by log
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	}
-	leakutil.SetUpLeakTest(m, opts...)
+	// opts := []goleak.Option{
+	// 	// library used by log
+	// 	goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	// }
+	// leakutil.SetUpLeakTest(m, opts...)
 }

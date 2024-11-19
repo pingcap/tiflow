@@ -40,6 +40,7 @@ func newUniformGenerator(workingSetSize int64, batchSize int, numSlots uint64) *
 func (g *uniformGenerator) Next() []uint64 {
 	set := make(map[uint64]struct{}, g.batchSize)
 	for i := 0; i < g.batchSize; i++ {
+		//nolint:gosec
 		key := uint64(rand.Int63n(g.workingSetSize))
 		set[key] = struct{}{}
 	}

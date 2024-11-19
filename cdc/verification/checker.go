@@ -70,6 +70,7 @@ func (c *checker) getCheckSum(ctx context.Context, db string, f filter.Filter) (
 }
 
 func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
+	//nolint:rowserrcheck
 	rows, err := c.db.QueryContext(ctx, "SHOW DATABASES")
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
@@ -94,6 +95,7 @@ func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
 }
 
 func (c *checker) getAllTables(ctx context.Context, db string, f filter.Filter) ([]string, error) {
+	//nolint:rowserrcheck
 	rows, err := c.db.QueryContext(ctx, "SHOW TABLES")
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
@@ -129,6 +131,7 @@ type columnInfo struct {
 }
 
 func (c *checker) getColumns(ctx context.Context, tableName string) ([]columnInfo, error) {
+	//nolint:rowserrcheck
 	rows, err := c.db.QueryContext(ctx, fmt.Sprintf("SHOW COLUMNS FROM %s", tableName))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
