@@ -333,3 +333,6 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
+
+// tls10server=1
+godebug tlsrsakex=1
