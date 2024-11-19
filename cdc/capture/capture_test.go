@@ -216,8 +216,9 @@ func TestCampaignLiveness(t *testing.T) {
 		campaignGrantCh:   make(chan struct{}, 1),
 	}
 	cp := &captureImpl{
-		config: config.GetDefaultServerConfig(),
-		info:   &model.CaptureInfo{ID: "test"},
+		config:   config.GetDefaultServerConfig(),
+		info:     &model.CaptureInfo{ID: "test"},
+		election: me,
 	}
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 
