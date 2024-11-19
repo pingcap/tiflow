@@ -249,7 +249,7 @@ function test_delete_owner_key() {
 # We expect when the owner is resigned, the new owner will be elected
 function test_resign_owner() {
 	echo "run test case test_resign_owner"
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_resign_owner.server1
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix test_resign_owner.server1
 	# ensure the server become the owner
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
