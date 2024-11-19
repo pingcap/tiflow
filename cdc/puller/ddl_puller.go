@@ -73,7 +73,6 @@ type ddlJobPullerImpl struct {
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
-	schemaVersion int64
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
@@ -364,8 +363,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 	}()
 
-	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
-		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() {
 		log.Info("ddl job finishedTs less than puller resolvedTs,"+
 			"discard the ddl job",
 			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
@@ -455,7 +453,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	}
 
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
-	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
 	return p.checkIneligibleTableDDL(snap, job)
 }
