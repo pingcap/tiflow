@@ -218,7 +218,7 @@ func WrapSchemesForInitialCluster(s string, https bool) string {
 // See https://github.com/mysql/mysql-server/blob/8e797a5d6eb3a87f16498edcb7261a75897babae/sql/rpl_binlog_sender.h#L235
 // and https://github.com/mysql/mysql-server/blob/8cc757da3d87bf4a1f07dcfb2d3c96fed3806870/sql/rpl_binlog_sender.cc#L899
 func IsFakeRotateEvent(header *replication.EventHeader) bool {
-	return header.Timestamp == 0 || header.LogPos == 0
+	return header.Timestamp == 0 && header.LogPos == 0 && header.EventType == replication.ROTATE_EVENT
 }
 
 // LogHTTPProxies logs HTTP proxy relative environment variables.

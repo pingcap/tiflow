@@ -352,6 +352,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
 					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
 					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+					ClaimCheckRawValue:            oldConfig.ClaimCheckRawValue,
 				}
 			}
 
@@ -622,6 +623,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
 					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
 					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+					ClaimCheckRawValue:            oldConfig.ClaimCheckRawValue,
 				}
 			}
 
@@ -989,6 +991,7 @@ type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption      string `json:"large_message_handle_option"`
 	LargeMessageHandleCompression string `json:"large_message_handle_compression"`
 	ClaimCheckStorageURI          string `json:"claim_check_storage_uri"`
+	ClaimCheckRawValue            bool   `json:"claim_check_raw_value"`
 }
 
 // DispatchRule represents partition rule for a table

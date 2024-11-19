@@ -123,22 +123,21 @@ func (c *consumer) Consume(ctx context.Context) {
 	for {
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
-			if err.(kafka.Error).IsRetriable() {
-				log.Error("read message failed, just continue to retry", zap.Error(err))
-				continue
-			}
-			log.Panic("read message failed", zap.Error(err))
+			log.Error("read message failed, just continue to retry", zap.Error(err))
+			continue
 		}
 		needCommit := c.writer.WriteMessage(ctx, msg)
 		if !needCommit {
 			continue
 		}
-		if _, err = c.client.CommitMessage(msg); err != nil {
-			if err.(kafka.Error).IsRetriable() {
-				log.Error("commit failed, just continue and retry", zap.Error(err))
-				continue
-			}
-			log.Panic("commit message failed", zap.Error(err))
+
+		topicPartition, err := c.client.CommitMessage(msg)
+		if err != nil {
+			log.Error("commit message failed, just continue", zap.Error(err))
+			continue
 		}
+		log.Info("commit message success",
+			zap.String("topic", topicPartition[0].String()), zap.Int32("partition", topicPartition[0].Partition),
+			zap.Any("offset", topicPartition[0].Offset))
 	}
 }
