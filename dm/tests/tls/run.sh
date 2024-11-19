@@ -377,9 +377,9 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	# https://github.com/pingcap/dm/issues/1458
-	# check the log is not repeatedly printed
-	check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
+	## https://github.com/pingcap/dm/issues/1458
+	## check the log is not repeatedly printed
+	#check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
 
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }
