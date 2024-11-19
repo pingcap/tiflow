@@ -86,7 +86,11 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")
+<<<<<<< HEAD
 	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+=======
+	ownerGroup.Use(ownerMiddleware)
+>>>>>>> 8e3b63acec (fix resign owner api not processed by owner node bug (#11770))
 	ownerGroup.POST("/resign", api.resignOwner)
 
 	// common APIs
