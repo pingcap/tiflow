@@ -17,7 +17,7 @@ function get_mysql_ssl_data_path() {
 
 function setup_tidb_with_tls() {
 	echo "run a new tidb server with tls"
-	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
+	cat - >"/dm/tidb-tls-config.toml" <<EOF
 
 socket = "/tmp/tidb-tls.sock"
 
@@ -26,20 +26,20 @@ status-port = 10090
 
 [security]
 # set the path for certificates. Empty string means disabling secure connections.
-ssl-ca = "$cur/conf/ca.pem"
-ssl-cert = "$cur/conf/dm.pem"
-ssl-key = "$cur/conf/dm.key"
-cluster-ssl-ca = "$cur/conf/ca.pem"
-cluster-ssl-cert = "$cur/conf/dm.pem"
-cluster-ssl-key = "$cur/conf/dm.key"
+ssl-ca = "/dm/tiflow/dm/tests/tls/conf/ca.pem"
+ssl-cert = "/dm/tiflow/dm/tests/tls/conf/dm.pem"
+ssl-key = "/dm/tiflow/dm/tests/tls/conf/dm.key"
+cluster-ssl-ca = "/dm/tiflow/dm/tests/tls/conf/ca.pem"
+cluster-ssl-cert = "/dm/tiflow/dm/tests/tls/conf/dm.pem"
+cluster-ssl-key = "/dm/tiflow/dm/tests/tls/conf/dm.key"
 EOF
 
 	bin/tidb-server \
 		-P 4400 \
-		--path $WORK_DIR/tidb \
+		--path /dm/tidb \
 		--store unistore \
-		--config $WORK_DIR/tidb-tls-config.toml \
-		--log-file "$WORK_DIR/tidb.log" 2>&1 &
+		--config /dm/tidb-tls-config.toml \
+		--log-file "dm/tidb.log" 2>&1 &
 
 	sleep 5
 	ls -alh $cur/conf
