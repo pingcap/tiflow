@@ -1465,6 +1465,7 @@ components:
         - "progress"
         - "meta_binlog"
         - "meta_binlog_gtid"
+        - "bps"
     SyncStatus:
       type: object
       description: "status of sync unit"

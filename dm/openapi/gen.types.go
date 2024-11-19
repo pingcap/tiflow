@@ -262,7 +262,7 @@ type GrafanaTopology struct {
 
 // status of load unit
 type LoadStatus struct {
-	Bps            *int64 `json:"bps,omitempty"`
+	Bps            int64  `json:"bps"`
 	FinishedBytes  int64  `json:"finished_bytes"`
 	MetaBinlog     string `json:"meta_binlog"`
 	MetaBinlogGtid string `json:"meta_binlog_gtid"`
