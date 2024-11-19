@@ -30,6 +30,7 @@ var defaultOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*client).backgroundMetadataUpdater"),
 	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*Broker).responseReceiver"),
 	goleak.IgnoreTopFunction("github.com/lestrrat-go/httprc.runFetchWorker"),
+	goleak.IgnoreTopFunction("github.com/golang/glog.(*fileSink).flushDaemon"),
 }
 
 // VerifyNone verifies that no unexpected leaks occur
