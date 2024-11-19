@@ -1456,6 +1456,9 @@ components:
           type: string
         meta_binlog_gtid:
           type: string
+        bps:
+          type: integer
+          format: int64
       required:
         - "finished_bytes"
         - "total_bytes"
@@ -1540,12 +1543,19 @@ components:
         estimate_total_rows:
           type: number
           format: double
+        bps:
+          type: integer
+          format: int64
+        progress:
+          type: string
       required:
         - "total_tables"
         - "completed_tables"
         - "finished_bytes"
         - "finished_rows"
         - "estimate_total_rows"
+        - "bps"
+        - "progress"
     SubTaskStatus:
       type: object
       properties:
