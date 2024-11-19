@@ -17,7 +17,7 @@ function get_mysql_ssl_data_path() {
 
 function setup_tidb_with_tls() {
 	echo "run a new tidb server with tls"
-	cat - >"/dm/tidb-tls-config.toml" <<EOF
+	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
 
 socket = "/tmp/tidb-tls.sock"
 
