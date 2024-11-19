@@ -242,3 +242,31 @@ function test_delete_owner_key() {
 	echo "delete_owner_key pass"
 	cleanup_process $CDC_BINARY
 }
+
+# test_resign_owner resign the owner by sending
+# the resign owner v2 API
+# We expect when the owner is resigned, the new owner will be elected
+function test_resign_owner() {
+	echo "run test case test_resign_owner"
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_resign_owner.server1
+	# ensure the server become the owner
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
+	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+	owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/\"id/{print $4}')
+	echo "owner pid:" $owner_pid
+	echo "owner id" $owner_id
+
+	# run another server
+  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_resign_owner.server2
+  ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
+  capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
+  capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+  echo "capture_id:" $capture_id
+
+	# resign the owner
+	curl -X POST http://127.0.0.1:8301/api/v2/owner/resign
+	# check that the new owner is elected
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server 'http://127.0.0.1:8301' 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	echo "test_resign_owner: pass"
+	cleanup_process $CDC_BINARY
+}
