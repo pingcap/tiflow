@@ -34,12 +34,13 @@ EOF
 		--data-dir "$WORK_DIR/pd" &
 	# wait until PD is online...
 	i=0
-	while curl "http://$PD_ADDR/pd/api/v1/version"; do
+	while ! curl -s "http://$PD_ADDR/pd/api/v1/version" > /dev/null; do
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to start PD'
 			return 1
 		fi
+		echo 'Waiting for PD ready'
 		sleep 3
 	done
 	echo 'Start PD success'
@@ -61,6 +62,7 @@ start_tikv() {
 			echo 'Failed to initialize TiKV cluster'
 			return 1
 		fi
+		echo 'Waiting for TiKV ready'
 		sleep 5
 	done
 	echo 'Start TiKV success'
@@ -77,12 +79,13 @@ start_tidb() {
 		--log-file "$WORK_DIR/tidb.log" &
 
 	i=0
-	while curl "http://$TIDB_IP:10080/status"; do
+	while ! curl -s "http://$TIDB_IP:10080/status" > /dev/null; do
 		i=$((i + 1))
 		if [ "$i" -gt 50 ]; then
 			echo 'Failed to start TiDB'
 			return 1
 		fi
+		echo 'Waiting for TiDB ready'
 		sleep 3
 	done
 	echo 'Start TiDB success'
