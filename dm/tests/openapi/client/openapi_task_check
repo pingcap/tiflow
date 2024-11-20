@@ -410,29 +410,32 @@ def get_task_status_success(task_name, total):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_status_success resp=", data)
+    print("get_task_status_success resp=")
     assert data["total"] == int(total)
 
-def get_task_io_counter_success(task_name, total):
+def check_sync_task_status_success(
+    task_name,
+    min_dump_io_total_bytes=0,
+    max_dump_io_total_bytes=float('inf'),
+    min_io_total_bytes=0,
+    max_io_total_bytes=float('inf')
+):
     url = API_ENDPOINT + "/" + task_name + "/status"
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_io_counter_success resp=", data)
-    assert data["total"] == int(total)
+    print("check_sync_task_status_success resp=", data)
 
     for item in data.get("data", []):
+        # Only validate sync task status
         unit = item.get("unit")
+        assert unit == "Sync"
         sync_status = item.get("sync_status", {})
-        # Only validate I/O statistics if the unit is "Sync"
-        if unit == "Sync":
-            dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
-            io_total_bytes = sync_status.get("io_total_bytes")
-            assert dump_io_total_bytes is not None and io_total_bytes is not None
-            assert dump_io_total_bytes > 0 and io_total_bytes > 0
-        else:
-            print("Skipping validation for task stage is not 'Sync'.")
-
+        dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
+        io_total_bytes = sync_status.get("io_total_bytes")
+        assert dump_io_total_bytes is not None and io_total_bytes is not None
+        assert dump_io_total_bytes > min_dump_io_total_bytes and io_total_bytes > min_io_total_bytes
+        assert dump_io_total_bytes < max_dump_io_total_bytes and io_total_bytes < max_io_total_bytes
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
@@ -778,7 +781,7 @@ if __name__ == "__main__":
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "get_task_status_success_but_worker_meet_error": get_task_status_success_but_worker_meet_error,
-        "get_task_io_counter_success": get_task_io_counter_success,
+        "check_sync_task_status_success": check_sync_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
         "create_task_template_success": create_task_template_success,
         "create_task_template_failed": create_task_template_failed,

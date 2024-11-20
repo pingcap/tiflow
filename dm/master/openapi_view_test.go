@@ -1023,6 +1023,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&updateResp))
 	s.EqualValues(updateResp.Task.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
 	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
+
 	// list tasks
 	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
