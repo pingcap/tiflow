@@ -1056,6 +1056,26 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(float64(0), resultTaskStatus.Data[0].DumpStatus.CompletedTables)
 	s.Equal(int64(1), resultTaskStatus.Data[0].DumpStatus.TotalTables)
 	s.Equal(float64(10), resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows)
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedBytes)
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedRows)
+
+	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskStatus))
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedBytes)
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedRows)
+
+	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskStatus))
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedBytes)
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedRows)
+
+	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskStatus))
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedBytes)
+	fmt.Println(resultTaskStatus.Data[0].DumpStatus.FinishedRows)
 
 	// get task status with source name
 	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
