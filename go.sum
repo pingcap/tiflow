@@ -719,8 +719,6 @@ github.com/labstack/echo/v4 v4.10.0/go.mod h1:S/T/5fy/GigaXnHTkh0ZGe4LpkkQysvRjF
 github.com/labstack/gommon v0.3.0/go.mod h1:MULnywXg0yavhxWKc+lOruYdAhDwPK9wf0OL7NoOu+k=
 github.com/labstack/gommon v0.4.0 h1:y7cvthEAEbU0yHOf4axH8ZG2NH8knB9iNSoTO8dyIk8=
 github.com/labstack/gommon v0.4.0/go.mod h1:uW6kP17uPlLJsD3ijUYn3/M5bAxtlZhMI6m3MFxTMTM=
-github.com/lance6716/pebble v0.0.0-20241108073934-da961314c63f h1:KyBFXtlZDJTrwuD3wBHGk+TtdOpCB17AEm0X4eqhRdg=
-github.com/lance6716/pebble v0.0.0-20241108073934-da961314c63f/go.mod h1:ZxnWA3Ab0ufDIyppyzL16j6HFNpdXeiU/1cE4Wlv/lQ=
 github.com/leodido/go-urn v1.2.0/go.mod h1:+8+nEpDfqqsY+g338gtMEUOtuK+4dEMhiQEgxpxOKII=
 github.com/leodido/go-urn v1.2.1/go.mod h1:zt4jvISO2HfUBqxjfIshjdMTYS56ZS/qv49ictyFfxY=
 github.com/leodido/go-urn v1.2.4 h1:XlAE/cm/ms7TE/VMVoduSpNBoyc2dOxHs5MZSwAN63Q=
@@ -906,12 +904,12 @@ github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d h1:y3EueKVfVykdpTyfU
 github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
-github.com/pingcap/tidb v1.1.0-beta.0.20241119124618-50b5cd27d413 h1:EpfEfHIdolNMUHy/qM6+eC7kGx8M6PJteTTc0YeKUx0=
-github.com/pingcap/tidb v1.1.0-beta.0.20241119124618-50b5cd27d413/go.mod h1:6iRUCOS1jqgfXVtLO8RaRC91Sv/+dPuAt551k1nAyRw=
+github.com/pingcap/tidb v1.1.0-beta.0.20241120103608-82376c7732c1 h1:njwCVdlDgnvbFmJyRnLy/i1ysnKWQuX2aOy/kwNzU38=
+github.com/pingcap/tidb v1.1.0-beta.0.20241120103608-82376c7732c1/go.mod h1:WmGWHcdI4kJnz8pat4Q3xH5cbOBFiqZAh5XJnaD/VwM=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20241119124618-50b5cd27d413 h1:Yr9Hc6y70JvAcRMCqUu5fdpzHc+tnHxxnQLmeVLnxxo=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20241119124618-50b5cd27d413/go.mod h1:Hju1TEWZvrctQKbztTRwXH7rd41Yq0Pgmq4PrEKcq7o=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20241120103608-82376c7732c1 h1:kXonivqohILI2m1cB9xlTpMGUF7flZgU7qFoZn891Ws=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20241120103608-82376c7732c1/go.mod h1:Hju1TEWZvrctQKbztTRwXH7rd41Yq0Pgmq4PrEKcq7o=
 github.com/pingcap/tipb v0.0.0-20241022082558-0607513e7fa4 h1:wvaUybJT0fUReCDcFtV3CEvMuI9iu+G7IW72tbSlil4=
 github.com/pingcap/tipb v0.0.0-20241022082558-0607513e7fa4/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
