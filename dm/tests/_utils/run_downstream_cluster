@@ -2,7 +2,7 @@
 # tools to run a TiDB cluster
 # parameter 1: work directory
 set -eux
-WORK_DIR=$1
+WORK_DIR=/tmp
 
 export PD_PEER_ADDR="127.0.0.1:2380"
 export PD_ADDR="127.0.0.1:2379"
@@ -32,18 +32,13 @@ EOF
 		--log-file "$WORK_DIR/pd.log" \
 		--config "$WORK_DIR/pd.toml" \
 		--data-dir "$WORK_DIR/pd" &
+	sleep 10
 	# wait until PD is online...
 	echo "after start PD...."
 	i=0
 	while true; do
-		echo "test curl 1"
-		curl www.baidu.com
-		echo "test curl 2"
-		curl http://$PD_ADDR
-		echo "run curl before...."
 		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version")
 		echo "curl response: $response"
-		echo "run curl after...."
 		if [ "$response" -eq 200 ]; then
 			echo 'Start PD success'
 			break
@@ -68,6 +63,7 @@ start_tikv() {
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
 		-s "$WORK_DIR/tikv" &
+	sleep 10	
 	# wait until TiKV is online...
 	i=0
 	while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
@@ -90,7 +86,7 @@ start_tidb() {
 		--store tikv \
 		--path "$PD_ADDR" \
 		--log-file "$WORK_DIR/tidb.log" &
-	echo "Finish start TiDB"
+	sleep 10
 	# wait until TiDB is online...
 	i=0
 	while true; do
@@ -116,3 +112,4 @@ start_tidb
 
 mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '123456';" || true
 mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
+
