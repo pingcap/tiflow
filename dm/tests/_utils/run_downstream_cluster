@@ -33,9 +33,12 @@ EOF
 		--config "$WORK_DIR/pd.toml" \
 		--data-dir "$WORK_DIR/pd" &
 	# wait until PD is online...
+	echo "after start PD...."
 	i=0
 	while true; do
+		echo "run curl before...."
 		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version")
+		echo "run curl after...."
 		if [ "$response" -eq 200 ]; then
 			echo 'Start PD success'
 			break
