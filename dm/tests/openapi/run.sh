@@ -27,7 +27,7 @@ function init_noshard_data() {
 function init_dump_data() {
 
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4);"
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4),(5,6),(7,8),(9,10),(11,12),(13,14),(15,16),(17,18);"
 }
 
 function init_shard_data() {
@@ -214,6 +214,9 @@ function test_dump_task() {
 
 	# start dump task success
 	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
 
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
