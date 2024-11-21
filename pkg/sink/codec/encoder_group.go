@@ -70,7 +70,7 @@ func NewEncoderGroup(
 	if concurrency <= 0 {
 		concurrency = config.DefaultEncoderGroupConcurrency
 	}
-	// limit concurrency to avoid OOM
+	// limit concurrency to avoid crash
 	if concurrency >= cpu.GetCPUCount()*10 {
 		concurrency = cpu.GetCPUCount() * 10
 	}
