@@ -63,7 +63,7 @@ start_tikv() {
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
 		-s "$WORK_DIR/tikv" &
-	sleep 10	
+	sleep 10
 	# wait until TiKV is online...
 	i=0
 	while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
