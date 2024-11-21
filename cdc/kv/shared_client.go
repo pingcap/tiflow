@@ -293,6 +293,7 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Uint64("startTs", startTs),
 		zap.String("span", rt.span.String()))
 }
 

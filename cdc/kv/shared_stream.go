@@ -362,18 +362,31 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
 				return err
 			}
-			if err = cc.Client().Send(c.createRegionRequest(region)); err != nil {
+			request := c.createRegionRequest(region)
+			if err = cc.Client().Send(request); err != nil {
 				log.Warn("event feed send request to grpc stream failed",
 					zap.String("namespace", c.changefeed.Namespace),
 					zap.String("changefeed", c.changefeed.ID),
+					zap.Int64("tableID", region.span.TableID),
+					zap.Uint64("regionID", request.RegionId),
+					zap.Uint64("checkpointTs", request.CheckpointTs),
 					zap.Uint64("streamID", s.streamID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.Uint64("regionID", region.verID.GetID()),
-					zap.Int64("tableID", region.span.TableID),
 					zap.Uint64("storeID", rs.storeID),
 					zap.String("addr", rs.storeAddr),
 					zap.Error(err))
 			}
+			log.Info("event feed send request to grpc stream",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Int64("tableID", region.span.TableID),
+				zap.Uint64("regionID", request.RegionId),
+				zap.Uint64("checkpointTs", request.CheckpointTs),
+				zap.Uint64("streamID", s.streamID),
+				zap.Any("subscriptionID", subscriptionID),
+				zap.Uint64("storeID", rs.storeID),
+				zap.String("addr", rs.storeAddr),
+				zap.Error(err))
 		}
 
 		if region, err = fetchMoreReq(); err != nil {
