@@ -428,14 +428,13 @@ def check_sync_task_status_success(
 
     for item in data.get("data", []):
         # Only validate sync task status
-        unit = item.get("unit")
-        assert unit == "Sync"
+        assert item.get("unit") == "Sync"
         sync_status = item.get("sync_status", {})
         dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
         io_total_bytes = sync_status.get("io_total_bytes")
         assert dump_io_total_bytes is not None and io_total_bytes is not None
-        assert dump_io_total_bytes > min_dump_io_total_bytes and io_total_bytes > min_io_total_bytes
-        assert dump_io_total_bytes < max_dump_io_total_bytes and io_total_bytes < max_io_total_bytes
+        assert dump_io_total_bytes > int(min_dump_io_total_bytes) and io_total_bytes > int(min_io_total_bytes)
+        assert dump_io_total_bytes < int(max_dump_io_total_bytes) and io_total_bytes < int(max_io_total_bytes)
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
