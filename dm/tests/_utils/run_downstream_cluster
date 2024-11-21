@@ -90,6 +90,7 @@ start_tidb() {
 		--store tikv \
 		--path "$PD_ADDR" \
 		--log-file "$WORK_DIR/tidb.log" &
+	echo "Finish start TiDB"
 	# wait until TiDB is online...
 	i=0
 	while true; do
