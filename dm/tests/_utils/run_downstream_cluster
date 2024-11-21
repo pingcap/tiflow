@@ -36,6 +36,10 @@ EOF
 	echo "after start PD...."
 	i=0
 	while true; do
+		echo "test curl 1"
+		curl www.baidu.com
+		echo "test curl 2"
+		curl http://$PD_ADDR
 		echo "run curl before...."
 		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version")
 		echo "run curl after...."
