@@ -8,8 +8,15 @@
 workdir=$1
 master_addr=$2
 cmd=$3
+retry_times=10 # Default retry times
 
-shift 3
+# Validate retry_times is a number
+if [[ $4 =~ ^[0-9]+$ ]] && [[ $# -gt 4 ]]; then
+	retry_times=$4
+	shift 4
+else
+	shift 3
+fi
 
 PWD=$(pwd)
 binary=$PWD/bin/dmctl.test
@@ -18,8 +25,8 @@ dmctl_log=$workdir/dmctl.$ts.log
 pid=$$
 
 all_matched=true
-echo "dmctl test cmd: \"$cmd\""
-for ((k = 0; k < 10; k++)); do
+echo "dmctl test cmd: \"$cmd\" with max $retry_times retries"
+for ((k = 0; k < retry_times; k++)); do
 	echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr >$dmctl_log 2>&1
 	all_matched=true
 	for ((i = 1; i < $#; i += 2)); do
