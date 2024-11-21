@@ -56,6 +56,7 @@ EOF
 start_tikv() {
 	echo "Starting TiKV..."
 	mkdir -p "$WORK_DIR/tikv"
+	bin/tikv-server --version
 	bin/tikv-server \
 		--pd "$PD_ADDR" \
 		-A "$TIKV_ADDR" \
@@ -79,6 +80,7 @@ start_tikv() {
 
 start_tidb() {
 	echo "Starting TiDB..."
+	bin/tidb-serve --version
 	bin/tidb-server \
 		-P 4000 \
 		--status 10080 \
