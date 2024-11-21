@@ -80,7 +80,7 @@ start_tikv() {
 
 start_tidb() {
 	echo "Starting TiDB..."
-	bin/tidb-serve --version
+	bin/tidb-server --version
 	bin/tidb-server \
 		-P 4000 \
 		--status 10080 \
