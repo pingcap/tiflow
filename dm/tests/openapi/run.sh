@@ -298,7 +298,7 @@ function test_shard_task() {
 
 	# get task list
 	openapi_task_check "get_task_list" 0
-	
+
 	# delete source success
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: SHARD TASK SUCCESS"
