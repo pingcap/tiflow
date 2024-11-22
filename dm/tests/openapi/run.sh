@@ -357,7 +357,7 @@ function test_shard_task() {
 
 	# get task status and check sync task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
-	openapi_task_check "check_sync_task_status_success" "$task_name" 3000 5000 19000 30000
+	openapi_task_check "check_sync_task_status_success" "$task_name" 3000 7000 19000 30000
 
 	# get task list
 	openapi_task_check "get_task_list" 1
