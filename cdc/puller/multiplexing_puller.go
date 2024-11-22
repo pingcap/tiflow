@@ -98,8 +98,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Duration("duration", time.Since(p.start)),
 			zap.Int64("tableID", p.spans[0].TableID),
-			zap.String("tableName", p.tableName),
-			zap.Any("tableID", p.spans))
+			zap.String("tableName", p.tableName))
 	}
 	if resolvedTs > p.resolvedTs.Load() {
 		p.resolvedTs.Store(resolvedTs)
