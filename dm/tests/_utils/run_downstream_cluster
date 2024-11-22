@@ -2,7 +2,7 @@
 # tools to run a TiDB cluster
 # parameter 1: work directory
 set -eu
-WORK_DIR=/tmp
+WORK_DIR=$1
 
 export PD_PEER_ADDR="127.0.0.1:2380"
 export PD_ADDR="127.0.0.1:2379"
