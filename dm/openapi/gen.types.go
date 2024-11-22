@@ -80,6 +80,8 @@ const (
 const (
 	TaskStageFinished TaskStage = "Finished"
 
+	TaskStagePaused TaskStage = "Paused"
+
 	TaskStageRunning TaskStage = "Running"
 
 	TaskStageStopped TaskStage = "Stopped"

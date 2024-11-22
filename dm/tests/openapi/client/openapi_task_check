@@ -452,6 +452,24 @@ def check_load_task_finished_status_success(task_name, finished_bytes, total_byt
         assert load_status.get("finished_bytes") == int(finished_bytes)
         assert load_status.get("total_bytes") == int(total_bytes)
 
+def check_dump_task_finished_status_success(task_name, completed_tables, total_tables, estimate_total_rows,finished_rows,finished_bytes):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_dump_task_finished_status_success resp=", data)
+
+    for item in data.get("data", []):
+        # Only validate dump task status
+        assert item.get("unit") == "Dump"
+        assert item.get("stage") == "Finished"
+        dump_status = item.get("dump_status", {})
+        assert dump_status.get("progress") == "100.00 %"
+        assert dump_status.get("completed_tables") == int(completed_tables)
+        assert dump_status.get("total_tables") == int(total_tables)
+        assert dump_status.get("estimate_total_rows") == int(estimate_total_rows)
+        assert dump_status.get("finished_rows") == int(finished_rows)
+        assert dump_status.get("finished_bytes") == int(finished_bytes)
 
 def check_task_stage_success(task_name, total, stage):
     url = API_ENDPOINT + "/" + task_name + "/status"
@@ -818,9 +836,10 @@ if __name__ == "__main__":
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
         "do_complex_operations": do_complex_operations,
         "create_task_with_precheck": create_task_with_precheck,
+        "check_task_stage_success": check_task_stage_success,
         "check_sync_task_status_success": check_sync_task_status_success,
         "check_load_task_finished_status_success": check_load_task_finished_status_success,
-        "check_task_stage_success": check_task_stage_success,
+        "check_dump_task_finished_status_success": check_dump_task_finished_status_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]

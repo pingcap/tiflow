@@ -28,6 +28,9 @@ function init_dump_data() {
 
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4);"
+
+	run_sql_source1 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source1 "INSERT INTO openapi.t2(i,j) VALUES (1, 2),(3,4);"
 }
 
 function init_shard_data() {
@@ -209,6 +212,7 @@ function test_dump_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 1
+	openapi_task_check "check_task_stage_success" $task_name 1 "Stopped"
 
 	init_dump_data
 
@@ -222,6 +226,7 @@ function test_dump_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" 100 \
 		"\"stage\": \"Finished\"" 1
+	openapi_task_check "check_dump_task_finished_status_success" $task_name 2 2 4 4 228
 
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
@@ -258,7 +263,7 @@ function test_full_mode_task() {
 	openapi_task_check "check_task_stage_success" $task_name 2 "Stopped"
 
 	init_noshard_data
-	
+
 	# start task success
 	openapi_task_check "start_task_success" $task_name ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
