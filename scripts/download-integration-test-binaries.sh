@@ -140,7 +140,7 @@ download_binaries() {
 	local tiflash_sha1=$(echo "$tiflash_branch_sha1" | cut -d':' -f2)
 
 	# Define download URLs
-	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/9530fdc2388d025af86eb6fce5e617972c361000/centos7/tidb-server.tar.gz"
+	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/5450000d921801751d5677714be7c18129a7fb91/centos7/tidb-server.tar.gz"
 	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
 	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
 	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
