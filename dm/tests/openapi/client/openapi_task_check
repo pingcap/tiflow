@@ -410,15 +410,15 @@ def get_task_status_success(task_name, total):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_status_success resp=")
+    print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
 
 def check_sync_task_status_success(
     task_name,
     min_dump_io_total_bytes=0,
-    max_dump_io_total_bytes=float('inf'),
+    max_dump_io_total_bytes=sys.maxsize,
     min_io_total_bytes=0,
-    max_io_total_bytes=float('inf')
+    max_io_total_bytes=sys.maxsize
 ):
     url = API_ENDPOINT + "/" + task_name + "/status"
     resp = requests.get(url=url)
@@ -655,7 +655,7 @@ def check_noshard_task_dump_status_success(task_name, total):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("check_dump_status_success resp=", data)
+    print("check_noshard_task_dump_status_success resp=", data)
     assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
 
 
