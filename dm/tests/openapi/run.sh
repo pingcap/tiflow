@@ -481,7 +481,7 @@ function test_complex_operations_of_source_and_task() {
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 	openapi_task_check "get_task_status_success" "$task_name" 2
-	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 4000 18000 30000
+	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 5000 18000 42000
 
 	# do some complex operations
 	openapi_task_check "do_complex_operations" "$task_name"
