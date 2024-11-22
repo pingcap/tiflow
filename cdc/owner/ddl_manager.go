@@ -293,18 +293,16 @@ func (m *ddlManager) tick(
 			continue
 		}
 
-		log.Info("handle a ddl job",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Int64("tableID", job.TableID),
-			zap.Int64("jobID", job.ID),
-			zap.String("query", job.Query),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-		)
 		events, err := m.schema.BuildDDLEvents(ctx, job)
 		if err != nil {
 			return nil, nil, err
 		}
+
+		log.Info("build ddl events from the ddl job",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Int64("tableID", job.TableID),
+			zap.Int64("jobID", job.ID))
 
 		for _, event := range events {
 			tableName := event.TableInfo.TableName

@@ -210,12 +210,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		log.Info("a new ddl job is received",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
-			zap.Any("job", job))
+			zap.Int64("jobID", job.ID))
 	}
 
 	jobEntry := &model.DDLJobEntry{
@@ -671,11 +666,6 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 	log.Info("ddl puller receives new pending job",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
-		zap.String("schema", job.SchemaName),
-		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
-		zap.Uint64("startTs", job.StartTS),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 		zap.Int64("jobID", job.ID))
 }
 
