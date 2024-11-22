@@ -302,10 +302,6 @@ function test_full_mode_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK"
 }
 
-function test_complex_operations_of_source_and_task() {
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: COMPLEX OPERATION"
-}
-
 function test_shard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SHARD TASK"
 	prepare_database
