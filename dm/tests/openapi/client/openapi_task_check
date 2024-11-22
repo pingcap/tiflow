@@ -446,8 +446,8 @@ def check_load_task_finished_status_success(task_name, finished_bytes, total_byt
     for item in data.get("data", []):
         # Only validate load task status
         assert item.get("unit") == "Load"
+        assert item.get("stage") == "Finished"
         load_status = item.get("load_status", {})
-        assert load_status.get("stage") == "Finished"
         assert load_status.get("progress") == "100.00 %"
         assert load_status.get("finished_bytes") == int(finished_bytes)
         assert load_status.get("total_bytes") == int(total_bytes)
