@@ -2,7 +2,6 @@ drop database if exists `partition_table`;
 drop database if exists `partition_table2`;
 create database `partition_table`;
 use `partition_table`;
-set tidb_enable_global_index = ON;
 
 create table t (a int, b varchar(255), primary key (a), unique key (b) global) partition by hash(a) partitions 5;
 insert into t values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6);
