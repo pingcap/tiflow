@@ -40,7 +40,7 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 		SecondsBehindMaster: s.secondsBehindMaster.Load(),
 	}
 	if s.cfg.IOTotalBytes != nil {
-		st.IOTotalBytes = s.cfg.IOTotalBytes.Load()
+		st.IoTotalBytes = s.cfg.IOTotalBytes.Load()
 	}
 	if s.cfg.DumpIOTotalBytes != nil {
 		st.DumpIOTotalBytes = s.cfg.DumpIOTotalBytes.Load()

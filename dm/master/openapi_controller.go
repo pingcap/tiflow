@@ -563,6 +563,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		// add load status
 		if loadS := subTaskStatus.GetLoad(); loadS != nil {
 			openapiSubTaskStatus.LoadStatus = &openapi.LoadStatus{
+				Bps:            loadS.Bps,
 				FinishedBytes:  loadS.FinishedBytes,
 				MetaBinlog:     loadS.MetaBinlog,
 				MetaBinlogGtid: loadS.MetaBinlogGTID,
@@ -584,7 +585,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 				SyncerBinlogGtid:    syncerS.SyncerBinlogGtid,
 				TotalEvents:         syncerS.TotalEvents,
 				TotalTps:            syncerS.TotalTps,
-				IoTotalBytes:        syncerS.IOTotalBytes,
+				IoTotalBytes:        syncerS.IoTotalBytes,
 				DumpIoTotalBytes:    syncerS.DumpIOTotalBytes,
 			}
 			if unResolvedGroups := syncerS.GetUnresolvedGroups(); len(unResolvedGroups) > 0 {
@@ -603,10 +604,12 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		// add dump status
 		if dumpS := subTaskStatus.GetDump(); dumpS != nil {
 			openapiSubTaskStatus.DumpStatus = &openapi.DumpStatus{
+				Bps:               dumpS.Bps,
 				CompletedTables:   dumpS.CompletedTables,
 				EstimateTotalRows: dumpS.EstimateTotalRows,
 				FinishedBytes:     dumpS.FinishedBytes,
 				FinishedRows:      dumpS.FinishedRows,
+				Progress:          dumpS.Progress,
 				TotalTables:       dumpS.TotalTables,
 			}
 		}
