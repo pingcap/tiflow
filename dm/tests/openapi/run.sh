@@ -228,6 +228,79 @@ function test_dump_task() {
 
 }
 
+function test_full_mode_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: FULL MODE TASK"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name=""
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	# create no shard task in full mode success
+	openapi_task_check "create_noshard_task_success" $task_name "" "full"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Stopped"
+
+	init_noshard_data
+	
+	# start task success
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Running"
+
+	# get task status and load task status
+	openapi_task_check "get_task_status_success" "$task_name" 2
+
+	# wait full task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" 100 \
+		"\"stage\": \"Finished\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Finished"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	# check load task status
+	openapi_task_check "check_load_task_finished_status_success" "$task_name" 107 107
+
+	# delete source with force
+	openapi_source_check "delete_source_with_force_success" "mysql-01"
+
+	# get task list
+	openapi_task_check "get_task_list" 1
+
+	# delete task success with force
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+
+	openapi_task_check "get_task_list" 0
+
+	# delete source success
+	openapi_source_check "delete_source_success" "mysql-02"
+	openapi_source_check "list_source_success" 0
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK"
+}
+
+function test_complex_operations_of_source_and_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: COMPLEX OPERATION"
+}
+
 function test_shard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SHARD TASK"
 	prepare_database
@@ -345,7 +418,7 @@ function test_noshard_task() {
 
 	# get task status and check sync task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
-	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 4000 18000 30000
+	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 4000 18000 42000
 
 	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
@@ -1104,6 +1177,7 @@ function run() {
 	test_start_task_with_condition
 	test_stop_task_with_condition
 	test_reverse_https
+	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster

@@ -105,10 +105,10 @@ def create_task_with_precheck(task_name, ignore_check, is_success, check_result)
         assert resp.status_code == 400
         assert check_result in resp.json()["error_msg"]
 
-def create_noshard_task_success(task_name, tartget_table_name=""):
+def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all"):
     task = {
         "name": task_name,
-        "task_mode": "all",
+        "task_mode": task_mode,
         "meta_schema": "dm-meta",
         "enhance_online_schema_change": True,
         "on_duplicate": "error",
@@ -435,6 +435,33 @@ def check_sync_task_status_success(
         assert dump_io_total_bytes is not None and io_total_bytes is not None
         assert dump_io_total_bytes > int(min_dump_io_total_bytes) and io_total_bytes > int(min_io_total_bytes)
         assert dump_io_total_bytes < int(max_dump_io_total_bytes) and io_total_bytes < int(max_io_total_bytes)
+
+def check_load_task_finished_status_success(task_name, finished_bytes, total_bytes):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_load_task_finished_status_success resp=", data)
+
+    for item in data.get("data", []):
+        # Only validate load task status
+        assert item.get("unit") == "Load"
+        load_status = item.get("load_status", {})
+        assert load_status.get("stage") == "Finished"
+        assert load_status.get("progress") == "100.00 %"
+        assert load_status.get("finished_bytes") == int(finished_bytes)
+        assert load_status.get("total_bytes") == int(total_bytes)
+
+
+def check_task_stage_success(task_name, total, stage):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_task_stage_success resp=", data)
+    assert data["total"] == int(total)
+    for status in data["data"]:
+        assert status["stage"] == stage
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
@@ -780,7 +807,6 @@ if __name__ == "__main__":
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
         "get_task_status_success_but_worker_meet_error": get_task_status_success_but_worker_meet_error,
-        "check_sync_task_status_success": check_sync_task_status_success,
         "operate_schema_and_table_success": operate_schema_and_table_success,
         "create_task_template_success": create_task_template_success,
         "create_task_template_failed": create_task_template_failed,
@@ -792,6 +818,9 @@ if __name__ == "__main__":
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
         "do_complex_operations": do_complex_operations,
         "create_task_with_precheck": create_task_with_precheck,
+        "check_sync_task_status_success": check_sync_task_status_success,
+        "check_load_task_finished_status_success": check_load_task_finished_status_success,
+        "check_task_stage_success": check_task_stage_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]
