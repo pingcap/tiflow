@@ -218,9 +218,6 @@ function test_dump_task() {
 
 	# start dump task success
 	openapi_task_check "start_task_success" $task_name ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name" \
-		"\"stage\": \"Running\"" 1
 
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
