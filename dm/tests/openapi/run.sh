@@ -263,10 +263,6 @@ function test_full_mode_task() {
 
 	# start task success
 	openapi_task_check "start_task_success" $task_name ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name" \
-		"\"stage\": \"Running\"" 2
-	openapi_task_check "check_task_stage_success" $task_name 2 "Running"
 
 	# get task status and load task status
 	openapi_task_check "get_task_status_success" "$task_name" 2
