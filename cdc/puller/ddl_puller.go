@@ -514,6 +514,10 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 
 	// 1. If the table is not in the snapshot before the DDL,
 	// we should ignore the DDL.
+	if job.Type == timodel.ActionCreateTable {
+		// For create table, oldTableID is the new table ID.
+		oldTableID = job.BinlogInfo.TableInfo.ID
+	}
 	_, exist := snapBefore.PhysicalTableByID(oldTableID)
 	if !exist {
 		return true, nil
