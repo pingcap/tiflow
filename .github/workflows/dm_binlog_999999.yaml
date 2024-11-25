@@ -56,7 +56,7 @@ jobs:
         with:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
-      
+
       - name: Build DM binary
         run: make dm_integration_test_build
 
