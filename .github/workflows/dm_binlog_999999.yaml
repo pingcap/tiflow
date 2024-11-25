@@ -1,8 +1,6 @@
 name: DM Binlog 999999
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -74,7 +72,7 @@ jobs:
           chmod +x minio
           mv minio bin/
 
-      - name: Change binlog sequence number to 999998
+      - name: Change binlog sequence number to 999999
         run: |
           while ! mysqladmin -h127.0.0.1 -P3306 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
             echo "wait mysql"
