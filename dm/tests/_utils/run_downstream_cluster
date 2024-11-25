@@ -65,12 +65,13 @@ start_tikv() {
 		--log-level info \
 		-s "$WORK_DIR/tikv" &
     # add debug to check error code 2
-    tikv_ret=$?
-    echo "TiKV start return code: $tikv_ret"
+  tikv_ret=$?
+  echo "TiKV start return code: $tikv_ret"
 
-	sleep 10
-	# wait until TiKV is online...
-	i=0
+  echo "sleep 10 sec"
+  sleep 10
+  echo "sleep with return code: $?"
+  echo "start check tikv cluster status"
 	while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
