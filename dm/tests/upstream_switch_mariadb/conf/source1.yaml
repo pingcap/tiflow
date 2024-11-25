@@ -1,0 +1,9 @@
+source-id: "mysql-replica-01"
+enable-gtid: true
+enable-relay: false
+
+from:
+  host: "172.28.128.2"
+  user: "root"
+  password: "123456"
+  port: 3306
