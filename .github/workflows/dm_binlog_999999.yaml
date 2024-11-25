@@ -142,4 +142,4 @@ jobs:
           msg_type: text
           content: |
             text: |
-              dataflow engine chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
+              binlog 999999 job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
