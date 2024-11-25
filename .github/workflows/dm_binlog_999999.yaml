@@ -1,8 +1,6 @@
 name: DM Binlog 999999
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -21,6 +19,7 @@ jobs:
         image: docker:19.03.12
         options: >-
           --privileged
+
     steps:
       - name: Set up Go env
         uses: actions/setup-go@v3
@@ -130,12 +129,14 @@ jobs:
           path: |
             ./logs
 
-      # Send Slack notification if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
+      # Send feishu notification if failed.
+      - name: Feishu notification
+        continue-on-error: true
+        uses: foxundermoon/feishu-action@v2
         if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
         with:
-          args: "binlog 999999 failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
+          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
+          msg_type: text
+          content: |
+            text: |
+              dataflow engine chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
