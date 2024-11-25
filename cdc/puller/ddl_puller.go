@@ -734,6 +734,7 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 		return atomic.LoadUint64(&h.resolvedTS), nil
 	}
 	job := h.pendingDDLJobs[0]
+	h.pendingDDLJobs[0] = nil
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
 	return job.BinlogInfo.FinishedTS, job
 }
