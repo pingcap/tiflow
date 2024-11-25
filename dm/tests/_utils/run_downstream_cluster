@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools to run a TiDB cluster
 # parameter 1: work directory
-set -ux
+set -eux
 WORK_DIR=$1
 
 export PD_PEER_ADDR="127.0.0.1:2380"
@@ -64,6 +64,10 @@ start_tikv() {
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
 		-s "$WORK_DIR/tikv" &
+    # add debug to check error code 2
+    tikv_ret=$?
+    echo "TiKV start return code: $tikv_ret"
+
 	sleep 10
 	# wait until TiKV is online...
 	i=0
