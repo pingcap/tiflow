@@ -24,6 +24,12 @@ function init_noshard_data() {
 	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (3, 4);"
 }
 
+function init_dump_data() {
+
+	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4);"
+}
+
 function init_shard_data() {
 	run_sql_source1 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
@@ -173,6 +179,52 @@ function test_relay() {
 	openapi_source_check "delete_source_success" "mysql-01"
 
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: RELAY SUCCESS"
+
+}
+
+function test_dump_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump TASK"
+	prepare_database
+
+	task_name="test-dump"
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	# get source list success
+	openapi_source_check "list_source_success" 1
+
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create task success: not valid task create request
+	openapi_task_check "create_task_failed"
+
+	# create dump task success
+	openapi_task_check "create_dump_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 1
+
+	init_dump_data
+
+	# start dump task success
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+
+	# wait dump task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" 100 \
+		"\"stage\": \"Finished\"" 1
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
 
 }
 
@@ -1040,6 +1092,7 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
+	test_dump_task
 	test_task_templates
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
