@@ -107,9 +107,9 @@ jobs:
         run: |
           RESET_MASTER=false make dm_integration_test CASE=incremental_mode
           echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456
-          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456 | grep -q "mysql-bin.100000"
           echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456
-          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456 | grep -q "mysql-bin.100000"
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456 | grep -q "mysql-bin.1000003"
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456 | grep -q "mysql-bin.1000003"
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
