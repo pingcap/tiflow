@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/util/cpu"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -64,6 +65,19 @@ func NewEncoderGroup(builder RowEventEncoderBuilder,
 	if count <= 0 {
 		count = defaultEncoderGroupSize
 	}
+<<<<<<< HEAD
+=======
+	limitConcurrency := cpu.GetCPUCount() * 10
+	if concurrency > limitConcurrency {
+		concurrency = limitConcurrency
+		log.Warn("limit concurrency to avoid crash", zap.Int("concurrency", concurrency), zap.Any("limitConcurrency", limitConcurrency))
+	}
+	inputCh := make([]chan *future, concurrency)
+	for i := 0; i < concurrency; i++ {
+		inputCh[i] = make(chan *future, defaultInputChanSize)
+	}
+	outCh := make(chan *future, defaultInputChanSize*concurrency)
+>>>>>>> 325804360b (sink(ticdc): limit encoder-concurrency to avoid crash (#11775))
 
 	inputCh := make([]chan *future, count)
 	for i := 0; i < count; i++ {
