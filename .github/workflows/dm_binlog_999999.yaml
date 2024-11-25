@@ -1,6 +1,8 @@
 name: DM Binlog 999999
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -101,6 +103,9 @@ jobs:
             echo "wait mysql"
             sleep 1
           done
+
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456
 
       - name: Run test cases
         run: |
