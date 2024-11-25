@@ -277,21 +277,8 @@ function test_full_mode_task() {
 	# check load task status
 	openapi_task_check "check_load_task_finished_status_success" "$task_name" 107 107
 
-	# delete source with force
-	openapi_source_check "delete_source_with_force_success" "mysql-01"
-
-	# get task list
-	openapi_task_check "get_task_list" 1
-
-	# delete task success with force
-	openapi_task_check "delete_task_with_force_success" "$task_name"
-
-	openapi_task_check "get_task_list" 0
-
-	# delete source success
-	openapi_source_check "delete_source_success" "mysql-02"
-	openapi_source_check "list_source_success" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
+	# delete source success and clean data for other test
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK"
 }
 
