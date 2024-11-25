@@ -813,4 +813,16 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	require.NoError(t, err)
 	// Skip because the table is ineligible before the DDL.
 	require.True(t, skip)
+
+	// case 5: create a ineligible table and alter it to eligible, expect no error.
+	ddl = helper.DDL2Job("CREATE TABLE test1.t4 (id INT not null);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	// Add a unique key to the table, make it eligible.
+	ddl = helper.DDL2Job("ALTER TABLE test1.t4 ADD UNIQUE KEY cdc_valid_index (id);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
 }
