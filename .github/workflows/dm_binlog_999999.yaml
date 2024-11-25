@@ -55,6 +55,9 @@ jobs:
         with:
           path: tools/bin
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
+      
+      - name: Build DM binary
+        run: make dm_integration_test_build
 
       - name: Setup CI environment
         run: |
@@ -68,9 +71,6 @@ jobs:
           curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
           chmod +x minio
           mv minio bin/
-
-      - name: Build DM binary
-        run: make dm_integration_test_build
 
       - name: Change binlog sequence number to 999998
         run: |
