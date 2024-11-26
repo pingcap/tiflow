@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # tools to run a TiDB cluster
 # parameter 1: work directory
 set -eux
@@ -24,17 +24,15 @@ start_pd() {
 max-replicas = 1
 EOF
 
-	pd-server --version
+	bin/pd-server --version
 	mkdir -p "$WORK_DIR/pd"
-	bin/pd-server \
+	nohup bin/pd-server \
 		--client-urls "http://$PD_ADDR" \
 		--peer-urls "http://$PD_PEER_ADDR" \
 		--log-file "$WORK_DIR/pd.log" \
 		--config "$WORK_DIR/pd.toml" \
-		--data-dir "$WORK_DIR/pd" &
-	sleep 10
-	# wait until PD is online...
-	echo "after start PD...."
+		--data-dir "$WORK_DIR/pd" >/dev/null 2>&1 &
+	sleep 5
 	i=0
 	while true; do
 		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version")
@@ -57,28 +55,35 @@ start_tikv() {
 	echo "Starting TiKV..."
 	mkdir -p "$WORK_DIR/tikv"
 	bin/tikv-server --version
-  bin/tikv-server \
+	nohup bin/tikv-server \
 		--pd "$PD_ADDR" \
 		-A "$TIKV_ADDR" \
 		--status-addr "$TIKV_STATUS_ADDR" \
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
-		-s "$WORK_DIR/tikv" &
-    # add debug to check error code 2
-  tikv_ret=$?
-  echo "TiKV start return code: $tikv_ret"
+		-s "$WORK_DIR/tikv" >/dev/null 2>&1 &
+	sleep 5
+	i=0
+	while true; do
+		response=$(curl -s "http://$PD_ADDR/pd/api/v1/cluster/status" || echo "")
 
-  echo "sleep 10 sec"
-  # sleep 10
-  echo "sleep with return code: $?"
-  echo "start check tikv cluster status"
-  i=0
-  while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
+		if [ -z "$response" ]; then
+			echo "Failed to connect to PD server"
+		else
+			echo "PD response: $response"
+			if echo "$response" | grep -q '"is_initialized": true'; then
+				echo "TiKV cluster initialized successfully"
+				break
+			fi
+		fi
+
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
-			echo 'Failed to initialize TiKV cluster'
+			echo 'Failed to initialize TiKV cluster after 20 attempts'
+			echo "Last response: $response"
 			return 1
 		fi
+
 		echo 'Waiting for TiKV ready...'
 		sleep 5
 	done
@@ -86,15 +91,15 @@ start_tikv() {
 
 start_tidb() {
 	echo "Starting TiDB..."
-	bin/tidb-server --version
-	bin/tidb-server \
+	bin/tidb-server -V
+	nohup bin/tidb-server \
 		-P 4000 \
 		--status 10080 \
 		--advertise-address="127.0.0.1" \
 		--store tikv \
 		--path "$PD_ADDR" \
-		--log-file "$WORK_DIR/tidb.log" &
-	sleep 10
+		--log-file "$WORK_DIR/tidb.log" >/dev/null 2>&1 &
+	sleep 5
 	# wait until TiDB is online...
 	i=0
 	while true; do
