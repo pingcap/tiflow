@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -65,8 +66,8 @@ func NewEncoderGroup(builder RowEventEncoderBuilder,
 		count = defaultEncoderGroupSize
 	}
 	limitCount := runtime.GOMAXPROCS(0) * 10
-	if count > limitConcurrency {
-		count = limitConcurrency
+	if count > limitCount {
+		count = limitCount
 		log.Warn("limit count to avoid crash", zap.Int("count", count), zap.Any("limitCount", limitCount))
 	}
 	inputCh := make([]chan *future, count)
