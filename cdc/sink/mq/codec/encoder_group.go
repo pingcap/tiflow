@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,11 @@ type encoderGroup struct {
 func NewEncoderGroup(builder EncoderBuilder, count int, changefeedID model.ChangeFeedID) *encoderGroup {
 	if count <= 0 {
 		count = defaultEncoderGroupSize
+	}
+	limitCount := runtime.GOMAXPROCS(0) * 10
+	if count > limitCount {
+		count = limitCount
+		log.Warn("limit count to avoid crash", zap.Int("count", count), zap.Any("limitCount", limitCount))
 	}
 
 	inputCh := make([]chan *future, count)
