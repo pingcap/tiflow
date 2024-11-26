@@ -16,11 +16,13 @@ package config
 import (
 	"fmt"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // ConsistentConfig represents replication consistency config for a changefeed.
@@ -77,7 +79,7 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return nil
 	}
 
-	if c.MaxLogSize == 0 {
+	if c.MaxLogSize <= 0 {
 		c.MaxLogSize = redo.DefaultMaxLogSize
 	}
 
@@ -107,8 +109,16 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 	if c.EncodingWorkerNum == 0 {
 		c.EncodingWorkerNum = redo.DefaultEncodingWorkerNum
 	}
+	if c.EncodingWorkerNum > redo.MaxEncodingWorkerNum {
+		log.Warn("limit encoding worker num to avoid crash", zap.Int("encodingWorkerNum", c.EncodingWorkerNum), zap.Any("maxEncodingWorkerNum", redo.MaxEncodingWorkerNum))
+		c.EncodingWorkerNum = redo.MaxEncodingWorkerNum
+	}
 	if c.FlushWorkerNum == 0 {
 		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
+	}
+	if c.FlushWorkerNum > redo.MaxFlushWorkerNum {
+		log.Warn("limit flush worker num to avoid crash", zap.Int("flushWorkerNum", c.FlushWorkerNum), zap.Any("maxFlushWorkerNum", redo.MaxFlushWorkerNum))
+		c.FlushWorkerNum = redo.MaxFlushWorkerNum
 	}
 
 	uri, err := storage.ParseRawURL(c.Storage)

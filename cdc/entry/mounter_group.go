@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -47,6 +49,7 @@ type mounterGroup struct {
 
 const (
 	defaultMounterWorkerNum = 16
+	maxMounterWorkerNum     = 512
 	defaultInputChanSize    = 1024
 	defaultMetricInterval   = 15 * time.Second
 )
@@ -62,6 +65,10 @@ func NewMounterGroup(
 ) *mounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
+	}
+	if workerNum > maxMounterWorkerNum {
+		workerNum = maxMounterWorkerNum
+		log.Warn("limit worker num to avoid crash", zap.Int("workerNum", workerNum), zap.Any("maxMounterWorkerNum", maxMounterWorkerNum))
 	}
 	return &mounterGroup{
 		schemaStorage: schemaStorage,
