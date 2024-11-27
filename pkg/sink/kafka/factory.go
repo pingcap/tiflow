@@ -217,6 +217,7 @@ func (p *saramaAsyncProducer) Close() {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
+	var oldOffset int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -236,6 +237,12 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
+				if ack.Offset < oldOffset {
+					log.Panic("kafka async producer receive an out-of-order message",
+						zap.Int64("oldOffset", oldOffset),
+						zap.Int64("newOffset", ack.Offset))
+				}
+				oldOffset = ack.Offset
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer

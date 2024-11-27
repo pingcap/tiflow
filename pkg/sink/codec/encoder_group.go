@@ -219,7 +219,7 @@ func (g *encoderGroup) cleanMetrics() {
 // It's used to notify the caller that the result is ready.
 type future struct {
 	Key      model.TopicPartitionKey
-	events   []*dmlsink.RowChangeCallbackableEvent
+	Events   []*dmlsink.RowChangeCallbackableEvent
 	Messages []*common.Message
 	done     chan struct{}
 }

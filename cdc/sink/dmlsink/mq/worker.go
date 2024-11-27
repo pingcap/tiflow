@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -267,6 +268,9 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	metricSendMessageDuration := mq.WorkerSendMessageDuration.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	defer mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 
+	//var previousCommitTs uint64
+	var previous *model.RowChangedEvent
+	var previousMessage *common.Message
 	var err error
 	outCh := w.encoderGroup.Output()
 	for {
@@ -283,7 +287,29 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
+			for _, event := range future.Events {
+				if previous != nil {
+					if event.Event.CommitTs < previous.CommitTs {
+						log.Panic("commitTs is not monotonically increasing",
+							zap.String("namespace", w.changeFeedID.Namespace),
+							zap.String("changefeed", w.changeFeedID.ID),
+							zap.Any("previous", previous),
+							zap.Any("event", event.Event))
+					}
+				}
+				previous = event.Event
+			}
 			for _, message := range future.Messages {
+				if previousMessage != nil {
+					if message.Ts < previousMessage.Ts {
+						log.Panic("Ts is not monotonically increasing",
+							zap.String("namespace", w.changeFeedID.Namespace),
+							zap.String("changefeed", w.changeFeedID.ID),
+							zap.Any("previous", previousMessage),
+							zap.Any("message", message))
+					}
+				}
+				previousMessage = message
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, int64, error) {
 					message.SetPartitionKey(future.Key.PartitionKey)
