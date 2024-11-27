@@ -123,7 +123,8 @@ func ParseMetaDataByReader(filename string, rd io.Reader) (*binlog.Location, *bi
 		}
 
 		switch line {
-		case "SHOW MASTER STATUS:":
+		case "SHOW BINARY LOG STATUS:",
+			"SHOW MASTER STATUS:":
 			if err3 := parsePosAndGTID(&pos, &gtidStr); err3 != nil {
 				return nil, nil, err3
 			}

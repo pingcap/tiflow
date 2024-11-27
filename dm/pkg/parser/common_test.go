@@ -278,11 +278,11 @@ var testCases = []testCase{
 		[]string{"ALTER TABLE `xtest`.`xt1` DROP INDEX IF EXISTS `i1`"},
 	},
 	{
-		"alter table `t1` drop foreign key if exists fk_t2_id",
-		[]string{"ALTER TABLE `test`.`t1` DROP FOREIGN KEY IF EXISTS `fk_t2_id`"},
+		"alter table `t1` drop foreign key fk_t2_id",
+		[]string{"ALTER TABLE `test`.`t1` DROP FOREIGN KEY `fk_t2_id`"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
-		[]string{"ALTER TABLE `xtest`.`xt1` DROP FOREIGN KEY IF EXISTS `fk_t2_id`"},
+		[]string{"ALTER TABLE `xtest`.`xt1` DROP FOREIGN KEY `fk_t2_id`"},
 	},
 	{
 		"alter table `t1` drop partition if exists p2",
