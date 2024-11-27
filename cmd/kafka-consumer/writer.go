@@ -79,6 +79,9 @@ type partitionProgress struct {
 
 	eventGroups map[int64]*eventsGroup
 	decoder     codec.RowEventDecoder
+
+	commitTsMap map[model.TableID]uint64
+	offsetMap   map[model.TableID]kafka.Offset
 }
 
 type writer struct {
@@ -132,6 +135,8 @@ func newWriter(ctx context.Context, o *option) *writer {
 		}
 		w.progresses[i] = &partitionProgress{
 			eventGroups: make(map[int64]*eventsGroup),
+			commitTsMap: make(map[model.TableID]uint64),
+			offsetMap:   make(map[model.TableID]kafka.Offset),
 			decoder:     decoder,
 		}
 	}
@@ -376,6 +381,23 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
 				continue
 			}
+
+			previous, ok := progress.commitTsMap[tableID]
+			previousOffset, ok := progress.offsetMap[tableID]
+			if ok {
+				if previous > row.CommitTs {
+					if previousOffset < message.TopicPartition.Offset {
+						log.Panic("row changed event commitTs fallback",
+							zap.Uint64("previous", previous), zap.Uint64("commitTs", row.CommitTs),
+							zap.Any("previousOffset", previousOffset), zap.Any("offset", message.TopicPartition.Offset))
+					}
+					log.Warn("row changed event commitTs fallback, ignore it",
+						zap.Uint64("previous", previous), zap.Uint64("commitTs", row.CommitTs),
+						zap.Any("previousOffset", previousOffset), zap.Any("offset", message.TopicPartition.Offset))
+				}
+			}
+			progress.commitTsMap[tableID] = row.CommitTs
+			progress.offsetMap[tableID] = message.TopicPartition.Offset
 
 			group, ok := eventGroup[tableID]
 			if !ok {
