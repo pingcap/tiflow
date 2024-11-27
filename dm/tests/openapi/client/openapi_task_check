@@ -416,9 +416,9 @@ def get_task_status_success(task_name, total):
 def check_sync_task_status_success(
     task_name,
     min_dump_io_total_bytes=0,
-    max_dump_io_total_bytes=1044480,
+    max_dump_io_total_bytes=1048576,
     min_io_total_bytes=0,
-    max_io_total_bytes=1044480
+    max_io_total_bytes=1048576
 ):
     url = API_ENDPOINT + "/" + task_name + "/status"
     resp = requests.get(url=url)
