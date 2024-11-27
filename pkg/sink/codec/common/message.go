@@ -34,6 +34,7 @@ const MaxRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
 type Message struct {
 	Key       []byte
 	Value     []byte
+	TableID   int64
 	Ts        uint64            // reserved for possible output sorting
 	Schema    *string           // schema
 	Table     *string           // table

@@ -268,9 +268,8 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	metricSendMessageDuration := mq.WorkerSendMessageDuration.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	defer mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 
-	//var previousCommitTs uint64
-	var previous *model.RowChangedEvent
-	var previousMessage *common.Message
+	previousMap := make(map[int64]*model.RowChangedEvent)
+	previousMessageMap := make(map[int64]*common.Message)
 	var err error
 	outCh := w.encoderGroup.Output()
 	for {
@@ -288,6 +287,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, event := range future.Events {
+				previous := previousMap[event.Event.GetTableID()]
 				if previous != nil {
 					if event.Event.CommitTs < previous.CommitTs {
 						log.Panic("commitTs is not monotonically increasing",
@@ -297,9 +297,10 @@ func (w *worker) sendMessages(ctx context.Context) error {
 							zap.Any("event", event.Event))
 					}
 				}
-				previous = event.Event
+				previousMap[event.Event.GetTableID()] = event.Event
 			}
 			for _, message := range future.Messages {
+				previousMessage := previousMessageMap[message.TableID]
 				if previousMessage != nil {
 					if message.Ts < previousMessage.Ts {
 						log.Panic("Ts is not monotonically increasing",
@@ -309,7 +310,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 							zap.Any("message", message))
 					}
 				}
-				previousMessage = message
+				previousMessageMap[message.TableID] = message
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, int64, error) {
 					message.SetPartitionKey(future.Key.PartitionKey)
