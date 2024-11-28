@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -217,7 +218,11 @@ func (p *saramaAsyncProducer) Close() {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
-	var oldOffset int64
+	var (
+		oldOffset   int64
+		oldTableID  string
+		oldCommitTs string
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -237,12 +242,19 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
+				tableID := string(ack.Headers[0].Value)
+				commitTs := string(ack.Headers[1].Value)
+				log.Info("async producer receive ack",
+					zap.Int64("oldOffset", oldOffset), zap.String("tableID", oldTableID), zap.String("commitTs", oldCommitTs),
+					zap.Int64("newOffset", ack.Offset), zap.String("tableID", tableID), zap.String("commitTs", commitTs))
 				if ack.Offset < oldOffset {
 					log.Panic("kafka async producer receive an out-of-order message",
-						zap.Int64("oldOffset", oldOffset),
-						zap.Int64("newOffset", ack.Offset))
+						zap.Int64("oldOffset", oldOffset), zap.String("tableID", oldTableID), zap.String("commitTs", oldCommitTs),
+						zap.Int64("newOffset", ack.Offset), zap.String("tableID", tableID), zap.String("commitTs", commitTs))
 				}
 				oldOffset = ack.Offset
+				oldTableID = tableID
+				oldCommitTs = commitTs
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
@@ -261,9 +273,14 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 // AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
 func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, message *common.Message) error {
+	headers := []sarama.RecordHeader{
+		{[]byte("tableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
+		{[]byte("commitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
+	}
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
+		Headers:   headers,
 		Key:       sarama.StringEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
@@ -273,5 +290,8 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		return errors.Trace(ctx.Err())
 	case p.producer.Input() <- msg:
 	}
+	log.Info("async producer send message",
+		zap.Int64("tableID", message.TableID), zap.Uint64("commitTs", message.Ts))
+
 	return nil
 }
