@@ -106,14 +106,14 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 			fmt.Sprintf("The consistent.compression:%s must be 'none' or 'lz4'", c.Compression))
 	}
 
-	if c.EncodingWorkerNum == 0 {
+	if c.EncodingWorkerNum <= 0 {
 		c.EncodingWorkerNum = redo.DefaultEncodingWorkerNum
 	}
 	if c.EncodingWorkerNum > redo.MaxEncodingWorkerNum {
 		log.Warn("limit encoding worker num to avoid crash", zap.Int("encodingWorkerNum", c.EncodingWorkerNum), zap.Any("maxEncodingWorkerNum", redo.MaxEncodingWorkerNum))
 		c.EncodingWorkerNum = redo.MaxEncodingWorkerNum
 	}
-	if c.FlushWorkerNum == 0 {
+	if c.FlushWorkerNum <= 0 {
 		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
 	}
 	if c.FlushWorkerNum > redo.MaxFlushWorkerNum {

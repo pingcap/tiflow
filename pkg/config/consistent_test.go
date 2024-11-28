@@ -23,23 +23,23 @@ import (
 
 func TestConsistentConfig(t *testing.T) {
 	config := ConsistentConfig{
-		Level:             "none",
+		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        -1,
 		EncodingWorkerNum: -1,
 		FlushWorkerNum:    -1,
 	}
 	config.ValidateAndAdjust()
-	require.Equal(t, config.MaxLogSize, redo.DefaultEncodingWorkerNum)
-	require.Equal(t, config.FlushIntervalInMs, redo.DefaultFlushIntervalInMs)
-	require.Equal(t, config.MetaFlushIntervalInMs, redo.DefaultMetaFlushIntervalInMs)
-	require.Equal(t, config.EncodingWorkerNum, redo.DefaultEncodingWorkerNum)
-	require.Equal(t, config.FlushWorkerNum, redo.DefaultFlushWorkerNum)
+	require.Equal(t, config.MaxLogSize, redo.DefaultMaxLogSize)
+	require.EqualValues(t, config.FlushIntervalInMs, redo.DefaultFlushIntervalInMs)
+	require.EqualValues(t, config.MetaFlushIntervalInMs, redo.DefaultMetaFlushIntervalInMs)
+	require.EqualValues(t, config.EncodingWorkerNum, redo.DefaultEncodingWorkerNum)
+	require.EqualValues(t, config.FlushWorkerNum, redo.DefaultFlushWorkerNum)
 
 	config.EncodingWorkerNum = redo.MaxEncodingWorkerNum + 10
 	config.FlushWorkerNum = redo.MaxFlushWorkerNum + 10
 	config.ValidateAndAdjust()
-	require.Equal(t, config.EncodingWorkerNum, redo.MaxEncodingWorkerNum)
-	require.Equal(t, config.FlushWorkerNum, redo.MaxFlushWorkerNum)
+	require.EqualValues(t, config.EncodingWorkerNum, redo.MaxEncodingWorkerNum)
+	require.EqualValues(t, config.FlushWorkerNum, redo.MaxFlushWorkerNum)
 
 	config.FlushIntervalInMs = -1
 	require.ErrorIs(t, config.ValidateAndAdjust(), cerror.ErrInvalidReplicaConfig)
