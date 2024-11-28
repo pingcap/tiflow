@@ -269,20 +269,8 @@ Finished dump at: 2020-09-30 12:16:49
 		}
 	}
 
-	noBinlogLoc := `Started dump at: 2024-11-18 12:52:52
-SHOW BINARY LOG STATUS:
-	Log: mysql-bin.000001
-	Pos: 16127
-	GTID:0-1-7331
-	
-SHOW SLAVE STATUS:
-	Connection name:
-	Host: mariadb_master
-	Log: mysql-bin.000005
-	Pos: 16544
-	GTID:
-	
-Finished dump at: 2024-11-18 12:52:52
+	noBinlogLoc := `Started dump at: 2020-12-02 17:13:56
+Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	require.NoError(t, err)
