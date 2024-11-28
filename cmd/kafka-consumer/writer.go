@@ -80,8 +80,12 @@ type partitionProgress struct {
 	eventGroups map[int64]*eventsGroup
 	decoder     codec.RowEventDecoder
 
-	commitTsMap map[model.TableID]uint64
-	offsetMap   map[model.TableID]kafka.Offset
+	previousMap map[model.TableID]previous
+}
+
+type previous struct {
+	offset   kafka.Offset
+	commitTs uint64
 }
 
 type writer struct {
@@ -135,8 +139,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 		}
 		w.progresses[i] = &partitionProgress{
 			eventGroups: make(map[int64]*eventsGroup),
-			commitTsMap: make(map[model.TableID]uint64),
-			offsetMap:   make(map[model.TableID]kafka.Offset),
+			previousMap: make(map[model.TableID]previous),
 			decoder:     decoder,
 		}
 	}
@@ -382,22 +385,25 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 
-			previous, ok := progress.commitTsMap[tableID]
-			previousOffset, ok := progress.offsetMap[tableID]
+			prev, ok := progress.previousMap[tableID]
 			if ok {
-				if previous > row.CommitTs {
-					if previousOffset < message.TopicPartition.Offset {
+				if prev.commitTs > row.CommitTs {
+					if prev.offset < message.TopicPartition.Offset {
 						log.Panic("row changed event commitTs fallback",
-							zap.Uint64("previous", previous), zap.Uint64("commitTs", row.CommitTs),
-							zap.Any("previousOffset", previousOffset), zap.Any("offset", message.TopicPartition.Offset))
+							zap.Int64("tableID", tableID),
+							zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+							zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
 					}
 					log.Warn("row changed event commitTs fallback, ignore it",
-						zap.Uint64("previous", previous), zap.Uint64("commitTs", row.CommitTs),
-						zap.Any("previousOffset", previousOffset), zap.Any("offset", message.TopicPartition.Offset))
+						zap.Int64("tableID", tableID),
+						zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+						zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
 				}
 			}
-			progress.commitTsMap[tableID] = row.CommitTs
-			progress.offsetMap[tableID] = message.TopicPartition.Offset
+			progress.previousMap[tableID] = previous{
+				offset:   message.TopicPartition.Offset,
+				commitTs: row.CommitTs,
+			}
 
 			group, ok := eventGroup[tableID]
 			if !ok {
