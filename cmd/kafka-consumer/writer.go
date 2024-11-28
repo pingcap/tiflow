@@ -390,12 +390,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				if prev.commitTs > row.CommitTs {
 					if prev.offset < message.TopicPartition.Offset {
 						log.Panic("row changed event commitTs fallback",
-							zap.Int64("tableID", tableID),
+							zap.Int64("tableID", tableID), zap.Int32("partition", partition),
 							zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
 							zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
 					}
 					log.Warn("row changed event commitTs fallback, ignore it",
-						zap.Int64("tableID", tableID),
+						zap.Int64("tableID", tableID), zap.Int32("partition", partition),
 						zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
 						zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
 				}
