@@ -86,3 +86,4 @@ jobs:
           content: |
             text: |
               dm upstream switch job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
+

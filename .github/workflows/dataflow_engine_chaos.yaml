@@ -339,15 +339,3 @@ jobs:
           name: chaos-base-logs.${{ matrix.chaos-obj }}
           path: |
             ./logs
-
-      # Send feishu notification if failed.
-      - name: Feishu notification
-        continue-on-error: true
-        uses: foxundermoon/feishu-action@v2
-        if: ${{ failure() }}
-        with:
-          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
-          msg_type: text
-          content: |
-            text: |
-              dataflow engine chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}

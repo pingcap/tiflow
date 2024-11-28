@@ -84,6 +84,29 @@ Finished dump at: 2018-12-27 19:51:22`,
 			mysql.Position{},
 			"",
 		},
+		{
+			`Started dump at: 2018-12-27 19:51:22
+SHOW BINARY LOG STATUS:
+        Log: mysql-bin.000004
+        Pos: 3295818
+        GTID:
+
+SHOW SLAVE STATUS:
+        Host: 10.128.27.98
+        Log: mysql-bin.000003
+        Pos: 329635
+        GTID:
+
+Finished dump at: 2018-12-27 19:51:22`,
+			mysql.Position{
+				Name: "mysql-bin.000004",
+				Pos:  3295818,
+			},
+			"",
+			false,
+			mysql.Position{},
+			"",
+		},
 		{ // with empty line after multiple GTID sets
 			`Started dump at: 2020-05-21 18:14:49
 SHOW MASTER STATUS:
