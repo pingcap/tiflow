@@ -215,14 +215,16 @@ func (p *saramaAsyncProducer) Close() {
 	}()
 }
 
+type item struct {
+	tableID  string
+	commitTs string
+	offset   int64
+}
+
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
-	var (
-		oldOffset   int64
-		oldTableID  string
-		oldCommitTs string
-	)
+	memo := make(map[int32]item)
 	for {
 		select {
 		case <-ctx.Done():
@@ -244,17 +246,20 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				}
 				tableID := string(ack.Headers[0].Value)
 				commitTs := string(ack.Headers[1].Value)
+				previous := memo[ack.Partition]
 				log.Info("async producer receive ack",
-					zap.Int64("oldOffset", oldOffset), zap.String("tableID", oldTableID), zap.String("commitTs", oldCommitTs),
-					zap.Int64("newOffset", ack.Offset), zap.String("tableID", tableID), zap.String("commitTs", commitTs))
-				if ack.Offset < oldOffset {
-					log.Panic("kafka async producer receive an out-of-order message",
-						zap.Int64("oldOffset", oldOffset), zap.String("tableID", oldTableID), zap.String("commitTs", oldCommitTs),
-						zap.Int64("newOffset", ack.Offset), zap.String("tableID", tableID), zap.String("commitTs", commitTs))
+					zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
+					zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
+				if ack.Offset < previous.offset {
+					log.Warn("kafka async producer receive an out-of-order message",
+						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
 				}
-				oldOffset = ack.Offset
-				oldTableID = tableID
-				oldCommitTs = commitTs
+				memo[ack.Partition] = item{
+					tableID:  tableID,
+					commitTs: commitTs,
+					offset:   ack.Offset,
+				}
 			}
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
