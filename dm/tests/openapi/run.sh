@@ -230,6 +230,72 @@ function test_dump_task() {
 
 }
 
+function test_load_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump & load TASK"
+	prepare_database
+
+	task_name_dump="test-dump"
+	task_name_load="test-load"
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	# get source list success
+	openapi_source_check "list_source_success" 1
+
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create task success: not valid task create request
+	openapi_task_check "create_task_failed"
+
+	# create dump task success
+	openapi_task_check "create_dump_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_dump" \
+		"\"stage\": \"Stopped\"" 1
+
+	init_dump_data
+
+	# start dump task success
+	openapi_task_check "start_task_success" $task_name_dump ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_dump" \
+		"\"stage\": \"Running\"" 1
+
+	# wait dump task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_dump" 100 \
+		"\"stage\": \"Finished\"" 1
+
+	# create load task success
+	openapi_task_check "create_load_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_load" \
+		"\"stage\": \"Stopped\"" 1
+
+	# use the data from the same dir of dump task
+
+	# start load task success
+	openapi_task_check "start_task_success" $task_name_load ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_load" \
+		"\"stage\": \"Running\"" 1
+
+	# wait load task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_load" 100 \
+		"\"stage\": \"Finished\"" 1
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI:  dump & load TASK"
+
+}
+
 function test_full_mode_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: FULL MODE TASK"
 	prepare_database
@@ -1150,6 +1216,7 @@ function run() {
 	test_multi_tasks
 	test_noshard_task
 	test_dump_task
+	test_load_task
 	test_task_templates
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
