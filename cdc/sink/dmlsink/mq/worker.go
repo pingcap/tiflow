@@ -303,11 +303,23 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				previousMessage := previousMessageMap[message.TableID]
 				if previousMessage != nil {
 					if message.Ts < previousMessage.Ts {
+						for _, event := range future.Events {
+							log.Warn("Ts not monotonically increasing",
+								zap.String("namespace", w.changeFeedID.Namespace),
+								zap.String("changefeed", w.changeFeedID.ID),
+								zap.Int64("tableID", event.Event.GetTableID()),
+								zap.Uint64("commitTs", event.Event.CommitTs),
+								zap.Int("length", len(future.Events)))
+						}
+
 						log.Panic("Ts is not monotonically increasing",
 							zap.String("namespace", w.changeFeedID.Namespace),
 							zap.String("changefeed", w.changeFeedID.ID),
-							zap.Any("previous", previousMessage),
-							zap.Any("message", message))
+							zap.Int64("tableID", previousMessage.TableID),
+							zap.Uint64("previousTs", previousMessage.Ts),
+							zap.Int64("currentTableID", message.TableID),
+							zap.Uint64("currentTs", message.Ts),
+							zap.Int("length", len(future.Messages)))
 					}
 				}
 				previousMessageMap[message.TableID] = message
