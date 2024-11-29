@@ -294,6 +294,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		counter     int
 		needFlush   bool
 		messageType model.MessageType
+		totalevents int64
 	)
 	for {
 		ty, hasNext, err := decoder.HasNext()
@@ -418,46 +419,38 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("commitTs", row.CommitTs))
+
+			atomic.AddInt64(&totalevents, 1)
+			var ts uint64
+			// flush
+			if totalevents >= 100 {
+				for tableID, group := range eventGroup {
+					events := group.events
+					if len(events) == 0 {
+						continue
+					}
+					tableSink, ok := progress.tableSinkMap.Load(tableID)
+					if !ok {
+						tableSink = w.sinkFactory.CreateTableSinkForConsumer(
+							model.DefaultChangeFeedID("kafka-consumer"),
+							spanz.TableIDToComparableSpan(tableID),
+							events[0].CommitTs,
+						)
+						progress.tableSinkMap.Store(tableID, tableSink)
+					}
+					tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
+					log.Debug("append row changed events to table sink", zap.Int64("tableID", tableID), zap.Int("count", len(events)),
+						zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+					// this should be the maximum value
+					ts = group.events[len(group.events)-1].CommitTs
+					group.events = group.events[:0] // clear
+				}
+				// the max commitTs of all tables
+				atomic.StoreUint64(&progress.watermark, ts)
+				progress.watermarkOffset = message.TopicPartition.Offset
+				needFlush = true
+			}
 		case model.MessageTypeResolved:
-			ts, err := decoder.NextResolvedEvent()
-			if err != nil {
-				log.Panic("decode message value failed",
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.ByteString("value", value),
-					zap.Error(err))
-			}
-
-			log.Debug("watermark event received",
-				zap.Int32("partition", partition),
-				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("watermark", ts))
-
-			if w.checkOldMessage(progress, ts, nil, partition, message) {
-				continue
-			}
-
-			for tableID, group := range eventGroup {
-				events := group.Resolve(ts)
-				if len(events) == 0 {
-					continue
-				}
-				tableSink, ok := progress.tableSinkMap.Load(tableID)
-				if !ok {
-					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
-						model.DefaultChangeFeedID("kafka-consumer"),
-						spanz.TableIDToComparableSpan(tableID),
-						events[0].CommitTs,
-					)
-					progress.tableSinkMap.Store(tableID, tableSink)
-				}
-				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
-				log.Debug("append row changed events to table sink",
-					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
-			}
-			atomic.StoreUint64(&progress.watermark, ts)
-			progress.watermarkOffset = message.TopicPartition.Offset
-			needFlush = true
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
 				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
