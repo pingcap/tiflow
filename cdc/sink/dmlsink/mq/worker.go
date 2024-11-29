@@ -307,6 +307,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 							log.Warn("Ts not monotonically increasing",
 								zap.String("namespace", w.changeFeedID.Namespace),
 								zap.String("changefeed", w.changeFeedID.ID),
+								zap.Int32("partition", future.Key.Partition),
 								zap.Int64("tableID", event.Event.GetTableID()),
 								zap.Uint64("commitTs", event.Event.CommitTs),
 								zap.Int("length", len(future.Events)))
@@ -315,6 +316,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 						log.Panic("Ts is not monotonically increasing",
 							zap.String("namespace", w.changeFeedID.Namespace),
 							zap.String("changefeed", w.changeFeedID.ID),
+							zap.Int32("partition", future.Key.Partition),
 							zap.Int64("tableID", previousMessage.TableID),
 							zap.Uint64("previousTs", previousMessage.Ts),
 							zap.Int64("currentTableID", message.TableID),
