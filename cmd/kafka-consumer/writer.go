@@ -81,6 +81,9 @@ type partitionProgress struct {
 	decoder     codec.RowEventDecoder
 
 	previousMap map[model.TableID]previous
+
+	eventCount int64
+	resolvedTs uint64
 }
 
 type previous struct {
@@ -284,7 +287,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 	progress := w.progresses[partition]
 	decoder := progress.decoder
-	eventGroup := progress.eventGroups
+	// eventGroup := progress.eventGroups
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Panic("add key value to the decoder failed",
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
@@ -294,7 +297,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		counter     int
 		needFlush   bool
 		messageType model.MessageType
-		totalevents int64
 	)
 	for {
 		ty, hasNext, err := decoder.HasNext()
@@ -331,22 +333,22 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Error(err))
 			}
 
-			if simple, ok := decoder.(*simple.Decoder); ok {
-				cachedEvents := simple.GetCachedEvents()
-				for _, row := range cachedEvents {
-					row.TableInfo.TableName.TableID = row.PhysicalTableID
-					w.checkPartition(row, partition, message)
-					if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-						continue
-					}
-					group, ok := eventGroup[row.PhysicalTableID]
-					if !ok {
-						group = NewEventsGroup()
-						eventGroup[row.PhysicalTableID] = group
-					}
-					group.Append(row)
-				}
-			}
+			// if simple, ok := decoder.(*simple.Decoder); ok {
+			// 	cachedEvents := simple.GetCachedEvents()
+			// 	for _, row := range cachedEvents {
+			// 		row.TableInfo.TableName.TableID = row.PhysicalTableID
+			// 		w.checkPartition(row, partition, message)
+			// 		if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+			// 			continue
+			// 		}
+			// 		group, ok := eventGroup[row.PhysicalTableID]
+			// 		if !ok {
+			// 			group = NewEventsGroup()
+			// 			eventGroup[row.PhysicalTableID] = group
+			// 		}
+			// 		group.Append(row)
+			// 	}
+			// }
 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
@@ -407,12 +409,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				commitTs: row.CommitTs,
 			}
 
-			group, ok := eventGroup[tableID]
-			if !ok {
-				group = NewEventsGroup()
-				eventGroup[tableID] = group
-			}
-			group.Append(row)
+			// group, ok := eventGroup[tableID]
+			// if !ok {
+			// 	group = NewEventsGroup()
+			// 	eventGroup[tableID] = group
+			// }
+			// group.Append(row)
 			log.Info("DML event received",
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()),
@@ -420,35 +422,27 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("commitTs", row.CommitTs))
 
-			atomic.AddInt64(&totalevents, 1)
-			var ts uint64
-			// flush
-			if totalevents >= 100 {
-				for tableID, group := range eventGroup {
-					events := group.events
-					if len(events) == 0 {
-						continue
-					}
-					tableSink, ok := progress.tableSinkMap.Load(tableID)
-					if !ok {
-						tableSink = w.sinkFactory.CreateTableSinkForConsumer(
-							model.DefaultChangeFeedID("kafka-consumer"),
-							spanz.TableIDToComparableSpan(tableID),
-							events[0].CommitTs,
-						)
-						progress.tableSinkMap.Store(tableID, tableSink)
-					}
-					tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
-					log.Debug("append row changed events to table sink", zap.Int64("tableID", tableID), zap.Int("count", len(events)),
-						zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
-					// this should be the maximum value
-					ts = max(ts, group.events[len(group.events)-1].CommitTs)
-					group.events = group.events[:0] // clear
-				}
+			resolvedTs := max(progress.resolvedTs, row.CommitTs)
+			progress.resolvedTs = resolvedTs
+			tableSink, ok := progress.tableSinkMap.Load(tableID)
+			if !ok {
+				tableSink = w.sinkFactory.CreateTableSinkForConsumer(
+					model.DefaultChangeFeedID("kafka-consumer"),
+					spanz.TableIDToComparableSpan(tableID),
+					row.CommitTs,
+				)
+				progress.tableSinkMap.Store(tableID, tableSink)
+			}
+			tableSink.(tablesink.TableSink).AppendRowChangedEvents(row)
+			progress.eventCount++
+			if progress.eventCount >= 1000 {
 				// the max commitTs of all tables
-				atomic.StoreUint64(&progress.watermark, ts)
+				atomic.StoreUint64(&progress.watermark, resolvedTs)
 				progress.watermarkOffset = message.TopicPartition.Offset
 				needFlush = true
+				log.Info("flush row changed events",
+					zap.Int32("partition", partition), zap.Uint64("resolvedTs", resolvedTs), zap.Int64("count", progress.eventCount))
+				progress.eventCount = 0
 			}
 		case model.MessageTypeResolved:
 		default:
