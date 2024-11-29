@@ -301,7 +301,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, event := range future.Events {
-				previous := previousMap[event.Event.GetTableID()]
+				previous := previousMap[event.Event.Table.TableID]
 				if previous != nil {
 					if event.Event.CommitTs < previous.CommitTs {
 						log.Panic("commitTs is not monotonically increasing",
@@ -311,7 +311,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 							zap.Any("event", event.Event))
 					}
 				}
-				previousMap[event.Event.GetTableID()] = event.Event
+				previousMap[event.Event.Table.TableID] = event.Event
 			}
 			for _, message := range future.Messages {
 				previousMessage := previousMessageMap[message.TableID]
@@ -322,7 +322,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 								zap.String("namespace", w.changeFeedID.Namespace),
 								zap.String("changefeed", w.changeFeedID.ID),
 								zap.Int32("partition", future.Key.Partition),
-								zap.Int64("tableID", event.Event.GetTableID()),
+								zap.Int64("tableID", event.Event.Table.TableID),
 								zap.Uint64("commitTs", event.Event.CommitTs),
 								zap.Int("length", len(future.Events)))
 						}
