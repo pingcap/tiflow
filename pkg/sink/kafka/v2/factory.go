@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"crypto/tls"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"strings"
 	"time"
 
@@ -364,8 +365,7 @@ func (a *asyncWriter) Close() {
 // AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
 func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
-	partition int32, key []byte, value []byte,
-	callback func(),
+	partition int32, message *common.Message,
 ) error {
 	select {
 	case <-ctx.Done():
@@ -375,9 +375,9 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 	return a.w.WriteMessages(ctx, kafka.Message{
 		Topic:      topic,
 		Partition:  int(partition),
-		Key:        key,
-		Value:      value,
-		WriterData: callback,
+		Key:        message.Key,
+		Value:      message.Value,
+		WriterData: message.Callback,
 	})
 }
 
