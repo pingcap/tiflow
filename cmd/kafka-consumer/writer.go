@@ -442,7 +442,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					log.Debug("append row changed events to table sink", zap.Int64("tableID", tableID), zap.Int("count", len(events)),
 						zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 					// this should be the maximum value
-					ts = group.events[len(group.events)-1].CommitTs
+					ts = max(ts, group.events[len(group.events)-1].CommitTs)
 					group.events = group.events[:0] // clear
 				}
 				// the max commitTs of all tables
