@@ -1056,6 +1056,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(float64(0), resultTaskStatus.Data[0].DumpStatus.CompletedTables)
 	s.Equal(int64(1), resultTaskStatus.Data[0].DumpStatus.TotalTables)
 	s.Equal(float64(10), resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows)
+	s.Equal(int64(0), resultTaskStatus.Data[0].DumpStatus.Bps)
+	s.Equal(float64(0), resultTaskStatus.Data[0].DumpStatus.FinishedBytes)
+	s.Equal(float64(5), resultTaskStatus.Data[0].DumpStatus.FinishedRows)
 
 	// get task status with source name
 	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)

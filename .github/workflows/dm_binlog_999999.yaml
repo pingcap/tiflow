@@ -14,6 +14,11 @@ jobs:
   test-binlog-999999:
     name: Test binlog 999999
     runs-on: ubuntu-20.04
+    services:
+      docker:
+        image: docker:19.03.12
+        options: >-
+          --privileged
 
     steps:
       - name: Set up Go env
@@ -29,6 +34,14 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: refs/pull/${{ github.event.inputs.pr }}/head
+
+      - name: Set DOCKER_HOST
+        run: echo "export DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
+
+      - name: Install docker-compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
 
       - name: Cache go modules
         uses: actions/cache@v2
@@ -48,7 +61,9 @@ jobs:
 
       - name: Setup CI environment
         run: |
-          docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
+          sudo apt-get update
+          sudo apt-get install -y curl
+          sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
           curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
           curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
@@ -57,7 +72,7 @@ jobs:
           chmod +x minio
           mv minio bin/
 
-      - name: change binlog sequence number to 999998
+      - name: Change binlog sequence number to 999999
         run: |
           while ! mysqladmin -h127.0.0.1 -P3306 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
             echo "wait mysql"
@@ -87,11 +102,16 @@ jobs:
             sleep 1
           done
 
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456
+
       - name: Run test cases
         run: |
           RESET_MASTER=false make dm_integration_test CASE=incremental_mode
-          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456 | grep -q "mysql-bin.1000000"
-          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456 | grep -q "mysql-bin.1000000"
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456 | grep -q "mysql-bin.1000003"
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456 | grep -q "mysql-bin.1000002"
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
@@ -112,12 +132,14 @@ jobs:
           path: |
             ./logs
 
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
+      # Send feishu notification if failed.
+      - name: Feishu notification
+        continue-on-error: true
+        uses: foxundermoon/feishu-action@v2
         if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
         with:
-          args: "binlog 999999 failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
+          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
+          msg_type: text
+          content: |
+            text: |
+              binlog 999999 job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}

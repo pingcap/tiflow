@@ -3376,6 +3376,12 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.EnableGTID = newCfg.EnableGTID
 	oldCfg.CaseSensitive = newCfg.CaseSensitive
 
+	// Skip comparing atomic values since they cannot be marshaled/unmarshaled
+	// by the TOML encoder/decoder. These fields will remain uninitialized (zero value)
+	// after decoding.
+	newCfg.IOTotalBytes = oldCfg.IOTotalBytes
+	newCfg.DumpIOTotalBytes = oldCfg.DumpIOTotalBytes
+
 	if oldCfg.String() != newCfg.String() {
 		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)

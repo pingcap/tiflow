@@ -105,10 +105,10 @@ def create_task_with_precheck(task_name, ignore_check, is_success, check_result)
         assert resp.status_code == 400
         assert check_result in resp.json()["error_msg"]
 
-def create_noshard_task_success(task_name, tartget_table_name=""):
+def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all"):
     task = {
         "name": task_name,
-        "task_mode": "all",
+        "task_mode": task_mode,
         "meta_schema": "dm-meta",
         "enhance_online_schema_change": True,
         "on_duplicate": "error",
@@ -413,6 +413,73 @@ def get_task_status_success(task_name, total):
     print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
 
+def check_sync_task_status_success(
+    task_name,
+    min_dump_io_total_bytes=2000,
+    max_dump_io_total_bytes=51200,
+    min_io_total_bytes=2000,
+    max_io_total_bytes=51200
+):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_sync_task_status_success resp=", data)
+
+    for item in data.get("data", []):
+        # Only validate sync task status
+        assert item.get("unit") == "Sync"
+        sync_status = item.get("sync_status", {})
+        dump_io_total_bytes = sync_status.get("dump_io_total_bytes")
+        io_total_bytes = sync_status.get("io_total_bytes")
+        assert dump_io_total_bytes is not None and io_total_bytes is not None
+        assert dump_io_total_bytes > int(min_dump_io_total_bytes) and io_total_bytes > int(min_io_total_bytes)
+        assert dump_io_total_bytes < int(max_dump_io_total_bytes) and io_total_bytes < int(max_io_total_bytes)
+
+def check_load_task_finished_status_success(task_name, finished_bytes, total_bytes):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_load_task_finished_status_success resp=", data)
+
+    for item in data.get("data", []):
+        # Only validate load task status
+        assert item.get("unit") == "Load"
+        assert item.get("stage") == "Finished"
+        load_status = item.get("load_status", {})
+        assert load_status.get("progress") == "100.00 %"
+        assert load_status.get("finished_bytes") == int(finished_bytes)
+        assert load_status.get("total_bytes") == int(total_bytes)
+
+def check_dump_task_finished_status_success(task_name, completed_tables, total_tables, estimate_total_rows,finished_rows,finished_bytes):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_dump_task_finished_status_success resp=", data)
+
+    for item in data.get("data", []):
+        # Only validate dump task status
+        assert item.get("unit") == "Dump"
+        assert item.get("stage") == "Finished"
+        dump_status = item.get("dump_status", {})
+        assert dump_status.get("progress") == "100.00 %"
+        assert dump_status.get("completed_tables") == int(completed_tables)
+        assert dump_status.get("total_tables") == int(total_tables)
+        assert dump_status.get("estimate_total_rows") == int(estimate_total_rows)
+        assert dump_status.get("finished_rows") == int(finished_rows)
+        assert dump_status.get("finished_bytes") == int(finished_bytes)
+
+def check_task_stage_success(task_name, total, stage):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("check_task_stage_success resp=", data)
+    assert data["total"] == int(total)
+    for status in data["data"]:
+        assert status["stage"] == stage
 
 def get_task_status_success_but_worker_meet_error(task_name, total):
     url = API_ENDPOINT + "/" + task_name + "/status"
@@ -633,7 +700,7 @@ def check_noshard_task_dump_status_success(task_name, total):
     resp = requests.get(url=url)
     data = resp.json()
     assert resp.status_code == 200
-    print("check_dump_status_success resp=", data)
+    print("check_noshard_task_dump_status_success resp=", data)
     assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
 
 
@@ -769,6 +836,10 @@ if __name__ == "__main__":
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
         "do_complex_operations": do_complex_operations,
         "create_task_with_precheck": create_task_with_precheck,
+        "check_task_stage_success": check_task_stage_success,
+        "check_sync_task_status_success": check_sync_task_status_success,
+        "check_load_task_finished_status_success": check_load_task_finished_status_success,
+        "check_dump_task_finished_status_success": check_dump_task_finished_status_success,
     }
 
     func = FUNC_MAP[sys.argv[1]]

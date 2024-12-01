@@ -27,7 +27,10 @@ function init_noshard_data() {
 function init_dump_data() {
 
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4),(5,6),(7,8),(9,10),(11,12),(13,14),(15,16),(17,18);"
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2),(3,4);"
+
+	run_sql_source1 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source1 "INSERT INTO openapi.t2(i,j) VALUES (1, 2),(3,4);"
 }
 
 function init_shard_data() {
@@ -209,23 +212,74 @@ function test_dump_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 1
+	openapi_task_check "check_task_stage_success" $task_name 1 "Stopped"
 
 	init_dump_data
 
 	# start dump task success
 	openapi_task_check "start_task_success" $task_name ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name" \
-		"\"stage\": \"Running\"" 1
 
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" 100 \
 		"\"stage\": \"Finished\"" 1
+	openapi_task_check "check_dump_task_finished_status_success" $task_name 2 2 4 4 228
 
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
 
+}
+
+function test_full_mode_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: FULL MODE TASK"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name=""
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	# create no shard task in full mode success
+	openapi_task_check "create_noshard_task_success" $task_name "" "full"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Stopped"
+
+	init_noshard_data
+
+	# start task success
+	openapi_task_check "start_task_success" $task_name ""
+
+	# get task status and load task status
+	openapi_task_check "get_task_status_success" "$task_name" 2
+
+	# wait full task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" 100 \
+		"\"stage\": \"Finished\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Finished"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	# check load task status
+	openapi_task_check "check_load_task_finished_status_success" "$task_name" 107 107
+
+	# delete source success and clean data for other test
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK"
 }
 
 function test_shard_task() {
@@ -281,8 +335,9 @@ function test_shard_task() {
 	# get illegal char task_status failed
 	openapi_task_check get_illegal_char_task_status_failed
 
-	# get task status success
+	# get task status and check sync task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "check_sync_task_status_success" "$task_name" 3000 7000 19000 30000
 
 	# get task list
 	openapi_task_check "get_task_list" 1
@@ -342,8 +397,9 @@ function test_noshard_task() {
 	# get task status failed
 	openapi_task_check "get_task_status_failed" "not a task name"
 
-	# get task status success
+	# get task status and check sync task status success
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 5000 18000 42000
 
 	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
@@ -405,6 +461,7 @@ function test_complex_operations_of_source_and_task() {
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 	openapi_task_check "get_task_status_success" "$task_name" 2
+	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 5000 18000 42000
 
 	# do some complex operations
 	openapi_task_check "do_complex_operations" "$task_name"
@@ -1101,6 +1158,7 @@ function run() {
 	test_start_task_with_condition
 	test_stop_task_with_condition
 	test_reverse_https
+	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster

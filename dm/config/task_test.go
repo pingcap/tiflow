@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 var correctTaskConfig = `---
@@ -688,6 +689,8 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			ValidatorCfg:     validatorCfg,
 			CleanDumpFile:    true,
 			EnableANSIQuotes: true,
+			IOTotalBytes:     atomic.NewUint64(0),
+			DumpIOTotalBytes: atomic.NewUint64(0),
 		}
 	)
 
