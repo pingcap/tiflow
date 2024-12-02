@@ -244,18 +244,20 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if callback != nil {
 					callback()
 				}
-				tableID := string(ack.Headers[0].Value)
-				commitTs := string(ack.Headers[1].Value)
+				schema := string(ack.Headers[0].Value)
+				table := string(ack.Headers[1].Value)
+				tableID := string(ack.Headers[2].Value)
+				commitTs := string(ack.Headers[3].Value)
 				previous := memo[ack.Partition]
 				log.Info("async producer receive ack",
 					zap.Int32("partition", ack.Partition),
 					zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
-					zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
+					zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID), zap.String("schema", schema), zap.String("table", table))
 				if ack.Offset < previous.offset {
 					log.Warn("kafka async producer receive an out-of-order message",
 						zap.Int32("partition", ack.Partition),
 						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
-						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID), zap.String("schema", schema), zap.String("table", table))
 				}
 				memo[ack.Partition] = item{
 					tableID:  tableID,
@@ -281,8 +283,10 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 // wish to send.
 func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	headers := []sarama.RecordHeader{
-		{[]byte("tableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
-		{[]byte("commitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
+		{[]byte("Schema"), []byte(message.GetSchema())},
+		{[]byte("Table"), []byte(message.GetTable())},
+		{[]byte("TableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
+		{[]byte("CommitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
 	}
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
@@ -297,7 +301,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		return errors.Trace(ctx.Err())
 	case p.producer.Input() <- msg:
 	}
-	log.Info("async producer send message",
+	log.Info("async producer send message", zap.String("schema", message.GetSchema()), zap.String("table", message.GetTable()),
 		zap.Int64("tableID", message.TableID), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
 
 	return nil
