@@ -291,8 +291,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			zap.Error(err))
 	}
 	var (
-		counter     int
-		needFlush   bool
+		counter int
+		//needFlush   bool
 		messageType model.MessageType
 	)
 	for {
@@ -349,13 +349,19 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
-				w.appendDDL(ddl)
-				needFlush = true
-				log.Info("DDL message received",
-					zap.Int32("partition", partition),
-					zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("commitTs", ddl.CommitTs),
-					zap.String("DDL", ddl.Query))
+				// DDL can be executed, do it first.
+				if err = w.ddlSink.WriteDDLEvent(ctx, ddl); err != nil {
+					log.Panic("write DDL event failed", zap.Error(err),
+						zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs))
+				}
+
+				//w.appendDDL(ddl)
+				//needFlush = true
+				//log.Info("DDL message received",
+				//	zap.Int32("partition", partition),
+				//	zap.Any("offset", message.TopicPartition.Offset),
+				//	zap.Uint64("commitTs", ddl.CommitTs),
+				//	zap.String("DDL", ddl.Query))
 			}
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -423,7 +429,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("commitTs", row.CommitTs), zap.Uint64("es", row.CommitTs>>18))
-			
+
 			tableSink, ok := progress.tableSinkMap.Load(tableID)
 			if !ok {
 				tableSink = w.sinkFactory.CreateTableSinkForConsumer(
@@ -447,12 +453,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			zap.Int("max-batch-size", w.option.maxBatchSize), zap.Int("actual-batch-size", counter),
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 	}
-
-	if !needFlush {
-		return false
-	}
-	// flush when received DDL event or resolvedTs
-	return w.Write(ctx, messageType)
+	return true
+	//if !needFlush {
+	//	return false
+	//}
+	//// flush when received DDL event or resolvedTs
+	//return w.Write(ctx, messageType)
 }
 
 func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, message *kafka.Message) {
