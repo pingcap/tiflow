@@ -272,6 +272,13 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
+			snap := m.schema.GetLastSnapshot()
+			if event.Type == timodel.ActionCreateTable ||
+				event.Type == timodel.ActionCreateTables {
+				if snap.IsIneligibleTableID(event.TableInfo.ID) {
+					continue
+				}
+			}
 			tableName := event.TableInfo.TableName
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}
