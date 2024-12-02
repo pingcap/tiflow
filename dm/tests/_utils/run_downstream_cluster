@@ -80,7 +80,6 @@ start_tikv() {
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to initialize TiKV cluster after 20 attempts'
-			echo "Last response: $response"
 			return 1
 		fi
 
