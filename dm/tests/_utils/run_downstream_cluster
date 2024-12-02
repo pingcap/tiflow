@@ -35,7 +35,7 @@ EOF
 	sleep 5
 	i=0
 	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version")
+		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start PD success'
@@ -102,7 +102,7 @@ start_tidb() {
 	# wait until TiDB is online...
 	i=0
 	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_IP:10080/status")
+		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_IP:10080/status" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start TiDB success'
