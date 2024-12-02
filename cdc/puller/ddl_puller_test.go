@@ -828,4 +828,11 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	skip, err = ddlJobPullerImpl.handleJob(ddl)
 	require.NoError(t, err)
 	require.False(t, skip)
+
+	// case 6: Batch create tables, including a ineligible table and a eligible table, expect no error.
+	ddl = helper.DDL2Job(`CREATE TABLE test1.t5 (id INT);
+		CREATE TABLE test1.t6 (id INT PRIMARY KEY);`)
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
 }
