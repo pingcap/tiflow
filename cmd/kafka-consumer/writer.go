@@ -384,24 +384,28 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			w.checkPartition(row, partition, message)
 
-			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-				continue
-			}
+			//if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+			//	continue
+			//}
 
 			prev, ok := progress.previousMap[tableID]
 			if ok {
 				if prev.commitTs > row.CommitTs && prev.offset < message.TopicPartition.Offset {
 					watermark := atomic.LoadUint64(&progress.watermark)
-					if row.CommitTs < atomic.LoadUint64(&progress.watermark) {
-						log.Panic("row changed event commitTs fallback",
-							zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
-							zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
-							zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
-					}
-					log.Warn("row changed event commitTs fallback, ignore it",
+					log.Panic("row changed event commitTs fallback",
 						zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
 						zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
 						zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
+					//if row.CommitTs < atomic.LoadUint64(&progress.watermark) {
+					//	log.Panic("row changed event commitTs fallback",
+					//		zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
+					//		zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+					//		zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
+					//}
+					//log.Warn("row changed event commitTs fallback, ignore it",
+					//	zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
+					//	zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+					//	zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
 				}
 			}
 			progress.previousMap[tableID] = previous{
