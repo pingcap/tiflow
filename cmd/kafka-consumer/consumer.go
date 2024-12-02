@@ -133,7 +133,9 @@ func (c *consumer) Consume(ctx context.Context) {
 
 		topicPartition, err := c.client.CommitMessage(msg)
 		if err != nil {
-			log.Error("commit message failed, just continue", zap.Error(err))
+			log.Error("commit message failed, just continue",
+				zap.String("topic", *msg.TopicPartition.Topic), zap.Int32("partition", msg.TopicPartition.Partition),
+				zap.Any("offset", msg.TopicPartition.Offset), zap.Error(err))
 			continue
 		}
 		log.Debug("commit message success",

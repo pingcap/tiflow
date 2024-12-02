@@ -260,7 +260,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 		w.popDDL()
 	}
 
-	if messageType == model.MessageTypeResolved {
+	if messageType == model.MessageTypeResolved || messageType == model.MessageTypeRow {
 		w.forEachPartition(func(sink *partitionProgress) {
 			syncFlushRowChangedEvents(ctx, sink, watermark)
 		})
