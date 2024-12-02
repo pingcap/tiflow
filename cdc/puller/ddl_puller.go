@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -389,11 +390,17 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
 	case timodel.ActionCreateTables:
+		querys, err := ddl.SplitQueries(job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
 		// we only use multiTableInfos and Querys when we generate job event
 		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
-		if strings.Count(job.Query, ";") != len(job.BinlogInfo.MultipleTableInfos) {
+		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
 			log.Error("the number of queries in `Job.Query` is not equal to "+
 				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
 				zap.String("Job.Query", job.Query),
 				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
 				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
@@ -404,7 +411,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		var newQuerys []string
 
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
-		querys := strings.Split(job.Query, ";")
 
 		for index, tableInfo := range multiTableInfos {
 			// judge each table whether need to be skip
@@ -412,7 +418,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				continue
 			}
 			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
-			newQuerys = append(newQuerys, querys[index]+";")
+			newQuerys = append(newQuerys, querys[index])
 		}
 
 		skip = len(newMultiTableInfos) == 0

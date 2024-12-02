@@ -16,7 +16,6 @@ package entry
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -410,7 +410,10 @@ func (s *schemaStorage) BuildDDLEvents(
 		}
 	case timodel.ActionCreateTables:
 		if job.BinlogInfo != nil && job.BinlogInfo.MultipleTableInfos != nil {
-			querys := strings.Split(job.Query, ";")
+			querys, err := ddl.SplitQueries(job.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 			multiTableInfos := job.BinlogInfo.MultipleTableInfos
 			for index, tableInfo := range multiTableInfos {
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
