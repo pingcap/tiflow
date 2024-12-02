@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/format"
+
 	// NOTE: Do not remove the `test_driver` import.
 	// For details, refer to: https://github.com/pingcap/parser/issues/43
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
@@ -34,10 +35,8 @@ func SplitQueries(queries string) ([]string, error) {
 	// However, the overhead of creating a new parser is minimal, so there is no need to worry about performance.
 	p := parser.New()
 	stmts, warns, err := p.ParseSQL(queries)
-	if warns != nil {
-		for _, w := range warns {
-			log.Warn("parse sql warnning", zap.Error(w))
-		}
+	for _, w := range warns {
+		log.Warn("parse sql warnning", zap.Error(w))
 	}
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrTiDBUnexpectedJobMeta, err)
