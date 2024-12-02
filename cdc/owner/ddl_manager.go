@@ -276,6 +276,11 @@ func (m *ddlManager) tick(
 			if event.Type == timodel.ActionCreateTable ||
 				event.Type == timodel.ActionCreateTables {
 				if snap.IsIneligibleTableID(event.TableInfo.ID) {
+					log.Info("table is ineligible, skip the ddl",
+						zap.String("namespace", m.changfeedID.Namespace),
+						zap.String("changefeed", m.changfeedID.ID),
+						zap.String("query", job.Query),
+						zap.Any("table", event.TableInfo))
 					continue
 				}
 			}
