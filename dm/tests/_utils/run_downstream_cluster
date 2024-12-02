@@ -26,12 +26,12 @@ EOF
 
 	bin/pd-server --version
 	mkdir -p "$WORK_DIR/pd"
-	nohup bin/pd-server \
+	bin/pd-server \
 		--client-urls "http://$PD_ADDR" \
 		--peer-urls "http://$PD_PEER_ADDR" \
 		--log-file "$WORK_DIR/pd.log" \
 		--config "$WORK_DIR/pd.toml" \
-		--data-dir "$WORK_DIR/pd" >/dev/null 2>&1 &
+		--data-dir "$WORK_DIR/pd" &
 	sleep 5
 	i=0
 	while true; do
@@ -55,13 +55,13 @@ start_tikv() {
 	echo "Starting TiKV..."
 	mkdir -p "$WORK_DIR/tikv"
 	bin/tikv-server --version
-	nohup bin/tikv-server \
+	bin/tikv-server \
 		--pd "$PD_ADDR" \
 		-A "$TIKV_ADDR" \
 		--status-addr "$TIKV_STATUS_ADDR" \
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
-		-s "$WORK_DIR/tikv" >/dev/null 2>&1 &
+		-s "$WORK_DIR/tikv" &
 	sleep 5
 	i=0
 	while true; do
@@ -91,13 +91,13 @@ start_tikv() {
 start_tidb() {
 	echo "Starting TiDB..."
 	bin/tidb-server -V
-	nohup bin/tidb-server \
+	bin/tidb-server \
 		-P 4000 \
 		--status 10080 \
 		--advertise-address="127.0.0.1" \
 		--store tikv \
 		--path "$PD_ADDR" \
-		--log-file "$WORK_DIR/tidb.log" >/dev/null 2>&1 &
+		--log-file "$WORK_DIR/tidb.log" &
 	sleep 5
 	# wait until TiDB is online...
 	i=0
