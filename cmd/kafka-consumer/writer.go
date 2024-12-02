@@ -426,7 +426,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.String("table", row.TableInfo.GetTableName()),
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("commitTs", row.CommitTs))
+				zap.Uint64("commitTs", row.CommitTs), zap.Uint64("es", row.CommitTs>>18))
 
 			resolvedTs := max(progress.resolvedTs, row.CommitTs)
 			progress.resolvedTs = resolvedTs
