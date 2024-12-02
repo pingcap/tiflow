@@ -81,10 +81,6 @@ type partitionProgress struct {
 	decoder     codec.RowEventDecoder
 
 	previousMap map[model.TableID]previous
-
-	eventCount    int64
-	resolvedTs    uint64
-	lastFlushTime time.Time
 }
 
 type previous struct {
@@ -427,9 +423,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("commitTs", row.CommitTs), zap.Uint64("es", row.CommitTs>>18))
-
-			resolvedTs := max(progress.resolvedTs, row.CommitTs)
-			progress.resolvedTs = resolvedTs
+			
 			tableSink, ok := progress.tableSinkMap.Load(tableID)
 			if !ok {
 				tableSink = w.sinkFactory.CreateTableSinkForConsumer(
@@ -440,17 +434,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				progress.tableSinkMap.Store(tableID, tableSink)
 			}
 			tableSink.(tablesink.TableSink).AppendRowChangedEvents(row)
-			progress.eventCount++
-			if progress.eventCount >= 1000 || time.Since(progress.lastFlushTime) > 2*time.Second {
-				// the max commitTs of all tables
-				atomic.StoreUint64(&progress.watermark, resolvedTs)
-				progress.watermarkOffset = message.TopicPartition.Offset
-				needFlush = true
-				log.Info("flush row changed events",
-					zap.Int32("partition", partition), zap.Uint64("resolvedTs", resolvedTs), zap.Int64("count", progress.eventCount))
-				progress.eventCount = 0
-				progress.lastFlushTime = time.Now()
-			}
+			syncFlushRowChangedEvents(ctx, progress, row.CommitTs+1)
 		case model.MessageTypeResolved:
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
