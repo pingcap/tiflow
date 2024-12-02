@@ -82,8 +82,9 @@ type partitionProgress struct {
 
 	previousMap map[model.TableID]previous
 
-	eventCount int64
-	resolvedTs uint64
+	eventCount    int64
+	resolvedTs    uint64
+	lastFlushTime time.Time
 }
 
 type previous struct {
@@ -439,7 +440,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			tableSink.(tablesink.TableSink).AppendRowChangedEvents(row)
 			progress.eventCount++
-			if progress.eventCount >= 1000 {
+			if progress.eventCount >= 1000 || time.Since(progress.lastFlushTime) > 2*time.Second {
 				// the max commitTs of all tables
 				atomic.StoreUint64(&progress.watermark, resolvedTs)
 				progress.watermarkOffset = message.TopicPartition.Offset
@@ -447,6 +448,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				log.Info("flush row changed events",
 					zap.Int32("partition", partition), zap.Uint64("resolvedTs", resolvedTs), zap.Int64("count", progress.eventCount))
 				progress.eventCount = 0
+				progress.lastFlushTime = time.Now()
 			}
 		case model.MessageTypeResolved:
 		default:
