@@ -399,8 +399,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
 			log.Error("the number of queries in `Job.Query` is not equal to "+
 				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
-				zap.Int("number of queries", len(querys)),
-				zap.Int("number of `TableInfo`", len(job.BinlogInfo.MultipleTableInfos)),
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
 				zap.String("Job.Query", job.Query),
 				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
 				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
