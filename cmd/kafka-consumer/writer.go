@@ -394,6 +394,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				if prev.commitTs > row.CommitTs && prev.offset < message.TopicPartition.Offset {
 					watermark := atomic.LoadUint64(&progress.watermark)
 					log.Panic("row changed event commitTs fallback",
+						zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
 						zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
 						zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
 						zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
