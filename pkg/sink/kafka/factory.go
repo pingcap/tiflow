@@ -14,8 +14,8 @@
 package kafka
 
 import (
+	"bytes"
 	"context"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"strconv"
 	"time"
 
@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -252,16 +253,13 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				}
 				tableID := string(ack.Headers[0].Value)
 				commitTs := string(ack.Headers[1].Value)
+				handleKey := string(ack.Headers[2].Value)
 				previous := memo[ack.Partition]
-				log.Info("async producer receive ack",
-					zap.Int32("partition", ack.Partition),
-					zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
-					zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
 				if ack.Offset < previous.offset {
-					log.Warn("kafka async producer receive an out-of-order message",
-						zap.Int32("partition", ack.Partition),
-						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldTableID", previous.tableID),
-						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("tableID", tableID))
+					log.Panic("kafka async producer receive an out-of-order message",
+						zap.Int32("partition", ack.Partition), zap.String("tableID", tableID), zap.String("handleKey", handleKey),
+						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs),
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs))
 				}
 				memo[ack.Partition] = item{
 					tableID:  tableID,
@@ -290,9 +288,17 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	partition int32,
 	message *common.Message,
 ) error {
+	var handleKey bytes.Buffer
+	for idx, key := range message.HandleKey {
+		handleKey.WriteString(key)
+		if idx != len(message.HandleKey)-1 {
+			handleKey.WriteString(",")
+		}
+	}
 	headers := []sarama.RecordHeader{
 		{[]byte("tableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
 		{[]byte("commitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
+		{[]byte("handleKey"), handleKey.Bytes()},
 	}
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,

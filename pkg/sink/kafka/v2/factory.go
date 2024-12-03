@@ -16,7 +16,6 @@ package v2
 import (
 	"context"
 	"crypto/tls"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"

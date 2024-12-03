@@ -37,6 +37,7 @@ type Message struct {
 	Value     []byte
 	Ts        uint64 // reserved for possible output sorting
 	TableID   int64
+	HandleKey []string
 	Schema    *string           // schema
 	Table     *string           // table
 	Type      model.MessageType // type

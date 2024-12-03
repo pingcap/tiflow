@@ -15,7 +15,6 @@ package mq
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
