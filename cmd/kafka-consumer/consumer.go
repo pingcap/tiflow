@@ -128,7 +128,7 @@ func (c *consumer) Consume(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			log.Info("consumer exist: context cancelled")
-			break
+			return
 		default:
 		}
 		msg, err := c.client.ReadMessage(-1)
