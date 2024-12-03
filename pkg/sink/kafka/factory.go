@@ -223,8 +223,9 @@ func (p *saramaAsyncProducer) Close() {
 }
 
 type item struct {
-	commitTs string
-	offset   int64
+	handleKey string
+	commitTs  string
+	offset    int64
 }
 
 func (p *saramaAsyncProducer) AsyncRunCallback(
@@ -256,13 +257,14 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				previous := memo[tableID]
 				if ack.Offset < previous.offset {
 					log.Warn("kafka async producer receive an out-of-order message response",
-						zap.Int32("partition", ack.Partition), zap.String("tableID", tableID), zap.String("handleKey", handleKey),
-						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs),
-						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs))
+						zap.Int32("partition", ack.Partition), zap.String("tableID", tableID),
+						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldHandleKey", previous.handleKey),
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("handleKey", handleKey))
 				}
 				memo[tableID] = item{
-					commitTs: commitTs,
-					offset:   ack.Offset,
+					handleKey: handleKey,
+					commitTs:  commitTs,
+					offset:    ack.Offset,
 				}
 			}
 		case err := <-p.producer.Errors():
@@ -293,10 +295,11 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 			handleKey.WriteString(",")
 		}
 	}
+	handle := handleKey.Bytes()
 	headers := []sarama.RecordHeader{
 		{[]byte("tableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
 		{[]byte("commitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
-		{[]byte("handleKey"), handleKey.Bytes()},
+		{[]byte("handleKey"), handle},
 	}
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
@@ -312,6 +315,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	case p.producer.Input() <- msg:
 	}
 	log.Info("async producer send message",
-		zap.Int64("tableID", message.TableID), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
+		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", handle), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
 	return nil
 }
