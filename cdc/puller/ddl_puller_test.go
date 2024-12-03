@@ -563,6 +563,15 @@ func TestSchemaOutOfOrderSuccess(t *testing.T) {
 	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
 	ddlJobPullerImpl.setResolvedTs(startTs)
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{
+		"testschema.t1",
+		"testschema.t2",
+	}
+
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
 
 	// Create database
 	{
@@ -593,7 +602,7 @@ func TestSchemaOutOfOrderSuccess(t *testing.T) {
 		ddlJobPullerImpl.setResolvedTs(fakeResolvedTs)
 		// mock two jobs
 		job1 := helper.DDL2Job("alter table testschema.t1 add column x int")
-		job2 := helper.DDL2Job("alter table testschema.t1 add column y int")
+		job2 := helper.DDL2Job("alter table testschema.t2 add column y int")
 		job1.BinlogInfo.SchemaVersion = 1
 		job1.BinlogInfo.FinishedTS = fakeResolvedTs + 2
 		job2.BinlogInfo.SchemaVersion = 2
