@@ -624,7 +624,7 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string)
 		case <-ctx.Done():
 			log.Error("get downstream sync end ts failed due to timeout", zap.String("table", tableName), zap.Error(ctx.Err()))
 			return "", ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			// result, ok := tryGetEndTs(db, tidbAPIEndpoint, tableName)
 			result, ok := tryGetEndTsFromLog(db, tableName)
 			if ok {
@@ -649,18 +649,7 @@ func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
 	return endTime, true
 }
 
-func tryGetEndTsFromLog(db *sql.DB, tableName string) (result uint64, ok bool) {
-	query := "SELECT JOB_ID FROM information_schema.ddl_jobs WHERE table_name = ?"
-	log.Info("try get end ts", zap.String("query", query), zap.String("tableName", tableName))
-	var jobID uint64
-	row := db.QueryRow(query, tableName)
-	if err := row.Scan(&jobID); err != nil {
-		if err != sql.ErrNoRows {
-			log.Info("rows scan failed", zap.Error(err))
-		}
-		return 0, false
-	}
-
+func tryGetEndTsFromLog(_ *sql.DB, tableName string) (result uint64, ok bool) {
 	log.Info("try parse finishedTs from ticdc log", zap.String("tableName", tableName))
 
 	logFilePath := "/tmp/tidb_cdc_test/bank"
