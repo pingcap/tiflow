@@ -125,6 +125,12 @@ func (c *consumer) Consume(ctx context.Context) {
 		}
 	}()
 	for {
+		select {
+		case <-ctx.Done():
+			log.Info("consumer exist: context cancelled")
+			break
+		default:
+		}
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
 			log.Error("read message failed, just continue to retry", zap.Error(err))
