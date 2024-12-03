@@ -125,7 +125,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	defer d.Close()
 
 	if !cfg.CheckDataOnly {
-		err = d.StructEqual(ctx)
+		err = d.StructEqual(ctx, cfg.CheckConstraints)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table structure: %s, please check log info in %s for full details\n",
 				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))

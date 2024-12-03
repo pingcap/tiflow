@@ -378,6 +378,8 @@ type Config struct {
 	// set true if want to compare rows
 	// set false won't compare rows.
 	ExportFixSQL bool `toml:"export-fix-sql" json:"export-fix-sql"`
+	// whether check table constraints.
+	CheckConstraints bool `toml:"check-constraints" json:"check-constraints"`
 	// only check table struct without table data.
 	CheckStructOnly bool `toml:"check-struct-only" json:"check-struct-only"`
 	// experimental feature: only check table data without table struct
@@ -420,6 +422,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.DMTask, "dm-task", "", "identifier of dm task")
 	fs.IntVar(&cfg.CheckThreadCount, "check-thread-count", 4, "how many goroutines are created to check data")
 	fs.BoolVar(&cfg.ExportFixSQL, "export-fix-sql", true, "set true if want to compare rows or set to false will only compare checksum")
+	fs.BoolVar(&cfg.CheckConstraints, "check-constraints", false, "check table constraints.")
 	fs.BoolVar(&cfg.CheckStructOnly, "check-struct-only", false, "ignore check table's data")
 	fs.BoolVar(&cfg.SkipNonExistingTable, "skip-non-existing-table", false, "skip validation for tables that don't exist upstream or downstream")
 	fs.BoolVar(&cfg.CheckDataOnly, "check-data-only", false, "ignore check table's struct")

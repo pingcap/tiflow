@@ -298,7 +298,7 @@ func (df *Diff) Equal(ctx context.Context) error {
 }
 
 // StructEqual compare tables from downstream
-func (df *Diff) StructEqual(ctx context.Context) error {
+func (df *Diff) StructEqual(ctx context.Context, checkConstraints bool) error {
 	tables := df.downstream.GetTables()
 	tableIndex := 0
 	if df.startRange != nil {
@@ -308,7 +308,7 @@ func (df *Diff) StructEqual(ctx context.Context) error {
 		isEqual, isSkip, isAllTableExist := false, true, tables[tableIndex].TableLack
 		if common.AllTableExist(isAllTableExist) {
 			var err error
-			isEqual, isSkip, err = df.compareStruct(ctx, tableIndex)
+			isEqual, isSkip, err = df.compareStruct(ctx, tableIndex, checkConstraints)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -319,13 +319,13 @@ func (df *Diff) StructEqual(ctx context.Context) error {
 	return nil
 }
 
-func (df *Diff) compareStruct(ctx context.Context, tableIndex int) (isEqual bool, isSkip bool, err error) {
+func (df *Diff) compareStruct(ctx context.Context, tableIndex int, checkConstraint bool) (isEqual bool, isSkip bool, err error) {
 	sourceTableInfos, err := df.upstream.GetSourceStructInfo(ctx, tableIndex)
 	if err != nil {
 		return false, true, errors.Trace(err)
 	}
 	table := df.downstream.GetTables()[tableIndex]
-	isEqual, isSkip = utils.CompareStruct(sourceTableInfos, table.Info)
+	isEqual, isSkip = utils.CompareStruct(sourceTableInfos, table.Info, checkConstraint)
 	table.IgnoreDataCheck = isSkip
 	return isEqual, isSkip, nil
 }

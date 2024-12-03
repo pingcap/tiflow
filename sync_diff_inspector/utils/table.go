@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -43,6 +44,9 @@ const (
 
 func init() {
 	collate.SetNewCollationEnabledForTest(false)
+
+	// Enable constraint check
+	variable.EnableCheckConstraint.Store(true)
 }
 
 // addClusteredAnnotation add the `/*T![clustered_index] NONCLUSTERED */` for primary key of create table info

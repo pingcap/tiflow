@@ -376,7 +376,7 @@ func sameProperties(c1, c2 *model.ColumnInfo) bool {
 //
 //	isEqual	: result of comparing tables' columns and indices
 //	isPanic	: the differences of tables' struct can not be ignored. Need to skip data comparing.
-func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isPanic bool) {
+func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo, checkConstraint bool) (isEqual bool, isPanic bool) {
 	// compare columns
 	for _, upstreamTableInfo := range upstreamTableInfos {
 		if len(upstreamTableInfo.Columns) != len(downstreamTableInfo.Columns) {
@@ -426,6 +426,28 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 					zap.Uint8("column type", downstreamTableInfo.Columns[i].GetType()),
 				)
 				return false, true
+			}
+		}
+	}
+
+	// compare constraints
+	if checkConstraint {
+		downstreamConstraints := downstreamTableInfo.Constraints
+		sort.Slice(downstreamConstraints, func(i, j int) bool {
+			return downstreamConstraints[i].Name.L < downstreamConstraints[j].Name.L
+		})
+		for _, upstreamTableInfo := range upstreamTableInfos {
+			upstreamConstraints := upstreamTableInfo.Constraints
+			if len(upstreamConstraints) != len(downstreamConstraints) {
+				return false, true
+			}
+			sort.Slice(upstreamConstraints, func(i, j int) bool {
+				return upstreamConstraints[i].Name.L < upstreamConstraints[j].Name.L
+			})
+			for i, upConstrain := range upstreamConstraints {
+				if upConstrain.ExprString != downstreamConstraints[i].ExprString {
+					return false, true
+				}
 			}
 		}
 	}
