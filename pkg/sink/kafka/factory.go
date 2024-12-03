@@ -255,7 +255,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				handleKey := string(ack.Headers[2].Value)
 				previous := memo[tableID]
 				if ack.Offset < previous.offset {
-					log.Panic("kafka async producer receive an out-of-order message",
+					log.Warn("kafka async producer receive an out-of-order message response",
 						zap.Int32("partition", ack.Partition), zap.String("tableID", tableID), zap.String("handleKey", handleKey),
 						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs),
 						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs))
