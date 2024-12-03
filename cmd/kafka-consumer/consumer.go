@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func getPartitionNum(o *option) (int32, error) {
@@ -98,6 +99,9 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 		_ = configMap.SetKey("ssl.ca.location", o.ca)
 		_ = configMap.SetKey("ssl.key.location", o.key)
 		_ = configMap.SetKey("ssl.certificate.location", o.cert)
+	}
+	if level, err := zapcore.ParseLevel(o.logLevel); err == nil && level.String() == "debug" {
+		configMap.SetKey("debug", "all")
 	}
 	client, err := kafka.NewConsumer(configMap)
 	if err != nil {
