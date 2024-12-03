@@ -26,6 +26,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -40,7 +41,9 @@ const (
 )
 
 var (
-	tidbVersionRegex       = regexp.MustCompile(`-[v]?\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+	// `select tidb_version()` result with full release version
+	tidbReleaseVersionFullRegex = regexp.MustCompile(`Release Version:\s*v\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+
 	autoGCSafePointVersion = semver.New("4.0.0")
 )
 
@@ -170,43 +173,48 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 	return strs, errors.Trace(rows.Err())
 }
 
-// parse versino string to semver.Version
-func parseVersion(versionStr string) (*semver.Version, error) {
-	versionStr = tidbVersionRegex.FindString(versionStr)[1:]
-	versionStr = strings.TrimPrefix(versionStr, "v")
-	return semver.NewVersion(versionStr)
+// FetchVersion gets the version information from the database server
+// It is copied from br/pkg/version and remove warning logs
+//
+// NOTE: the executed query will be:
+// - `select tidb_version()` if target db is tidb
+// - `select version()` if target db is not tidb
+func fetchVersion(ctx context.Context, db dbutil.QueryExecutor) (string, error) {
+	var versionInfo string
+	const queryTiDB = "SELECT tidb_version();"
+	tidbRow := db.QueryRowContext(ctx, queryTiDB)
+	err := tidbRow.Scan(&versionInfo)
+	if err == nil && tidbReleaseVersionFullRegex.FindString(versionInfo) != "" {
+		return versionInfo, nil
+	}
+	const query = "SELECT version();"
+	row := db.QueryRowContext(ctx, query)
+	err = row.Scan(&versionInfo)
+	if err != nil {
+		return "", errors.Annotatef(err, "sql: %s", query)
+	}
+	return versionInfo, nil
 }
 
 // TryToGetVersion gets the version of current db.
 // It's OK to failed to get db version
 func TryToGetVersion(ctx context.Context, db *sql.DB) *semver.Version {
-	versionStr, err := dbutil.GetDBVersion(ctx, db)
+	versionStr, err := fetchVersion(ctx, db)
 	if err != nil {
 		return nil
 	}
-	if !strings.Contains(strings.ToLower(versionStr), "tidb") {
-		return nil
-	}
-	version, err := parseVersion(versionStr)
-	if err != nil {
-		// It's OK when parse version failed
-		version = nil
-	}
-	return version
+	versionInfo := version.ParseServerInfo(versionStr)
+	return versionInfo.ServerVersion
 }
 
 // StartGCSavepointUpdateService keeps GC safePoint stop moving forward.
 func StartGCSavepointUpdateService(ctx context.Context, pdCli pd.Client, db *sql.DB, snapshot string) error {
-	versionStr, err := selectVersion(db)
-	if err != nil {
-		log.Info("detect version of tidb failed")
+	tidbVersion := TryToGetVersion(ctx, db)
+	if tidbVersion == nil {
+		log.Info("parse TiDB version failed")
 		return nil
 	}
-	tidbVersion, err := parseVersion(versionStr)
-	if err != nil {
-		log.Info("parse version of tidb failed")
-		return nil
-	}
+
 	// get latest snapshot
 	snapshotTS, err := parseSnapshotToTSO(db, snapshot)
 	if tidbVersion.Compare(*autoGCSafePointVersion) > 0 {
