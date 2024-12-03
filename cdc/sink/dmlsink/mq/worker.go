@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -280,8 +279,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	}()
 
-	previousMap := make(map[int64]*model.RowChangedEvent)
-	previousMessageMap := make(map[int64]*common.Message)
 	var err error
 	outCh := w.encoderGroup.Output()
 	for {
@@ -300,45 +297,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			for _, event := range future.Events {
-				previous := previousMap[event.Event.Table.TableID]
-				if previous != nil {
-					if event.Event.CommitTs < previous.CommitTs {
-						log.Panic("commitTs is not monotonically increasing",
-							zap.String("namespace", w.changeFeedID.Namespace),
-							zap.String("changefeed", w.changeFeedID.ID),
-							zap.Any("previous", previous),
-							zap.Any("event", event.Event))
-					}
-				}
-				previousMap[event.Event.Table.TableID] = event.Event
-			}
 			for _, message := range future.Messages {
-				previousMessage := previousMessageMap[message.TableID]
-				if previousMessage != nil {
-					if message.Ts < previousMessage.Ts {
-						for _, event := range future.Events {
-							log.Warn("Ts not monotonically increasing",
-								zap.String("namespace", w.changeFeedID.Namespace),
-								zap.String("changefeed", w.changeFeedID.ID),
-								zap.Int32("partition", future.Key.Partition),
-								zap.Int64("tableID", event.Event.Table.TableID),
-								zap.Uint64("commitTs", event.Event.CommitTs),
-								zap.Int("length", len(future.Events)))
-						}
-
-						log.Panic("Ts is not monotonically increasing",
-							zap.String("namespace", w.changeFeedID.Namespace),
-							zap.String("changefeed", w.changeFeedID.ID),
-							zap.Int32("partition", future.Key.Partition),
-							zap.Int64("tableID", previousMessage.TableID),
-							zap.Uint64("previousTs", previousMessage.Ts),
-							zap.Int64("currentTableID", message.TableID),
-							zap.Uint64("currentTs", message.Ts),
-							zap.Int("length", len(future.Messages)))
-					}
-				}
-				previousMessageMap[message.TableID] = message
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, int64, error) {
 					message.SetPartitionKey(future.Key.PartitionKey)
