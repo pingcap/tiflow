@@ -42,8 +42,13 @@ EOF
 		--log-file "$WORK_DIR/tidb.log" 2>&1 &
 
 	sleep 5
+
+	echo "show databases without TLS"
+	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 -E -e "SHOW DATABASES;"
+	echo "drop database tls with TLS"
 	# if execute failed, print tidb's log for debug
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists tls" || (cat $WORK_DIR/tidb.log && exit 1)
+	echo "drop database dm_meta with TLS"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists dm_meta"
 }
 
