@@ -77,4 +77,8 @@ services:
       db-networks:
         ipv4_address: 172.28.128.8
     image: pingcap/tidb:latest
+    command:
+      - --log-file=/logs/tidb.log
     restart: always
+    volumes:
+      - /tmp/tidb_logs:/logs
