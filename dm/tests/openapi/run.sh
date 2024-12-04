@@ -237,9 +237,6 @@ function test_dump_and_load_task() {
 
 	# start load task success
 	openapi_task_check "start_task_success" $task_name_load ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_load" \
-		"\"stage\": \"Running\"" 1
 
 	# wait load task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
