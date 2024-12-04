@@ -297,9 +297,9 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	}
 	handle := handleKey.Bytes()
 	headers := []sarama.RecordHeader{
-		{[]byte("tableID"), []byte(strconv.FormatUint(uint64(message.TableID), 10))},
-		{[]byte("commitTs"), []byte(strconv.FormatUint(message.Ts, 10))},
-		{[]byte("handleKey"), handle},
+		{Key: []byte("tableID"), Value: []byte(strconv.FormatUint(uint64(message.TableID), 10))},
+		{Key: []byte("commitTs"), Value: []byte(strconv.FormatUint(message.Ts, 10))},
+		{Key: []byte("handleKey"), Value: handle},
 	}
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
