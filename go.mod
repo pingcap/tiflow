@@ -395,4 +395,4 @@ replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appda
 
 replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
 
-replace github.com/IBM/sarama => github.com/3AceShowHand/sarama v0.0.0-20241203120653-82b856454ce5
+replace github.com/IBM/sarama => github.com/3AceShowHand/sarama v0.0.0-20241204051647-318559e536ae
