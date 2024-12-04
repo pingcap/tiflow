@@ -117,10 +117,14 @@ function download_binaries() {
 	file_server_url="http://fileserver.pingcap.net"
 
 	# Get sha1 based on branch name.
-	tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-	tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
-	pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
-	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+	# tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
+	# tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
+	# pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
+	# tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+	tidb_sha1="15a52d8b9c7eb373fa0b9b71a0ac346f652b7cdf"
+	tikv_sha1="b4bddeeb995e7bedc1973ce9e856eeb2d856ce9b"
+	pd_sha1="3f8217cc0efbf496effa2e11cc630f9c30b71ff7"
+	tiflash_sha1="85341773736131ac06d7644b47d66b8f00d36739"
 
 	# All download links.
 	tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
