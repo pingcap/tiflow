@@ -2,6 +2,7 @@
 
 set -eu
 
+export DM_MASTER_EXTRA_ARG=""
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PATH=$CUR/../_utils:$PATH # for sync_diff_inspector
 

@@ -38,7 +38,7 @@ function run_with_fast_create_table() {
 
 	## to generate batch create ddl. In changefeed.toml, we filter test.t_1
 	for ((i = 1; i <= 100; i++)); do
-		mysql -h ${UP_TIDB_HOST} -P ${UP_TIDB_PORT} -u root -D "test" -e "create table t_$i (a int primary key , b int)" &
+		mysql -h ${UP_TIDB_HOST} -P ${UP_TIDB_PORT} -u root -D "test" -e 'create table t_'$i' (a int primary key , `test_;semicolon;` int)' &
 	done
 
 	for ((i = 1; i <= 100; i++)); do

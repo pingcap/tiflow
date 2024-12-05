@@ -728,7 +728,7 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
-func TestCcheckIneligibleTableDDL(t *testing.T) {
+func TestCheckIneligibleTableDDL(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
 
@@ -787,4 +787,36 @@ func TestCcheckIneligibleTableDDL(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, skip)
 	require.Contains(t, err.Error(), "An eligible table become ineligible after DDL")
+
+	// case 4: create a ineligible table and truncate it, expect no error.
+	// It is because the table is ineligible before the DDL.
+	ddl = helper.DDL2Job("CREATE TABLE test1.t3 (id INT);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	ddl = helper.DDL2Job("TRUNCATE TABLE test1.t3;")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	// Skip because the table is ineligible before the DDL.
+	require.True(t, skip)
+
+	// case 5: create a ineligible table and alter it to eligible, expect no error.
+	ddl = helper.DDL2Job("CREATE TABLE test1.t4 (id INT not null);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	// Add a unique key to the table, make it eligible.
+	ddl = helper.DDL2Job("ALTER TABLE test1.t4 ADD UNIQUE KEY cdc_valid_index (id);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// case 6: Batch create tables, including a ineligible table and a eligible table, expect no error.
+	ddl = helper.DDL2Job(`CREATE TABLE test1.t5 (id INT);
+		CREATE TABLE test1.t6 (id INT PRIMARY KEY);`)
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
 }

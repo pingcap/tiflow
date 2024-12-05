@@ -101,6 +101,8 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
+		cfg.InitIOCounters()
+
 		if err := cfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
 		}
@@ -308,6 +310,8 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
 			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
 		}
+		// set syncer IO total bytes counter
+		subTaskCfg.InitIOCounters()
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)

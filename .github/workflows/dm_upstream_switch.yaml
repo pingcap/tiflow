@@ -48,6 +48,8 @@ jobs:
 
       - name: Setup containers
         run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
           docker-compose -f ./dm/tests/upstream_switch/docker-compose.yml up -d
 
       - name: Run test cases
@@ -73,12 +75,15 @@ jobs:
           path: |
             ./logs
 
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
+      # Send feishu notification if failed.
+      - name: Feishu notification
+        continue-on-error: true
+        uses: foxundermoon/feishu-action@v2
         if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
         with:
-          args: "upstream-switch job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
+          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
+          msg_type: text
+          content: |
+            text: |
+              dm upstream switch job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
+

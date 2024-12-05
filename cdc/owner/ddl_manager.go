@@ -302,9 +302,23 @@ func (m *ddlManager) tick(
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int64("tableID", job.TableID),
-			zap.Int64("jobID", job.ID))
+			zap.Int64("jobID", job.ID),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 
 		for _, event := range events {
+			snap := m.schema.GetLastSnapshot()
+			if event.Type == timodel.ActionCreateTable ||
+				event.Type == timodel.ActionCreateTables {
+				if snap.IsIneligibleTableID(event.TableInfo.ID) {
+					log.Info("table is ineligible, skip the ddl",
+						zap.String("namespace", m.changfeedID.Namespace),
+						zap.String("changefeed", m.changfeedID.ID),
+						zap.String("query", job.Query),
+						zap.Any("table", event.TableInfo))
+					continue
+				}
+			}
 			tableName := event.TableInfo.TableName
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}

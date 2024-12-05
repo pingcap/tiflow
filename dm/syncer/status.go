@@ -39,6 +39,12 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 		SyncerBinlog:        syncerLocation.Position.String(),
 		SecondsBehindMaster: s.secondsBehindMaster.Load(),
 	}
+	if s.cfg.IOTotalBytes != nil {
+		st.IoTotalBytes = s.cfg.IOTotalBytes.Load()
+	}
+	if s.cfg.DumpIOTotalBytes != nil {
+		st.DumpIOTotalBytes = s.cfg.DumpIOTotalBytes.Load()
+	}
 
 	if syncerLocation.GetGTID() != nil {
 		st.SyncerBinlogGtid = syncerLocation.GetGTID().String()

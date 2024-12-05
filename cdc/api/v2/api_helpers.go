@@ -231,9 +231,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, errors.Cause(err)
 	}
 	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
-		if err != nil {
-			return nil, err
-		}
 		if len(ineligibleTables) != 0 {
 			return nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
 		}
