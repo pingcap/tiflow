@@ -223,7 +223,7 @@ function test_dump_and_load_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name_dump" 100 \
 		"\"stage\": \"Finished\"" 1
-	openapi_task_check "check_dump_task_finished_status_success" $task_name 2 2 4 4 228
+	openapi_task_check "check_dump_task_finished_status_success" $task_name_dump 2 2 4 4 228
 
 	# create load task success
 	openapi_task_check "create_load_task_success"
