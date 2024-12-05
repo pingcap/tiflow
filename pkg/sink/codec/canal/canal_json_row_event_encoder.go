@@ -394,6 +394,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		Key:      nil,
 		Value:    value,
 		Ts:       e.CommitTs,
+		TableID:  e.TableInfo.ID,
 		Schema:   e.TableInfo.GetSchemaNamePtr(),
 		Table:    e.TableInfo.GetTableNamePtr(),
 		Type:     model.MessageTypeRow,

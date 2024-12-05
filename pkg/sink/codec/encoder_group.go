@@ -164,7 +164,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ctx.Done():
 			return nil
 		case future := <-inputCh:
-			for _, event := range future.events {
+			for _, event := range future.Events {
 				err := encoder.AppendRowChangedEvent(ctx, future.Key.Topic, event.Event, event.Callback)
 				if err != nil {
 					return errors.Trace(err)
@@ -219,7 +219,7 @@ func (g *encoderGroup) cleanMetrics() {
 // It's used to notify the caller that the result is ready.
 type future struct {
 	Key      model.TopicPartitionKey
-	events   []*dmlsink.RowChangeCallbackableEvent
+	Events   []*dmlsink.RowChangeCallbackableEvent
 	Messages []*common.Message
 	done     chan struct{}
 }
@@ -229,7 +229,7 @@ func newFuture(key model.TopicPartitionKey,
 ) *future {
 	return &future{
 		Key:    key,
-		events: events,
+		Events: events,
 		done:   make(chan struct{}),
 	}
 }

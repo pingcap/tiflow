@@ -81,7 +81,7 @@ func (c *JSONMessage) getTable() *string {
 
 // for JSONMessage, we lost the commitTs.
 func (c *JSONMessage) getCommitTs() uint64 {
-	return 0
+	return uint64(c.ExecutionTime) << 18
 }
 
 func (c *JSONMessage) getQuery() string {

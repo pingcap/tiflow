@@ -79,6 +79,13 @@ type partitionProgress struct {
 
 	eventGroups map[int64]*eventsGroup
 	decoder     codec.RowEventDecoder
+
+	previousMap map[model.TableID]previous
+}
+
+type previous struct {
+	offset   kafka.Offset
+	commitTs uint64
 }
 
 type writer struct {
@@ -132,6 +139,7 @@ func newWriter(ctx context.Context, o *option) *writer {
 		}
 		w.progresses[i] = &partitionProgress{
 			eventGroups: make(map[int64]*eventsGroup),
+			previousMap: make(map[model.TableID]previous),
 			decoder:     decoder,
 		}
 	}
@@ -249,7 +257,7 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 		w.popDDL()
 	}
 
-	if messageType == model.MessageTypeResolved {
+	if messageType == model.MessageTypeResolved || messageType == model.MessageTypeRow {
 		w.forEachPartition(func(sink *partitionProgress) {
 			syncFlushRowChangedEvents(ctx, sink, watermark)
 		})
@@ -276,15 +284,15 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 	progress := w.progresses[partition]
 	decoder := progress.decoder
-	eventGroup := progress.eventGroups
+	// eventGroup := progress.eventGroups
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Panic("add key value to the decoder failed",
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 			zap.Error(err))
 	}
 	var (
-		counter     int
-		needFlush   bool
+		counter int
+		//needFlush   bool
 		messageType model.MessageType
 	)
 	for {
@@ -322,32 +330,38 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Error(err))
 			}
 
-			if simple, ok := decoder.(*simple.Decoder); ok {
-				cachedEvents := simple.GetCachedEvents()
-				for _, row := range cachedEvents {
-					row.TableInfo.TableName.TableID = row.PhysicalTableID
-					w.checkPartition(row, partition, message)
-					if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-						continue
-					}
-					group, ok := eventGroup[row.PhysicalTableID]
-					if !ok {
-						group = NewEventsGroup()
-						eventGroup[row.PhysicalTableID] = group
-					}
-					group.Append(row)
-				}
-			}
+			// if simple, ok := decoder.(*simple.Decoder); ok {
+			// 	cachedEvents := simple.GetCachedEvents()
+			// 	for _, row := range cachedEvents {
+			// 		row.TableInfo.TableName.TableID = row.PhysicalTableID
+			// 		w.checkPartition(row, partition, message)
+			// 		if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+			// 			continue
+			// 		}
+			// 		group, ok := eventGroup[row.PhysicalTableID]
+			// 		if !ok {
+			// 			group = NewEventsGroup()
+			// 			eventGroup[row.PhysicalTableID] = group
+			// 		}
+			// 		group.Append(row)
+			// 	}
+			// }
 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
-				w.appendDDL(ddl)
-				needFlush = true
-				log.Info("DDL message received",
-					zap.Int32("partition", partition),
-					zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("commitTs", ddl.CommitTs),
-					zap.String("DDL", ddl.Query))
+				// DDL can be executed, do it first.
+				if err = w.ddlSink.WriteDDLEvent(ctx, ddl); err != nil {
+					log.Panic("write DDL event failed", zap.Error(err),
+						zap.String("DDL", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs))
+				}
+
+				//w.appendDDL(ddl)
+				//needFlush = true
+				//log.Info("DDL message received",
+				//	zap.Int32("partition", partition),
+				//	zap.Any("offset", message.TopicPartition.Offset),
+				//	zap.Uint64("commitTs", ddl.CommitTs),
+				//	zap.String("DDL", ddl.Query))
 			}
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -373,64 +387,61 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			w.checkPartition(row, partition, message)
 
-			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-				continue
+			//if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+			//	continue
+			//}
+
+			prev, ok := progress.previousMap[tableID]
+			if ok {
+				if prev.commitTs > row.CommitTs && prev.offset < message.TopicPartition.Offset {
+					watermark := atomic.LoadUint64(&progress.watermark)
+					log.Panic("row changed event commitTs fallback",
+						zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+						zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
+						zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+						zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
+					//if row.CommitTs < atomic.LoadUint64(&progress.watermark) {
+					//	log.Panic("row changed event commitTs fallback",
+					//		zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
+					//		zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+					//		zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
+					//}
+					//log.Warn("row changed event commitTs fallback, ignore it",
+					//	zap.Int64("tableID", tableID), zap.Int32("partition", partition), zap.Uint64("watermark", watermark),
+					//	zap.Uint64("previous", prev.commitTs), zap.Uint64("commitTs", row.CommitTs),
+					//	zap.Any("previousOffset", prev.offset), zap.Any("offset", message.TopicPartition.Offset))
+				}
+			}
+			progress.previousMap[tableID] = previous{
+				offset:   message.TopicPartition.Offset,
+				commitTs: row.CommitTs,
 			}
 
-			group, ok := eventGroup[tableID]
-			if !ok {
-				group = NewEventsGroup()
-				eventGroup[tableID] = group
-			}
-			group.Append(row)
-			log.Debug("DML event received",
-				zap.Int32("partition", partition),
-				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("commitTs", row.CommitTs),
-				zap.Int64("physicalTableID", row.PhysicalTableID),
-				zap.Int64("tableID", tableID),
+			// group, ok := eventGroup[tableID]
+			// if !ok {
+			// 	group = NewEventsGroup()
+			// 	eventGroup[tableID] = group
+			// }
+			// group.Append(row)
+			log.Info("DML event received",
 				zap.String("schema", row.TableInfo.GetSchemaName()),
-				zap.String("table", row.TableInfo.GetTableName()))
-		case model.MessageTypeResolved:
-			ts, err := decoder.NextResolvedEvent()
-			if err != nil {
-				log.Panic("decode message value failed",
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
-					zap.ByteString("value", value),
-					zap.Error(err))
-			}
-
-			log.Debug("watermark event received",
+				zap.String("table", row.TableInfo.GetTableName()),
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("watermark", ts))
+				zap.Uint64("commitTs", row.CommitTs), zap.Uint64("es", row.CommitTs>>18))
 
-			if w.checkOldMessage(progress, ts, nil, partition, message) {
-				continue
+			tableSink, ok := progress.tableSinkMap.Load(tableID)
+			if !ok {
+				tableSink = w.sinkFactory.CreateTableSinkForConsumer(
+					model.DefaultChangeFeedID("kafka-consumer"),
+					spanz.TableIDToComparableSpan(tableID),
+					row.CommitTs,
+				)
+				progress.tableSinkMap.Store(tableID, tableSink)
 			}
-
-			for tableID, group := range eventGroup {
-				events := group.Resolve(ts)
-				if len(events) == 0 {
-					continue
-				}
-				tableSink, ok := progress.tableSinkMap.Load(tableID)
-				if !ok {
-					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
-						model.DefaultChangeFeedID("kafka-consumer"),
-						spanz.TableIDToComparableSpan(tableID),
-						events[0].CommitTs,
-					)
-					progress.tableSinkMap.Store(tableID, tableSink)
-				}
-				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
-				log.Debug("append row changed events to table sink",
-					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
-					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
-			}
-			atomic.StoreUint64(&progress.watermark, ts)
-			progress.watermarkOffset = message.TopicPartition.Offset
-			needFlush = true
+			tableSink.(tablesink.TableSink).AppendRowChangedEvents(row)
+			syncFlushRowChangedEvents(ctx, progress, row.CommitTs+1)
+		case model.MessageTypeResolved:
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
 				zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
@@ -442,12 +453,12 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			zap.Int("max-batch-size", w.option.maxBatchSize), zap.Int("actual-batch-size", counter),
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 	}
-
-	if !needFlush {
-		return false
-	}
-	// flush when received DDL event or resolvedTs
-	return w.Write(ctx, messageType)
+	return true
+	//if !needFlush {
+	//	return false
+	//}
+	//// flush when received DDL event or resolvedTs
+	//return w.Write(ctx, messageType)
 }
 
 func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, message *kafka.Message) {
