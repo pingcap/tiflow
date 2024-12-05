@@ -9,9 +9,6 @@ on:
         description: 'Which PR do you want to trigger'
         required: true
         default: ''
-  push:
-    branches:
-      - master
 
 jobs:
   upstream-database-switch:
