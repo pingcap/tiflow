@@ -329,6 +329,17 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
+	if subtaskCfg.LoaderConfig.Security != nil {
+		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
+		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
+	}
+	if subtaskCfg.To.Security != nil {
+		cfg.TiDB.Security.CABytes = subtaskCfg.To.Security.SSLCABytes
+		cfg.TiDB.Security.CertBytes = subtaskCfg.To.Security.SSLCABytes
+		cfg.TiDB.Security.KeyBytes = subtaskCfg.To.Security.SSLKeyBytes
+	}
+
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
@@ -340,6 +351,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		// NOTE: If we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
+			return nil, err
+		}
+		if err := cfg.TiDB.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
 		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
@@ -657,7 +671,7 @@ func connParamFromConfig(config *lcfg.Config) *common.MySQLConnectParam {
 		SQLMode:  mysql.DefaultSQLMode,
 		// TODO: keep same as Lightning defaultMaxAllowedPacket later
 		MaxAllowedPacket:         64 * 1024 * 1024,
-		TLSConfig:                config.Security.TLSConfig,
-		AllowFallbackToPlaintext: config.Security.AllowFallbackToPlaintext,
+		TLSConfig:                config.TiDB.Security.TLSConfig,
+		AllowFallbackToPlaintext: config.TiDB.Security.AllowFallbackToPlaintext,
 	}
 }
