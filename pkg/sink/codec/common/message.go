@@ -62,7 +62,7 @@ func (m *Message) Length() int {
 	headers := m.Headers()
 	var headerLen int
 	for _, header := range headers {
-		headerLen += len(header.Key) + len(header.Value)
+		headerLen += len(header.Key) + len(header.Value) + 2*binary.MaxVarintLen32
 	}
 	return headerLen + len(m.Key) + len(m.Value) + MaxRecordOverhead
 }
