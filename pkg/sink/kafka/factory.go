@@ -262,8 +262,10 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				if ack.Offset < previous.offset {
 					log.Warn("kafka async producer receive an out-of-order message response",
 						zap.String("tableID", tableID), zap.Int32("partition", ack.Partition),
-						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldHandleKey", previous.handleKey),
-						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("handleKey", handleKey))
+						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs),
+						zap.String("oldHandleKey", previous.handleKey),
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs),
+						zap.String("handleKey", handleKey))
 				}
 				partitionMemo[ack.Partition] = item{
 					handleKey: handleKey,
@@ -307,6 +309,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	case p.producer.Input() <- msg:
 	}
 	log.Info("async producer send message",
-		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", headers[2].Value), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
+		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", headers[2].Value),
+		zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
 	return nil
 }
