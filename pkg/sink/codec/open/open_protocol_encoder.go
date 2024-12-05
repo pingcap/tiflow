@@ -113,7 +113,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		Schema:    &e.Table.Schema,
 		Table:     &e.Table.Table,
 		Type:      model.MessageTypeRow,
-		Protocol:  config.ProtocolCanalJSON,
+		Protocol:  config.ProtocolOpen,
 		Callback:  callback,
 	}
 
