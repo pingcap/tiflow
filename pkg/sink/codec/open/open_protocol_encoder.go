@@ -105,7 +105,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	}
 
 	m := &common.Message{
-		Key:       nil,
+		Key:       key,
 		Value:     value,
 		Ts:        e.CommitTs,
 		TableID:   e.Table.TableID,
