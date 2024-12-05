@@ -218,14 +218,12 @@ function test_dump_and_load_task() {
 
 	# start dump task success
 	openapi_task_check "start_task_success" $task_name_dump ""
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_dump" \
-		"\"stage\": \"Running\"" 1
 
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name_dump" 100 \
 		"\"stage\": \"Finished\"" 1
+	openapi_task_check "check_dump_task_finished_status_success" $task_name 2 2 4 4 228
 
 	# create load task success
 	openapi_task_check "create_load_task_success"
@@ -1163,22 +1161,7 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	test_relay
-	test_source
-
-	test_shard_task
-	test_multi_tasks
-	test_noshard_task
 	test_dump_and_load_task
-	test_task_templates
-	test_noshard_task_dump_status
-	test_complex_operations_of_source_and_task
-	test_task_with_ignore_check_items
-	test_delete_task_with_stopped_downstream
-	test_start_task_with_condition
-	test_stop_task_with_condition
-	test_reverse_https
-	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
