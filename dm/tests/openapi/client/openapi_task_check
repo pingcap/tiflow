@@ -329,7 +329,7 @@ def create_load_task_success():
                     "schema": "openapi",
                     "table": "*",
                 },
-                "target": {"schema": "openapi", "table": "t"},
+                "target": {"schema": "openapi", "table": ""},
             }
         ],
         "source_config": {
