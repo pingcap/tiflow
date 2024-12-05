@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2mock "github.com/pingcap/tiflow/pkg/sink/kafka/v2/mock"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -244,14 +245,14 @@ func TestAsyncWriterAsyncSend(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	callback := func() {}
+	message := &common.Message{Key: []byte{'1'}, Value: []byte{}, Callback: func() {}}
 	mw.EXPECT().WriteMessages(gomock.Any(), gomock.Any()).Return(nil)
-	err := w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
+	err := w.AsyncSend(ctx, "topic", 1, message)
 	require.NoError(t, err)
 
 	cancel()
 
-	err = w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
+	err = w.AsyncSend(ctx, "topic", 1, nil)
 	require.ErrorIs(t, err, context.Canceled)
 }
 

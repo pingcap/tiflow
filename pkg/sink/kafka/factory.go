@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -76,8 +77,7 @@ type AsyncProducer interface {
 	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
 	AsyncSend(ctx context.Context, topic string,
-		partition int32, key []byte, value []byte,
-		callback func()) error
+		partition int32, message *common.Message) error
 
 	// AsyncRunCallback process the messages that has sent to kafka,
 	// and run tha attached callback. the caller should call this
@@ -220,9 +220,16 @@ func (p *saramaAsyncProducer) Close() {
 	}()
 }
 
+type item struct {
+	handleKey string
+	commitTs  string
+	offset    int64
+}
+
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
+	memo := make(map[string]map[int32]item)
 	for {
 		select {
 		case <-ctx.Done():
@@ -241,6 +248,29 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				callback := ack.Metadata.(func())
 				if callback != nil {
 					callback()
+				}
+				tableID := string(ack.Headers[0].Value)
+				commitTs := string(ack.Headers[1].Value)
+				handleKey := string(ack.Headers[2].Value)
+
+				partitionMemo := memo[tableID]
+				if partitionMemo == nil {
+					partitionMemo = make(map[int32]item)
+					memo[tableID] = partitionMemo
+				}
+				previous := partitionMemo[ack.Partition]
+				if ack.Offset < previous.offset {
+					log.Warn("kafka async producer receive an out-of-order message response",
+						zap.String("tableID", tableID), zap.Int32("partition", ack.Partition),
+						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs),
+						zap.String("oldHandleKey", previous.handleKey),
+						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs),
+						zap.String("handleKey", handleKey))
+				}
+				partitionMemo[ack.Partition] = item{
+					handleKey: handleKey,
+					commitTs:  commitTs,
+					offset:    ack.Offset,
 				}
 			}
 		case err := <-p.producer.Errors():
@@ -262,21 +292,24 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	topic string,
 	partition int32,
-	key []byte,
-	value []byte,
-	callback func(),
+	message *common.Message,
 ) error {
+	headers := message.Headers()
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
-		Key:       sarama.StringEncoder(key),
-		Value:     sarama.ByteEncoder(value),
-		Metadata:  callback,
+		Headers:   headers,
+		Key:       sarama.StringEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
+		Metadata:  message.Callback,
 	}
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case p.producer.Input() <- msg:
 	}
+	log.Info("async producer send message",
+		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", headers[2].Value),
+		zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
 	return nil
 }
