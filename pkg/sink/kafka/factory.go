@@ -14,9 +14,7 @@
 package kafka
 
 import (
-	"bytes"
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -288,19 +286,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	partition int32,
 	message *common.Message,
 ) error {
-	var handleKey bytes.Buffer
-	for idx, key := range message.HandleKey {
-		handleKey.WriteString(key)
-		if idx != len(message.HandleKey)-1 {
-			handleKey.WriteString(",")
-		}
-	}
-	handle := handleKey.Bytes()
-	headers := []sarama.RecordHeader{
-		{Key: []byte("tableID"), Value: []byte(strconv.FormatUint(uint64(message.TableID), 10))},
-		{Key: []byte("commitTs"), Value: []byte(strconv.FormatUint(message.Ts, 10))},
-		{Key: []byte("handleKey"), Value: handle},
-	}
+	headers := message.Headers()
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
@@ -315,6 +301,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	case p.producer.Input() <- msg:
 	}
 	log.Info("async producer send message",
-		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", handle), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
+		zap.Int64("tableID", message.TableID), zap.ByteString("handleKey", headers[2].Value), zap.Int32("partition", partition), zap.Uint64("commitTs", message.Ts))
 	return nil
 }
