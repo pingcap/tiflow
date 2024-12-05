@@ -67,7 +67,7 @@ func (m *Message) Length() int {
 	return headerLen + len(m.Key) + len(m.Value) + MaxRecordOverhead
 }
 
-// Header returns the header of kafka message
+// Headers returns the headers of Kafka message
 func (m *Message) Headers() []sarama.RecordHeader {
 	var handleKey bytes.Buffer
 	for idx, key := range m.HandleKey {
