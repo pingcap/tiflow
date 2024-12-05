@@ -229,7 +229,7 @@ type item struct {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
-	memo := make(map[string]item)
+	memo := make(map[string]map[int32]item)
 	for {
 		select {
 		case <-ctx.Done():
@@ -252,14 +252,20 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				tableID := string(ack.Headers[0].Value)
 				commitTs := string(ack.Headers[1].Value)
 				handleKey := string(ack.Headers[2].Value)
-				previous := memo[tableID]
+
+				partitionMemo := memo[tableID]
+				if partitionMemo == nil {
+					partitionMemo = make(map[int32]item)
+					memo[tableID] = partitionMemo
+				}
+				previous := partitionMemo[ack.Partition]
 				if ack.Offset < previous.offset {
 					log.Warn("kafka async producer receive an out-of-order message response",
-						zap.Int32("partition", ack.Partition), zap.String("tableID", tableID),
+						zap.String("tableID", tableID), zap.Int32("partition", ack.Partition),
 						zap.Int64("oldOffset", previous.offset), zap.String("oldCommitTs", previous.commitTs), zap.String("oldHandleKey", previous.handleKey),
 						zap.Int64("newOffset", ack.Offset), zap.String("commitTs", commitTs), zap.String("handleKey", handleKey))
 				}
-				memo[tableID] = item{
+				partitionMemo[ack.Partition] = item{
 					handleKey: handleKey,
 					commitTs:  commitTs,
 					offset:    ack.Offset,

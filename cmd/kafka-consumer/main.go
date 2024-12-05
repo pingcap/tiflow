@@ -529,10 +529,6 @@ func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 }
 
 func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
-	sort.Slice(g.events, func(i, j int) bool {
-		return g.events[i].CommitTs < g.events[j].CommitTs
-	})
-
 	i := sort.Search(len(g.events), func(i int) bool {
 		return g.events[i].CommitTs > resolveTs
 	})
