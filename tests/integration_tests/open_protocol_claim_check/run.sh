@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 # use kafka-consumer with open-protocol decoder to sync data from kafka to mysql
 function run() {
-		return
+	return
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
