@@ -628,6 +628,9 @@ type TaskFullMigrateConf struct {
 	// to control range concurrency of physical import
 	RangeConcurrency *int `json:"range_concurrency,omitempty"`
 
+	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
+	Security *Security `json:"security"`
+
 	// sorting dir name for physical import
 	SortingDir *string `json:"sorting_dir,omitempty"`
 }
