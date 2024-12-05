@@ -572,7 +572,7 @@ func (s *Snapshot) SchemaCount() (count int) {
 func (s *Snapshot) DumpToString() string {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	
+
 	schemas := make([]string, 0, s.inner.schemas.Len())
 	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))
