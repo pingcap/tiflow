@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -389,11 +390,17 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
 	case timodel.ActionCreateTables:
+		querys, err := ddl.SplitQueries(job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
 		// we only use multiTableInfos and Querys when we generate job event
 		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
-		if strings.Count(job.Query, ";") != len(job.BinlogInfo.MultipleTableInfos) {
+		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
 			log.Error("the number of queries in `Job.Query` is not equal to "+
 				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
 				zap.String("Job.Query", job.Query),
 				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
 				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
@@ -404,7 +411,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		var newQuerys []string
 
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
-		querys := strings.Split(job.Query, ";")
 
 		for index, tableInfo := range multiTableInfos {
 			// judge each table whether need to be skip
@@ -412,7 +418,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				continue
 			}
 			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
-			newQuerys = append(newQuerys, querys[index]+";")
+			newQuerys = append(newQuerys, querys[index])
 		}
 
 		skip = len(newMultiTableInfos) == 0
@@ -493,27 +499,50 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		return false, nil
 	}
 
-	ineligible := p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(job.TableID)
-	if !ineligible {
+	snapAfter := p.schemaStorage.GetLastSnapshot()
+
+	if job.Type == timodel.ActionCreateTable {
+		// For create table, oldTableID is the new table ID.
+		isEligibleAfter := !snapAfter.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID)
+		if isEligibleAfter {
+			return false, nil
+		}
+	}
+
+	// For create tables, we always apply the DDL here.
+	if job.Type == timodel.ActionCreateTables {
 		return false, nil
 	}
 
-	// If the table is not in the snapshot before the DDL,
+	oldTableID := job.TableID
+	newTableID := job.BinlogInfo.TableInfo.ID
+
+	// If the table is eligible after the DDL, we should apply the DDL.
+	// No matter its status before the DDL.
+	isEligibleAfter := !p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(newTableID)
+	if isEligibleAfter {
+		return false, nil
+	}
+
+	// Steps here means this table is ineligible after the DDL.
+	// We need to check if its status before the DDL.
+
+	// 1. If the table is not in the snapshot before the DDL,
 	// we should ignore the DDL.
-	_, exist := snapBefore.PhysicalTableByID(job.TableID)
+	_, exist := snapBefore.PhysicalTableByID(oldTableID)
 	if !exist {
 		return true, nil
 	}
 
-	// If the table after the DDL is ineligible, we should check if it is not ineligible before the DDL.
-	// If so, we should return an error to inform the user that it is a
-	// dangerous operation and should be handled manually.
-	isBeforeineligible := snapBefore.IsIneligibleTableID(job.TableID)
-	if isBeforeineligible {
-		log.Warn("ignore the DDL event of ineligible table",
+	// 2. If the table is ineligible before the DDL, we should ignore the DDL.
+	isIneligibleBefore := snapBefore.IsIneligibleTableID(oldTableID)
+	if isIneligibleBefore {
+		log.Warn("Ignore the DDL event of ineligible table",
 			zap.String("changefeed", p.changefeedID.ID), zap.Any("ddl", job))
 		return true, nil
 	}
+
+	// 3. If the table is eligible before the DDL, we should return an error.
 	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
 		"it is a dangerous operation and may cause data loss. If you want to replicate this ddl safely, "+
 		"pelase pause the changefeed and update the `force-replicate=true` "+
