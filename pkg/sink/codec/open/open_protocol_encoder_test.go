@@ -175,7 +175,7 @@ func TestMaxMessageBytes(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 	// just can hold it.
-	a := 173
+	a := 231
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
