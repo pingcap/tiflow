@@ -209,12 +209,14 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.String("DDL", job.Query),
+				zap.String("role", s.role.String()),
 				zap.Int64("jobID", job.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("schemaVersion", s.schemaVersion),
-				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-				zap.String("role", s.role.String()))
+				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -225,11 +227,14 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
+			zap.String("role", s.role.String()),
+			zap.Int64("jobID", job.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("role", s.role.String()),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Int64("schemaVersion", s.schemaVersion),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -239,12 +244,15 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	log.Info("schemaStorage: update snapshot by the DDL job",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
+		zap.String("role", s.role.String()),
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
+		zap.Int64("jobID", job.ID),
+		zap.Uint64("startTs", job.StartTS),
 		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
-		zap.String("role", s.role.String()))
+		zap.String("query", job.Query))
+
 	return nil
 }
 
