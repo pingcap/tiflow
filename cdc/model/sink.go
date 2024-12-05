@@ -670,6 +670,17 @@ type ColumnData struct {
 	ApproximateBytes int `json:"-" msg:"-"`
 }
 
+// Equal checks whether two columns based on their value string.
+func (c *ColumnData) Equal(other *ColumnData) bool {
+	if c == other {
+		return true
+	}
+	if c == nil || other == nil {
+		return false
+	}
+	return ColumnValueString(c.Value) == ColumnValueString(other.Value)
+}
+
 // RedoColumn stores Column change
 type RedoColumn struct {
 	// Fields from Column and can't be marshaled directly in Column.
@@ -1254,10 +1265,8 @@ func ShouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 		col := updateEvent.Columns[i]
 		preCol := updateEvent.PreColumns[i]
 		if isNonEmptyUniqueOrHandleCol(col, tableInfo) && isNonEmptyUniqueOrHandleCol(preCol, tableInfo) {
-			colValueString := ColumnValueString(col.Value)
-			preColValueString := ColumnValueString(preCol.Value)
 			// If one unique key columns is updated, we need to split the event row.
-			if colValueString != preColValueString {
+			if !col.Equal(preCol) {
 				return true
 			}
 		}

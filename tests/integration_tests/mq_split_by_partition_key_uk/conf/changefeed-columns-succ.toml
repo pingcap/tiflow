@@ -1,0 +1,15 @@
+[filter]
+rules = ['test.*']
+
+[sink]
+dispatchers = [
+    {matcher = ['test.*'], partition = "columns", columns = ["a"]},
+]
+
+[sink.kafka-config]
+output-raw-change-event = true
+split-by-partition-key = true
+
+[sink.pulsar-config]
+output-raw-change-event = true
+split-by-partition-key = true
