@@ -14,13 +14,16 @@
 package main
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
+	"sort"
 )
 
 // EventsGroup could store change event message.
 type eventsGroup struct {
-	events []*model.RowChangedEvent
-	ts     uint64
+	events        []*model.RowChangedEvent
+	highWatermark uint64
 }
 
 // NewEventsGroup will create new event group.
@@ -33,11 +36,22 @@ func NewEventsGroup() *eventsGroup {
 // Append will append an event to event groups.
 func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 	g.events = append(g.events, e)
+	g.highWatermark = e.CommitTs
 }
 
 // Resolve will get events where CommitTs is less than resolveTs.
-func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
-	result := g.events[:]
-	g.events = g.events[:0]
+func (g *eventsGroup) Resolve(resolve uint64) []*model.RowChangedEvent {
+	i := sort.Search(len(g.events), func(i int) bool {
+		return g.events[i].CommitTs > resolve
+	})
+
+	result := g.events[:i]
+	g.events = g.events[i:]
+
+	if len(g.events) != 0 {
+		log.Warn("not all events resolved",
+			zap.Int("length", len(g.events)), zap.Uint64("firstCommitTs", g.events[0].CommitTs))
+	}
+
 	return result
 }
