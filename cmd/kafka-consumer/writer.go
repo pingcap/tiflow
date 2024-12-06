@@ -413,7 +413,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 
 			for tableID, group := range eventGroup {
-				events := group.Resolve()
+				events := group.Resolve(ts)
 				if len(events) == 0 {
 					continue
 				}
