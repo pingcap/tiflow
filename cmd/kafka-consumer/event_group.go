@@ -20,6 +20,7 @@ import (
 // EventsGroup could store change event message.
 type eventsGroup struct {
 	events []*model.RowChangedEvent
+	ts     uint64
 }
 
 // NewEventsGroup will create new event group.
@@ -36,7 +37,7 @@ func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 
 // Resolve will get events where CommitTs is less than resolveTs.
 func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
-	result := g.events
+	result := g.events[:]
 	g.events = g.events[:0]
 	return result
 }

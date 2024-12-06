@@ -376,11 +376,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			w.checkPartition(row, partition, message)
 
-			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
+			group, ok := eventGroup[tableID]
+			if w.checkOldMessage(progress, row, group, row.CommitTs, partition, message) {
 				continue
 			}
-
-			group, ok := eventGroup[tableID]
 			if !ok {
 				group = NewEventsGroup()
 				eventGroup[tableID] = group
@@ -388,7 +387,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			group.Append(row)
 			// DML events should be in order
 			// and all DML events commitTs should be less than resolveTs
-			atomic.StoreUint64(&progress.watermark, row.CommitTs)
+			atomic.StoreUint64(&group.ts, row.CommitTs)
 			log.Debug("DML event received",
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
@@ -411,7 +410,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", ts))
 
-			if w.checkOldMessage(progress, ts, nil, partition, message) {
+			if w.checkOldMessageForWatermark(progress, ts, partition, message) {
 				continue
 			}
 
@@ -474,40 +473,47 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, mes
 	}
 }
 
-func (w *writer) checkOldMessage(progress *partitionProgress, ts uint64, row *model.RowChangedEvent, partition int32, message *kafka.Message) bool {
+func (w *writer) checkOldMessageForWatermark(progress *partitionProgress, ts uint64, partition int32, message *kafka.Message) bool {
 	watermark := atomic.LoadUint64(&progress.watermark)
-	if row == nil {
-		if ts < watermark {
-			if message.TopicPartition.Offset > progress.watermarkOffset {
-				log.Panic("partition resolved ts fallback, skip it",
-					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-					zap.Int32("partition", partition))
-			}
-			log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+	if ts < watermark {
+		if message.TopicPartition.Offset > progress.watermarkOffset {
+			log.Panic("partition resolved ts fallback, skip it",
 				zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 				zap.Int32("partition", partition))
-			return true
 		}
-		return false
+		log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+			zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+			zap.Int32("partition", partition))
+		return true
+	}
+	return false
+}
+
+func (w *writer) checkOldMessage(progress *partitionProgress, row *model.RowChangedEvent, group *eventsGroup, ts uint64, partition int32, message *kafka.Message) bool {
+	var preTs uint64
+	if group != nil {
+		preTs = group.ts
+	} else {
+		preTs = atomic.LoadUint64(&progress.watermark)
 	}
 	// if the kafka cluster is normal, this should not hit.
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
-	if ts < watermark {
+	if ts < preTs {
 		// if commit message failed, the consumer may read previous message,
 		// just ignore this message should be fine, otherwise panic.
 		if message.TopicPartition.Offset > progress.watermarkOffset {
 			log.Panic("RowChangedEvent fallback row",
 				zap.Uint64("commitTs", ts), zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+				zap.Uint64("preTs", preTs), zap.Any("watermarkOffset", progress.watermarkOffset),
 				zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()))
 		}
 		log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+			zap.Uint64("preTs", preTs), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
 			zap.String("schema", row.TableInfo.GetSchemaName()),
 			zap.String("table", row.TableInfo.GetTableName()))
