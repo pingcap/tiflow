@@ -1850,6 +1850,7 @@ components:
             - "incremental"
             - "all"
             - "dump"
+            - "load"
         shard_mode:
           type: string
           description: the way to coordinate DDL
