@@ -152,12 +152,12 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
-	// for dump/load&sync mode task, we needn't to setup external storage
-	// these two tasks will directly read/write data from/to user specified external storage without executor's management
-	// for all/full mode task, the dump/load units run on a same executor, so they can access the s3 data under a same executor
-	// but for dump/load&sync mode task, import API needs a clear S3 URI without exector's prefix,
-	// what's more, dump/load units may not be executed on a same executor,
-	// so we choose to use user's own external storage and don't set up here.
+	// For dump/load/load&sync mode tasks, we don’t need to set up external storage.
+	// These tasks directly read/write data to/from user-specified external storage without the executor's management.
+	// In all/full mode tasks, dump/load units run on the same executor, allowing access to S3 data under the same executor's namespace.
+	// However, for dump/load & sync mode tasks, the import API requires a plain S3 URI without the executor's prefix.
+	// Additionally, dump/load units may not run on the same executor,
+	// so we opt to use the user’s external storage directly instead of configuring it here.
 	if (w.cfg.Mode == dmconfig.ModeAll || w.cfg.Mode == dmconfig.ModeFull) && w.needExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err
@@ -258,8 +258,10 @@ func (w *dmWorker) updateStatusWhenStageChange(ctx context.Context) error {
 		return w.UpdateStatus(ctx, status)
 	}
 
-	// now we are in StageFinished
-	// for all and full mode, resource is managed by engine, we need to discard them
+	// Now we are in StageFinished
+	// For all and full mode, resource is managed by engine, we need to discard them
+	// In standalone modes (e.g., dump and load), we use user-specified storage.
+	// No additional operations on storage are needed, leaving management to the user.
 	if w.cfg.Mode == dmconfig.ModeAll || w.cfg.Mode == dmconfig.ModeFull {
 		switch w.workerType {
 		case frameModel.WorkerDMDump:
