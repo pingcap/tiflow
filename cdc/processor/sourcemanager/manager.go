@@ -165,10 +165,17 @@ func (m *SourceManager) Close() error {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
+
+	var wg sync.WaitGroup
 	m.pullers.Range(func(key, value interface{}) bool {
-		value.(*pullerwrapper.Wrapper).Close()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value.(*pullerwrapper.Wrapper).Close()
+		}()
 		return true
 	})
+	wg.Wait()
 	log.Info("All pullers have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
