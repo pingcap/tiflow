@@ -282,6 +282,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 			zap.Error(err))
 	}
+	log.Info("add value to the decoder",
+		zap.Int32("partition", message.TopicPartition.Partition), zap.Any("offset", message.TopicPartition.Offset),
+		zap.ByteString("value", value), zap.ByteString("key", key))
 	var (
 		counter     int
 		needFlush   bool
@@ -327,13 +330,13 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				for _, row := range cachedEvents {
 					row.TableInfo.TableName.TableID = row.PhysicalTableID
 					w.checkPartition(row, partition, message)
-					if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-						continue
-					}
 					group, ok := eventGroup[row.PhysicalTableID]
 					if !ok {
 						group = NewEventsGroup()
 						eventGroup[row.PhysicalTableID] = group
+					}
+					if w.isOldMessage(progress, row, group, partition, message) {
+						continue
 					}
 					group.Append(row)
 				}
@@ -373,16 +376,16 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			w.checkPartition(row, partition, message)
 
-			if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
-				continue
-			}
-
-			group, ok := eventGroup[tableID]
-			if !ok {
+			group := eventGroup[tableID]
+			if group == nil {
 				group = NewEventsGroup()
 				eventGroup[tableID] = group
 			}
+			if w.isOldMessage(progress, row, group, partition, message) {
+				continue
+			}
 			group.Append(row)
+
 			log.Debug("DML event received",
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
@@ -405,7 +408,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", ts))
 
-			if w.checkOldMessage(progress, ts, nil, partition, message) {
+			if w.checkOldMessageForWatermark(progress, ts, partition, message) {
 				continue
 			}
 
@@ -427,6 +430,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				log.Debug("append row changed events to table sink",
 					zap.Uint64("resolvedTs", ts), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
+
 			}
 			atomic.StoreUint64(&progress.watermark, ts)
 			progress.watermarkOffset = message.TopicPartition.Offset
@@ -468,42 +472,34 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, mes
 	}
 }
 
-func (w *writer) checkOldMessage(progress *partitionProgress, ts uint64, row *model.RowChangedEvent, partition int32, message *kafka.Message) bool {
+func (w *writer) checkOldMessageForWatermark(progress *partitionProgress, ts uint64, partition int32, message *kafka.Message) bool {
 	watermark := atomic.LoadUint64(&progress.watermark)
-	if row == nil {
-		watermark := atomic.LoadUint64(&progress.watermark)
-		if ts < watermark {
-			if message.TopicPartition.Offset > progress.watermarkOffset {
-				log.Panic("partition resolved ts fallback, skip it",
-					zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-					zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-					zap.Int32("partition", partition))
-			}
-			log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+	if ts < watermark {
+		if message.TopicPartition.Offset > progress.watermarkOffset {
+			log.Panic("partition resolved ts fallback, skip it",
 				zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 				zap.Int32("partition", partition))
-			return true
 		}
-		return false
+		log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+			zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+			zap.Int32("partition", partition))
+		return true
 	}
+	return false
+}
+
+func (w *writer) isOldMessage(progress *partitionProgress, row *model.RowChangedEvent, group *eventsGroup, partition int32, message *kafka.Message) bool {
 	// if the kafka cluster is normal, this should not hit.
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
-	if ts < watermark {
-		// if commit message failed, the consumer may read previous message,
-		// just ignore this message should be fine, otherwise panic.
-		if message.TopicPartition.Offset > progress.watermarkOffset {
-			log.Panic("RowChangedEvent fallback row",
-				zap.Uint64("commitTs", ts), zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-				zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
-				zap.String("schema", row.TableInfo.GetSchemaName()),
-				zap.String("table", row.TableInfo.GetTableName()))
-		}
-		log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
+	watermark := atomic.LoadUint64(&progress.watermark)
+	if row.CommitTs < group.highWatermark || row.CommitTs < watermark {
+		log.Warn("RowChangedEvent fallback row",
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-			zap.Int32("partition", partition), zap.Int64("tableID", row.TableInfo.TableName.TableID),
+			zap.Uint64("highWatermark", group.highWatermark), zap.Int32("partition", partition),
+			zap.Int64("tableID", row.TableInfo.TableName.TableID), zap.Any("partitionWatermark", watermark),
+			zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()),
 			zap.String("table", row.TableInfo.GetTableName()))
 		return true
