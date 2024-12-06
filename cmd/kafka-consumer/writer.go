@@ -386,6 +386,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				eventGroup[tableID] = group
 			}
 			group.Append(row)
+			// DML events should be in order
+			// and all DML events commitTs should be less than resolveTs
+			atomic.StoreUint64(&progress.watermark, row.CommitTs)
 			log.Debug("DML event received",
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
@@ -474,7 +477,6 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, mes
 func (w *writer) checkOldMessage(progress *partitionProgress, ts uint64, row *model.RowChangedEvent, partition int32, message *kafka.Message) bool {
 	watermark := atomic.LoadUint64(&progress.watermark)
 	if row == nil {
-		watermark := atomic.LoadUint64(&progress.watermark)
 		if ts < watermark {
 			if message.TopicPartition.Offset > progress.watermarkOffset {
 				log.Panic("partition resolved ts fallback, skip it",

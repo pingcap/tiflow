@@ -14,8 +14,6 @@
 package main
 
 import (
-	"sort"
-
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -38,11 +36,7 @@ func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 
 // Resolve will get events where CommitTs is less than resolveTs.
 func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
-	i := sort.Search(len(g.events), func(i int) bool {
-		return g.events[i].CommitTs > resolveTs
-	})
-
-	result := g.events[:i]
-	g.events = g.events[i:]
+	result := g.events
+	g.events = g.events[:0]
 	return result
 }
