@@ -258,22 +258,17 @@ func (m *SourceManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
-
-	log.Info("All pullers have been closed",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Duration("cost", time.Since(start)))
-
 	if err := m.engine.Close(); err != nil {
 		log.Panic("Fail to close sort engine",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)),
 			zap.Error(err))
 	}
 	log.Info("Closed source manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Duration("cost", time.Since(start)))
+		zap.Duration("duration", time.Since(start)))
 }
 
 // Add adds events to the engine. It is used for testing.

@@ -82,7 +82,7 @@ func TestCheckpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		ddlSink.close(ctx)
+		ddlSink.close()
 	}()
 	ddlSink.run(ctx)
 
@@ -106,7 +106,7 @@ func TestExecDDLEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		ddlSink.close(ctx)
+		ddlSink.close()
 	}()
 	ddlSink.run(ctx)
 
@@ -150,7 +150,7 @@ func TestExecDDLError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		ddlSink.close(ctx)
+		ddlSink.close()
 	}()
 
 	ddlSink.run(ctx)
