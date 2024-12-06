@@ -23,11 +23,27 @@ import (
 	"go.uber.org/zap"
 )
 
-// causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
-// causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
-// if some conflicts exist in more than one groups, causality generate a conflict job and reset.
+// causality provides a simple mechanism to ensure correctness when we are running
+// DMLs concurrently.
+// As a table might have one or multiple keys (including PK and UKs), row changes
+// might depend on other row changes, together they form a dependency graph, only
+// row changes without dependency can run concurrently.
+// currently, row changes for a table from upstream are dispatched to DML workers
+// by their keys, to make sure row changes with same keys are dispatched to the
+// same worker, but this cannot handle dependencies cross row changes with
+// different keys.
+// suppose we have a table `t(a int unique, b int unique)`, and following row changes:
+//   - insert t(a=1, b=1), we put to worker 1
+//   - insert t(a=2, b=2), we put to worker 2
+//   - delete t(a=2, b=2), we put to worker 2
+//   - update t set b=2 where a=1, this row change depends on all above row changes,
+//     we must at least wait all row changes related to (a=2, b=2) finish before
+//     dispatch it to worker 1, else data inconsistency might happen.
+//
+// causality is used to detect this kind of dependencies, and it will generate a
+// conflict job to wait all DMLs in DML workers are executed before we can continue
+// dispatching.
 // this mechanism meets quiescent consistency to ensure correctness.
-// causality relation is consisted of groups of keys separated by flush job, and such design helps removed flushed dml job keys.
 type causality struct {
 	relation    *causalityRelation
 	outCh       chan *job

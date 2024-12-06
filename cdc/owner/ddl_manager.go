@@ -293,6 +293,8 @@ func (m *ddlManager) tick(
 			continue
 		}
 
+		// Note: do not change the key words in the log, it is used to search the
+		// FinishTS of the DDL job. Some integration tests and users depend on it.
 		log.Info("handle a ddl job",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
@@ -307,6 +309,18 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
+			snap := m.schema.GetLastSnapshot()
+			if event.Type == timodel.ActionCreateTable ||
+				event.Type == timodel.ActionCreateTables {
+				if snap.IsIneligibleTableID(event.TableInfo.ID) {
+					log.Info("table is ineligible, skip the ddl",
+						zap.String("namespace", m.changfeedID.Namespace),
+						zap.String("changefeed", m.changfeedID.ID),
+						zap.String("query", job.Query),
+						zap.Any("table", event.TableInfo))
+					continue
+				}
+			}
 			tableName := event.TableInfo.TableName
 			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 		}

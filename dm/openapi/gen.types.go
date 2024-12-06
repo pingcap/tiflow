@@ -28,6 +28,8 @@ const (
 const (
 	TaskTaskModeAll TaskTaskMode = "all"
 
+	TaskTaskModeDump TaskTaskMode = "dump"
+
 	TaskTaskModeFull TaskTaskMode = "full"
 
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
@@ -77,6 +79,8 @@ const (
 // Defines values for TaskStage.
 const (
 	TaskStageFinished TaskStage = "Finished"
+
+	TaskStagePaused TaskStage = "Paused"
 
 	TaskStageRunning TaskStage = "Running"
 
@@ -163,10 +167,12 @@ type DisableRelayRequest struct {
 
 // status of dump unit
 type DumpStatus struct {
+	Bps               int64   `json:"bps"`
 	CompletedTables   float64 `json:"completed_tables"`
 	EstimateTotalRows float64 `json:"estimate_total_rows"`
 	FinishedBytes     float64 `json:"finished_bytes"`
 	FinishedRows      float64 `json:"finished_rows"`
+	Progress          string  `json:"progress"`
 	TotalTables       int64   `json:"total_tables"`
 }
 
@@ -258,6 +264,7 @@ type GrafanaTopology struct {
 
 // status of load unit
 type LoadStatus struct {
+	Bps            int64  `json:"bps"`
 	FinishedBytes  int64  `json:"finished_bytes"`
 	MetaBinlog     string `json:"meta_binlog"`
 	MetaBinlogGtid string `json:"meta_binlog_gtid"`
@@ -499,6 +506,8 @@ type SyncStatus struct {
 
 	// sharding DDL which current is blocking
 	BlockingDdls        []string `json:"blocking_ddls"`
+	DumpIoTotalBytes    uint64   `json:"dump_io_total_bytes"`
+	IoTotalBytes        uint64   `json:"io_total_bytes"`
 	MasterBinlog        string   `json:"master_binlog"`
 	MasterBinlogGtid    string   `json:"master_binlog_gtid"`
 	RecentTps           int64    `json:"recent_tps"`

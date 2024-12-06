@@ -1,6 +1,3 @@
--- ----------------------------------------------------------------------------------------------------------------
--- DATABASE:  regression_test
--- ----------------------------------------------------------------------------------------------------------------
 -- The integration test for this database expects to scan all of the binlog events associated with this database
 -- without error or problems. The integration test does not modify any records in this database, so this script
 -- must contain all operations to these tables.
@@ -42,6 +39,7 @@ CREATE TABLE dbz84_integer_types_table (
 INSERT INTO dbz84_integer_types_table
 VALUES(127,-128,128,255, default,201,202,203, default,301,302,303, default,401,402,403, default,501,502,503, 1);
 
+SET time_zone='UTC';
 -- DBZ-85 handle fractional part of seconds
 CREATE TABLE dbz_85_fractest (
   c1 DATE,
@@ -86,7 +84,6 @@ INSERT INTO dbz_123_bitvaluetest VALUES (1,2,64,23989979, 1);
 INSERT INTO dbz_123_bitvaluetest VALUES (b'1',b'10',b'01000000',b'1011011100000111011011011', 2);
 
 -- DBZ-104 handle create table like ...
-DROP DATABASE IF EXISTS connector_test;
 CREATE DATABASE connector_test;
 CREATE TABLE connector_test.customers (
   id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -95,10 +92,13 @@ CREATE TABLE connector_test.customers (
   email VARCHAR(255) NOT NULL UNIQUE KEY
 ) AUTO_INCREMENT=1001;
 INSERT INTO connector_test.customers
-VALUES (default,"Sally","Thomas","sally.thomas@acme.com"),
-       (default,"George","Bailey","gbailey@foobar.com"),
-       (default,"Edward","Walker","ed@walker.com"),
-       (default,"Anne","Kretchmar","annek@noanswer.org");
+VALUES (default,"Sally","Thomas","sally.thomas@acme.com");
+INSERT INTO connector_test.customers
+VALUES (default,"George","Bailey","gbailey@foobar.com");
+INSERT INTO connector_test.customers
+VALUES (default,"Edward","Walker","ed@walker.com");
+INSERT INTO connector_test.customers
+VALUES (default,"Anne","Kretchmar","annek@noanswer.org");
 
 -- DBZ-147 handle decimal value
 CREATE TABLE dbz_147_decimalvalues (

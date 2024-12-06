@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -117,6 +118,13 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
 	c.Assert(subTaskConfig.IgnoreCheckingItems, check.IsNil)
+	// check io total bytes counter and uuid
+	c.Assert(subTaskConfig.IOTotalBytes, check.NotNil)
+	c.Assert(subTaskConfig.DumpIOTotalBytes, check.NotNil)
+	c.Assert(subTaskConfig.IOTotalBytes.Load(), check.Equals, uint64(0))
+	c.Assert(subTaskConfig.DumpIOTotalBytes.Load(), check.Equals, uint64(0))
+	c.Assert(subTaskConfig.UUID, check.HasLen, len(uuid.NewString()))
+	c.Assert(subTaskConfig.DumpUUID, check.HasLen, len(uuid.NewString()))
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
