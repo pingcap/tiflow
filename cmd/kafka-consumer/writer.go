@@ -282,6 +282,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset),
 			zap.Error(err))
 	}
+	log.Info("add value to the decoder",
+		zap.Int32("partition", message.TopicPartition.Partition), zap.Any("offset", message.TopicPartition.Offset),
+		zap.ByteString("value", value), zap.ByteString("key", key))
 	var (
 		counter     int
 		needFlush   bool
