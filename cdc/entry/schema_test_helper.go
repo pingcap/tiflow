@@ -173,7 +173,11 @@ func (s *SchemaTestHelper) DML2Event(dml string, schema, table string, partition
 	require.True(s.t, ok)
 
 	tableID := tableInfo.ID
-	partitionTableID := tableInfo.TableInfo.GetPartitionInfo().GetPartitionIDByName(partitionID[0])
+
+	var partitionTableID int64 = -1
+	if len(partitionID) == 1 {
+		partitionTableID = tableInfo.TableInfo.GetPartitionInfo().GetPartitionIDByName(partitionID[0])
+	}
 	if partitionTableID != -1 {
 		tableID = partitionTableID
 	}
