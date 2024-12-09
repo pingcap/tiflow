@@ -203,6 +203,28 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	require.Nil(t, decodedRow)
 }
 
+func TestEncodePartitionTables(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	createPartitionTableDDL := helper.DDL2Event(`create table test.t(a int primary key, b int) partition by range (a) (
+		partition p0 values less than (10),
+		partition p1 values less than (20),
+		partition p2 values less than MAXVALUE)`)
+	require.NotNil(t, createPartitionTableDDL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, 1)`, "test", "t")
+	require.NotNil(t, insertEvent)
+
+	insertEvent = helper.DML2Event(`insert into test.t values (11, 11)`, "test", "t")
+	require.NotNil(t, insertEvent)
+
+	insertEvent = helper.DML2Event(`insert into test.t values (21, 21)`, "test", "t")
+	require.NotNil(t, insertEvent)
+}
+
 func TestEncodeDDLSequence(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
