@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -65,6 +66,12 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+		Security: &security.Security{
+			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
+		},
 	}
 	// change meta
 	newMeta := "new_dm_meta"
@@ -125,6 +132,12 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.DumpIOTotalBytes.Load(), check.Equals, uint64(0))
 	c.Assert(subTaskConfig.UUID, check.HasLen, len(uuid.NewString()))
 	c.Assert(subTaskConfig.DumpUUID, check.HasLen, len(uuid.NewString()))
+	// check security items
+	c.Assert(string(subTaskConfig.To.Security.SSLCABytes), check.Equals, task.TargetConfig.Security.SslCaContent)
+	c.Assert(string(subTaskConfig.To.Security.SSLCertBytes), check.Equals, task.TargetConfig.Security.SslCertContent)
+	c.Assert(string(subTaskConfig.To.Security.SSLKeyBytes), check.Equals, task.TargetConfig.Security.SslKeyContent)
+	c.Assert(subTaskConfig.To.Security.CertAllowedCN, check.Equals, task.TargetConfig.Security.CertAllowedCn)
+	c.Assert(subTaskConfig.LoaderConfig.Security, check.IsNil)
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
@@ -215,6 +228,12 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
 	c.Assert(subTask1Config.IgnoreCheckingItems, check.IsNil)
+	// check security items
+	c.Assert(string(subTask1Config.LoaderConfig.Security.SSLCert), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
+	c.Assert(string(subTask1Config.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
+	c.Assert(string(subTask1Config.LoaderConfig.Security.SSLKeyBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+	c.Assert(subTask1Config.LoaderConfig.Security.CertAllowedCN, check.Equals, task.SourceConfig.FullMigrateConf.Security.CertAllowedCn)
+	c.Assert(subTask1Config.To.Security, check.IsNil)
 
 	// check sub task 2
 	subTask2Config := subTaskConfigList[1]
@@ -264,6 +283,12 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
 	c.Assert(subTask2Config.IgnoreCheckingItems, check.IsNil)
+	// check security items
+	c.Assert(string(subTask2Config.LoaderConfig.Security.SSLCert), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
+	c.Assert(string(subTask2Config.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
+	c.Assert(string(subTask2Config.LoaderConfig.Security.SSLKeyBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+	c.Assert(subTask2Config.LoaderConfig.Security.CertAllowedCN, check.Equals, task.SourceConfig.FullMigrateConf.Security.CertAllowedCn)
+	c.Assert(subTask2Config.To.Security, check.IsNil)
 }
 
 func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
