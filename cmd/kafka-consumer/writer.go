@@ -339,6 +339,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 			if simple, ok := decoder.(*simple.Decoder); ok {
 				cachedEvents := simple.GetCachedEvents()
+				if len(cachedEvents) != 0 {
+					log.Info("simple protocol resolved cached events", zap.Int("resolvedCount", len(cachedEvents)))
+				}
 				for _, row := range cachedEvents {
 					row.TableInfo.TableName.TableID = row.PhysicalTableID
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
@@ -357,8 +360,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl, offset)
-				needFlush = true
 			}
+			needFlush = true
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
@@ -491,8 +494,7 @@ func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, pa
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("highWatermark", group.highWatermark),
 			zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-			zap.String("schema", row.TableInfo.GetSchemaName()),
-			zap.String("table", row.TableInfo.GetTableName()))
+			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()))
 		return true
 	}
 	return false
