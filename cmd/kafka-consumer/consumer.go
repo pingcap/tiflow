@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func getPartitionNum(o *option) (int32, error) {
@@ -99,6 +100,9 @@ func newConsumer(ctx context.Context, o *option) *consumer {
 		_ = configMap.SetKey("ssl.key.location", o.key)
 		_ = configMap.SetKey("ssl.certificate.location", o.cert)
 	}
+	if level, err := zapcore.ParseLevel(o.logLevel); err == nil && level.String() == "debug" {
+		configMap.SetKey("debug", "all")
+	}
 	client, err := kafka.NewConsumer(configMap)
 	if err != nil {
 		log.Panic("create kafka consumer failed", zap.Error(err))
@@ -121,6 +125,12 @@ func (c *consumer) Consume(ctx context.Context) {
 		}
 	}()
 	for {
+		select {
+		case <-ctx.Done():
+			log.Info("consumer exist: context cancelled")
+			return
+		default:
+		}
 		msg, err := c.client.ReadMessage(-1)
 		if err != nil {
 			log.Error("read message failed, just continue to retry", zap.Error(err))
