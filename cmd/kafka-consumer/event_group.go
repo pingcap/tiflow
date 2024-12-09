@@ -14,29 +14,44 @@
 package main
 
 import (
+	"sort"
+
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
-	"sort"
 )
 
 // EventsGroup could store change event message.
 type eventsGroup struct {
+	partition int32
+	tableID   int64
+
 	events        []*model.RowChangedEvent
 	highWatermark uint64
 }
 
 // NewEventsGroup will create new event group.
-func NewEventsGroup() *eventsGroup {
+func NewEventsGroup(partition int32, tableID int64) *eventsGroup {
 	return &eventsGroup{
-		events: make([]*model.RowChangedEvent, 0),
+		partition: partition,
+		tableID:   tableID,
+		events:    make([]*model.RowChangedEvent, 0),
 	}
 }
 
 // Append will append an event to event groups.
-func (g *eventsGroup) Append(e *model.RowChangedEvent) {
-	g.events = append(g.events, e)
-	g.highWatermark = e.CommitTs
+func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
+	g.events = append(g.events, row)
+	g.highWatermark = row.CommitTs
+	log.Info("DML event received",
+		zap.Int32("partition", g.partition),
+		zap.Any("offset", offset),
+		zap.Uint64("commitTs", row.CommitTs),
+		zap.Int64("physicalTableID", row.PhysicalTableID),
+		zap.Int64("tableID", g.tableID),
+		zap.String("schema", row.TableInfo.GetSchemaName()),
+		zap.String("table", row.TableInfo.GetTableName()))
 }
 
 // Resolve will get events where CommitTs is less than resolveTs.
@@ -48,9 +63,10 @@ func (g *eventsGroup) Resolve(resolve uint64) []*model.RowChangedEvent {
 	result := g.events[:i]
 	g.events = g.events[i:]
 
-	if len(g.events) != 0 {
+	if len(result) != 0 && len(g.events) != 0 {
 		log.Warn("not all events resolved",
-			zap.Int("length", len(g.events)), zap.Uint64("resolveTs", resolve), zap.Uint64("firstCommitTs", g.events[0].CommitTs))
+			zap.Int("resolved", len(result)), zap.Int("remained", len(g.events)),
+			zap.Uint64("resolveTs", resolve), zap.Uint64("firstCommitTs", g.events[0].CommitTs))
 	}
 
 	return result
