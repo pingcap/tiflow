@@ -302,7 +302,9 @@ type LoaderConfig struct {
 	RangeConcurrency    int                          `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
 	CompressKVPairs     string                       `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
 	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
-	Security            *security.Security           `toml:"security" json:"security" yaml:"security"`
+	// now only creating task by OpenAPI will use the `Security` field to connect PD.
+	// TODO: support setting `Security` by dmctl
+	Security *security.Security `toml:"security" json:"security" yaml:"security"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
