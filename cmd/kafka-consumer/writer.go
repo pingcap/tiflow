@@ -81,6 +81,15 @@ type partitionProgress struct {
 	decoder     codec.RowEventDecoder
 }
 
+func (p *partitionProgress) updateWatermark(watermark uint64, offset kafka.Offset) {
+	atomic.StoreUint64(&p.watermark, watermark)
+	p.watermarkOffset = offset
+}
+
+func (p *partitionProgress) loadWatermark() uint64 {
+	return atomic.LoadUint64(&p.watermark)
+}
+
 type writer struct {
 	option *option
 
@@ -203,7 +212,7 @@ func (w *writer) popDDL() {
 func (w *writer) getMinWatermark() uint64 {
 	result := uint64(math.MaxUint64)
 	for _, p := range w.progresses {
-		watermark := atomic.LoadUint64(&p.watermark)
+		watermark := p.loadWatermark()
 		if watermark < result {
 			result = watermark
 		}
@@ -335,7 +344,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 						group = NewEventsGroup()
 						eventGroup[row.PhysicalTableID] = group
 					}
-					if w.isOldMessage(progress, row, group, partition, message) {
+					if w.isOldMessage(row, group, partition, message) {
 						continue
 					}
 					group.Append(row)
@@ -381,7 +390,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				group = NewEventsGroup()
 				eventGroup[tableID] = group
 			}
-			if w.isOldMessage(progress, row, group, partition, message) {
+			if w.isOldMessage(row, group, partition, message) {
 				continue
 			}
 			group.Append(row)
@@ -408,7 +417,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("watermark", ts))
 
-			if w.checkOldMessageForWatermark(progress, ts, partition, message) {
+			if w.checkOldMessageForWatermark(ts, partition, message) {
 				continue
 			}
 
@@ -432,8 +441,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.Int32("partition", partition), zap.Any("offset", message.TopicPartition.Offset))
 
 			}
-			atomic.StoreUint64(&progress.watermark, ts)
-			progress.watermarkOffset = message.TopicPartition.Offset
+			progress.updateWatermark(ts, message.TopicPartition.Offset)
 			needFlush = true
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
@@ -472,28 +480,30 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, mes
 	}
 }
 
-func (w *writer) checkOldMessageForWatermark(progress *partitionProgress, ts uint64, partition int32, message *kafka.Message) bool {
-	watermark := atomic.LoadUint64(&progress.watermark)
-	if ts < watermark {
-		if message.TopicPartition.Offset > progress.watermarkOffset {
-			log.Panic("partition resolved ts fallback, skip it",
-				zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-				zap.Int32("partition", partition))
-		}
-		log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
-			zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-			zap.Int32("partition", partition))
-		return true
+func (w *writer) checkOldMessageForWatermark(ts uint64, partition int32, message *kafka.Message) bool {
+	progress := w.progresses[partition]
+	watermark := progress.loadWatermark()
+	if ts >= watermark {
+		return false
 	}
-	return false
+	if message.TopicPartition.Offset > progress.watermarkOffset {
+		log.Panic("partition resolved ts fallback",
+			zap.Int32("partition", partition),
+			zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset))
+	}
+	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+		zap.Int32("partition", partition),
+		zap.Uint64("ts", ts), zap.Any("offset", message.TopicPartition.Offset),
+		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset))
+	return true
 }
 
-func (w *writer) isOldMessage(progress *partitionProgress, row *model.RowChangedEvent, group *eventsGroup, partition int32, message *kafka.Message) bool {
+func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, partition int32, message *kafka.Message) bool {
 	// if the kafka cluster is normal, this should not hit.
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
-	watermark := atomic.LoadUint64(&progress.watermark)
+	progress := w.progresses[partition]
+	watermark := progress.loadWatermark()
 	if row.CommitTs < group.highWatermark || row.CommitTs < watermark {
 		log.Warn("RowChangedEvent fallback row",
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", message.TopicPartition.Offset),

@@ -50,7 +50,7 @@ func (g *eventsGroup) Resolve(resolve uint64) []*model.RowChangedEvent {
 
 	if len(g.events) != 0 {
 		log.Warn("not all events resolved",
-			zap.Int("length", len(g.events)), zap.Uint64("firstCommitTs", g.events[0].CommitTs))
+			zap.Int("length", len(g.events)), zap.Uint64("resolveTs", resolve), zap.Uint64("firstCommitTs", g.events[0].CommitTs))
 	}
 
 	return result
