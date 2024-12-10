@@ -126,6 +126,40 @@ func TestGenKeys(t *testing.T) {
 	}
 	event3.SetTableID(47)
 
+	event4 := &model.RowChangedEvent{
+		StartTs:   418658114257813514,
+		CommitTs:  418658114257813515,
+		TableInfo: tableInfoWithTwoUniqueKeys,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a1",
+				Value: 12,
+			},
+			{
+				Name:  "a3",
+				Value: 1,
+			},
+		}, tableInfoWithTwoUniqueKeys),
+	}
+	event4.SetTableID(47)
+
+	event5 := &model.RowChangedEvent{
+		StartTs:   418658114257813514,
+		CommitTs:  418658114257813515,
+		TableInfo: tableInfoWithTwoUniqueKeys,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a1",
+				Value: 1,
+			},
+			{
+				Name:  "a3",
+				Value: 21,
+			},
+		}, tableInfoWithTwoUniqueKeys),
+	}
+	event5.SetTableID(47)
+
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected []uint64
@@ -139,12 +173,12 @@ func TestGenKeys(t *testing.T) {
 		expected: []uint64{2072713494, 3710968706},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{event1, event2},
+			Rows: []*model.RowChangedEvent{event4, event5},
 		},
 		expected: []uint64{318190470, 2109733718, 2658640457, 2989258527},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{event3, event2},
+			Rows: []*model.RowChangedEvent{event3, event5},
 		},
 		expected: []uint64{318190470, 2095136920, 2658640457},
 	}}
