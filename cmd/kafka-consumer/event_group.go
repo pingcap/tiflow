@@ -50,7 +50,8 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 		zap.Uint64("commitTs", row.CommitTs),
 		zap.Int64("physicalTableID", row.GetTableID()),
 		zap.String("schema", row.TableInfo.GetSchemaName()),
-		zap.String("table", row.TableInfo.GetTableName()))
+		zap.String("table", row.TableInfo.GetTableName()),
+		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 }
 
 // Resolve will get events where CommitTs is less than resolveTs.
