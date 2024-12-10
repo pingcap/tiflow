@@ -397,13 +397,13 @@ func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
 	tableInfo.TableName.TableID = r.Table.TableID
 	tableInfo.TableName.IsPartition = r.Table.IsPartition
 	row := &RowChangedEvent{
-		StartTs:         r.StartTs,
-		CommitTs:        r.CommitTs,
-		physicalTableID: r.Table.TableID,
-		TableInfo:       tableInfo,
-		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
-		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
+		StartTs:    r.StartTs,
+		CommitTs:   r.CommitTs,
+		TableInfo:  tableInfo,
+		Columns:    Columns2ColumnDatas(r.Columns, tableInfo),
+		PreColumns: Columns2ColumnDatas(r.PreColumns, tableInfo),
 	}
+	row.SetTableID(r.Table.TableID)
 	return row
 }
 
