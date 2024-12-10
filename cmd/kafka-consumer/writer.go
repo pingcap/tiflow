@@ -343,12 +343,13 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					log.Info("simple protocol resolved cached events", zap.Int("resolvedCount", len(cachedEvents)))
 				}
 				for _, row := range cachedEvents {
-					row.TableInfo.TableName.TableID = row.PhysicalTableID
+					tableID := row.GetTableID()
+					row.TableInfo.TableName.TableID = tableID
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
-					group, ok := eventGroup[row.PhysicalTableID]
+					group, ok := eventGroup[tableID]
 					if !ok {
-						group = NewEventsGroup(partition, row.GetTableID())
-						eventGroup[row.PhysicalTableID] = group
+						group = NewEventsGroup(partition, tableID)
+						eventGroup[tableID] = group
 					}
 					if w.isOldMessage(row, group, partition, offset) {
 						continue
@@ -376,14 +377,15 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 
-			tableID := row.PhysicalTableID
-			// simple protocol decoder should have set the table id already.
-			if w.option.protocol != config.ProtocolSimple {
+			tableID := row.GetTableID()
+			switch w.option.protocol {
+			// open-protocol and simple protocol already encode the table id, so there is no need to generate fake table id.
+			case config.ProtocolSimple, config.ProtocolOpen:
+			default:
 				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.PhysicalTableID)
-				row.TableInfo.TableName.TableID = tableID
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 			}
-
+			row.TableInfo.TableName.TableID = tableID
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			group := eventGroup[tableID]
