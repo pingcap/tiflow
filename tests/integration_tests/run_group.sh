@@ -38,7 +38,7 @@ groups=(
 	# G02
 	"$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
 	# G03
-	'row_format drop_many_tables processor_stop_delay partition_table'
+	'row_format drop_many_tables processor_stop_delay partition_table ddl_with_exists'
 	# G04
 	'foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
 	# G05
