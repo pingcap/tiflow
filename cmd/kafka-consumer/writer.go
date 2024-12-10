@@ -375,17 +375,13 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if w.option.protocol == config.ProtocolSimple && row == nil {
 				continue
 			}
+			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			tableID := row.GetTableID()
-			switch w.option.protocol {
-			// open-protocol and simple protocol already encode the table id, so there is no need to generate fake table id.
-			case config.ProtocolSimple, config.ProtocolOpen:
-			default:
+			if tableID != 0 {
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 			}
-			w.checkPartition(row, partition, message.TopicPartition.Offset)
-
 			group := eventGroup[tableID]
 			if group == nil {
 				group = NewEventsGroup(partition, tableID)
