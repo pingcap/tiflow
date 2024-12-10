@@ -293,6 +293,7 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.Uint64("startTs", startTs),
 		zap.String("span", rt.span.String()))
 }
 
@@ -823,9 +824,6 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		log.Info("event feed starts to check locked regions",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID))
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
