@@ -332,17 +332,12 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
-	if subtaskCfg.To.Security != nil {
-		cfg.TiDB.Security.CABytes = subtaskCfg.To.Security.SSLCABytes
-		cfg.TiDB.Security.CertBytes = subtaskCfg.To.Security.SSLCertBytes
-		cfg.TiDB.Security.KeyBytes = subtaskCfg.To.Security.SSLKeyBytes
-	}
+	cfg.TiDB.Security = &globalCfg.Security
 	if subtaskCfg.LoaderConfig.Security != nil {
 		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
 		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
 		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
 	}
-
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
