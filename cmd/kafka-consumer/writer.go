@@ -344,7 +344,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 				for _, row := range cachedEvents {
 					tableID := row.GetTableID()
-					row.TableInfo.TableName.TableID = tableID
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
 					group, ok := eventGroup[tableID]
 					if !ok {
@@ -385,7 +384,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 			}
-			row.TableInfo.TableName.TableID = tableID
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			group := eventGroup[tableID]
@@ -454,14 +452,14 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, off
 	if err != nil {
 		log.Panic("cannot calculate partition for the row changed event",
 			zap.Int32("partition", partition), zap.Any("offset", offset),
-			zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", row.TableInfo.TableName.TableID),
+			zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", row.GetTableID()),
 			zap.Error(err), zap.Any("event", row))
 	}
 	if partition != target {
 		log.Panic("RowChangedEvent dispatched to wrong partition",
 			zap.Int32("partition", partition), zap.Int32("expected", target),
 			zap.Int32("partitionNum", w.option.partitionNum), zap.Any("offset", offset),
-			zap.Int64("tableID", row.TableInfo.TableName.TableID), zap.Any("row", row),
+			zap.Int64("tableID", row.GetTableID()), zap.Any("row", row),
 		)
 	}
 }
@@ -490,14 +488,35 @@ func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, pa
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
 	progress := w.progresses[partition]
 	watermark := progress.loadWatermark()
-	if row.CommitTs < group.highWatermark || row.CommitTs < watermark {
-		log.Warn("RowChangedEvent fallback row",
-			zap.Int64("tableID", row.TableInfo.TableName.TableID), zap.Int32("partition", partition),
+	if row.CommitTs < watermark {
+		log.Warn("RowChangedEvent fallback row, since less than the partition watermark, ignore it",
+			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
+			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
+			zap.Uint64("highWatermark", group.highWatermark),
+			zap.Uint64("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()))
+		return true
+	}
+	if row.CommitTs < group.highWatermark {
+		switch w.option.protocol {
+		case config.ProtocolSimple, config.ProtocolOpen:
+			log.Warn("RowChangedEvent fallback row, since less than the group high watermark, ignore it",
+				zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
+				zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
+				zap.Uint64("highWatermark", group.highWatermark),
+				zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+				zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+				zap.String("protocol", w.option.protocol.String()))
+			return true
+		default:
+		}
+		log.Warn("RowChangedEvent fallback row, since less than the group high watermark, do not ignore it",
+			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("highWatermark", group.highWatermark),
 			zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()))
-		return true
+			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+			zap.String("protocol", w.option.protocol.String()))
 	}
 	return false
 }

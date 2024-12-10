@@ -48,8 +48,7 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 		zap.Int32("partition", g.partition),
 		zap.Any("offset", offset),
 		zap.Uint64("commitTs", row.CommitTs),
-		zap.Int64("physicalTableID", row.PhysicalTableID),
-		zap.Int64("tableID", g.tableID),
+		zap.Int64("physicalTableID", row.GetTableID()),
 		zap.String("schema", row.TableInfo.GetSchemaName()),
 		zap.String("table", row.TableInfo.GetTableName()))
 }
