@@ -497,27 +497,28 @@ func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, pa
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()))
 		return true
 	}
-	if row.CommitTs < group.highWatermark {
-		switch w.option.protocol {
-		case config.ProtocolSimple, config.ProtocolOpen:
-			log.Warn("RowChangedEvent fallback row, since less than the group high watermark, ignore it",
-				zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
-				zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
-				zap.Uint64("highWatermark", group.highWatermark),
-				zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-				zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
-				zap.String("protocol", w.option.protocol.String()))
-			return true
-		default:
-		}
-		log.Warn("RowChangedEvent fallback row, since less than the group high watermark, do not ignore it",
+	if row.CommitTs >= group.highWatermark {
+		return false
+	}
+	switch w.option.protocol {
+	case config.ProtocolSimple, config.ProtocolOpen:
+		log.Warn("RowChangedEvent fallback row, since less than the group high watermark, ignore it",
 			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("highWatermark", group.highWatermark),
 			zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
 			zap.String("protocol", w.option.protocol.String()))
+		return true
+	default:
 	}
+	log.Warn("RowChangedEvent fallback row, since less than the group high watermark, do not ignore it",
+		zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", partition),
+		zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
+		zap.Uint64("highWatermark", group.highWatermark),
+		zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
+		zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+		zap.String("protocol", w.option.protocol.String()))
 	return false
 }
 
