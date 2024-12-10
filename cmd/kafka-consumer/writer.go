@@ -375,7 +375,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			tableID := row.GetTableID()
-			if tableID != 0 {
+			if tableID == 0 {
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 			}
