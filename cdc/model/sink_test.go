@@ -650,7 +650,7 @@ func TestToRedoLog(t *testing.T) {
 	event := &RowChangedEvent{
 		StartTs:         100,
 		CommitTs:        1000,
-		PhysicalTableID: 1,
+		physicalTableID: 1,
 		TableInfo:       tableInfo,
 		Columns: Columns2ColumnDatas([]*Column{
 			{

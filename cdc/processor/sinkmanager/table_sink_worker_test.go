@@ -86,14 +86,15 @@ func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowC
 		{Name: "a", Value: 1},
 	}
 	tableInfo := model.BuildTableInfo("table", "table", columns, nil)
-	return &model.RowChangedEvent{
-		StartTs:         startTs,
-		CommitTs:        commitTs,
-		PhysicalTableID: span.TableID,
-		TableInfo:       tableInfo,
-		Columns:         model.Columns2ColumnDatas(columns, tableInfo),
-		PreColumns:      model.Columns2ColumnDatas(preColumns, tableInfo),
+	result := &model.RowChangedEvent{
+		StartTs:    startTs,
+		CommitTs:   commitTs,
+		TableInfo:  tableInfo,
+		Columns:    model.Columns2ColumnDatas(columns, tableInfo),
+		PreColumns: model.Columns2ColumnDatas(preColumns, tableInfo),
 	}
+	result.SetTableID(span.TableID)
+	return result
 }
 
 type tableSinkWorkerSuite struct {

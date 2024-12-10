@@ -92,7 +92,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	partition := b.headers.GetPartition(b.index)
 	if partition >= 0 {
-		ev.PhysicalTableID = partition
+		ev.SetTableID(partition)
 		ev.TableInfo.TableName.IsPartition = true
 	}
 	b.index++

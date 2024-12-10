@@ -361,40 +361,40 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 			Flag: 0,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			StartTs:         1,
-			CommitTs:        2,
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-				{
-					Name:  "b",
-					Value: "test",
-				},
-			}, tableInfo),
-		},
-		{
-			StartTs:         5,
-			CommitTs:        6,
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 2,
-				},
-				{
-					Name:  "b",
-					Value: "test",
-				},
-			}, tableInfo),
-		},
+	event1 := &model.RowChangedEvent{
+		StartTs:   1,
+		CommitTs:  2,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+			{
+				Name:  "b",
+				Value: "test",
+			},
+		}, tableInfo),
 	}
+	event1.SetTableID(1)
+
+	event2 := &model.RowChangedEvent{
+		StartTs:   5,
+		CommitTs:  6,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 2,
+			},
+			{
+				Name:  "b",
+				Value: "test",
+			},
+		}, tableInfo),
+	}
+	event2.SetTableID(1)
+	rows := []*model.RowChangedEvent{event1, event2}
 
 	var flushedTs uint64 = 0
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -423,28 +423,28 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-			}, tableInfo),
-		},
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 2,
-				},
-			}, tableInfo),
-		},
+	event1 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+		}, tableInfo),
 	}
+	event1.SetTableID(1)
+
+	event2 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 2,
+			},
+		}, tableInfo),
+	}
+	event2.SetTableID(1)
+	rows := []*model.RowChangedEvent{event1, event2}
 
 	errDatabaseNotExists := &dmysql.MySQLError{
 		Number: uint16(infoschema.ErrDatabaseNotExists.Code()),
@@ -490,28 +490,28 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 			Value: 1,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-			}, tableInfo),
-		},
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 2,
-				},
-			}, tableInfo),
-		},
+	event1 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+		}, tableInfo),
 	}
+	event1.SetTableID(1)
+
+	event2 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 2,
+			},
+		}, tableInfo),
+	}
+	event2.SetTableID(1)
+	rows := []*model.RowChangedEvent{event1, event2}
 
 	errTableNotExists := &dmysql.MySQLError{
 		Number: uint16(infoschema.ErrTableNotExists.Code()),
@@ -557,28 +557,27 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 			Value: 1,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-			}, tableInfo),
-		},
-		{
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 2,
-				},
-			}, tableInfo),
-		},
+	event1 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+		}, tableInfo),
 	}
+	event1.SetTableID(1)
+	event2 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 2,
+			},
+		}, tableInfo),
+	}
+	event2.SetTableID(1)
+	rows := []*model.RowChangedEvent{event1, event2}
 
 	errLockDeadlock := &dmysql.MySQLError{
 		Number: mysql.ErrLockDeadlock,
@@ -627,21 +626,20 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 			Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			StartTs:         2,
-			CommitTs:        3,
-			ReplicatingTs:   1,
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-			}, tableInfo),
-		},
+	event := &model.RowChangedEvent{
+		StartTs:       2,
+		CommitTs:      3,
+		ReplicatingTs: 1,
+		TableInfo:     tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+		}, tableInfo),
 	}
+	event.SetTableID(1)
+	rows := []*model.RowChangedEvent{event}
 
 	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -812,40 +810,40 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			Flag: 0,
 		},
 	}, [][]int{{0}})
-	rows := []*model.RowChangedEvent{
-		{
-			StartTs:         1,
-			CommitTs:        2,
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 1,
-				},
-				{
-					Name:  "b",
-					Value: "test",
-				},
-			}, tableInfo),
-		},
-		{
-			StartTs:         2,
-			CommitTs:        3,
-			TableInfo:       tableInfo,
-			PhysicalTableID: 1,
-			Columns: model.Columns2ColumnDatas([]*model.Column{
-				{
-					Name:  "a",
-					Value: 2,
-				},
-				{
-					Name:  "b",
-					Value: "test",
-				},
-			}, tableInfo),
-		},
+	event1 := &model.RowChangedEvent{
+		StartTs:   1,
+		CommitTs:  2,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 1,
+			},
+			{
+				Name:  "b",
+				Value: "test",
+			},
+		}, tableInfo),
 	}
+	event1.SetTableID(1)
+
+	event2 := &model.RowChangedEvent{
+		StartTs:   2,
+		CommitTs:  3,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a",
+				Value: 2,
+			},
+			{
+				Name:  "b",
+				Value: "test",
+			},
+		}, tableInfo),
+	}
+	event2.SetTableID(1)
+	rows := []*model.RowChangedEvent{event1, event2}
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},

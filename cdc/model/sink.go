@@ -329,7 +329,7 @@ type RowChangedEvent struct {
 
 	RowID int64 // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	PhysicalTableID int64
+	physicalTableID int64
 
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
@@ -399,7 +399,7 @@ func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
 	row := &RowChangedEvent{
 		StartTs:         r.StartTs,
 		CommitTs:        r.CommitTs,
-		PhysicalTableID: r.Table.TableID,
+		physicalTableID: r.Table.TableID,
 		TableInfo:       tableInfo,
 		Columns:         Columns2ColumnDatas(r.Columns, tableInfo),
 		PreColumns:      Columns2ColumnDatas(r.PreColumns, tableInfo),
@@ -436,7 +436,12 @@ func (e txnRows) Swap(i, j int) {
 
 // GetTableID returns the table ID of the event.
 func (r *RowChangedEvent) GetTableID() int64 {
-	return r.PhysicalTableID
+	return r.physicalTableID
+}
+
+// SetTableID set the row event physical table id
+func (r *RowChangedEvent) SetTableID(tableID int64) {
+	r.physicalTableID = tableID
 }
 
 // GetCommitTs returns the commit timestamp of this event.
@@ -701,7 +706,7 @@ func NewIncrementalColumnIDAllocator() *IncrementalColumnIDAllocator {
 }
 
 // GetColumnID return the next mock column id
-func (d *IncrementalColumnIDAllocator) GetColumnID(name string) int64 {
+func (d *IncrementalColumnIDAllocator) GetColumnID(_ string) int64 {
 	result := d.nextColID
 	d.nextColID += 1
 	return result

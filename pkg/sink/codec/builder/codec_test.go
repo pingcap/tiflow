@@ -373,7 +373,7 @@ func benchmarkProtobuf1Decoding(b *testing.B) []*model.RowChangedEvent {
 		ev.Columns = model.Columns2ColumnDatas(codecDecodeRowChangedPB1(value.NewValue), ev.TableInfo)
 		ev.CommitTs = key.Ts
 		if key.Partition >= 0 {
-			ev.PhysicalTableID = key.Partition
+			ev.SetTableID(key.Partition)
 			ev.TableInfo.TableName.IsPartition = true
 		}
 		result = append(result, ev)
@@ -431,7 +431,7 @@ func benchmarkProtobuf2Decoding(b *testing.B) []*model.RowChangedEvent {
 			}
 			ev.CommitTs = ts
 			if keys.Partition[i] >= 0 {
-				ev.PhysicalTableID = keys.Partition[i]
+				ev.SetTableID(keys.Partition[i])
 				ev.TableInfo.TableName.IsPartition = true
 			}
 			result = append(result, ev)

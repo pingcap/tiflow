@@ -75,6 +75,57 @@ func TestGenKeys(t *testing.T) {
 		},
 	}, [][]int{{0}, {1}})
 
+	event1 := &model.RowChangedEvent{
+		StartTs:   418658114257813514,
+		CommitTs:  418658114257813515,
+		TableInfo: tableInfoWithOneCompositeUniqueKey,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a1",
+				Value: 12,
+			},
+			{
+				Name:  "a3",
+				Value: 1,
+			},
+		}, tableInfoWithOneCompositeUniqueKey),
+	}
+	event1.SetTableID(47)
+
+	event2 := &model.RowChangedEvent{
+		StartTs:   418658114257813514,
+		CommitTs:  418658114257813515,
+		TableInfo: tableInfoWithOneCompositeUniqueKey,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a1",
+				Value: 1,
+			},
+			{
+				Name:  "a3",
+				Value: 21,
+			},
+		}, tableInfoWithOneCompositeUniqueKey),
+	}
+	event2.SetTableID(47)
+	
+	event3 := &model.RowChangedEvent{
+		StartTs:   418658114257813514,
+		CommitTs:  418658114257813515,
+		TableInfo: tableInfoWithTwoUniqueKeys,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "a1",
+				Value: nil,
+			},
+			{
+				Name:  "a3",
+				Value: nil,
+			},
+		}, tableInfoWithTwoUniqueKeys),
+	}
+	event3.SetTableID(47)
+
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected []uint64
@@ -83,113 +134,17 @@ func TestGenKeys(t *testing.T) {
 		expected: nil,
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
-				{
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					PhysicalTableID: 47,
-					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: 12,
-						},
-						{
-							Name:  "a3",
-							Value: 1,
-						},
-					}, tableInfoWithOneCompositeUniqueKey),
-				}, {
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					PhysicalTableID: 47,
-					TableInfo:       tableInfoWithOneCompositeUniqueKey,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: 1,
-						},
-						{
-							Name:  "a3",
-							Value: 21,
-						},
-					}, tableInfoWithOneCompositeUniqueKey),
-				},
-			},
+			Rows: []*model.RowChangedEvent{event1, event2},
 		},
 		expected: []uint64{2072713494, 3710968706},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
-				{
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					PhysicalTableID: 47,
-					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: 12,
-						},
-						{
-							Name:  "a3",
-							Value: 1,
-						},
-					}, tableInfoWithTwoUniqueKeys),
-				}, {
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: 1,
-						},
-						{
-							Name:  "a3",
-							Value: 21,
-						},
-					}, tableInfoWithTwoUniqueKeys),
-				},
-			},
+			Rows: []*model.RowChangedEvent{event1, event2},
 		},
 		expected: []uint64{318190470, 2109733718, 2658640457, 2989258527},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
-				{
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					PhysicalTableID: 47,
-					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: nil,
-						},
-						{
-							Name:  "a3",
-							Value: nil,
-						},
-					}, tableInfoWithTwoUniqueKeys),
-				}, {
-					StartTs:         418658114257813514,
-					CommitTs:        418658114257813515,
-					TableInfo:       tableInfoWithTwoUniqueKeys,
-					PhysicalTableID: 47,
-					PreColumns: model.Columns2ColumnDatas([]*model.Column{
-						{
-							Name:  "a1",
-							Value: 1,
-						},
-						{
-							Name:  "a3",
-							Value: 21,
-						},
-					}, tableInfoWithTwoUniqueKeys),
-				},
-			},
+			Rows: []*model.RowChangedEvent{event3, event2},
 		},
 		expected: []uint64{318190470, 2095136920, 2658640457},
 	}}
