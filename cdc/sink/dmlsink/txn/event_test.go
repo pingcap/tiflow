@@ -108,7 +108,7 @@ func TestGenKeys(t *testing.T) {
 		}, tableInfoWithOneCompositeUniqueKey),
 	}
 	event2.SetTableID(47)
-	
+
 	event3 := &model.RowChangedEvent{
 		StartTs:   418658114257813514,
 		CommitTs:  418658114257813515,
