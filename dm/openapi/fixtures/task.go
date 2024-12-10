@@ -51,12 +51,7 @@ var (
 		  "password": "123456",
 		  "port": 4000,
 		  "user": "root",
-		  "security": {
-        	  "ssl_ca_content": "fake_ssl_ca_content",
-              "ssl_cert_content": "fake_ssl_cert_content",
-        	  "ssl_key_content": "fake_ssl_key_content",
-			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
-            }
+		  "security": null,
 		},
 		"task_mode": "all",
 		"strict_optimistic_shard_mode": false
@@ -156,7 +151,12 @@ var (
 		  "host": "root",
 		  "password": "123456",
 		  "port": 4000,
-		  "security": null,
+		  "security": {
+        	  "ssl_ca_content": "fake_ssl_ca_content",
+              "ssl_cert_content": "fake_ssl_cert_content",
+        	  "ssl_key_content": "fake_ssl_key_content",
+			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
+          },
 		  "user": "root"
 		},
 		"task_mode": "all"
