@@ -40,6 +40,53 @@ func NewIndexValueDispatcher(indexName string) *IndexValueDispatcher {
 	}
 }
 
+// IsPartitionKeyUpdated returns whether the partition key is updated.
+func (r *IndexValueDispatcher) IsPartitionKeyUpdated(row *model.RowChangedEvent) (bool, error) {
+	if !row.IsUpdate() {
+		return false, nil
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// the most normal case, index-name is not set, use the handle key columns.
+	if r.IndexName == "" {
+		tableInfo := row.TableInfo
+		for idx, col := range row.Columns {
+			if col == nil {
+				continue
+			}
+			if tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
+				preCol := row.PreColumns[idx]
+				if !col.Equal(preCol) {
+					return true, nil
+				}
+			}
+		}
+	} else {
+		_, offsets, ok := row.TableInfo.IndexByName(r.IndexName)
+		if !ok {
+			log.Error("index not found when dispatch event",
+				zap.Any("tableName", row.TableInfo.GetTableName()),
+				zap.String("indexName", r.IndexName))
+			return false, errors.ErrDispatcherFailed.GenWithStack(
+				"index not found when dispatch event, table: %v, index: %s", row.TableInfo.GetTableName(), r.IndexName)
+		}
+		for _, idx := range offsets {
+			col := row.Columns[idx]
+			preCol := row.PreColumns[idx]
+			if col == nil || preCol == nil {
+				// TODO: handle the case where the column is nil
+				continue
+			}
+			if !col.Equal(preCol) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
@@ -83,5 +130,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	}
 
 	sum32 := r.hasher.Sum32()
+	log.Debug("dispatch row changed event", zap.String("table", row.TableInfo.GetTableName()),
+		zap.Int32("partitionNum", partitionNum), zap.Uint32("sum32", sum32))
 	return int32(sum32 % uint32(partitionNum)), strconv.FormatInt(int64(sum32), 10), nil
 }
