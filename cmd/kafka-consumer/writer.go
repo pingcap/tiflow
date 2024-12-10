@@ -350,10 +350,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 						group = NewEventsGroup(partition, tableID)
 						eventGroup[tableID] = group
 					}
-					if w.isOldMessage(row, group, progress, offset) {
-						continue
-					}
-					group.Append(row, offset)
+					w.appendRow2Group(row, group, progress, offset)
 				}
 			}
 
@@ -387,10 +384,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				group = NewEventsGroup(partition, tableID)
 				eventGroup[tableID] = group
 			}
-			if w.isOldMessage(row, group, progress, offset) {
-				continue
-			}
-			group.Append(row, offset)
+			w.appendRow2Group(row, group, progress, offset)
 		case model.MessageTypeResolved:
 			newWatermark, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -479,24 +473,16 @@ func (w *writer) checkOldMessageForWatermark(newWatermark uint64, partition int3
 	return true
 }
 
-func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, progress *partitionProgress, offset kafka.Offset) bool {
+func (w *writer) appendRow2Group(row *model.RowChangedEvent, group *eventsGroup, progress *partitionProgress, offset kafka.Offset) {
 	// if the kafka cluster is normal, this should not hit.
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
 	watermark := progress.loadWatermark()
-	if row.CommitTs < watermark {
-		log.Warn("RowChangedEvent fallback row, since less than the partition watermark, ignore it",
-			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", progress.partition),
-			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
-			zap.Uint64("highWatermark", group.highWatermark),
-			zap.Uint64("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
-			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()))
-		return true
-	}
 	if row.CommitTs >= group.highWatermark {
-		return false
+		group.Append(row, offset)
+		return
 	}
 	switch w.option.protocol {
-	case config.ProtocolSimple, config.ProtocolOpen:
+	case config.ProtocolSimple:
 		log.Warn("RowChangedEvent fallback row, since less than the group high watermark, ignore it",
 			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", progress.partition),
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
@@ -504,8 +490,12 @@ func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, pr
 			zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
 			zap.String("protocol", w.option.protocol.String()))
-		return true
+		return
 	default:
+		// open-protocol does not set the table id for normal table, only for partition table.
+		// canal-json does not set table id for all messages.
+		// in the partition table case, all partition tables have the same table id, use the same progress,
+		// so it's hard to know whether the fallback row comes from the same table partition or not, so do not ignore the row.
 	}
 	log.Warn("RowChangedEvent fallback row, since less than the group high watermark, do not ignore it",
 		zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", progress.partition),
@@ -514,7 +504,7 @@ func (w *writer) isOldMessage(row *model.RowChangedEvent, group *eventsGroup, pr
 		zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 		zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
 		zap.String("protocol", w.option.protocol.String()))
-	return false
+	group.Append(row, offset)
 }
 
 type fakeTableIDGenerator struct {
