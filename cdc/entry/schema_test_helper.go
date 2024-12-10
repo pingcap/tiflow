@@ -166,13 +166,23 @@ func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 // DML2Event execute the dml and return the corresponding row changed event.
 // caution: it does not support `delete` since the key value cannot be found
 // after the query executed.
-func (s *SchemaTestHelper) DML2Event(dml string, schema, table string) *model.RowChangedEvent {
+func (s *SchemaTestHelper) DML2Event(dml string, schema, table string, partitionID ...string) *model.RowChangedEvent {
 	s.tk.MustExec(dml)
 
 	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(schema, table)
 	require.True(s.t, ok)
 
-	key, value := s.getLastKeyValue(tableInfo.ID)
+	tableID := tableInfo.ID
+
+	var partitionTableID int64 = -1
+	if len(partitionID) == 1 {
+		partitionTableID = tableInfo.TableInfo.GetPartitionInfo().GetPartitionIDByName(partitionID[0])
+	}
+	if partitionTableID != -1 {
+		tableID = partitionTableID
+	}
+
+	key, value := s.getLastKeyValue(tableID)
 	ts := s.schemaStorage.GetLastSnapshot().CurrentTs()
 	rawKV := &model.RawKVEntry{
 		OpType:   model.OpTypePut,

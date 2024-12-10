@@ -714,13 +714,6 @@ type NameBasedColumnIDAllocator struct {
 	nameToIDMap map[string]int64
 }
 
-// NewNameBasedColumnIDAllocator creates a new NameBasedColumnIDAllocator
-func NewNameBasedColumnIDAllocator(nameToIDMap map[string]int64) *NameBasedColumnIDAllocator {
-	return &NameBasedColumnIDAllocator{
-		nameToIDMap: nameToIDMap,
-	}
-}
-
 // GetColumnID return the column id of the name
 func (n *NameBasedColumnIDAllocator) GetColumnID(name string) int64 {
 	colID, ok := n.nameToIDMap[name]
