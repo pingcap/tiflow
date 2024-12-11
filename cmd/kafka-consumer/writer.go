@@ -343,8 +343,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					log.Info("simple protocol resolved cached events", zap.Int("resolvedCount", len(cachedEvents)))
 				}
 				for _, row := range cachedEvents {
-					tableID := row.GetTableID()
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
+					tableID := w.fakeTableIDGenerator.
+						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.GetTableID())
+					row.PhysicalTableID = tableID
 					group, ok := eventGroup[tableID]
 					if !ok {
 						group = NewEventsGroup(partition, tableID)
