@@ -325,15 +325,16 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if simple, ok := decoder.(*simple.Decoder); ok {
 				cachedEvents := simple.GetCachedEvents()
 				for _, row := range cachedEvents {
-					row.TableInfo.TableName.TableID = row.PhysicalTableID
+					tableID := row.GetTableID()
+					row.TableInfo.TableName.TableID = tableID
 					w.checkPartition(row, partition, message)
 					if w.checkOldMessage(progress, row.CommitTs, row, partition, message) {
 						continue
 					}
-					group, ok := eventGroup[row.PhysicalTableID]
+					group, ok := eventGroup[tableID]
 					if !ok {
 						group = NewEventsGroup()
-						eventGroup[row.PhysicalTableID] = group
+						eventGroup[tableID] = group
 					}
 					group.Append(row)
 				}
@@ -363,11 +364,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 
-			tableID := row.PhysicalTableID
+			tableID := row.GetTableID()
 			// simple protocol decoder should have set the table id already.
 			if w.option.protocol != config.ProtocolSimple {
 				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.PhysicalTableID)
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 				row.TableInfo.TableName.TableID = tableID
 			}
 
@@ -387,7 +388,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				zap.Int32("partition", partition),
 				zap.Any("offset", message.TopicPartition.Offset),
 				zap.Uint64("commitTs", row.CommitTs),
-				zap.Int64("physicalTableID", row.PhysicalTableID),
 				zap.Int64("tableID", tableID),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()))

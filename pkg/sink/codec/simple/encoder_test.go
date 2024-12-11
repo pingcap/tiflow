@@ -269,7 +269,7 @@ func TestE2EPartitionTable(t *testing.T) {
 
 			decodedEvent, err := decoder.NextRowChangedEvent()
 			require.NoError(t, err)
-			// table id should be set to the partition table id, the PhysicalTableID
+			// table id should be set to the partition table id, the physicalTableID
 			require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
 		}
 	}
