@@ -374,12 +374,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
-			tableID := row.GetTableID()
-			if tableID == 0 {
-				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
-			}
+			tableID := w.fakeTableIDGenerator.
+				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.GetTableID())
+			row.PhysicalTableID = tableID
 			group := eventGroup[tableID]
 			if group == nil {
 				group = NewEventsGroup(partition, tableID)
