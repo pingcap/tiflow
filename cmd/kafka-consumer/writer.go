@@ -240,7 +240,8 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 		// and write to the sink, but not flush yet, flush all events here.
 		todoDDL := w.getFrontDDL()
 		if todoDDL == nil {
-			log.Warn("todo ddl is nil, this should not happen")
+			log.Warn("todo ddl is nil, this should not happen",
+				zap.Any("messageType", messageType))
 		}
 		w.forEachPartition(func(p *partitionProgress) {
 			syncFlushRowChangedEvents(ctx, p, todoDDL.CommitTs)
