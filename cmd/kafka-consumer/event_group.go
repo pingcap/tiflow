@@ -14,12 +14,12 @@
 package main
 
 import (
-	"github.com/pingcap/tiflow/pkg/config"
 	"sort"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
