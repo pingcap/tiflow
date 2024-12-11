@@ -185,11 +185,12 @@ function test_relay() {
 
 }
 
-function test_dump_task() {
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump TASK"
+function test_dump_and_load_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump & load TASK"
 	prepare_database
 
-	task_name="test-dump"
+	task_name_dump="test-dump"
+	task_name_load="test-load"
 
 	# create source successfully
 	openapi_source_check "create_source1_success"
@@ -210,23 +211,40 @@ function test_dump_task() {
 	# create dump task success
 	openapi_task_check "create_dump_task_success"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name" \
+		"query-status $task_name_dump" \
 		"\"stage\": \"Stopped\"" 1
-	openapi_task_check "check_task_stage_success" $task_name 1 "Stopped"
 
 	init_dump_data
 
 	# start dump task success
-	openapi_task_check "start_task_success" $task_name ""
+	openapi_task_check "start_task_success" $task_name_dump ""
 
 	# wait dump task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name" 100 \
+		"query-status $task_name_dump" 100 \
 		"\"stage\": \"Finished\"" 1
-	openapi_task_check "check_dump_task_finished_status_success" $task_name 2 2 4 4 228
+	openapi_task_check "check_dump_task_finished_status_success" $task_name_dump 2 2 4 4 228
+
+	# create load task success
+	openapi_task_check "create_load_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_load" \
+		"\"stage\": \"Stopped\"" 1
+
+	# use the data from the same dir of dump task
+
+	# start load task success
+	openapi_task_check "start_task_success" $task_name_load ""
+
+	# wait load task finish
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name_load" 100 \
+		"\"stage\": \"Finished\"" 1
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard_one_source.toml
 
 	clean_cluster_sources_and_tasks
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: dump TASK"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI:  dump & load TASK"
 
 }
 
@@ -1149,7 +1167,7 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
-	test_dump_task
+	test_dump_and_load_task
 	test_task_templates
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
