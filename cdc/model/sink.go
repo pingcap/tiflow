@@ -325,8 +325,6 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	PhysicalTableID int64
-
 	// Table contains the table name and table ID.
 	// NOTICE: We store the physical table ID here, not the logical table ID.
 	Table    *TableName         `json:"table" msg:"table"`
@@ -390,7 +388,7 @@ func (e txnRows) Swap(i, j int) {
 
 // GetTableID returns the table ID of the event.
 func (r *RowChangedEvent) GetTableID() int64 {
-	return r.PhysicalTableID
+	return r.Table.TableID
 }
 
 // GetCommitTs returns the commit timestamp of this event.

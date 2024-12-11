@@ -387,6 +387,7 @@ func buildRowChangedEvent(
 		TableInfo: tableInfo,
 		Table:     &tableInfo.TableName,
 	}
+	result.Table.TableID = msg.TableID
 
 	result.Columns = decodeColumns(msg.Data, tableInfo)
 	result.PreColumns = decodeColumns(msg.Old, tableInfo)

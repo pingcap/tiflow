@@ -16,6 +16,7 @@ package open
 import (
 	"context"
 	"database/sql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
