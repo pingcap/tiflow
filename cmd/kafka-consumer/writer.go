@@ -222,9 +222,6 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 	for _, p := range w.progresses {
 		wg.Add(1)
 		go func(p *partitionProgress) {
-			if p == nil {
-				log.Warn("partition progress is nil")
-			}
 			defer wg.Done()
 			fn(p)
 		}(p)
@@ -239,10 +236,6 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 		// DDL is a strong sync point, which means all data before the DDL must be received
 		// and write to the sink, but not flush yet, flush all events here.
 		todoDDL := w.getFrontDDL()
-		if todoDDL == nil {
-			log.Warn("todo ddl is nil, this should not happen",
-				zap.Any("messageType", messageType))
-		}
 		w.forEachPartition(func(p *partitionProgress) {
 			syncFlushRowChangedEvents(ctx, p, todoDDL.CommitTs)
 		})
@@ -334,10 +327,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl, offset)
+				w.resolveRowChangedEvents(eventGroup, ddl.CommitTs, progress)
+				progress.updateWatermark(ddl.CommitTs, offset)
+				needFlush = true
 			}
-			w.resolveRowChangedEvents(eventGroup, ddl.CommitTs, progress)
-			progress.updateWatermark(ddl.CommitTs, offset)
-			needFlush = true
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
