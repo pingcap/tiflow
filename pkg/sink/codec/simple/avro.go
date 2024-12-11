@@ -248,7 +248,7 @@ func (a *avroMarshaller) newDMLMessageMap(
 		"version":       defaultVersion,
 		"database":      event.TableInfo.GetSchemaName(),
 		"table":         event.TableInfo.GetTableName(),
-		"tableID":       event.TableInfo.ID,
+		"tableID":       event.GetTableID(),
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
 		"schemaVersion": int64(event.TableInfo.UpdateTS),

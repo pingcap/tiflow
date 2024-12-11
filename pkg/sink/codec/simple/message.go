@@ -385,7 +385,11 @@ func buildRowChangedEvent(
 	result := &model.RowChangedEvent{
 		CommitTs:  msg.CommitTs,
 		TableInfo: tableInfo,
-		Table:     &tableInfo.TableName,
+		Table: &model.TableName{
+			Schema:  tableInfo.TableName.Schema,
+			Table:   tableInfo.TableName.Table,
+			TableID: msg.TableID,
+		},
 	}
 
 	result.Columns = decodeColumns(msg.Data, tableInfo)
@@ -587,7 +591,7 @@ func (a *jsonMarshaller) newDMLMessage(
 		Version:            defaultVersion,
 		Schema:             event.TableInfo.GetSchemaName(),
 		Table:              event.TableInfo.GetTableName(),
-		TableID:            event.TableInfo.ID,
+		TableID:            event.GetTableID(),
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),
 		SchemaVersion:      event.TableInfo.UpdateTS,
