@@ -244,26 +244,15 @@ func (a *avroMarshaller) newDMLMessageMap(
 	onlyHandleKey bool,
 	claimCheckFileName string,
 ) map[string]interface{} {
-<<<<<<< HEAD
 	m := map[string]interface{}{
 		"version":       defaultVersion,
 		"database":      event.TableInfo.GetSchemaName(),
 		"table":         event.TableInfo.GetTableName(),
-		"tableID":       event.TableInfo.ID,
+		"tableID":       event.GetTableID(),
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
 		"schemaVersion": int64(event.TableInfo.UpdateTS),
 	}
-=======
-	dmlMessagePayload := dmlMessagePayloadPool.Get().(map[string]interface{})
-	dmlMessagePayload["version"] = defaultVersion
-	dmlMessagePayload["database"] = event.TableInfo.GetSchemaName()
-	dmlMessagePayload["table"] = event.TableInfo.GetTableName()
-	dmlMessagePayload["tableID"] = event.GetTableID()
-	dmlMessagePayload["commitTs"] = int64(event.CommitTs)
-	dmlMessagePayload["buildTs"] = time.Now().UnixMilli()
-	dmlMessagePayload["schemaVersion"] = int64(event.TableInfo.UpdateTS)
->>>>>>> b8e69ab3b8 (codec(ticdc): simple protocol set table id by using the physical table id (#11845))
 
 	if !a.config.LargeMessageHandle.Disabled() && onlyHandleKey {
 		m["handleKeyOnly"] = map[string]interface{}{
