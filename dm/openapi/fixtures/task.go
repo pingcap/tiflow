@@ -31,7 +31,15 @@ var (
 		  "full_migrate_conf": {
 			"data_dir": "./exported_data",
 			"export_threads": 4,
-			"import_threads": 16
+			"import_threads": 16,
+			"import_mode": "physical",
+			"pd_addr": "https://127.0.0.1:2379",
+			"security": {
+				"ssl_ca_content": "fake_ssl_ca_content_2",
+				"ssl_cert_content": "fake_ssl_cert_content_2",
+				"ssl_key_content": "fake_ssl_key_content_2",
+				"cert_allowed_cn": ["PD1", "PD2"]
+			}
 		  },
 		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
 		  "source_conf": [{ "source_name": "mysql-replica-01" }]
@@ -59,18 +67,6 @@ var (
 		  "user": "root"
 		},
 		"task_mode": "all",
-		"task_source_config": {
-            "full_migrate_conf": {
-                "import_mode": "physical",
-                "pd_addr": "https://127.0.0.1:2379",
-                "security": {
-                    "ssl_ca_content": "fake_ssl_ca_content_2",
-                    "ssl_cert_content": "fake_ssl_cert_content_2",
-                    "ssl_key_content": "fake_ssl_key_content_2",
-					"cert_allowed_cn": ["PD1", "PD2"]
-                }
-            }
-        },
 		"strict_optimistic_shard_mode": false
 	}
 	`

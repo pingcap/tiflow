@@ -136,11 +136,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(string(subTaskConfig.To.Security.SSLCABytes), check.Equals, task.TargetConfig.Security.SslCaContent)
 	c.Assert(string(subTaskConfig.To.Security.SSLCertBytes), check.Equals, task.TargetConfig.Security.SslCertContent)
 	c.Assert(string(subTaskConfig.To.Security.SSLKeyBytes), check.Equals, task.TargetConfig.Security.SslKeyContent)
-	c.Assert(subTaskConfig.To.Security.CertAllowedCN, check.Equals, task.TargetConfig.Security.CertAllowedCn)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCert), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
+	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
 	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
 	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLKeyBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKeyContent)
-	c.Assert(subTaskConfig.LoaderConfig.Security.CertAllowedCN, check.Equals, task.SourceConfig.FullMigrateConf.Security.CertAllowedCn)
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
@@ -160,12 +158,6 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
-		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
-			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
-		},
 	}
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1, source2Name: sourceCfg2}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
@@ -306,6 +298,12 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+		Security: &security.Security{
+			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
+		},
 	}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	c.Assert(err, check.IsNil)
@@ -392,6 +390,12 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+		Security: &security.Security{
+			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
+		},
 	}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	require.NoError(t, err)
