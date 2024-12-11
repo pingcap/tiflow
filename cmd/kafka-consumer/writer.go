@@ -374,12 +374,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
-			tableID := row.GetTableID()
-			if tableID == 0 {
-				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
-			}
+			tableID := w.fakeTableIDGenerator.
+				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.GetTableID())
+			row.PhysicalTableID = tableID
 			group := eventGroup[tableID]
 			if group == nil {
 				group = NewEventsGroup(partition, tableID)
@@ -513,11 +510,8 @@ type fakeTableIDGenerator struct {
 	currentTableID int64
 }
 
-func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
-	key := quotes.QuoteSchema(schema, table)
-	if partition != 0 {
-		key = fmt.Sprintf("%s.`%d`", key, partition)
-	}
+func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, tableID int64) int64 {
+	key := fmt.Sprintf("`%s`.`%s`.`%d`", quotes.EscapeName(schema), quotes.EscapeName(table), tableID)
 	if tableID, ok := g.tableIDs[key]; ok {
 		return tableID
 	}
