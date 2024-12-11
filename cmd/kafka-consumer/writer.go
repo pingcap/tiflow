@@ -401,7 +401,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			progress.updateWatermark(newWatermark, offset)
 			needFlush = true
 			for tableID, group := range eventGroup {
-				events := group.Resolve(newWatermark)
+				events := group.Resolve(newWatermark, w.option.protocol)
 				if len(events) == 0 {
 					continue
 				}
