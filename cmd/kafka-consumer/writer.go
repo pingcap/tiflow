@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -217,17 +216,6 @@ func (w *writer) popDDL() {
 	}
 }
 
-func (w *writer) getMinWatermark() uint64 {
-	result := uint64(math.MaxUint64)
-	for _, p := range w.progresses {
-		watermark := p.loadWatermark()
-		if watermark < result {
-			result = watermark
-		}
-	}
-	return result
-}
-
 // partition progress could be executed at the same time
 func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 	var wg sync.WaitGroup
@@ -243,42 +231,24 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 
 // Write will synchronously write data downstream
 func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool {
-	watermark := w.getMinWatermark()
-	var todoDDL *model.DDLEvent
-	for {
-		todoDDL = w.getFrontDDL()
-		// watermark is the min value for all partitions,
-		// the DDL only executed by the first partition, other partitions may be slow
-		// so that the watermark can be smaller than the DDL's commitTs,
-		// which means some DML events may not be consumed yet, so cannot execute the DDL right now.
-		if todoDDL == nil || todoDDL.CommitTs > watermark {
-			break
-		}
-		// flush DMLs
-		w.forEachPartition(func(sink *partitionProgress) {
-			syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+	switch messageType {
+	case model.MessageTypeDDL:
+		// DDL is a strong sync point, which means all data before the DDL must be received
+		// and write to the sink, but not flush yet, flush all events here.
+		todoDDL := w.getFrontDDL()
+		w.forEachPartition(func(p *partitionProgress) {
+			syncFlushRowChangedEvents(ctx, p, todoDDL.CommitTs)
 		})
-		// DDL can be executed, do it first.
 		if err := w.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 			log.Panic("write DDL event failed", zap.Error(err),
 				zap.String("DDL", todoDDL.Query), zap.Uint64("commitTs", todoDDL.CommitTs))
 		}
 		w.popDDL()
-	}
-
-	if messageType == model.MessageTypeResolved {
-		w.forEachPartition(func(sink *partitionProgress) {
-			syncFlushRowChangedEvents(ctx, sink, watermark)
+	case model.MessageTypeResolved:
+		w.forEachPartition(func(p *partitionProgress) {
+			syncFlushRowChangedEvents(ctx, p, p.loadWatermark())
 		})
-	}
-
-	// The DDL events will only execute in partition0
-	if messageType == model.MessageTypeDDL && todoDDL != nil {
-		log.Info("DDL event will be flushed in the future",
-			zap.Uint64("watermark", watermark),
-			zap.Uint64("CommitTs", todoDDL.CommitTs),
-			zap.String("Query", todoDDL.Query))
-		return false
+	default:
 	}
 	return true
 }
@@ -358,6 +328,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if partition == 0 && ddl.Query != "" {
 				w.appendDDL(ddl, offset)
 			}
+			w.resolveRowChangedEvents(eventGroup, ddl.CommitTs, progress)
+			progress.updateWatermark(ddl.CommitTs, offset)
 			needFlush = true
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -398,27 +370,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 
+			w.resolveRowChangedEvents(eventGroup, newWatermark, progress)
 			progress.updateWatermark(newWatermark, offset)
 			needFlush = true
-			for tableID, group := range eventGroup {
-				events := group.Resolve(newWatermark, w.option.protocol)
-				if len(events) == 0 {
-					continue
-				}
-				tableSink, ok := progress.tableSinkMap.Load(tableID)
-				if !ok {
-					tableSink = w.sinkFactory.CreateTableSinkForConsumer(
-						model.DefaultChangeFeedID("kafka-consumer"),
-						spanz.TableIDToComparableSpan(tableID),
-						events[0].CommitTs,
-					)
-					progress.tableSinkMap.Store(tableID, tableSink)
-				}
-				tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
-				log.Debug("append row changed events to table sink",
-					zap.Uint64("watermark", newWatermark), zap.Int64("tableID", tableID), zap.Int("count", len(events)),
-					zap.Int32("partition", partition), zap.Any("offset", offset))
-			}
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
 				zap.Int32("partition", partition), zap.Any("offset", offset))
@@ -436,6 +390,25 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	}
 	// flush when received DDL event or resolvedTs
 	return w.Write(ctx, messageType)
+}
+
+func (w *writer) resolveRowChangedEvents(eventGroup map[int64]*eventsGroup, newWatermark uint64, progress *partitionProgress) {
+	for tableID, group := range eventGroup {
+		events := group.Resolve(newWatermark, w.option.protocol)
+		if len(events) == 0 {
+			continue
+		}
+		tableSink, ok := progress.tableSinkMap.Load(tableID)
+		if !ok {
+			tableSink = w.sinkFactory.CreateTableSinkForConsumer(
+				model.DefaultChangeFeedID("kafka-consumer"),
+				spanz.TableIDToComparableSpan(tableID),
+				events[0].CommitTs,
+			)
+			progress.tableSinkMap.Store(tableID, tableSink)
+		}
+		tableSink.(tablesink.TableSink).AppendRowChangedEvents(events...)
+	}
 }
 
 func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, offset kafka.Offset) {
@@ -528,6 +501,7 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, tableID
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, watermark uint64) {
+	resolvedTs := model.NewResolvedTs(watermark)
 	for {
 		select {
 		case <-ctx.Done():
@@ -537,10 +511,7 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 		}
 		flushedResolvedTs := true
 		progress.tableSinkMap.Range(func(key, value interface{}) bool {
-			resolvedTs := model.NewResolvedTs(watermark)
 			tableSink := value.(tablesink.TableSink)
-			// todo: can we update resolved ts for each table sink concurrently ?
-			// this maybe helpful to accelerate the consume process, and reduce the memory usage.
 			if err := tableSink.UpdateResolvedTs(resolvedTs); err != nil {
 				log.Panic("Failed to update resolved ts", zap.Error(err))
 			}
