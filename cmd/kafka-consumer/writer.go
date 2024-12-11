@@ -324,13 +324,17 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 			}
 
-			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event.
-			if partition == 0 && ddl.Query != "" {
+			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event, no need to handle it.
+			if ddl.Query == "" {
+				continue
+			}
+
+			if partition == 0 {
 				w.appendDDL(ddl, offset)
-				w.resolveRowChangedEvents(eventGroup, ddl.CommitTs, progress)
-				progress.updateWatermark(ddl.CommitTs, offset)
 				needFlush = true
 			}
+			w.resolveRowChangedEvents(eventGroup, ddl.CommitTs, progress)
+			progress.updateWatermark(ddl.CommitTs, offset)
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
