@@ -344,9 +344,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				}
 				for _, row := range cachedEvents {
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
-					tableID := w.fakeTableIDGenerator.
-						generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.GetTableID())
-					row.PhysicalTableID = tableID
+					tableID := row.GetTableID()
 					group, ok := eventGroup[tableID]
 					if !ok {
 						group = NewEventsGroup(partition, tableID)
@@ -376,8 +374,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
-			tableID := w.fakeTableIDGenerator.
-				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), row.GetTableID())
+			tableID := row.GetTableID()
+			if w.option.protocol != config.ProtocolSimple {
+				tableID = w.fakeTableIDGenerator.
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
+			}
 			row.PhysicalTableID = tableID
 			group := eventGroup[tableID]
 			if group == nil {
