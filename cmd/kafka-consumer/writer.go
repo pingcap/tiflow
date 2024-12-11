@@ -122,6 +122,24 @@ func newWriter(ctx context.Context, o *option) *writer {
 		},
 		progresses: make([]*partitionProgress, o.partitionNum),
 	}
+	var (
+		db  *sql.DB
+		err error
+	)
+	if o.upstreamTiDBDSN != "" {
+		db, err = openDB(ctx, o.upstreamTiDBDSN)
+		if err != nil {
+			log.Panic("cannot open the upstream TiDB, handle key only enabled",
+				zap.String("dsn", o.upstreamTiDBDSN))
+		}
+	}
+	for i := 0; i < int(o.partitionNum); i++ {
+		decoder, err := NewDecoder(ctx, o, db)
+		if err != nil {
+			log.Panic("cannot create the decoder", zap.Error(err))
+		}
+		w.progresses[i] = newPartitionProgress(int32(i), decoder)
+	}
 
 	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
 	if err != nil {
@@ -132,24 +150,6 @@ func newWriter(ctx context.Context, o *option) *writer {
 	w.eventRouter = eventRouter
 	log.Info("event router created", zap.Any("protocol", o.protocol),
 		zap.Any("topic", o.topic), zap.Any("dispatcherRules", o.replicaConfig.Sink.DispatchRules))
-
-	var db *sql.DB
-
-	if o.upstreamTiDBDSN != "" {
-		db, err = openDB(ctx, o.upstreamTiDBDSN)
-		if err != nil {
-			log.Panic("cannot open the upstream TiDB, handle key only enabled",
-				zap.String("dsn", o.upstreamTiDBDSN))
-		}
-	}
-
-	for i := 0; i < int(o.partitionNum); i++ {
-		decoder, err := NewDecoder(ctx, o, db)
-		if err != nil {
-			log.Panic("cannot create the decoder", zap.Error(err))
-		}
-		w.progresses[i] = newPartitionProgress(int32(i), decoder)
-	}
 
 	config.GetGlobalServerConfig().TZ = o.timezone
 	errChan := make(chan error, 1)
@@ -222,6 +222,9 @@ func (w *writer) forEachPartition(fn func(p *partitionProgress)) {
 	for _, p := range w.progresses {
 		wg.Add(1)
 		go func(p *partitionProgress) {
+			if p == nil {
+				log.Warn("partition progress is nil")
+			}
 			defer wg.Done()
 			fn(p)
 		}(p)
@@ -236,6 +239,9 @@ func (w *writer) Write(ctx context.Context, messageType model.MessageType) bool 
 		// DDL is a strong sync point, which means all data before the DDL must be received
 		// and write to the sink, but not flush yet, flush all events here.
 		todoDDL := w.getFrontDDL()
+		if todoDDL == nil {
+			log.Warn("todo ddl is nil, this should not happen")
+		}
 		w.forEachPartition(func(p *partitionProgress) {
 			syncFlushRowChangedEvents(ctx, p, todoDDL.CommitTs)
 		})
