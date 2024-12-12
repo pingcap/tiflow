@@ -25,3 +25,13 @@ for role in dm other; do
 	openssl req -new -batch -sha256 -subj "/CN=${role}" -key "$role.key" -out "$role.csr"
 	openssl x509 -req -sha256 -days 100000 -extensions EXT -extfile "ipsan.cnf" -in "$role.csr" -CA "ca.pem" -CAkey "ca.key" -CAcreateserial -out "$role.pem" 2>/dev/null
 done
+
+openssl ecparam -out "ca2.key" -name prime256v1 -genkey
+openssl req -new -batch -sha256 -subj '/CN=localhost' -key "ca2.key" -out "ca2.csr"
+openssl x509 -req -sha256 -days 100000 -in "ca2.csr" -signkey "ca2.key" -out "ca2.pem" 2>/dev/null
+
+for role in tidb; do
+	openssl ecparam -out "$role.key" -name prime256v1 -genkey
+	openssl req -new -batch -sha256 -subj "/CN=${role}" -key "$role.key" -out "$role.csr"
+	openssl x509 -req -sha256 -days 100000 -extensions EXT -extfile "ipsan.cnf" -in "$role.csr" -CA "ca2.pem" -CAkey "ca2.key" -CAcreateserial -out "$role.pem" 2>/dev/null
+done
