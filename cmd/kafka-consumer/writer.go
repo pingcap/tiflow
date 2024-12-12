@@ -490,6 +490,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, group *eventsGroup,
 			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
 			zap.String("protocol", w.option.protocol.String()), zap.Bool("IsPartition", row.TableInfo.TableName.IsPartition))
+		return
 	}
 	if row.CommitTs >= group.highWatermark {
 		group.Append(row, offset)
