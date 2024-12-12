@@ -1617,6 +1617,7 @@ components:
           description: "source password"
         security:
           $ref: "#/components/schemas/Security"
+          description: "downstram database ssl config"
       required:
         - "host"
         - "port"
@@ -1744,7 +1745,10 @@ components:
           description: "to control compress kv pairs of physical import"
         pd_addr:
           type: string
-          description: "address of pd"
+          description: "address of pd"          
+        security:
+          $ref: "#/components/schemas/Security"
+          description: "downstram tidb cluster ssl config"
         on_duplicate_logical:
           type: string
           example: "replace"
@@ -1846,6 +1850,7 @@ components:
             - "incremental"
             - "all"
             - "dump"
+            - "load"
         shard_mode:
           type: string
           description: the way to coordinate DDL

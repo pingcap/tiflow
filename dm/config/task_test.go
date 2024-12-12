@@ -532,6 +532,12 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			"sql_mode":  " NO_AUTO_VALUE_ON_ZERO,ANSI_QUOTES",
 			"time_zone": "+00:00",
 		}
+		security2 = security.Security{
+			SSLCA:         "/path/to/ca2",
+			SSLCert:       "/path/to/cert2",
+			SSLKey:        "/path/to/key2",
+			CertAllowedCN: []string{"allowed-cn"},
+		}
 		security = security.Security{
 			SSLCA:         "/path/to/ca",
 			SSLCert:       "/path/to/cert",
@@ -674,6 +680,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				PDAddr:              "http://test:2379",
 				RangeConcurrency:    32,
 				CompressKVPairs:     "gzip",
+				Security:            &security2,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,

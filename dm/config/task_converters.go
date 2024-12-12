@@ -239,6 +239,18 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 			if fullCfg.PdAddr != nil {
 				subTaskCfg.LoaderConfig.PDAddr = *fullCfg.PdAddr
 			}
+			if fullCfg.Security != nil {
+				var certAllowedCN []string
+				if fullCfg.Security.CertAllowedCn != nil {
+					certAllowedCN = *fullCfg.Security.CertAllowedCn
+				}
+				subTaskCfg.LoaderConfig.Security = &security.Security{
+					SSLCABytes:    []byte(fullCfg.Security.SslCaContent),
+					SSLKeyBytes:   []byte(fullCfg.Security.SslKeyContent),
+					SSLCertBytes:  []byte(fullCfg.Security.SslCertContent),
+					CertAllowedCN: certAllowedCN,
+				}
+			}
 			if fullCfg.RangeConcurrency != nil {
 				subTaskCfg.LoaderConfig.RangeConcurrency = *fullCfg.RangeConcurrency
 			}
@@ -539,6 +551,11 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		ExportThreads: &oneSubtaskConfig.MydumperConfig.Threads,
 		DataDir:       &oneSubtaskConfig.LoaderConfig.Dir,
 		ImportThreads: &oneSubtaskConfig.LoaderConfig.PoolSize,
+		PdAddr:        &oneSubtaskConfig.LoaderConfig.PDAddr,
+	}
+	importMode := openapi.TaskFullMigrateConfImportMode(oneSubtaskConfig.LoaderConfig.ImportMode)
+	if importMode != "" {
+		taskSourceConfig.FullMigrateConf.ImportMode = &importMode
 	}
 	consistencyInTask := oneSubtaskConfig.MydumperConfig.ExtraArgs
 	consistency := strings.Replace(consistencyInTask, "--consistency ", "", 1)
@@ -548,6 +565,18 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	taskSourceConfig.IncrMigrateConf = &openapi.TaskIncrMigrateConf{
 		ReplBatch:   &oneSubtaskConfig.SyncerConfig.Batch,
 		ReplThreads: &oneSubtaskConfig.SyncerConfig.WorkerCount,
+	}
+	if oneSubtaskConfig.LoaderConfig.Security != nil {
+		var certAllowedCN []string
+		if oneSubtaskConfig.LoaderConfig.Security.CertAllowedCN != nil {
+			certAllowedCN = oneSubtaskConfig.LoaderConfig.Security.CertAllowedCN
+		}
+		taskSourceConfig.FullMigrateConf.Security = &openapi.Security{
+			CertAllowedCn:  &certAllowedCN,
+			SslCaContent:   string(oneSubtaskConfig.LoaderConfig.Security.SSLCABytes),
+			SslCertContent: string(oneSubtaskConfig.LoaderConfig.Security.SSLCertBytes),
+			SslKeyContent:  string(oneSubtaskConfig.LoaderConfig.Security.SSLKeyBytes),
+		}
 	}
 	// set filter rules
 	filterRuleMap := openapi.Task_BinlogFilterRule{}
@@ -660,6 +689,19 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		ignoreItems := oneSubtaskConfig.IgnoreCheckingItems
 		task.IgnoreCheckingItems = &ignoreItems
 	}
+	if oneSubtaskConfig.To.Security != nil {
+		var certAllowedCN []string
+		if oneSubtaskConfig.To.Security.CertAllowedCN != nil {
+			certAllowedCN = oneSubtaskConfig.To.Security.CertAllowedCN
+		}
+		task.TargetConfig.Security = &openapi.Security{
+			CertAllowedCn:  &certAllowedCN,
+			SslCaContent:   string(oneSubtaskConfig.To.Security.SSLCABytes),
+			SslCertContent: string(oneSubtaskConfig.To.Security.SSLCertBytes),
+			SslKeyContent:  string(oneSubtaskConfig.To.Security.SSLKeyBytes),
+		}
+	}
+
 	return &task
 }
 
