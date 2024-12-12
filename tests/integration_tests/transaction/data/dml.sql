@@ -1,22 +1,13 @@
 use test;
+set GLOBAL tidb_dml_batch_size=1;
+set GLOBAL tidb_enable_batch_dml='ON';
+set GLOBAL tidb_batch_insert='ON';
 BEGIN;
 create table start_mark
 (
     id int PRIMARY KEY
 );
-create table start_mark1
-(
-    id int PRIMARY KEY
-);
-create table start_mark2
-(
-    id int PRIMARY KEY
-);
-create table start_mark3
-(
-    id int PRIMARY KEY
-);
-INSERT INTO test.t1 VALUES (1, 1);
+LOAD DATA LOCAL INFILE 'data/t1.csv' INTO TABLE test.t1 FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r\n' IGNORE 1 LINES (id,val);
 create table finish_mark
 (
     id int PRIMARY KEY
