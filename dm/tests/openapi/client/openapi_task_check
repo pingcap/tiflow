@@ -149,11 +149,73 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
-def create_noshard_task_success_https(
+def create_task_success_https(
+        task_name, target_table, ssl_ca, ssl_cert, ssl_key,
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+            "security":{
+                "ssl_ca_content": tidb_ca_content,
+				"ssl_cert_content": tidb_cert_content,
+				"ssl_key_content": tidb_key_content,
+                "cert_allowed_cn": ["TiDB"],
+            }
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+        "task_source_config": {
+            "full_migrate_conf": {
+                "import_mode": "physical",
+                "pd_addr": "https://127.0.0.1:2379",
+                "security": {
+                    "ssl_ca_content": cluster_ca_content,
+                    "ssl_cert_content": cluster_cert_content,
+                    "ssl_key_content": cluster_key_content,
+                    "cert_allowed_cn": ["dm"],
+                }
+            }
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT_HTTPS, json={"task": task}, verify=ssl_ca, cert=(ssl_cert, ssl_key))
+    print("create_task_success_https resp=", resp.json())
+    assert resp.status_code == 201
+
+def create_noshard_task_failed_https(
         task_name, ssl_ca, ssl_cert, ssl_key,
         tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
-        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""):
-    
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
     task = {
         "name": task_name,
         "task_mode": "all",
@@ -201,8 +263,8 @@ def create_noshard_task_success_https(
         },
     }
     resp = requests.post(url=API_ENDPOINT_HTTPS, json={"task": task}, verify=ssl_ca, cert=(ssl_cert, ssl_key))
-    print("create_noshard_task_success_https resp=", resp.json())
-    assert resp.status_code == 201
+    print("create_noshard_task_failed_https resp=", resp.json())
+    assert resp.status_code == 400
 
 def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
     task = {
@@ -380,8 +442,6 @@ def start_task_success_https(task_name, ssl_ca, ssl_cert, ssl_key):
     resp = requests.post(url=url,verify=ssl_ca, cert=(ssl_cert, ssl_key))
     if resp.status_code != 200:
         print("start_task_success_https resp=", resp.json())
-    else:
-        print("start_task_success_https_success=")
     assert resp.status_code == 200    
 
 def start_task_failed(task_name, source_name, check_result):
@@ -484,7 +544,7 @@ def get_task_status_success_https(task_name, total, ssl_ca, ssl_cert, ssl_key):
     resp = requests.get(url=url,verify=ssl_ca, cert=(ssl_cert, ssl_key))
     data = resp.json()
     assert resp.status_code == 200
-    print("get_task_status_success resp=", data)
+    print("get_task_status_success_https resp=", data)
     assert data["total"] == int(total)
     
 def get_task_status_with_retry(task_name, ssl_ca, ssl_cert, ssl_key, expected_unit, expected_stage, retries=50):
@@ -927,7 +987,8 @@ if __name__ == "__main__":
         "check_sync_task_status_success": check_sync_task_status_success,
         "check_load_task_finished_status_success": check_load_task_finished_status_success,
         "check_dump_task_finished_status_success": check_dump_task_finished_status_success,
-        "create_noshard_task_success_https": create_noshard_task_success_https,
+        "create_task_success_https": create_task_success_https,
+        "create_noshard_task_failed_https": create_noshard_task_failed_https,
         "start_task_success_https": start_task_success_https,
         "get_task_status_success_https" : get_task_status_success_https,
         "get_task_status_with_retry":get_task_status_with_retry,

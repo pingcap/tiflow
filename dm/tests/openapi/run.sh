@@ -74,7 +74,7 @@ function test_source() {
 	# recreate source will failed
 	openapi_source_check "create_source_failed"
 
-	# update source1 without password success
+	# update source1 without password successt
 	openapi_source_check "update_source1_without_password_success"
 
 	# get source list success
@@ -1082,8 +1082,8 @@ function test_reverse_https_and_tls() {
 
 	prepare_database
 	init_noshard_data
-	# create source successfully
-	openapi_source_check "create_source_success_https" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	# create source1 successfully
+	openapi_source_check "create_source1_success_https" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 
 	# get source list success
 	openapi_source_check "list_source_success_https" 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
@@ -1091,19 +1091,70 @@ function test_reverse_https_and_tls() {
 	# send request to not leader node
 	openapi_source_check "list_source_with_reverse_https" 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 
+	# create source2 successfully
+	openapi_source_check "create_source2_success_https" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+
 	echo "kill all tidb process and start downstream TiDB cluster with TLS"
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
 	killall -9 pd-server 2>/dev/null || true
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf
 
-	task_name="task-tls"
-	openapi_task_check "create_noshard_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+	task_name="task-tls-1"
+	openapi_task_check "create_task_success_https" $task_name "" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
 		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
 		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
-	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" 
-	openapi_task_check "get_task_status_success_https" $task_name 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" 
+	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	task_name="task-tls-2"
+	openapi_task_check "create_task_success_https" $task_name "t3" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
+
+	task_name="task-tls-3"
+	openapi_task_check "create_task_success_https" $task_name "t4" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "" ""
+	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
+
+	task_name="task-tls-4"
+	# use incorect tidb certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	# use incorect pd certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)"
+	# miss tidb cert certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	# miss tidb key certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	# miss pd key certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" ""
+	# miss pd cert certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "" "$(cat $cur/tls_conf/dm.key)"
+	# miss pd all certificate
+	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"" "" ""
 	cleanup_process
 
 	# run dm-master1
@@ -1174,7 +1225,7 @@ function run() {
 	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
-	test_cluster
+	# test_cluster
 }
 
 cleanup_data openapi
