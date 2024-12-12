@@ -1062,10 +1062,10 @@ function test_reverse_https_and_tls() {
 	cp $cur/tls_conf/dm-master2.toml $WORK_DIR/
 	cp $cur/tls_conf/dm-worker1.toml $WORK_DIR/
 	cp $cur/tls_conf/dm-worker2.toml $WORK_DIR/
-	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master1.toml
-	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master2.toml
-	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker1.toml
-	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master1.toml
+	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master2.toml
+	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker2.toml
 
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
@@ -1081,6 +1081,7 @@ function test_reverse_https_and_tls() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 
 	prepare_database
+	init_noshard_data
 	# create source successfully
 	openapi_source_check "create_source_success_https" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 
@@ -1090,14 +1091,20 @@ function test_reverse_https_and_tls() {
 	# send request to not leader node
 	openapi_source_check "list_source_with_reverse_https" 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 
-	cleanup_data openapi
-	cleanup_process
-
+	echo "kill all tidb process and start downstream TiDB cluster with TLS"
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
 	killall -9 pd-server 2>/dev/null || true
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf
 
+	task_name="task-tls"
+	openapi_task_check "create_noshard_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" 
+	openapi_task_check "get_task_status_success_https" $task_name 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" 
+	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
+	cleanup_process
 
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
@@ -1149,8 +1156,6 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	test_reverse_https
-	exit 0
 	test_relay
 	test_source
 
@@ -1165,7 +1170,7 @@ function run() {
 	test_delete_task_with_stopped_downstream
 	test_start_task_with_condition
 	test_stop_task_with_condition
-	test_reverse_https
+	test_reverse_https_and_tls
 	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
