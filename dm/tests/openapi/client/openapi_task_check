@@ -10,6 +10,7 @@ SOURCE2_NAME = "mysql-02"
 
 
 API_ENDPOINT = "http://127.0.0.1:8361/api/v1/tasks"
+API_ENDPOINT_HTTPS = "httpS://127.0.0.1:8361/api/v1/tasks"
 
 
 def create_task_failed():
@@ -145,6 +146,56 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
     }
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
     print("create_noshard_task_success resp=", resp.json())
+    assert resp.status_code == 201
+
+def create_noshard_task_with_security_success(
+        ssl_ca, ssl_cert, ssl_key, task_name, tartget_table_name="",
+        pd_ca_content="",pd_cert_content="",pd_key_content="",
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",):
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+            "security":{
+                "ssl_ca_content": tidb_ca_content,
+				"ssl_cert_content": tidb_cert_content,
+				"ssl_key_content": tidb_key_content,
+            }
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": tartget_table_name},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": tartget_table_name},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT_HTTPS, json={"task": task}, verify=ssl_ca, cert=(ssl_cert, ssl_key))
+    print("create_noshard_task_with_security_success resp=", resp.json())
     assert resp.status_code == 201
 
 def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
