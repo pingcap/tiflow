@@ -44,11 +44,14 @@ func NewEventsGroup(partition int32, tableID int64) *eventsGroup {
 // Append will append an event to event groups.
 func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 	g.events = append(g.events, row)
-	g.highWatermark = row.CommitTs
+	if row.CommitTs > g.highWatermark {
+		g.highWatermark = row.CommitTs
+	}
 	log.Info("DML event received",
 		zap.Int32("partition", g.partition),
 		zap.Any("offset", offset),
 		zap.Uint64("commitTs", row.CommitTs),
+		zap.Uint64("highWatermark", g.highWatermark),
 		zap.Int64("physicalTableID", row.GetTableID()),
 		zap.String("schema", row.TableInfo.GetSchemaName()),
 		zap.String("table", row.TableInfo.GetTableName()),
