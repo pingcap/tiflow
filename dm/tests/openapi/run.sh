@@ -74,7 +74,7 @@ function test_source() {
 	# recreate source will failed
 	openapi_source_check "create_source_failed"
 
-	# update source1 without password successt
+	# update source1 without password success
 	openapi_source_check "update_source1_without_password_success"
 
 	# get source list success
@@ -1062,10 +1062,10 @@ function test_reverse_https_and_tls() {
 	cp $cur/tls_conf/dm-master2.toml $WORK_DIR/
 	cp $cur/tls_conf/dm-worker1.toml $WORK_DIR/
 	cp $cur/tls_conf/dm-worker2.toml $WORK_DIR/
-	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master1.toml
-	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master2.toml
-	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker1.toml
-	sed -i '' "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker2.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker2.toml
 
 	# run dm-master1
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
@@ -1225,7 +1225,7 @@ function run() {
 	test_full_mode_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
-	# test_cluster
+	test_cluster
 }
 
 cleanup_data openapi
