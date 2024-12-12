@@ -495,7 +495,7 @@ def get_task_status_with_retry(task_name, ssl_ca, ssl_cert, ssl_key, expected_un
         assert resp.status_code == 200
         print("get_task_status_with_retry resp=", data)
         for item in data.get("data", []):
-            if item.get("stage") ==  expected_unit and item.get("stage") == expected_stage:
+            if item.get("unit") ==  expected_unit and item.get("stage") == expected_stage:
                 return
             time.sleep(2)
     assert False
