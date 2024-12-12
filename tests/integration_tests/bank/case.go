@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -21,6 +22,10 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -623,7 +628,8 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tidbAPIEndpoint, 
 			log.Error("get downstream sync end ts failed due to timeout", zap.String("table", tableName), zap.Error(ctx.Err()))
 			return 0, ctx.Err()
 		case <-time.After(2 * time.Second):
-			result, ok := tryGetEndTs(db, tidbAPIEndpoint, tableName)
+			// result, ok := tryGetEndTs(db, tidbAPIEndpoint, tableName)
+			result, ok := tryGetEndTsFromLog(db, tableName)
 			if ok {
 				return result, nil
 			}
@@ -674,4 +680,66 @@ func tryGetEndTs(db *sql.DB, tidbAPIEndpoint, tableName string) (result uint64, 
 		zap.String("tableName", tableName),
 		zap.Uint64("ts", ddlJob[0].Binlog.FinishedTS))
 	return ddlJob[0].Binlog.FinishedTS, true
+}
+
+func tryGetEndTsFromLog(_ *sql.DB, tableName string) (result uint64, ok bool) {
+	log.Info("try parse finishedTs from ticdc log", zap.String("tableName", tableName))
+
+	logFilePath := "/tmp/tidb_cdc_test/bank"
+	cdcLogFiles := make([]string, 0)
+	// walk all file with cdc prefix
+	err := filepath.WalkDir(logFilePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			if strings.Contains(d.Name(), "down") && strings.Contains(d.Name(), "cdc") && strings.Contains(d.Name(), "log") {
+				cdcLogFiles = append(cdcLogFiles, path)
+				fmt.Println(path)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error("Failed to walk dir: %v", zap.Error(err))
+	}
+	log.Info("total files", zap.Any("file", cdcLogFiles))
+
+	logRegex := regexp.MustCompile(`handle a ddl job`)
+	tableNameRegex := regexp.MustCompile(tableName + "`")
+	timeStampRegex := regexp.MustCompile(`finishedTs=([0-9]+)`)
+	for _, f := range cdcLogFiles {
+		file, err := os.Open(f)
+		if err != nil {
+			log.Error("Failed to open file: %v", zap.Error(err))
+		}
+		defer file.Close()
+
+		reader := bufio.NewReader(file)
+		for {
+			bs, _, err := reader.ReadLine()
+			if err != nil {
+				if err != io.EOF {
+					fmt.Printf("Error reading file: %v\n", err)
+				}
+				return 0, false
+			}
+			line := string(bs)
+			if !logRegex.MatchString(line) || !tableNameRegex.MatchString(line) {
+				continue
+			}
+
+			matches := timeStampRegex.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				fmt.Println("found first match line, Match Result: ", matches[1], ", line: ", line)
+				// convert to uint64
+				result, err := strconv.ParseUint(matches[1], 10, 64)
+				if err != nil {
+					log.Error("Failed to parse uint64: %v", zap.Error(err))
+				}
+				return result, true
+			}
+		}
+	}
+	return 0, false
 }
