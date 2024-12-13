@@ -286,11 +286,13 @@ func (s *schemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.Ta
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("before snap.IterTables")
 	snap.IterTables(true, func(tblInfo *model.TableInfo) {
 		if !s.shouldIgnoreTable(tblInfo) {
 			tables = append(tables, tblInfo)
 		}
 	})
+	log.Debug("after snap.IterTables")
 	return tables, nil
 }
 

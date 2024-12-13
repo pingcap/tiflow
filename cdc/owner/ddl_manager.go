@@ -261,7 +261,9 @@ func (m *ddlManager) tick(
 	m.justSentDDL = nil
 	m.checkpointTs = checkpointTs
 
+	log.Debug("before m.allTables(ctx)")
 	currentTables, err := m.allTables(ctx)
+	log.Debug("after m.allTables(ctx)")
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -281,6 +283,7 @@ func (m *ddlManager) tick(
 		return nil, nil, errors.Trace(err)
 	}
 
+	log.Debug("before drain all ddl jobs from ddlPuller")
 	// drain all ddl jobs from ddlPuller
 	for {
 		_, job := m.ddlPuller.PopFrontDDL()
@@ -341,6 +344,7 @@ func (m *ddlManager) tick(
 			}
 		}
 	}
+	log.Debug("after drain all ddl jobs from ddlPuller")
 
 	// advance resolvedTs
 	ddlRts := m.ddlPuller.ResolvedTs()
@@ -358,6 +362,7 @@ func (m *ddlManager) tick(
 	if m.ddlResolvedTs <= ddlRts {
 		m.ddlResolvedTs = ddlRts
 	}
+	log.Debug("after advance resolvedTs")
 
 	nextDDL := m.getNextDDL()
 	if nextDDL != nil {
@@ -584,7 +589,9 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
 	if m.tableInfoCache == nil {
 		ts := m.getSnapshotTs()
+		log.Debug("before m.schema.AllTables(ctx, ts)")
 		tableInfoCache, err := m.schema.AllTables(ctx, ts)
+		log.Debug("after m.schema.AllTables(ctx, ts)")
 		if err != nil {
 			return nil, err
 		}
