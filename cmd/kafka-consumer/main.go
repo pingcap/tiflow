@@ -83,6 +83,7 @@ func main() {
 	consumer := newConsumer(ctx, consumerOption)
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {
+		log.Info("profiling is enabled")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
