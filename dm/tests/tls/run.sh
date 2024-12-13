@@ -22,7 +22,7 @@ function setup_tidb_with_tls() {
 socket = "/tmp/tidb-tls.sock"
 
 [status]
-status-port = 10090
+status-port = 10080
 
 [security]
 # set the path for certificates. Empty string means disabling secure connections.

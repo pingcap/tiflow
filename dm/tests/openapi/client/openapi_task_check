@@ -194,11 +194,9 @@ def create_task_success_https(
                 {"source_name": SOURCE1_NAME},
                 {"source_name": SOURCE2_NAME},
             ],
-        },
-        "task_source_config": {
             "full_migrate_conf": {
                 "import_mode": "physical",
-                "pd_addr": "https://127.0.0.1:2379",
+                "pd_addr": "127.0.0.1:2379",
                 "security": {
                     "ssl_ca_content": cluster_ca_content,
                     "ssl_cert_content": cluster_cert_content,
@@ -248,11 +246,9 @@ def create_noshard_task_failed_https(
             "source_conf": [
                 {"source_name": SOURCE1_NAME},
             ],
-        },
-        "task_source_config": {
             "full_migrate_conf": {
                 "import_mode": "physical",
-                "pd_addr": "https://127.0.0.1:2379",
+                "pd_addr": "127.0.0.1:2379",
                 "security": {
                     "ssl_ca_content": cluster_ca_content,
                     "ssl_cert_content": cluster_cert_content,

@@ -115,7 +115,7 @@ start_tidb() {
 	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
 socket = "/tmp/tidb-tls.sock"
 [status]
-status-port = 10090
+status-port = 10080
 [security]
 ssl-ca = "$CONF_DIR/ca2.pem"
 ssl-cert = "$CONF_DIR/tidb.pem"
@@ -136,7 +136,7 @@ EOF
 	i=0
 	while true; do
 		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/ca.pem" \
-			--cert "$CONF_DIR/dm.pem" --key "$CONF_DIR/dm.key" "https://$TIDB_IP_TLS:10090/status" || echo "")
+			--cert "$CONF_DIR/dm.pem" --key "$CONF_DIR/dm.key" "https://$TIDB_IP_TLS:10080/status" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start TiDB success'
