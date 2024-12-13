@@ -321,9 +321,12 @@ func (s *Snapshot) IterSchemaNames(f func(schema string, target int64)) {
 
 // IterTables iterates all tables in the snapshot.
 func (s *Snapshot) IterTables(includeIneligible bool, f func(i *model.TableInfo)) {
+	log.Debug("before get s.rwlock.RLock()")
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
+	log.Debug("before s.inner.iterTables(includeIneligible, f)")
 	s.inner.iterTables(includeIneligible, f)
+	log.Debug("after s.inner.iterTables(includeIneligible, f)")
 }
 
 // IterTableNames iterates all table names in the snapshot.
@@ -424,8 +427,10 @@ func (s *Snapshot) CurrentTs() uint64 {
 // Drop drops the snapshot. It must be called when GC some snapshots.
 // Drop a snapshot will also drop all snapshots with a less timestamp.
 func (s *Snapshot) Drop() {
+	log.Debug("before s.rwlock.Lock() in Drop")
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
+	defer log.Debug("after s.rwlock.Unlock() in Drop")
 	s.inner.drop()
 }
 
@@ -438,8 +443,10 @@ func getWrapTableInfo(job *timodel.Job) *model.TableInfo {
 // DoHandleDDL is like HandleDDL but doesn't fill schema name into job.
 // NOTE: it's public because some tests in the upper package need this.
 func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
+	log.Debug("before s.rwlock.Lock() in DoHandleDDL")
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
+	defer log.Debug("after s.rwlock.Unlock() in DoHandleDDL")
 
 	switch job.Type {
 	case timodel.ActionCreateSchema:
@@ -481,6 +488,7 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionCreateTables:
+		log.Debug("before ActionCreateTables")
 		multiTableInfos := job.BinlogInfo.MultipleTableInfos
 		for _, tableInfo := range multiTableInfos {
 			err := s.inner.createTable(model.WrapTableInfo(job.SchemaID, job.SchemaName,
@@ -489,11 +497,14 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 				return errors.Trace(err)
 			}
 		}
+		log.Debug("after ActionCreateTables")
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
+		log.Debug("before ActionCreateTable")
 		err := s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		log.Debug("after ActionCreateTable")
 	case timodel.ActionDropTable, timodel.ActionDropView:
 		err := s.inner.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
@@ -1120,6 +1131,8 @@ func (s *snapshot) iterTables(includeIneligible bool, f func(i *model.TableInfo)
 	tag := negative(s.currentTs)
 	var tableID int64 = -1
 	s.tables.Ascend(func(x versionedID) bool {
+		log.Debug("in s.tables.Ascend")
+		defer log.Debug("out s.tables.Ascend")
 		if x.id != tableID && x.tag >= tag {
 			tableID = x.id
 			if x.target != nil && (includeIneligible ||

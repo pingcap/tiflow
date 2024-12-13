@@ -161,6 +161,7 @@ func (s *schemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schema.Sna
 	startTime := time.Now()
 	logTime := startTime
 	err := retry.Do(ctx, func() error {
+		log.Debug("retry s.getSnapshot(ts)")
 		var err error
 		snap, err = s.getSnapshot(ts)
 		now := time.Now()
@@ -253,12 +254,16 @@ func (s *schemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]m
 	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
 	// we can't know how many valid tables in the snapshot.
 	res := make([]model.TableID, 0)
+	log.Debug("before s.GetSnapshot(ctx, ts)")
 	snap, err := s.GetSnapshot(ctx, ts)
+	log.Debug("after s.GetSnapshot(ctx, ts)")
 	if err != nil {
 		return nil, err
 	}
 
 	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		log.Debug("in func(tblInfo *model.TableInfo)")
+		defer log.Debug("out func(tblInfo *model.TableInfo)")
 		if s.shouldIgnoreTable(tblInfo) {
 			return
 		}
