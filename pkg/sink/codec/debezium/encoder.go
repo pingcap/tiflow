@@ -39,7 +39,7 @@ type BatchEncoder struct {
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !d.config.EnableTiDBExtension {
 		return nil, nil
-	}	
+	}
 	keyMap := bytes.Buffer{}
 	valueBuf := bytes.Buffer{}
 	err := d.codec.EncodeCheckpointEvent(ts, &keyMap, &valueBuf)
