@@ -123,6 +123,7 @@ var (
 		  "full_migrate_conf": {
 			"data_dir": "./exported_data",
 			"export_threads": 4,
+			"import_mode": "logical",
 			"import_threads": 16
 		  },
 		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },

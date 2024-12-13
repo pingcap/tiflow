@@ -551,7 +551,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		ExportThreads: &oneSubtaskConfig.MydumperConfig.Threads,
 		DataDir:       &oneSubtaskConfig.LoaderConfig.Dir,
 		ImportThreads: &oneSubtaskConfig.LoaderConfig.PoolSize,
-		PdAddr:        &oneSubtaskConfig.LoaderConfig.PDAddr,
+	}
+	// only load task use physical mode need PD address
+	if oneSubtaskConfig.LoaderConfig.ImportMode == LoadModePhysical {
+		taskSourceConfig.FullMigrateConf.PdAddr = &oneSubtaskConfig.LoaderConfig.PDAddr
 	}
 	importMode := openapi.TaskFullMigrateConfImportMode(oneSubtaskConfig.LoaderConfig.ImportMode)
 	if importMode != "" {
