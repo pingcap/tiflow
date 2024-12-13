@@ -381,7 +381,9 @@ func (c *changefeed) tick(ctx context.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
 ) (model.Ts, model.Ts, error) {
+	log.Debug("before feedStateManager.Tick")
 	adminJobPending := c.feedStateManager.Tick(c.resolvedTs, cfStatus, cfInfo)
+	log.Debug("after feedStateManager.Tick")
 	preCheckpointTs := cfInfo.GetCheckpointTs(cfStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
@@ -425,7 +427,9 @@ func (c *changefeed) tick(ctx context.Context,
 		}
 	}
 
+	log.Debug("before ddlManager.tick")
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs)
+	log.Debug("after ddlManager.tick")
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
@@ -455,9 +459,11 @@ func (c *changefeed) tick(ctx context.Context,
 		return 0, 0, nil
 	}
 
+	log.Debug("before scheduler.Tick")
 	watermark, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
+	log.Debug("after scheduler.Tick")
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
