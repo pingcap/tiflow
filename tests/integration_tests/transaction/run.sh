@@ -29,11 +29,12 @@ function run() {
 	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    sleep 3
 	run_sql_file $CUR/data/dml.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT} &
     # wait transaction
-    sleep 0.01
+    sleep 0.1
 	run_sql "drop table test.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "create table test.t1(id int primary key, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table test.t1(id int primary key AUTO_INCREMENT, val1 int, val2 int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
