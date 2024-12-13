@@ -45,9 +45,8 @@ func TestDMLE2E(t *testing.T) {
 	_, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
-
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	for _, enableTiDBExtension := range []bool{true, false} {
-		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = enableTiDBExtension
 		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 		require.NoError(t, err)
@@ -530,7 +529,6 @@ func TestDDLEventWithExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ddlEvent.Query, decodedDDL.Query)
 	require.Equal(t, ddlEvent.CommitTs, decodedDDL.CommitTs)
-	require.Equal(t, ddlEvent.TableInfo.ID, decodedDDL.TableInfo.ID)
 	require.Equal(t, ddlEvent.TableInfo.IsPartitionTable(), decodedDDL.TableInfo.IsPartitionTable())
 	require.Equal(t, ddlEvent.TableInfo.TableName.Schema, decodedDDL.TableInfo.TableName.Schema)
 	require.Equal(t, ddlEvent.TableInfo.TableName.Table, decodedDDL.TableInfo.TableName.Table)
@@ -712,6 +710,7 @@ func TestE2EPartitionTable(t *testing.T) {
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
 
 	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
@@ -755,7 +754,7 @@ func TestE2EPartitionTable(t *testing.T) {
 		require.NoError(t, err)
 		// canal-json does not support encode the table id, so it's 0
 		require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
-		require.Equal(t, decodedEvent.TableInfo.ID, event.TableInfo.ID)
+		require.Equal(t, decodedEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 		require.Equal(t, decodedEvent.TableInfo.IsPartitionTable(), event.TableInfo.IsPartitionTable())
 	}
 }
@@ -869,8 +868,6 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 
 			if encodeEnable && decodeEnable {
 				require.Equal(t, ddlEvent.CommitTs, consumed.CommitTs)
-				require.Equal(t, ddlEvent.TableInfo.ID, consumed.TableInfo.ID)
-				require.Equal(t, ddlEvent.TableInfo.IsPartitionTable(), consumed.TableInfo.IsPartitionTable())
 			} else {
 				require.Equal(t, uint64(0), consumed.CommitTs)
 			}

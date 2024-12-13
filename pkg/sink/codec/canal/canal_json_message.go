@@ -37,6 +37,9 @@ type canalJSONMessageInterface interface {
 	getSchema() *string
 	getTable() *string
 	getCommitTs() uint64
+	getPhysicalTableID() int64
+	getTableID() int64
+	isPartition() bool
 	getQuery() string
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
@@ -82,6 +85,18 @@ func (c *JSONMessage) getTable() *string {
 // for JSONMessage, we lost the commitTs.
 func (c *JSONMessage) getCommitTs() uint64 {
 	return 0
+}
+
+func (c *JSONMessage) getTableID() int64 {
+	return 0
+}
+
+func (c *JSONMessage) getPhysicalTableID() int64 {
+	return 0
+}
+
+func (c *JSONMessage) isPartition() bool {
+	return false
 }
 
 func (c *JSONMessage) getQuery() string {
@@ -136,6 +151,8 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 
 type tidbExtension struct {
 	CommitTs           uint64 `json:"commitTs,omitempty"`
+	TableID            int64  `json:"tableId,omitempty"`
+	PhysicalTableID    int64  `json:"partitionId,omitempty"`
 	WatermarkTs        uint64 `json:"watermarkTs,omitempty"`
 	OnlyHandleKey      bool   `json:"onlyHandleKey,omitempty"`
 	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
@@ -154,26 +171,48 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
+func (c *canalJSONMessageWithTiDBExtension) getTableID() int64 {
+	return c.Extensions.TableID
+}
+
+func (c *canalJSONMessageWithTiDBExtension) getPhysicalTableID() int64 {
+	if c.Extensions.PhysicalTableID != 0 {
+		return c.Extensions.PhysicalTableID
+	}
+	return c.Extensions.TableID
+}
+
+func (c *canalJSONMessageWithTiDBExtension) isPartition() bool {
+	return c.Extensions.PhysicalTableID != 0
+}
+
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
+	result.PhysicalTableID = msg.getPhysicalTableID()
 	mysqlType := msg.getMySQLType()
-	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
 		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
+		if err != nil {
+			return nil, err
+		}
 		result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
+		result.TableInfo.TableName.IsPartition = msg.isPartition()
+		result.TableInfo.TableName.TableID = msg.getTableID()
 		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
-		return result, err
+		return result, nil
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
 	cols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-	result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
-	result.Columns = model.Columns2ColumnDatas(cols, result.TableInfo)
 	if err != nil {
 		return nil, err
 	}
+	result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
+	result.TableInfo.TableName.IsPartition = msg.isPartition()
+	result.TableInfo.TableName.TableID = msg.getTableID()
+	result.Columns = model.Columns2ColumnDatas(cols, result.TableInfo)
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
