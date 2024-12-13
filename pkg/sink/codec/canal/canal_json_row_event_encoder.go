@@ -255,14 +255,15 @@ func newJSONMessageForDML(
 		out.RawByte('{')
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
+		out.RawByte(',')
 
 		// the logical table id
 		out.RawString("\"tableId\":")
 		out.Int64(e.TableInfo.ID)
-		out.RawByte(',')
 
 		// the physical table id
 		if e.TableInfo.IsPartitionTable() {
+			out.RawByte(',')
 			out.RawString("\"partitionId\":")
 			out.Int64(e.GetTableID())
 		}

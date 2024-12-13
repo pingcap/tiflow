@@ -76,6 +76,8 @@ func TestDMLE2E(t *testing.T) {
 		require.True(t, decodedEvent.IsInsert())
 		if enableTiDBExtension {
 			require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
+			require.Equal(t, insertEvent.GetTableID(), decodedEvent.GetTableID())
+			require.Equal(t, insertEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
 		}
 		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
@@ -113,6 +115,11 @@ func TestDMLE2E(t *testing.T) {
 		decodedEvent, err = decoder.NextRowChangedEvent()
 		require.NoError(t, err)
 		require.True(t, decodedEvent.IsUpdate())
+		if enableTiDBExtension {
+			require.Equal(t, updateEvent.CommitTs, decodedEvent.CommitTs)
+			require.Equal(t, updateEvent.GetTableID(), decodedEvent.GetTableID())
+			require.Equal(t, updateEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
+		}
 
 		err = encoder.AppendRowChangedEvent(ctx, "", deleteEvent, func() {})
 		require.NoError(t, err)
@@ -129,6 +136,11 @@ func TestDMLE2E(t *testing.T) {
 		decodedEvent, err = decoder.NextRowChangedEvent()
 		require.NoError(t, err)
 		require.True(t, decodedEvent.IsDelete())
+		if enableTiDBExtension {
+			require.Equal(t, deleteEvent.CommitTs, decodedEvent.CommitTs)
+			require.Equal(t, deleteEvent.GetTableID(), decodedEvent.GetTableID())
+			require.Equal(t, deleteEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
+		}
 	}
 }
 
@@ -249,6 +261,8 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 		require.NoError(t, err, rawValue)
 
 		require.Equal(t, insertEvent.CommitTs, decodedLargeEvent.CommitTs)
+		require.Equal(t, insertEvent.GetTableID(), decodedLargeEvent.GetTableID())
+		require.Equal(t, insertEvent.TableInfo.IsPartitionTable(), decodedLargeEvent.TableInfo.IsPartitionTable())
 		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedLargeEvent.TableInfo.GetSchemaName())
 		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 		require.Nil(t, nil, decodedLargeEvent.PreColumns)
@@ -516,6 +530,8 @@ func TestDDLEventWithExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ddlEvent.Query, decodedDDL.Query)
 	require.Equal(t, ddlEvent.CommitTs, decodedDDL.CommitTs)
+	require.Equal(t, ddlEvent.TableInfo.ID, decodedDDL.TableInfo.ID)
+	require.Equal(t, ddlEvent.TableInfo.IsPartitionTable(), decodedDDL.TableInfo.IsPartitionTable())
 	require.Equal(t, ddlEvent.TableInfo.TableName.Schema, decodedDDL.TableInfo.TableName.Schema)
 	require.Equal(t, ddlEvent.TableInfo.TableName.Table, decodedDDL.TableInfo.TableName.Table)
 }
@@ -613,26 +629,29 @@ func TestMaxMessageBytes(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 
-	// the test message length is smaller than max-message-bytes
-	maxMessageBytes := 300
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	for _, enableTiDBExtension := range []bool{true, false} {
+		codecConfig.EnableTiDBExtension = enableTiDBExtension
+		// the test message length is smaller than max-message-bytes
+		codecConfig.WithMaxMessageBytes(300)
 
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
+		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		encoder := builder.Build()
 
-	err = encoder.AppendRowChangedEvent(ctx, topic, row, nil)
-	require.NoError(t, err)
+		err = encoder.AppendRowChangedEvent(ctx, topic, row, nil)
+		require.NoError(t, err)
 
-	// the test message length is larger than max-message-bytes
-	codecConfig = codecConfig.WithMaxMessageBytes(100)
+		// the test message length is larger than max-message-bytes
+		codecConfig = codecConfig.WithMaxMessageBytes(100)
 
-	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+		builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+		require.NoError(t, err)
 
-	encoder = builder.Build()
-	err = encoder.AppendRowChangedEvent(ctx, topic, row, nil)
-	require.Error(t, err, cerror.ErrMessageTooLarge)
+		encoder = builder.Build()
+		err = encoder.AppendRowChangedEvent(ctx, topic, row, nil)
+		require.Error(t, err, cerror.ErrMessageTooLarge)
+	}
 }
 
 func TestCanalJSONContentCompatibleE2E(t *testing.T) {
@@ -735,7 +754,9 @@ func TestE2EPartitionTable(t *testing.T) {
 		decodedEvent, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
 		// canal-json does not support encode the table id, so it's 0
-		require.Equal(t, decodedEvent.GetTableID(), int64(0))
+		require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
+		require.Equal(t, decodedEvent.TableInfo.ID, event.TableInfo.ID)
+		require.Equal(t, decodedEvent.TableInfo.IsPartitionTable(), event.TableInfo.IsPartitionTable())
 	}
 }
 
@@ -777,6 +798,8 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 			if encodeEnable && decodeEnable {
 				require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
+				require.Equal(t, insertEvent.GetTableID(), decodedEvent.GetTableID())
+				require.Equal(t, insertEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
 			}
 			require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 			require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
@@ -846,6 +869,8 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 
 			if encodeEnable && decodeEnable {
 				require.Equal(t, ddlEvent.CommitTs, consumed.CommitTs)
+				require.Equal(t, ddlEvent.TableInfo.ID, consumed.TableInfo.ID)
+				require.Equal(t, ddlEvent.TableInfo.IsPartitionTable(), consumed.TableInfo.IsPartitionTable())
 			} else {
 				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
