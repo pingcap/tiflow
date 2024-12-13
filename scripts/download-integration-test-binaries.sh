@@ -142,6 +142,7 @@ download_binaries() {
 	# Define download URLs
 	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_branch}/${tidb_sha1}/linux-amd64/tidb-server.tar.gz"
 	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_branch}/${tikv_sha1}/linux-amd64/tikv-server.tar.gz"
+	# TODO: need pd-ctl binary
 	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_branch}/${pd_sha1}/linux-amd64/pd-server.tar.gz"
 	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/linux-amd64/tiflash.tar.gz"
 	local minio_download_url="${FILE_SERVER_URL}/download/minio.tar.gz"
@@ -183,6 +184,7 @@ download_and_extract() {
 	# Move extracted files if necessary
 	case $file_name in
 	"tidb-server.tar.gz") mv ${THIRD_BIN_DIR}/tidb-server ${THIRD_BIN_DIR}/ ;;
+	# TODO: need pd-ctl binary
 	"pd-server.tar.gz") mv ${THIRD_BIN_DIR}/pd-server ${THIRD_BIN_DIR}/ ;;
 	"tikv-server.tar.gz") mv ${THIRD_BIN_DIR}/tikv-server ${THIRD_BIN_DIR}/ ;;
 	"tiflash.tar.gz")
