@@ -33,7 +33,7 @@ var (
 			"export_threads": 4,
 			"import_threads": 16,
 			"import_mode": "physical",
-			"pd_addr": "https://127.0.0.1:2379",
+			"pd_addr": "127.0.0.1:2379",
 			"security": {
 				"ssl_ca_content": "fake_ssl_ca_content_2",
 				"ssl_cert_content": "fake_ssl_cert_content_2",

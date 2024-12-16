@@ -334,9 +334,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	}
 	cfg.TiDB.Security = &globalCfg.Security
 	if subtaskCfg.LoaderConfig.Security != nil {
-		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
-		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
-		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
+		cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
+		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
+		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.

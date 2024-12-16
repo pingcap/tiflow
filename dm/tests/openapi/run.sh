@@ -1102,8 +1102,8 @@ function test_reverse_https_and_tls() {
 
 	task_name="task-tls-1"
 	openapi_task_check "create_task_success_https" $task_name "" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
-		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
@@ -1112,16 +1112,16 @@ function test_reverse_https_and_tls() {
 
 	task_name="task-tls-2"
 	openapi_task_check "create_task_success_https" $task_name "t3" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
-		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+		"$cur/tls_conf/ca2.pem" "" "" \
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
 
 	task_name="task-tls-3"
 	openapi_task_check "create_task_success_https" $task_name "t4" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
-		"$(cat $cur/tls_conf/ca.pem)" "" ""
+		"$$cur/tls_conf/ca2.pem" "" "" \
+		"$cur/tls_conf/ca.pem" "" ""
 	openapi_task_check "start_task_success_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_success_https" $task_name 2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	openapi_task_check "get_task_status_with_retry" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" "Sync" "Running" 50
@@ -1129,12 +1129,12 @@ function test_reverse_https_and_tls() {
 	task_name="task-tls-4"
 	# use incorect tidb certificate
 	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)" \
-		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	# use incorect pd certificate
 	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
-		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)"
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	# miss tidb cert certificate
 	openapi_task_check "create_noshard_task_failed_https" $task_name "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
 		"$(cat $cur/tls_conf/ca2.pem)" "" "$(cat $cur/tls_conf/tidb.key)" \

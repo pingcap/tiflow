@@ -27,7 +27,7 @@ max-replicas = 1
 cacert-path = "$CONF_DIR/ca.pem"
 cert-path = "$CONF_DIR/dm.pem"
 key-path = "$CONF_DIR/dm.key"
-cert-verify-cn = ["TiDB", "dm"]
+cert-verify-cn = ["TiDB", "dm", "localhost"]
 EOF
 
 	bin/pd-server --version
@@ -71,7 +71,7 @@ start_tikv() {
 ca-path = "$CONF_DIR/ca.pem"
 cert-path = "$CONF_DIR/dm.pem"
 key-path = "$CONF_DIR/dm.key"
-cert-verify-cn = ["TiDB", "dm"]
+cert-verify-cn = ["TiDB", "dm", "localhost"]
 EOF
 	mkdir -p "$WORK_DIR/tikv-tls"
 	bin/tikv-server --version
@@ -123,7 +123,7 @@ ssl-key = "$CONF_DIR/tidb.key"
 cluster-ssl-ca = "$CONF_DIR/ca.pem"
 cluster-ssl-cert = "$CONF_DIR/dm.pem"
 cluster-ssl-key = "$CONF_DIR/dm.key"
-cluster-verify-cn = ["TiDB", "dm"]
+cluster-verify-cn = ["TiDB", "dm" , "localhost"]
 EOF
 	mkdir -p "$WORK_DIR/tidb-tls"
 	bin/tidb-server \

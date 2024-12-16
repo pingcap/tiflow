@@ -245,9 +245,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 					certAllowedCN = *fullCfg.Security.CertAllowedCn
 				}
 				subTaskCfg.LoaderConfig.Security = &security.Security{
-					SSLCABytes:    []byte(fullCfg.Security.SslCaContent),
-					SSLKeyBytes:   []byte(fullCfg.Security.SslKeyContent),
-					SSLCertBytes:  []byte(fullCfg.Security.SslCertContent),
+					SSLCA:         *fullCfg.Security.SslCa,
+					SSLKey:        *fullCfg.Security.SslKey,
+					SSLCert:       *fullCfg.Security.SslCert,
 					CertAllowedCN: certAllowedCN,
 				}
 			}
@@ -575,10 +575,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			certAllowedCN = oneSubtaskConfig.LoaderConfig.Security.CertAllowedCN
 		}
 		taskSourceConfig.FullMigrateConf.Security = &openapi.Security{
-			CertAllowedCn:  &certAllowedCN,
-			SslCaContent:   string(oneSubtaskConfig.LoaderConfig.Security.SSLCABytes),
-			SslCertContent: string(oneSubtaskConfig.LoaderConfig.Security.SSLCertBytes),
-			SslKeyContent:  string(oneSubtaskConfig.LoaderConfig.Security.SSLKeyBytes),
+			CertAllowedCn: &certAllowedCN,
+			SslCa:         &oneSubtaskConfig.LoaderConfig.Security.SSLCA,
+			SslCert:       &oneSubtaskConfig.LoaderConfig.Security.SSLCert,
+			SslKey:        &oneSubtaskConfig.LoaderConfig.Security.SSLKey,
 		}
 	}
 	// set filter rules
