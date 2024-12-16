@@ -242,17 +242,16 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 			if fullCfg.Security != nil {
 				if fullCfg.Security.SslCa == "" || fullCfg.Security.SslKey == "" || fullCfg.Security.SslCert == "" {
 					return nil, terror.ErrOpenAPICommonError.Generatef("Invalid security config, need to set all of ca/cert/key file path.")
-				} else {
-					var certAllowedCN []string
-					if fullCfg.Security.CertAllowedCn != nil {
-						certAllowedCN = *fullCfg.Security.CertAllowedCn
-					}
-					subTaskCfg.LoaderConfig.Security = &security.Security{
-						SSLCA:         fullCfg.Security.SslCa,
-						SSLKey:        fullCfg.Security.SslKey,
-						SSLCert:       fullCfg.Security.SslCert,
-						CertAllowedCN: certAllowedCN,
-					}
+				}
+				var certAllowedCN []string
+				if fullCfg.Security.CertAllowedCn != nil {
+					certAllowedCN = *fullCfg.Security.CertAllowedCn
+				}
+				subTaskCfg.LoaderConfig.Security = &security.Security{
+					SSLCA:         fullCfg.Security.SslCa,
+					SSLKey:        fullCfg.Security.SslKey,
+					SSLCert:       fullCfg.Security.SslCert,
+					CertAllowedCN: certAllowedCN,
 				}
 			}
 			if fullCfg.RangeConcurrency != nil {
@@ -354,6 +353,9 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *dbconfig.DBConfig {
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
 			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLCert:       task.TargetConfig.Security.SslCert,
+			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: certAllowedCN,
 		}
 	}
@@ -703,7 +705,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		}
 		task.TargetConfig.Security = &openapi.Security{
 			CertAllowedCn: &certAllowedCN,
-			SslCa:         oneSubtaskConfig.To.Security.SSLCert,
+			SslCa:         oneSubtaskConfig.To.Security.SSLCA,
 			SslCert:       oneSubtaskConfig.To.Security.SSLCert,
 			SslKey:        oneSubtaskConfig.To.Security.SSLKey,
 		}

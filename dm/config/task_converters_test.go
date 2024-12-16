@@ -430,7 +430,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, task1)
-	require.Equal(t, task1.SourceConfig.FullMigrateConf.Security.SslCa, task.SourceConfig.FullMigrateConf.Security.SslCa)
 	require.EqualValues(t, task1, &task)
 
 	// test update some fields in task
