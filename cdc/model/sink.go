@@ -433,6 +433,11 @@ func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
+// GetTableID returns the table ID of the event.
+func (r *RowChangedEvent) GetTableID() int64 {
+	return r.PhysicalTableID
+}
+
 // GetCommitTs returns the commit timestamp of this event.
 func (r *RowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
