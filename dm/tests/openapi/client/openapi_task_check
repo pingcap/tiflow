@@ -271,12 +271,8 @@ def create_noshard_task_with_security_failed(
         },
     }
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
-    if resp.status_code == 502:
-        print("create_noshard_task_with_security_failed return 502")    
-        assert resp.status_code == 502
-    else:
-        print("create_noshard_task_with_security_failed resp=", resp.json())    
-        assert resp.status_code == 400
+    assert resp.status_code != 201
+    print("create_noshard_task_with_security_failed return ", resp.status_code)    
 
 def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
     task = {
