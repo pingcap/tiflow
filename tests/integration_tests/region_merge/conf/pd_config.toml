@@ -5,7 +5,7 @@ enable-placement-rules = true
 
 [schedule]
 # decrease the split-merge-interval to trigger fast region merge
-split-merge-interval = "3s"
+split-merge-interval = "1s"
 merge-schedule-limit = 32
 
 [[schedule.schedulers]]
