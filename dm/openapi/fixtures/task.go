@@ -62,12 +62,12 @@ var (
 		  "password": "123456",
 		  "port": 4000,
 		  "security": {
-        	  "ssl_ca_content": "fake_ssl_ca_content",
-              "ssl_cert_content": "fake_ssl_cert_content",
-        	  "ssl_key_content": "fake_ssl_key_content",
-        	  "ssl_ca": "fake_ssl_ca/ca.pem",
-              "ssl_cert": "fake_ssl_ca/dm.pem",
-        	  "ssl_key": "fake_ssl_ca/dm.key",
+		      "ssl_ca_content": "fake_ssl_ca_content",
+			  "ssl_cert_content": "fake_ssl_cert_content",
+			  "ssl_key_content": "fake_ssl_key_content",
+			  "ssl_ca": "fake_ssl_ca/ca.pem",
+			  "ssl_cert": "fake_ssl_ca/dm.pem",
+			  "ssl_key": "fake_ssl_ca/dm.key",
 			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
           },
 		  "user": "root"

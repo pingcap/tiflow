@@ -1247,8 +1247,9 @@ function run() {
 	test_delete_task_with_stopped_downstream
 	test_start_task_with_condition
 	test_stop_task_with_condition
-	test_reverse_https_and_tls
+	test_reverse_https
 	test_full_mode_task
+	test_tls
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster

@@ -143,6 +143,7 @@ func TestGetLightiningConfig(t *testing.T) {
 			toSecurityCfg:     &security.Security{},
 		},
 	}
+	// GetLightningConfig will varify certificates formate, so using real certificates.
 	for _, c := range cases {
 		conf, err = GetLightningConfig(
 			&lcfg.GlobalConfig{Security: *c.globalSecurityCfg},
