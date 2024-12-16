@@ -752,7 +752,6 @@ func TestE2EPartitionTable(t *testing.T) {
 
 		decodedEvent, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
-		// canal-json does not support encode the table id, so it's 0
 		require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
 		require.Equal(t, decodedEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 		require.Equal(t, decodedEvent.TableInfo.IsPartitionTable(), event.TableInfo.IsPartitionTable())
