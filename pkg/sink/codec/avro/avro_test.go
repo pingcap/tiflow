@@ -545,7 +545,6 @@ func TestColumnToAvroSchema(t *testing.T) {
 			})
 			schema, err := encoder.(*BatchEncoder).columnToAvroSchema(&v.col, v.colInfo.Ft)
 			require.NoError(t, err)
-<<<<<<< HEAD
 			require.Equal(
 				t,
 				avroSchema{
@@ -554,31 +553,6 @@ func TestColumnToAvroSchema(t *testing.T) {
 				},
 				schema,
 			)
-=======
-
-			messages := encoder.Build()
-			require.Len(t, messages, 1)
-			message := messages[0]
-
-			schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
-			require.NoError(t, err)
-
-			decoder := NewDecoder(codecConfig, schemaM, topic, nil)
-			err = decoder.AddKeyValue(message.Key, message.Value)
-			require.NoError(t, err)
-
-			messageType, exist, err := decoder.HasNext()
-			require.NoError(t, err)
-			require.True(t, exist)
-			require.Equal(t, model.MessageTypeRow, messageType)
-
-			decodedEvent, err := decoder.NextRowChangedEvent()
-			require.NoError(t, err)
-			require.NotNil(t, decodedEvent)
-			require.Equal(t, decodedEvent.GetTableID(), int64(0))
-
-			TeardownEncoderAndSchemaRegistry4Testing()
->>>>>>> b8e69ab3b8 (codec(ticdc): simple protocol set table id by using the physical table id (#11845))
 		}
 	}
 }

@@ -433,6 +433,11 @@ func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
+// GetTableID returns the table ID of the event.
+func (r *RowChangedEvent) GetTableID() int64 {
+	return r.TableInfo.TableName.TableID
+}
+
 // GetCommitTs returns the commit timestamp of this event.
 func (r *RowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
@@ -679,6 +684,13 @@ func (d *IncrementalColumnIDAllocator) GetColumnID(name string) int64 {
 //msgp:ignore NameBasedColumnIDAllocator
 type NameBasedColumnIDAllocator struct {
 	nameToIDMap map[string]int64
+}
+
+// NewNameBasedColumnIDAllocator creates a new NameBasedColumnIDAllocator
+func NewNameBasedColumnIDAllocator(nameToIDMap map[string]int64) *NameBasedColumnIDAllocator {
+	return &NameBasedColumnIDAllocator{
+		nameToIDMap: nameToIDMap,
+	}
 }
 
 // GetColumnID return the column id of the name
