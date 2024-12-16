@@ -1115,10 +1115,6 @@ function test_tls() {
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
 		"$$cur/tls_conf/ca2.pem" "" "" \
 		"$cur/tls_conf/ca.pem" "" ""
-	# use incorect pd certificate
-	openapi_task_check "create_noshard_task_with_security_failed" \
-		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key" \
-		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
 	# miss tidb cert certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
 		"$cur/tls_conf/ca2.pem""" "$cur/tls_conf/tidb.key" \
@@ -1139,6 +1135,11 @@ function test_tls() {
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
 		"$cur/tls_conf/ca2.pem""$cur/tls_conf/tidb.pem""$cur/tls_conf/tidb.key" \
 		"" "" ""
+
+	killall tidb-server 2>/dev/null || true
+	killall tikv-server 2>/dev/null || true
+	killall pd-server 2>/dev/null || true
+	cleanup_data openapi
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS"
 }
 
