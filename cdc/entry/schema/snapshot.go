@@ -258,7 +258,7 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 func (s *Snapshot) Copy() *Snapshot {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return &Snapshot{inner: s.inner, rwlock: &sync.RWMutex{}}
+	return &Snapshot{inner: s.inner, rwlock: s.rwlock}
 }
 
 // PrintStatus prints the schema snapshot.
