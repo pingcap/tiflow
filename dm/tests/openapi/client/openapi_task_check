@@ -167,8 +167,8 @@ def create_task_success_https(
             "password": "",
             "security":{
                 "ssl_ca": tidb_ca,
-				"ssl_cert": tidb_cert,
-				"ssl_key": tidb_key,
+                "ssl_cert": tidb_cert,
+                "ssl_key": tidb_key,
                 "ssl_ca_content": "",
                 "ssl_cert_content": "",
                 "ssl_key_content": "",                
