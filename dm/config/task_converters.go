@@ -240,15 +240,19 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 				subTaskCfg.LoaderConfig.PDAddr = *fullCfg.PdAddr
 			}
 			if fullCfg.Security != nil {
-				var certAllowedCN []string
-				if fullCfg.Security.CertAllowedCn != nil {
-					certAllowedCN = *fullCfg.Security.CertAllowedCn
-				}
-				subTaskCfg.LoaderConfig.Security = &security.Security{
-					SSLCA:         fullCfg.Security.SslCa,
-					SSLKey:        fullCfg.Security.SslKey,
-					SSLCert:       fullCfg.Security.SslCert,
-					CertAllowedCN: certAllowedCN,
+				if fullCfg.Security.SslCa == "" || fullCfg.Security.SslKey == "" || fullCfg.Security.SslCert == "" {
+					return nil, terror.ErrOpenAPICommonError.Generatef("Invalid security config, need to set all of ca/cert/key file path.")
+				} else {
+					var certAllowedCN []string
+					if fullCfg.Security.CertAllowedCn != nil {
+						certAllowedCN = *fullCfg.Security.CertAllowedCn
+					}
+					subTaskCfg.LoaderConfig.Security = &security.Security{
+						SSLCA:         fullCfg.Security.SslCa,
+						SSLKey:        fullCfg.Security.SslKey,
+						SSLCert:       fullCfg.Security.SslCert,
+						CertAllowedCN: certAllowedCN,
+					}
 				}
 			}
 			if fullCfg.RangeConcurrency != nil {
@@ -704,7 +708,6 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			SslKey:        oneSubtaskConfig.To.Security.SSLKey,
 		}
 	}
-
 	return &task
 }
 

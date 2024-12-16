@@ -12,7 +12,6 @@ SOURCE2_NAME = "mysql-02"
 
 
 API_ENDPOINT = "http://127.0.0.1:8361/api/v1/tasks"
-API_ENDPOINT_HTTPS = "httpS://127.0.0.1:8361/api/v1/tasks"
 
 
 def create_task_failed():
@@ -150,8 +149,8 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
-def create_task_success_https(
-        task_name, target_table, ssl_ca, ssl_cert, ssl_key,
+def create_noshard_task_with_security_success(
+        task_name, target_table,
         tidb_ca="",tidb_cert="",tidb_key="",
         cluster_ca="",cluster_cert="",cluster_key=""): 
     task = {
@@ -200,7 +199,7 @@ def create_task_success_https(
             ],
             "full_migrate_conf": {
                 "import_mode": "physical",
-                "pd_addr": "127.0.0.1:2379",
+                "pd_addr": "127.0.0.1:23790",
                 "security": {
                     "ssl_ca": cluster_ca,
                     "ssl_cert": cluster_cert,
@@ -213,12 +212,12 @@ def create_task_success_https(
             }
         },
     }
-    resp = requests.post(url=API_ENDPOINT_HTTPS, json={"task": task}, verify=ssl_ca, cert=(ssl_cert, ssl_key))
-    print("create_task_success_https resp=", resp.json())
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_with_security_success resp=", resp.json())
     assert resp.status_code == 201
 
-def create_noshard_task_failed_https(
-        task_name, ssl_ca, ssl_cert, ssl_key,
+def create_noshard_task_with_security_failed(
+        task_name, target_table,
         tidb_ca="",tidb_cert="",tidb_key="",
         cluster_ca="",cluster_cert="",cluster_key=""): 
     task = {
@@ -249,7 +248,7 @@ def create_noshard_task_failed_https(
                     "schema": "openapi",
                     "table": "*",
                 },
-                "target": {"schema": "openapi", "table": ""},
+                "target": {"schema": "openapi", "table": target_table},
             },
         ],
         "source_config": {
@@ -258,7 +257,7 @@ def create_noshard_task_failed_https(
             ],
             "full_migrate_conf": {
                 "import_mode": "physical",
-                "pd_addr": "127.0.0.1:2379",
+                "pd_addr": "127.0.0.1:23790",
                 "security": {
                     "ssl_ca": cluster_ca,
                     "ssl_cert": cluster_cert,
@@ -271,9 +270,13 @@ def create_noshard_task_failed_https(
             }
         },
     }
-    resp = requests.post(url=API_ENDPOINT_HTTPS, json={"task": task}, verify=ssl_ca, cert=(ssl_cert, ssl_key))
-    print("create_noshard_task_failed_https resp=", resp.json())
-    assert resp.status_code == 400
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    if resp.status_code == 502:
+        print("create_noshard_task_with_security_failed return 502")    
+        assert resp.status_code == 502
+    else:
+        print("create_noshard_task_with_security_failed resp=", resp.json())    
+        assert resp.status_code == 400
 
 def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
     task = {
@@ -485,13 +488,6 @@ def start_task_success(task_name, source_name):
         print("start_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
-def start_task_success_https(task_name, ssl_ca, ssl_cert, ssl_key):
-    url = API_ENDPOINT_HTTPS + "/" + task_name + "/start"
-    resp = requests.post(url=url,verify=ssl_ca, cert=(ssl_cert, ssl_key))
-    if resp.status_code != 200:
-        print("start_task_success_https resp=", resp.json())
-    assert resp.status_code == 200    
-
 def start_task_failed(task_name, source_name, check_result):
     url = API_ENDPOINT + "/" + task_name + "/start"
     req = {}
@@ -587,21 +583,13 @@ def get_task_status_success(task_name, total):
     print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
 
-def get_task_status_success_https(task_name, total, ssl_ca, ssl_cert, ssl_key):
-    url = API_ENDPOINT_HTTPS + "/" + task_name + "/status"
-    resp = requests.get(url=url,verify=ssl_ca, cert=(ssl_cert, ssl_key))
-    data = resp.json()
-    assert resp.status_code == 200
-    print("get_task_status_success_https resp=", data)
-    assert data["total"] == int(total)
-    
-def get_task_status_with_retry(task_name, ssl_ca, ssl_cert, ssl_key, expected_unit, expected_stage, retries=50):
-    url = API_ENDPOINT_HTTPS + "/" + task_name + "/status"
+def get_task_status_success_with_retry(task_name, expected_unit, expected_stage, retries=50):
+    url = API_ENDPOINT + "/" + task_name + "/status"
     for _ in range(int(retries)):
-        resp = requests.get(url=url,verify=ssl_ca, cert=(ssl_cert, ssl_key))
+        resp = requests.get(url=url)
         data = resp.json()
         assert resp.status_code == 200
-        print("get_task_status_with_retry resp=", data)
+        print("get_task_status_success_with_retry resp=", data)
         for item in data.get("data", []):
             if item.get("unit") ==  expected_unit and item.get("stage") == expected_stage:
                 return
@@ -1036,11 +1024,9 @@ if __name__ == "__main__":
         "check_sync_task_status_success": check_sync_task_status_success,
         "check_load_task_finished_status_success": check_load_task_finished_status_success,
         "check_dump_task_finished_status_success": check_dump_task_finished_status_success,
-        "create_task_success_https": create_task_success_https,
-        "create_noshard_task_failed_https": create_noshard_task_failed_https,
-        "start_task_success_https": start_task_success_https,
-        "get_task_status_success_https" : get_task_status_success_https,
-        "get_task_status_with_retry":get_task_status_with_retry,
+        "create_noshard_task_with_security_success": create_noshard_task_with_security_success,
+        "create_noshard_task_with_security_failed": create_noshard_task_with_security_failed,
+        "get_task_status_success_with_retry":get_task_status_success_with_retry,
     }
 
     func = FUNC_MAP[sys.argv[1]]

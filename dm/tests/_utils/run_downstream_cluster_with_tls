@@ -5,16 +5,17 @@ set -eux
 WORK_DIR=$1
 CONF_DIR=$2
 
-export PD_PEER_ADDR_TLS="127.0.0.1:2380"
-export PD_ADDR_TLS="127.0.0.1:2379"
+export PD_PEER_ADDR_TLS="127.0.0.1:23800"
+export PD_ADDR_TLS="127.0.0.1:23790"
 
 export TIDB_IP_TLS="127.0.0.1"
 export TIDB_PORT_TLS="4000"
 export TIDB_ADDR_TLS="127.0.0.1:4000"
-
+export TIDB_STATUS_PORT_TLS="10080"
 export TIDB_STATUS_ADDR_TLS="127.0.0.1:10080"
-export TIKV_ADDR_TLS="127.0.0.1:2016"
-export TIKV_STATUS_ADDR_TLS="127.0.0.1:2018"
+
+export TIKV_ADDR_TLS="127.0.0.1:20160"
+export TIKV_STATUS_ADDR_TLS="127.0.0.1:20180"
 
 start_pd() {
 	echo "Starting PD..."
@@ -115,7 +116,7 @@ start_tidb() {
 	cat - >"$WORK_DIR/tidb-tls-config.toml" <<EOF
 socket = "/tmp/tidb-tls.sock"
 [status]
-status-port = 10080
+status-port = $TIDB_STATUS_PORT_TLS
 [security]
 ssl-ca = "$CONF_DIR/ca2.pem"
 ssl-cert = "$CONF_DIR/tidb.pem"
@@ -136,7 +137,7 @@ EOF
 	i=0
 	while true; do
 		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/ca.pem" \
-			--cert "$CONF_DIR/dm.pem" --key "$CONF_DIR/dm.key" "https://$TIDB_IP_TLS:10080/status" || echo "")
+			--cert "$CONF_DIR/dm.pem" --key "$CONF_DIR/dm.key" "https://$TIDB_STATUS_ADDR_TLS/status" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start TiDB success'

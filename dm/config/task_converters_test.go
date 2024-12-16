@@ -67,9 +67,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLKey:        task.TargetConfig.Security.SslKey,
+			SSLCert:       task.TargetConfig.Security.SslCert,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}
@@ -133,12 +133,12 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.UUID, check.HasLen, len(uuid.NewString()))
 	c.Assert(subTaskConfig.DumpUUID, check.HasLen, len(uuid.NewString()))
 	// check security items
-	c.Assert(string(subTaskConfig.To.Security.SSLCABytes), check.Equals, task.TargetConfig.Security.SslCaContent)
-	c.Assert(string(subTaskConfig.To.Security.SSLCertBytes), check.Equals, task.TargetConfig.Security.SslCertContent)
-	c.Assert(string(subTaskConfig.To.Security.SSLKeyBytes), check.Equals, task.TargetConfig.Security.SslKeyContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLKeyBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+	c.Assert(subTaskConfig.To.Security.SSLCA, check.Equals, task.TargetConfig.Security.SslCa)
+	c.Assert(subTaskConfig.To.Security.SSLCert, check.Equals, task.TargetConfig.Security.SslCertContent)
+	c.Assert(subTaskConfig.To.Security.SSLKey, check.Equals, task.TargetConfig.Security.SslKeyContent)
+	c.Assert(subTaskConfig.LoaderConfig.Security.SSLCA, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCa)
+	c.Assert(subTaskConfig.LoaderConfig.Security.SSLCert, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCert)
+	c.Assert(subTaskConfig.LoaderConfig.Security.SSLKey, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKey)
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
@@ -299,9 +299,9 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLCert:       task.TargetConfig.Security.SslCert,
+			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}
@@ -371,7 +371,6 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	if task.TableMigrateRule[0].Source.SourceName != newTask.TableMigrateRule[0].Source.SourceName {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
-
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -391,9 +390,9 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLCert:       task.TargetConfig.Security.SslCert,
+			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}

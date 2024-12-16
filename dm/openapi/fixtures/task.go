@@ -40,7 +40,7 @@ var (
 				"ssl_key_content": "fake_ssl_key_content_2",
 				"ssl_ca": "fake_ssl_ca/ca.pem",
 				"ssl_cert": "fake_ssl_cert/dm.pem",
-				"ssl_key": "fake_ssl_key/dm.key:",
+				"ssl_key": "fake_ssl_key/dm.key",
 				"cert_allowed_cn": ["PD1", "PD2"]
 			}
 		  },

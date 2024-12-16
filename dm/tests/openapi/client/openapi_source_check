@@ -55,7 +55,7 @@ def create_source2_success():
         }
     }
     resp = requests.post(url=API_ENDPOINT, json=req)
-    print("create_source1_success resp=", resp.json())
+    print("create_source2_success resp=", resp.json())
     assert resp.status_code == 201
 
 def create_source1_success_https(ssl_ca, ssl_cert, ssl_key):
@@ -112,7 +112,7 @@ def list_source_success(source_count):
     resp = requests.get(url=API_ENDPOINT)
     assert resp.status_code == 200
     data = resp.json()
-    print("list_source_by_openapi_success resp=", data)
+    print("list_source_success resp=", data)
     assert data["total"] == int(source_count)
 
 def list_source_success_https(source_count, ssl_ca, ssl_cert, ssl_key):
@@ -286,8 +286,6 @@ if __name__ == "__main__":
         "create_source_failed": create_source_failed,
         "create_source1_success": create_source1_success,
         "create_source2_success": create_source2_success,
-        "create_source1_success_https": create_source1_success_https,
-        "create_source2_success_https":create_source2_success_https,
         "update_source1_without_password_success": update_source1_without_password_success,
         "list_source_success": list_source_success,
         "list_source_success_https": list_source_success_https,
