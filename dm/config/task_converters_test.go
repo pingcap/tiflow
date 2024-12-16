@@ -371,6 +371,7 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	if task.TableMigrateRule[0].Source.SourceName != newTask.TableMigrateRule[0].Source.SourceName {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
+
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
