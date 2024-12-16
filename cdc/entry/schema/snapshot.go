@@ -258,7 +258,7 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 func (s *Snapshot) Copy() *Snapshot {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return &Snapshot{inner: s.inner, rwlock: s.rwlock}
+	return &Snapshot{inner: s.inner, rwlock: &sync.RWMutex{}}
 }
 
 // PrintStatus prints the schema snapshot.
@@ -570,9 +570,6 @@ func (s *Snapshot) SchemaCount() (count int) {
 
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
-
 	schemas := make([]string, 0, s.inner.schemas.Len())
 	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))
