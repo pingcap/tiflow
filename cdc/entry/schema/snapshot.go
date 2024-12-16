@@ -583,8 +583,8 @@ func (s *Snapshot) SchemaCount() (count int) {
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
 	log.Debug("before s.rwlock.RLock() in DumpToString")
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
+	// s.rwlock.RLock()
+	// defer s.rwlock.RUnlock()
 	defer log.Debug("after s.rwlock.RLock() in DumpToString")
 
 	log.Debug("schemas in DumpToString")
