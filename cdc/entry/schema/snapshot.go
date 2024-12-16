@@ -582,34 +582,42 @@ func (s *Snapshot) SchemaCount() (count int) {
 
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
+	log.Debug("before s.rwlock.RLock() in DumpToString")
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
+	defer log.Debug("after s.rwlock.RLock() in DumpToString")
 
+	log.Debug("schemas in DumpToString")
 	schemas := make([]string, 0, s.inner.schemas.Len())
 	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))
 	})
 
+	log.Debug("tables in DumpToString")
 	tables := make([]string, 0, s.inner.tables.Len())
 	s.IterTables(true, func(tbInfo *model.TableInfo) {
 		tables = append(tables, fmt.Sprintf("%v", tbInfo))
 	})
 
+	log.Debug("partitions in DumpToString")
 	partitions := make([]string, 0, s.inner.partitions.Len())
 	s.IterPartitions(true, func(id int64, _ *model.TableInfo) {
 		partitions = append(partitions, fmt.Sprintf("%d", id))
 	})
 
+	log.Debug("schemaNames in DumpToString")
 	schemaNames := make([]string, 0, s.inner.schemaNameToID.Len())
 	s.IterSchemaNames(func(schema string, target int64) {
 		schemaNames = append(schemaNames, fmt.Sprintf("%s:%d", schema, target))
 	})
 
+	log.Debug("tableNames in DumpToString")
 	tableNames := make([]string, 0, s.inner.tableNameToID.Len())
 	s.IterTableNames(func(schemaID int64, table string, target int64) {
 		schema, _ := s.inner.schemaByID(schemaID)
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
+	log.Debug("after tableNames in DumpToString")
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
 		strings.Join(schemas, "\t"),
 		strings.Join(tables, "\t"),
