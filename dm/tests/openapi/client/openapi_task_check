@@ -206,8 +206,8 @@ def create_task_success_https(
                     "ssl_cert": cluster_cert,
                     "ssl_key": cluster_key,
                     "ssl_ca_content": "",
-				    "ssl_cert_content": "",
-				    "ssl_key_content": "",
+                    "ssl_cert_content": "",
+                    "ssl_key_content": "",
                     "cert_allowed_cn": ["dm"],
                 }
             }
