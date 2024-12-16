@@ -67,9 +67,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCA:         *task.TargetConfig.Security.SslCa,
-			SSLKey:        *task.TargetConfig.Security.SslKey,
-			SSLCert:       *task.TargetConfig.Security.SslCert,
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLKey:        task.TargetConfig.Security.SslKey,
+			SSLCert:       task.TargetConfig.Security.SslCert,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}
@@ -133,9 +133,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.UUID, check.HasLen, len(uuid.NewString()))
 	c.Assert(subTaskConfig.DumpUUID, check.HasLen, len(uuid.NewString()))
 	// check security items
-	c.Assert(subTaskConfig.To.Security.SSLCA, check.Equals, *task.TargetConfig.Security.SslCa)
-	c.Assert(subTaskConfig.To.Security.SSLCert, check.Equals, *task.TargetConfig.Security.SslCert)
-	c.Assert(subTaskConfig.To.Security.SSLKey, check.Equals, *task.TargetConfig.Security.SslKey)
+	c.Assert(subTaskConfig.To.Security.SSLCA, check.Equals, task.TargetConfig.Security.SslCa)
+	c.Assert(subTaskConfig.To.Security.SSLCert, check.Equals, task.TargetConfig.Security.SslCert)
+	c.Assert(subTaskConfig.To.Security.SSLKey, check.Equals, task.TargetConfig.Security.SslKey)
 	c.Assert(subTaskConfig.LoaderConfig.Security.SSLCA, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCa)
 	c.Assert(subTaskConfig.LoaderConfig.Security.SSLCert, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCert)
 	c.Assert(subTaskConfig.LoaderConfig.Security.SSLKey, check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKey)
@@ -299,9 +299,9 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCA:         *task.TargetConfig.Security.SslCa,
-			SSLCert:       *task.TargetConfig.Security.SslCert,
-			SSLKey:        *task.TargetConfig.Security.SslKey,
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLCert:       task.TargetConfig.Security.SslCert,
+			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}
@@ -391,9 +391,9 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 		Security: &security.Security{
-			SSLCA:         *task.TargetConfig.Security.SslCa,
-			SSLCert:       *task.TargetConfig.Security.SslCert,
-			SSLKey:        *task.TargetConfig.Security.SslKey,
+			SSLCA:         task.TargetConfig.Security.SslCa,
+			SSLCert:       task.TargetConfig.Security.SslCert,
+			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
 		},
 	}
