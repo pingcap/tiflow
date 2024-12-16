@@ -20,7 +20,7 @@ function split_and_random_merge() {
 	run_sql "SELECT count(distinct region_id) from information_schema.tikv_region_status where db_name = 'region_merge' and table_name = 't1';" &&
 		cat $OUT_DIR/sql_res.region_merge.txt
 	run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "truncate region_merge.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "delete from region_merge.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "ALTER TABLE region_merge.t1 ATTRIBUTES 'merge_option=allow';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sleep 5s to wait some region merge
 	sleep 5
