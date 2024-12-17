@@ -154,23 +154,38 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
-func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
+func (b *batchDecoder) queryTableInfo(schema, table string, columns []*model.Column, pkNames map[string]struct{}) *model.TableInfo {
+	cacheKey := tableKey{
+		schema: schema,
+		table:  table,
+	}
+	tableInfo, ok := b.tableInfoCache[cacheKey]
+	if !ok {
+		tableInfo = model.BuildTableInfoWithPKNames4Test(schema, table, columns, pkNames)
+		b.tableInfoCache[cacheKey] = tableInfo
+	}
+	return tableInfo
+}
+
+func (b *batchDecoder) canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
 	mysqlType := msg.getMySQLType()
-	var err error
+
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
 		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-		result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
-		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
+		tableInfo := b.queryTableInfo(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
+		result.TableInfo = tableInfo
+		result.PreColumns = model.Columns2ColumnDatas(preCols, tableInfo)
 		return result, err
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
 	cols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-	result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
-	result.Columns = model.Columns2ColumnDatas(cols, result.TableInfo)
+	tableInfo := b.queryTableInfo(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
+	result.TableInfo = tableInfo
+	result.Columns = model.Columns2ColumnDatas(cols, tableInfo)
 	if err != nil {
 		return nil, err
 	}

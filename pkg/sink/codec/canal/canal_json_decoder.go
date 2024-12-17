@@ -37,6 +37,11 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
+type tableKey struct {
+	schema string
+	table  string
+}
+
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
 	data []byte
@@ -48,6 +53,8 @@ type batchDecoder struct {
 
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
+
+	tableInfoCache map[tableKey]*model.TableInfo
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -282,7 +289,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 
-	result, err := canalJSONMessage2RowChange(b.msg)
+	result, err := b.canalJSONMessage2RowChange(b.msg)
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +307,17 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 	result := canalJSONMessage2DDLEvent(b.msg)
 	b.msg = nil
+
+	schema := *b.msg.getSchema()
+	table := *b.msg.getTable()
+	// if receive a table level DDL, just remove the table info to trigger create a new one.
+	if schema != "" && table != "" {
+		cacheKey := tableKey{
+			schema: schema,
+			table:  table,
+		}
+		delete(b.tableInfoCache, cacheKey)
+	}
 	return result, nil
 }
 
