@@ -66,9 +66,15 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
+<<<<<<< HEAD
 	github.com/pingcap/kvproto v0.0.0-20240227073058-929ab83f9754
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
 	github.com/pingcap/tidb v1.1.0-beta.0.20240802042051-abb56db84e19
+=======
+	github.com/pingcap/kvproto v0.0.0-20241120022153-92b0414aeed8
+	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
+	github.com/pingcap/tidb v1.1.0-beta.0.20241128113414-7518a29fb1d0
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240801132827-888a58b0064b
@@ -89,7 +95,11 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20240731082154-05c2c6641a7c
+=======
+	github.com/tikv/client-go/v2 v2.0.8-0.20241120024459-05d115b3e88b
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20240725040006-f1a90966c375
 	github.com/tinylib/msgp v1.1.6
@@ -167,6 +177,12 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/ks3sdklib/aws-sdk-go v1.2.9 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+<<<<<<< HEAD
+=======
+	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
+	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
@@ -186,8 +202,8 @@ require (
 	golang.org/x/arch v0.3.0 // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.28.6 // indirect
-	k8s.io/apimachinery v0.28.6 // indirect
+	k8s.io/api v0.29.11 // indirect
+	k8s.io/apimachinery v0.29.11 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
@@ -317,7 +333,11 @@ require (
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
+<<<<<<< HEAD
 	github.com/pingcap/tipb v0.0.0-20240318032315-55a7867ddd50 // indirect
+=======
+	github.com/pingcap/tipb v0.0.0-20241105053214-f91fdb81a69e // indirect
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
