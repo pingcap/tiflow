@@ -96,7 +96,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 		"WriteEvents": func(expected error) {
 			if expected == nil {
 				err := lw.WriteEvents(ctx, events...)
-				require.Nil(t, err)
+				require.NoError(t, err)
 			} else {
 				require.Eventually(
 					t, func() bool {
@@ -109,7 +109,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 		"FlushLog": func(expected error) {
 			if expected == nil {
 				err := lw.FlushLog(ctx)
-				require.Nil(t, err)
+				require.NoError(t, err)
 			} else {
 				require.Eventually(
 					t, func() bool {
