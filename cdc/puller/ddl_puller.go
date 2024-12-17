@@ -112,7 +112,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		}
 	}
 
-	job, err := p.unmarshalDDL(ddlRawKV)
+	job, err := p.unmarshalDDL(ctx, ddlRawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -146,6 +146,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	return nil
 }
 
+<<<<<<< HEAD
 func (p *ddlJobPullerImpl) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return errors.Trace(p.puller.Run(ctx)) })
@@ -161,6 +162,16 @@ func (p *ddlJobPullerImpl) run(ctx context.Context) error {
 			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
 				return errors.Trace(err)
 			}
+=======
+func (p *ddlJobPullerImpl) unmarshalDDL(ctx context.Context, rawKV *model.RawKVEntry) (*timodel.Job, error) {
+	if rawKV.OpType != model.OpTypePut {
+		return nil, nil
+	}
+	if p.ddlTableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
+		err := p.initDDLTableInfo(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 		}
 	})
 	return eg.Wait()
@@ -204,7 +215,11 @@ func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
 	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
+<<<<<<< HEAD
 func (p *ddlJobPullerImpl) initJobTableMeta() error {
+=======
+func (p *ddlJobPullerImpl) initDDLTableInfo(ctx context.Context) error {
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return errors.Trace(err)
@@ -221,7 +236,7 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 		return errors.Trace(err)
 	}
 
-	tbls, err := snap.ListTables(db.ID)
+	tbls, err := snap.ListTables(ctx, db.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
