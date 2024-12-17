@@ -322,6 +322,7 @@ func TestGetStoreFailed(t *testing.T) {
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
+	failpoint.Enable("github.com/pingcap/tiflow/pkg/version/GetStoreFailed", `return(true)`)
 	subID := client.AllocSubscriptionID()
 	span := tablepb.Span{TableID: 1, StartKey: []byte("a"), EndKey: []byte("b")}
 	eventCh := make(chan MultiplexingEvent, 50)
@@ -346,14 +347,12 @@ func TestGetStoreFailed(t *testing.T) {
 	events1 <- mockInitializedEvent(11, uint64(subID))
 	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
 	events1 <- makeTsEvent(11, ts, uint64(subID))
-	failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/GetStoreFailed", `return(true)`)
 	select {
-	case event := <-eventCh:
+	case <-eventCh:
 		require.True(t, false, "should not get event when get store failed")
-		checkTsEvent(event.RegionFeedEvent, ts)
 	case <-time.After(5 * time.Second):
 	}
-	failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/GetStoreFailed")
+	failpoint.Disable("github.com/pingcap/tiflow/pkg/version/GetStoreFailed")
 	select {
 	case event := <-eventCh:
 		checkTsEvent(event.RegionFeedEvent, ts)
