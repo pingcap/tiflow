@@ -40,3 +40,4 @@ services:
       - "4000:4000"
     image: pingcap/tidb:latest
     restart: always
+    command: 
