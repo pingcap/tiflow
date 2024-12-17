@@ -18,12 +18,9 @@ package kv
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 )
@@ -36,9 +33,6 @@ type mockPDClient struct {
 var _ pd.Client = &mockPDClient{}
 
 func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
-	failpoint.Inject("GetStoreFailed", func() {
-		failpoint.Return(nil, cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
-	})
 	s, err := m.Client.GetStore(ctx, storeID)
 	if err != nil {
 		return nil, err
