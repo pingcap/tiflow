@@ -152,6 +152,7 @@ EOF
 		sleep 3
 	done
 }
+rm -rf $WORK_DIR
 mkdir $WORK_DIR
 start_pd
 start_tikv

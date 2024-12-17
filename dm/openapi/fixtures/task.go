@@ -65,9 +65,9 @@ var (
 		      "ssl_ca_content": "",
 			  "ssl_cert_content": "",
 			  "ssl_key_content": "",
-			  "ssl_ca": "ca.pem",
-			  "ssl_cert": "dm.pem",
-			  "ssl_key": "dm.key",
+			  "ssl_ca": "",
+			  "ssl_cert": "",
+			  "ssl_key": "",
 			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
           },
 		  "user": "root"
