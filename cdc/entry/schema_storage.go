@@ -272,8 +272,7 @@ func (s *schemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]m
 	log.Debug("get new schema snapshot",
 		zap.Uint64("ts", ts),
 		zap.Uint64("snapTs", snap.CurrentTs()),
-		zap.Any("tables", res),
-		zap.String("snapshot", snap.DumpToString()))
+		zap.Any("tables", res))
 
 	return res, nil
 }
