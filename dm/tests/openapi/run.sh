@@ -1087,7 +1087,7 @@ function test_tls() {
 	echo "start downstream TiDB cluster with TLS"
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true	
+	killall -9 pd-server 2>/dev/null || true
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf
 
 	task_name="task-tls-1"
