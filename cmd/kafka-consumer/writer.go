@@ -134,8 +134,8 @@ func newWriter(ctx context.Context, o *option) *writer {
 				zap.String("dsn", o.upstreamTiDBDSN))
 		}
 	}
+	decoder, err := NewDecoder(ctx, o, db)
 	for i := 0; i < int(o.partitionNum); i++ {
-		decoder, err := NewDecoder(ctx, o, db)
 		if err != nil {
 			log.Panic("cannot create the decoder", zap.Error(err))
 		}
