@@ -79,10 +79,11 @@ func NewBatchDecoder(
 	}
 
 	return &batchDecoder{
-		config:       codecConfig,
-		storage:      externalStorage,
-		upstreamTiDB: db,
-		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		config:         codecConfig,
+		storage:        externalStorage,
+		upstreamTiDB:   db,
+		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
+		tableInfoCache: make(map[tableKey]*model.TableInfo),
 	}, nil
 }
 
