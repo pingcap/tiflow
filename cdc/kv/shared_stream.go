@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
@@ -90,12 +91,26 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			if err := waitForPreFetching(); err != nil {
 				return err
 			}
-			if canceled := stream.run(ctx, c, r); canceled {
+			err := stream.run(ctx, c, r)
+			log.Info("event feed grpc stream exits",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Uint64("streamID", stream.streamID),
+				zap.Uint64("storeID", r.storeID),
+				zap.String("addr", r.storeAddr),
+				zap.Error(err))
+			var regionErr error
+			if err == nil || errors.Cause(err) == context.Canceled {
 				return nil
+			} else if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
+				regionErr = &getStoreErr{}
+			} else {
+				regionErr = &sendRequestToStoreErr{}
 			}
+
 			for _, m := range stream.clearStates() {
 				for _, state := range m {
-					state.markStopped(&sendRequestToStoreErr{})
+					state.markStopped(regionErr)
 					sfEvent := newEventItem(nil, state, stream)
 					slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
 					_ = c.workers[slot].sendEvent(ctx, sfEvent)
@@ -108,7 +123,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 					// It means it's a special task for stopping the table.
 					continue
 				}
-				c.onRegionFail(newRegionErrorInfo(region, &sendRequestToStoreErr{}))
+				c.onRegionFail(newRegionErrorInfo(region, regionErr))
 			}
 			if err := util.Hang(ctx, time.Second); err != nil {
 				return err
@@ -125,16 +140,7 @@ func newRequestedStream(streamID uint64) *requestedStream {
 	return stream
 }
 
-func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requestedStore) (canceled bool) {
-	isCanceled := func() bool {
-		select {
-		case <-ctx.Done():
-			return true
-		default:
-			return false
-		}
-	}
-
+func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requestedStore) error {
 	if err := version.CheckStoreVersion(ctx, c.pd, rs.storeID); err != nil {
 		log.Info("event feed check store version fails",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -143,7 +149,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
 			zap.Error(err))
-		return isCanceled()
+		return err
 	}
 
 	log.Info("event feed going to create grpc stream",
@@ -154,13 +160,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		zap.String("addr", rs.storeAddr))
 
 	defer func() {
-		log.Info("event feed grpc stream exits",
-			zap.String("namespace", c.changefeed.Namespace),
-			zap.String("changefeed", c.changefeed.ID),
-			zap.Uint64("streamID", s.streamID),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
 			s.multiplexing = nil
 		} else if s.tableExclusives != nil {
@@ -181,7 +180,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
 			zap.Error(err))
-		return isCanceled()
+		return err
 	}
 
 	if cc.Multiplexing() {
@@ -211,8 +210,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		})
 	}
 	g.Go(func() error { return s.send(gctx, c, rs) })
-	_ = g.Wait()
-	return isCanceled()
+	return g.Wait()
 }
 
 func (s *requestedStream) receive(
