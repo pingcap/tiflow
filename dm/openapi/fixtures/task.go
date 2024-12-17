@@ -69,7 +69,7 @@ var (
 			  "ssl_cert": "",
 			  "ssl_key": "",
 			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
-          },
+		  },
 		  "user": "root"
 		},
 		"task_mode": "all",
