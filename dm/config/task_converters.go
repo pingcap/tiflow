@@ -240,17 +240,14 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 				subTaskCfg.LoaderConfig.PDAddr = *fullCfg.PdAddr
 			}
 			if fullCfg.Security != nil {
-				if fullCfg.Security.SslCa == "" || fullCfg.Security.SslKey == "" || fullCfg.Security.SslCert == "" {
-					return nil, terror.ErrOpenAPICommonError.Generatef("Invalid security config, need to set all of ca/cert/key file path.")
-				}
 				var certAllowedCN []string
 				if fullCfg.Security.CertAllowedCn != nil {
 					certAllowedCN = *fullCfg.Security.CertAllowedCn
 				}
 				subTaskCfg.LoaderConfig.Security = &security.Security{
-					SSLCA:         fullCfg.Security.SslCa,
-					SSLKey:        fullCfg.Security.SslKey,
-					SSLCert:       fullCfg.Security.SslCert,
+					SSLCABytes:    []byte(fullCfg.Security.SslCaContent),
+					SSLCertBytes:  []byte(fullCfg.Security.SslCertContent),
+					SSLKeyBytes:   []byte(fullCfg.Security.SslKeyContent),
 					CertAllowedCN: certAllowedCN,
 				}
 			}
@@ -578,10 +575,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			certAllowedCN = oneSubtaskConfig.LoaderConfig.Security.CertAllowedCN
 		}
 		taskSourceConfig.FullMigrateConf.Security = &openapi.Security{
-			CertAllowedCn: &certAllowedCN,
-			SslCa:         oneSubtaskConfig.LoaderConfig.Security.SSLCA,
-			SslCert:       oneSubtaskConfig.LoaderConfig.Security.SSLCert,
-			SslKey:        oneSubtaskConfig.LoaderConfig.Security.SSLKey,
+			SslCaContent:   string(oneSubtaskConfig.LoaderConfig.Security.SSLCABytes),
+			SslCertContent: string(oneSubtaskConfig.LoaderConfig.Security.SSLCertBytes),
+			SslKeyContent:  string(oneSubtaskConfig.LoaderConfig.Security.SSLKeyBytes),
+			CertAllowedCn:  &certAllowedCN,
 		}
 	}
 	// set filter rules
@@ -701,10 +698,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			certAllowedCN = oneSubtaskConfig.To.Security.CertAllowedCN
 		}
 		task.TargetConfig.Security = &openapi.Security{
-			CertAllowedCn: &certAllowedCN,
-			SslCa:         oneSubtaskConfig.To.Security.SSLCA,
-			SslCert:       oneSubtaskConfig.To.Security.SSLCert,
-			SslKey:        oneSubtaskConfig.To.Security.SSLKey,
+			SslCaContent:   string(oneSubtaskConfig.To.Security.SSLCABytes),
+			SslCertContent: string(oneSubtaskConfig.To.Security.SSLCertBytes),
+			SslKeyContent:  string(oneSubtaskConfig.To.Security.SSLKeyBytes),
+			CertAllowedCn:  &certAllowedCN,
 		}
 	}
 	return &task

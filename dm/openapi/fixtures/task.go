@@ -35,12 +35,9 @@ var (
 			"import_mode": "physical",
 			"pd_addr": "127.0.0.1:2379",
 			"security": {
-				"ssl_ca_content": "",
-				"ssl_cert_content": "",
-				"ssl_key_content": "",
-				"ssl_ca": "ca.pem",
-				"ssl_cert": "dm.pem",
-				"ssl_key": "dm.key",
+				"ssl_ca_content": "ca1",
+				"ssl_cert_content": "cert1",
+				"ssl_key_content": "key1",
 				"cert_allowed_cn": ["PD1", "PD2"]
 			}
 		  },
@@ -62,12 +59,9 @@ var (
 		  "password": "123456",
 		  "port": 4000,
 		  "security": {
-		      "ssl_ca_content": "",
-			  "ssl_cert_content": "",
-			  "ssl_key_content": "",
-			  "ssl_ca": "",
-			  "ssl_cert": "",
-			  "ssl_key": "",
+		      "ssl_ca_content": "ca2",
+			  "ssl_cert_content": "cert2",
+			  "ssl_key_content": "key2",
 			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
 		  },
 		  "user": "root"

@@ -1092,8 +1092,8 @@ function test_tls() {
 
 	task_name="task-tls-1"
 	openapi_task_check "create_noshard_task_with_security_success" $task_name "" \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
 	openapi_task_check "start_task_success" $task_name ""
 	openapi_task_check "get_task_status_success" $task_name 2
 	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50
@@ -1102,8 +1102,8 @@ function test_tls() {
 
 	task_name="task-tls-2"
 	openapi_task_check "create_noshard_task_with_security_success" $task_name "t3" \
-		"$cur/tls_conf/ca2.pem" "" "" \
-		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
 	openapi_task_check "start_task_success" $task_name ""
 	openapi_task_check "get_task_status_success" $task_name 2
 	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50
@@ -1111,30 +1111,30 @@ function test_tls() {
 	task_name="task-tls-error"
 	# miss pd cert and key certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$$cur/tls_conf/ca2.pem" "" "" \
-		"$cur/tls_conf/ca.pem" "" ""
+		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "" ""
 	# miss tidb cert certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem" "" "$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca.pem""$cur/tls_conf/dm.pem""$cur/tls_conf/dm.key)"
+		"$(cat $cur/tls_conf/ca2.pem)" "" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
 	# miss tidb key certificatete
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "" \
-		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key)"
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$cur/tls_conf/dm.key)"
 	# miss pd key certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca.pem""$cur/tls_conf/dm.pem"""
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" ""
 	# miss pd cert certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca.pem" "" "$cur/tls_conf/dm.key)"
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
+		"$(cat $cur/tls_conf/ca.pem)" "" "$(cat $cur/tls_conf/dm.key)"
 	# miss pd all certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
 		"" "" ""
 
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS SUCCESS"
 }
 
 function test_reverse_https() {

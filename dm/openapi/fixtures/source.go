@@ -31,9 +31,6 @@ var sourceStr = `
 		  "ssl_ca_content": "",
 		  "ssl_cert_content": "",
 		  "ssl_key_content": "",
-		  "ssl_ca": "",
-		  "ssl_cert": "",
-		  "ssl_key": "",
 		  "cert_allowed_cn": [
 			"string"
 		  ]

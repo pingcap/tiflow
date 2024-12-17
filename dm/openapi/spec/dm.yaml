@@ -1251,18 +1251,6 @@ components:
       description: "data source ssl configuration, the field will be hidden when getting the data source configuration from the interface"
       nullable: true
       properties:
-        ssl_ca:
-          type: string
-          example: ""
-          description: "certificate file path"
-        ssl_cert:
-          type: string
-          example: ""
-          description: "File path of PEM format/X509 format certificates"
-        ssl_key:
-          type: string
-          example: ""
-          description: "Path of the private key file in X509 format"      
         ssl_ca_content:
           type: string
           example: ""
@@ -1284,9 +1272,6 @@ components:
         - "ssl_ca_content"
         - "ssl_cert_content"
         - "ssl_key_content"
-        - "ssl_ca"
-        - "ssl_cert"
-        - "ssl_key"
     Purge:
       description: "relay log cleanup policy configuration"
       type: object

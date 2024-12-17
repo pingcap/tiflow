@@ -151,8 +151,8 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
 
 def create_noshard_task_with_security_success(
         task_name, target_table,
-        tidb_ca="",tidb_cert="",tidb_key="",
-        cluster_ca="",cluster_cert="",cluster_key=""): 
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
     task = {
         "name": task_name,
         "task_mode": "all",
@@ -165,9 +165,9 @@ def create_noshard_task_with_security_success(
             "user": "root",
             "password": "",
             "security":{
-                "ssl_ca": tidb_ca,
-                "ssl_cert": tidb_cert,
-                "ssl_key": tidb_key,
+                "ssl_ca": tidb_ca_content,
+                "ssl_cert": tidb_cert_content,
+                "ssl_key": tidb_key_content,
                 "ssl_ca_content": "",
                 "ssl_cert_content": "",
                 "ssl_key_content": "",                
@@ -201,9 +201,9 @@ def create_noshard_task_with_security_success(
                 "import_mode": "physical",
                 "pd_addr": "127.0.0.1:23790",
                 "security": {
-                    "ssl_ca": cluster_ca,
-                    "ssl_cert": cluster_cert,
-                    "ssl_key": cluster_key,
+                    "ssl_ca": cluster_ca_content,
+                    "ssl_cert": cluster_cert_content,
+                    "ssl_key": cluster_key_content,
                     "ssl_ca_content": "",
                     "ssl_cert_content": "",
                     "ssl_key_content": "",
@@ -218,8 +218,8 @@ def create_noshard_task_with_security_success(
 
 def create_noshard_task_with_security_failed(
         task_name, target_table,
-        tidb_ca="",tidb_cert="",tidb_key="",
-        cluster_ca="",cluster_cert="",cluster_key=""): 
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
     task = {
         "name": task_name,
         "task_mode": "all",
@@ -232,12 +232,9 @@ def create_noshard_task_with_security_failed(
             "user": "root",
             "password": "",
             "security":{
-                "ssl_ca": tidb_ca,
-                "ssl_cert": tidb_cert,
-                "ssl_key": tidb_key,
-                "ssl_ca_content": "",
-                "ssl_cert_content": "",
-                "ssl_key_content": "",             
+                "ssl_ca_content": tidb_ca_content,
+                "ssl_cert_content": tidb_cert_content,
+                "ssl_key_content": tidb_key_content,             
                 "cert_allowed_cn": ["TiDB"],
             }
         },
@@ -259,12 +256,9 @@ def create_noshard_task_with_security_failed(
                 "import_mode": "physical",
                 "pd_addr": "127.0.0.1:23790",
                 "security": {
-                    "ssl_ca": cluster_ca,
-                    "ssl_cert": cluster_cert,
-                    "ssl_key": cluster_key,
-                    "ssl_ca_content": "",
-                    "ssl_cert_content": "",
-                    "ssl_key_content": "",
+                    "ssl_ca_content": cluster_ca_content,
+                    "ssl_cert_content": cluster_cert_content,
+                    "ssl_key_content": cluster_key_content,
                     "cert_allowed_cn": ["dm"],
                 }
             }

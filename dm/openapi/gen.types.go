@@ -372,20 +372,11 @@ type Security struct {
 	// Common Name of SSL certificates
 	CertAllowedCn *[]string `json:"cert_allowed_cn,omitempty"`
 
-	// certificate file path
-	SslCa string `json:"ssl_ca"`
-
 	// certificate file content
 	SslCaContent string `json:"ssl_ca_content"`
 
-	// File path of PEM format/X509 format certificates
-	SslCert string `json:"ssl_cert"`
-
 	// File content of PEM format/X509 format certificates
 	SslCertContent string `json:"ssl_cert_content"`
-
-	// Path of the private key file in X509 format
-	SslKey string `json:"ssl_key"`
 
 	// Content of the private key file in X509 format
 	SslKeyContent string `json:"ssl_key_content"`
