@@ -347,7 +347,13 @@ func TestGetStoreFailed(t *testing.T) {
 	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
 	events1 <- makeTsEvent(11, ts, uint64(subID))
 	failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/GetStoreFailed", `return(true)`)
-	// defer failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause")
+	select {
+	case event := <-eventCh:
+		require.True(t, false, "should not get event when get store failed")
+		checkTsEvent(event.RegionFeedEvent, ts)
+	case <-time.After(5 * time.Second):
+	}
+	failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/GetStoreFailed")
 	select {
 	case event := <-eventCh:
 		checkTsEvent(event.RegionFeedEvent, ts)
