@@ -56,16 +56,5 @@ func main() {
 		}
 	}()
 
-	// TODO(dongmen): remove the useless code
-	sourceDBs, err := util.CreateSourceDBs()
-	if err != nil {
-		log.S().Fatal(err)
-	}
-	defer func() {
-		if err := util.CloseDBs(sourceDBs); err != nil {
-			log.S().Errorf("Failed to close source databases: %s\n", err)
-		}
-	}()
-
 	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg[0].Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }
