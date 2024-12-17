@@ -2,7 +2,7 @@
 # tools to run a TiDB cluster
 # parameter 1: work directory
 set -eux
-WORK_DIR=$1
+WORK_DIR="${1}_deploy_tidb"
 CONF_DIR=$2
 
 export PD_PEER_ADDR_TLS="127.0.0.1:23800"
@@ -132,7 +132,7 @@ EOF
 		--store tikv \
 		--path "$PD_ADDR_TLS" \
 		--config $WORK_DIR/tidb-tls-config.toml \
-		--log-file "$WORK_DIR/tidb-tls.log" 2>&1 &
+		--log-file "$WORK_DIR/tidb-tls.log" >/dev/null 2>&1 &
 	sleep 5
 	i=0
 	while true; do
@@ -152,7 +152,7 @@ EOF
 		sleep 3
 	done
 }
-
+mkdir $WORK_DIR
 start_pd
 start_tikv
 start_tidb
@@ -161,10 +161,10 @@ echo "Show databases without TLS"
 mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 -E -e "SHOW DATABASES;"
 echo "Show database with TLS"
 mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 --ssl-ca $CONF_DIR/ca2.pem \
-	--ssl-cert $CONF_DIR/tidb.pem --ssl-key $CONF_DIR/tidb.key -E -e "SHOW DATABASES;"
+	--ssl-cert $CONF_DIR/tidb.pem --ssl-key $CONF_DIR/tidb.key --ssl-mode=VERIFY_CA -E -e "SHOW DATABASES;"
 echo "Show databases with invalid TLS"
 if ! output=$(mysql -uroot -h"$TIDB_IP_TLS" -P"$TIDB_PORT_TLS" --default-character-set=utf8 \
 	--ssl-ca "$CONF_DIR/ca.pem" --ssl-cert "$CONF_DIR/dm.pem" --ssl-key "$CONF_DIR/dm.key" \
-	-E -e "SHOW DATABASES;" 2>&1); then
+	--ssl-mode=VERIFY_CA -E -e "SHOW DATABASES;" 2>&1); then
 	echo "$output"
 fi

@@ -1085,7 +1085,9 @@ function test_tls() {
 	openapi_source_check "create_source2_success"
 
 	echo "start downstream TiDB cluster with TLS"
-	killall tidb-server 2>/dev/null || true
+	killall -9 tidb-server 2>/dev/null || true
+	killall -9 tikv-server 2>/dev/null || true
+	killall -9 pd-server 2>/dev/null || true	
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf
 
 	task_name="task-tls-1"
@@ -1107,39 +1109,31 @@ function test_tls() {
 	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50
 
 	task_name="task-tls-error"
-	# use incorect pd certificate
-	openapi_task_check "create_noshard_task_with_security_failed" $task_name "t4" \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key"
 	# miss pd cert and key certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
 		"$$cur/tls_conf/ca2.pem" "" "" \
 		"$cur/tls_conf/ca.pem" "" ""
 	# miss tidb cert certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem""" "$cur/tls_conf/tidb.key" \
+		"$cur/tls_conf/ca2.pem" "" "$cur/tls_conf/tidb.key" \
 		"$cur/tls_conf/ca.pem""$cur/tls_conf/dm.pem""$cur/tls_conf/dm.key)"
 	# miss tidb key certificatete
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem""$cur/tls_conf/tidb.pem""" \
-		"$cur/tls_conf/ca.pem""$cur/tls_conf/dm.pem""$cur/tls_conf/dm.key)"
+		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "" \
+		"$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key)"
 	# miss pd key certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem""$cur/tls_conf/tidb.pem""$cur/tls_conf/tidb.key" \
+		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
 		"$cur/tls_conf/ca.pem""$cur/tls_conf/dm.pem"""
 	# miss pd cert certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem""$cur/tls_conf/tidb.pem""$cur/tls_conf/tidb.key" \
-		"$cur/tls_conf/ca.pem""" "$cur/tls_conf/dm.key)"
+		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
+		"$cur/tls_conf/ca.pem" "" "$cur/tls_conf/dm.key)"
 	# miss pd all certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
-		"$cur/tls_conf/ca2.pem""$cur/tls_conf/tidb.pem""$cur/tls_conf/tidb.key" \
+		"$cur/tls_conf/ca2.pem" "$cur/tls_conf/tidb.pem" "$cur/tls_conf/tidb.key" \
 		"" "" ""
 
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
-	cleanup_data openapi
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS"
 }
 

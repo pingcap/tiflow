@@ -353,9 +353,6 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *dbconfig.DBConfig {
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
 			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
-			SSLCA:         task.TargetConfig.Security.SslCa,
-			SSLCert:       task.TargetConfig.Security.SslCert,
-			SSLKey:        task.TargetConfig.Security.SslKey,
 			CertAllowedCN: certAllowedCN,
 		}
 	}
