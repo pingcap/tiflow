@@ -156,6 +156,87 @@ func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
 }
 
+<<<<<<< HEAD
+=======
+// Input receives the raw kv entry and put it into the input channel.
+func (p *ddlJobPullerImpl) Input(
+	ctx context.Context,
+	rawDDL *model.RawKVEntry,
+	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
+) error {
+	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
+	return nil
+}
+
+// handleRawKVEntry converts the raw kv entry to DDL job and sends it to the output channel.
+func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
+	if ddlRawKV == nil {
+		return nil
+	}
+
+	if ddlRawKV.OpType == model.OpTypeResolved {
+		// Only nil in unit test case.
+		if p.schemaStorage != nil {
+			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+		}
+		if ddlRawKV.CRTs > p.getResolvedTs() {
+			p.setResolvedTs(ddlRawKV.CRTs)
+		}
+	}
+
+	job, err := p.unmarshalDDL(ctx, ddlRawKV)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if job != nil {
+		skip, err := p.handleJob(job)
+		if err != nil {
+			return err
+		}
+		if skip {
+			return nil
+		}
+		log.Info("a new ddl job is received",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
+			zap.Any("job", job))
+	}
+
+	jobEntry := &model.DDLJobEntry{
+		Job:    job,
+		OpType: ddlRawKV.OpType,
+		CRTs:   ddlRawKV.CRTs,
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case p.outputCh <- jobEntry:
+	}
+	return nil
+}
+
+func (p *ddlJobPullerImpl) unmarshalDDL(ctx context.Context, rawKV *model.RawKVEntry) (*timodel.Job, error) {
+	if rawKV.OpType != model.OpTypePut {
+		return nil, nil
+	}
+	if p.ddlTableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
+		err := p.initDDLTableInfo(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	return entry.ParseDDLJob(rawKV, p.ddlTableInfo)
+}
+
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
 }
@@ -164,7 +245,11 @@ func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
 	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
+<<<<<<< HEAD
 func (p *ddlJobPullerImpl) initJobTableMeta() error {
+=======
+func (p *ddlJobPullerImpl) initDDLTableInfo(ctx context.Context) error {
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return errors.Trace(err)
@@ -184,7 +269,7 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 		return errors.Trace(err)
 	}
 
-	tbls, err := snap.ListTables(db.ID)
+	tbls, err := snap.ListTables(ctx, db.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}

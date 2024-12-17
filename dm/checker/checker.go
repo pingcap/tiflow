@@ -364,9 +364,24 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
+<<<<<<< HEAD
 		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg, pdClient)
 		if err != nil {
 			return err
+=======
+		builder := importer.NewPrecheckItemBuilder(
+			lCfg,
+			dbMetas,
+			newLightningPrecheckAdaptor(targetInfoGetter, info),
+			cpdb,
+			pdClient,
+			targetDB,
+		)
+
+		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {
+			c.checkList = append(c.checkList, checker.NewLightningFreeSpaceChecker(
+				info.totalDataSize.Load(), targetInfoGetter))
+>>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 		}
 		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
 			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
