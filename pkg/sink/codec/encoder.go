@@ -16,8 +16,8 @@ package codec
 import (
 	"bytes"
 	"context"
-	"github.com/pingcap/tidb/pkg/types"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
