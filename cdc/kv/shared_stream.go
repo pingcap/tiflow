@@ -305,6 +305,13 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	s.preFetchForConnecting = nil
 	for {
 		subscriptionID := region.subscribedTable.subscriptionID
+		log.Info("event feed receive region info",
+			zap.String("namespace", c.changefeed.Namespace),
+			zap.Uint64("streamID", s.streamID),
+			zap.Any("subscriptionID", subscriptionID),
+			zap.Int64("tableID", region.span.TableID),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr))
 		// It means it's a special task for stopping the table.
 		if region.isStopped() {
 			if s.multiplexing != nil {
@@ -324,10 +331,11 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				// 		zap.String("addr", rs.storeAddr),
 				// 		zap.Error(err))
 				// }
-				log.Info("deregister request")
+				log.Info("deregister request in multiplexing mode")
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
 				delete(tableExclusives, subscriptionID)
 				cc.Release()
+				log.Info("deregister request in non multiplexing mode")
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests
