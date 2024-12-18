@@ -339,7 +339,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 
-	result, err := b.canalJSONMessage2RowChange(b.msg)
+	result, err := b.canalJSONMessage2RowChange()
 	if err != nil {
 		return nil, err
 	}

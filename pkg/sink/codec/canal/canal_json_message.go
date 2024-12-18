@@ -181,9 +181,8 @@ func newTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
 	return model.WrapTableInfo(100, schema, 1000, tidbTableInfo)
 }
 
-func (b *batchDecoder) canalJSONMessage2RowChange(
-	msg canalJSONMessageInterface,
-) (*model.RowChangedEvent, error) {
+func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, error) {
+	msg := b.msg
 	result := new(model.RowChangedEvent)
 	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
