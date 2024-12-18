@@ -282,14 +282,13 @@ func setColumnInfos(
 ) {
 	mockColumnID := int64(100)
 	for name, _ := range rawColumns {
-		_, isPK := pkNames[name]
 		columnInfo := new(timodel.ColumnInfo)
 		columnInfo.ID = mockColumnID
 		columnInfo.Name = pmodel.NewCIStr(name)
 		if utils.IsBinaryMySQLType(mysqlType[name]) {
 			columnInfo.AddFlag(mysql.BinaryFlag)
 		}
-		if isPK {
+		if _, isPK := pkNames[name]; isPK {
 			columnInfo.AddFlag(mysql.PriKeyFlag)
 		}
 		tableInfo.Columns = append(tableInfo.Columns, columnInfo)
@@ -302,23 +301,18 @@ func setIndexes(
 	pkNames map[string]struct{},
 ) {
 	indexColumns := make([]*timodel.IndexColumn, 0, len(pkNames))
-	offsets := make(map[string]int, len(pkNames))
 	for idx, col := range tableInfo.Columns {
 		name := col.Name.O
 		if _, ok := pkNames[name]; ok {
-			offsets[name] = idx
+			indexColumns = append(indexColumns, &timodel.IndexColumn{
+				Name:   pmodel.NewCIStr(name),
+				Offset: idx,
+			})
 		}
 	}
-	for name, _ := range pkNames {
-		indexColumns = append(indexColumns, &timodel.IndexColumn{
-			Name:   pmodel.NewCIStr(name),
-			Offset: offsets[name],
-		})
-	}
-
 	indexInfo := &timodel.IndexInfo{
 		ID:      1,
-		Name:    pmodel.NewCIStr("PRIMARY"),
+		Name:    pmodel.NewCIStr("primary"),
 		Columns: indexColumns,
 		Unique:  true,
 		Primary: true,
