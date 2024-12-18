@@ -17,6 +17,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -271,6 +274,72 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 	return b.NextRowChangedEvent()
 }
 
+func setColumnInfos(
+	tableInfo *timodel.TableInfo,
+	rawColumns map[string]interface{},
+	mysqlType map[string]string,
+	pkNames map[string]struct{},
+) {
+	mockColumnID := int64(100)
+	for name, _ := range rawColumns {
+		_, isPK := pkNames[name]
+		columnInfo := new(timodel.ColumnInfo)
+		columnInfo.ID = mockColumnID
+		columnInfo.Name = pmodel.NewCIStr(name)
+		if utils.IsBinaryMySQLType(mysqlType[name]) {
+			columnInfo.AddFlag(mysql.BinaryFlag)
+		}
+		if isPK {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+		}
+		tableInfo.Columns = append(tableInfo.Columns, columnInfo)
+		mockColumnID++
+	}
+}
+
+func setIndexes(
+	tableInfo *timodel.TableInfo,
+	pkNames map[string]struct{},
+) {
+	indexColumns := make([]*timodel.IndexColumn, 0, len(pkNames))
+	offsets := make(map[string]int, len(pkNames))
+	for idx, col := range tableInfo.Columns {
+		name := col.Name.O
+		if _, ok := pkNames[name]; ok {
+			offsets[name] = idx
+		}
+	}
+	for name, _ := range pkNames {
+		indexColumns = append(indexColumns, &timodel.IndexColumn{
+			Name:   pmodel.NewCIStr(name),
+			Offset: offsets[name],
+		})
+	}
+
+	indexInfo := &timodel.IndexInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("PRIMARY"),
+		Columns: indexColumns,
+		Unique:  true,
+		Primary: true,
+	}
+	tableInfo.Indices = append(tableInfo.Indices, indexInfo)
+}
+
+func newTableInfo(msg canalJSONMessageInterface) (*model.TableInfo, error) {
+	schema := *msg.getSchema()
+	table := *msg.getTable()
+	tidbTableInfo := &timodel.TableInfo{}
+	tidbTableInfo.Name = pmodel.NewCIStr(table)
+
+	rawColumns := msg.getData()
+	pkNames := msg.pkNameSet()
+	mysqlType := msg.getMySQLType()
+	setColumnInfos(tidbTableInfo, rawColumns, mysqlType, pkNames)
+	setIndexes(tidbTableInfo, pkNames)
+	return model.WrapTableInfo(100, schema, 1000, tidbTableInfo), nil
+}
+
 // NextRowChangedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
@@ -289,6 +358,8 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			return b.assembleClaimCheckRowChangedEvent(ctx, message.Extensions.ClaimCheckLocation)
 		}
 	}
+
+	//tableInfo := b.queryTableInfo(b.msg.getSchema(), )
 
 	result, err := b.canalJSONMessage2RowChange(b.msg)
 	if err != nil {
