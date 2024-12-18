@@ -106,18 +106,11 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 // MakeGlobalConfig converts subtask config to lightning global config.
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
-	// if cfg.To.Security != nil {
-	// 	lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
-	// 	lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
-	// 	lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
-	// }
+	// use loader's security as global security config
 	if cfg.LoaderConfig.Security != nil {
 		lightningCfg.Security.CAPath = cfg.LoaderConfig.Security.SSLCA
 		lightningCfg.Security.CertPath = cfg.LoaderConfig.Security.SSLCert
 		lightningCfg.Security.KeyPath = cfg.LoaderConfig.Security.SSLKey
-		// lightningCfg.Security.CABytes = cfg.LoaderConfig.Security.SSLCABytes
-		// lightningCfg.Security.CertBytes = cfg.LoaderConfig.Security.SSLCertBytes
-		// lightningCfg.Security.KeyBytes = cfg.LoaderConfig.Security.SSLKeyBytes
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
