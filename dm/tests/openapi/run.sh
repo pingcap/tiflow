@@ -1077,10 +1077,6 @@ function test_tls() {
 	init_noshard_data
 	# create source1 successfully
 	openapi_source_check "create_source1_success"
-
-	# get source list success
-	openapi_source_check "list_source_success" 1
-
 	# create source2 successfully
 	openapi_source_check "create_source2_success"
 

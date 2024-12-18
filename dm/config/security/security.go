@@ -83,6 +83,9 @@ func (s *Security) ClearSSLBytesData() {
 	s.SSLCABytes = s.SSLCABytes[:0]
 	s.SSLKeyBytes = s.SSLKeyBytes[:0]
 	s.SSLCertBytes = s.SSLCertBytes[:0]
+	s.SSLCA = ""
+	s.SSLCert = ""
+	s.SSLKey = ""
 }
 
 // Clone returns a deep copy of Security.
@@ -95,5 +98,26 @@ func (s *Security) Clone() *Security {
 	clone.SSLCABytes = append([]byte(nil), s.SSLCABytes...)
 	clone.SSLKeyBytes = append([]byte(nil), s.SSLKeyBytes...)
 	clone.SSLCertBytes = append([]byte(nil), s.SSLCertBytes...)
+	clone.SSLCA = s.SSLCA
+	clone.SSLCert = s.SSLCert
+	clone.SSLKey = s.SSLKey
 	return &clone
+}
+
+func (s *Security) WriteFiles(name string) error {
+	// Initialize file paths in temp dir
+	s.SSLCA = fmt.Sprintf("%s/%s_ca.pem", os.TempDir(), name)
+	s.SSLKey = fmt.Sprintf("%s/%s_dm.pem", os.TempDir(), name)
+	s.SSLCert = fmt.Sprintf("%s/%s_dm.key", os.TempDir(), name)
+
+	if err := os.WriteFile(s.SSLCA, s.SSLCABytes, 0644); err != nil {
+		return fmt.Errorf("failed to save SSL CA: %w", err)
+	}
+	if err := os.WriteFile(s.SSLKey, s.SSLKeyBytes, 0644); err != nil {
+		return fmt.Errorf("failed to save SSL Key: %w", err)
+	}
+	if err := os.WriteFile(s.SSLCert, s.SSLCertBytes, 0644); err != nil {
+		return fmt.Errorf("failed to save SSL Cert: %w", err)
+	}
+	return nil
 }

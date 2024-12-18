@@ -240,6 +240,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 				subTaskCfg.LoaderConfig.PDAddr = *fullCfg.PdAddr
 			}
 			if fullCfg.Security != nil {
+				if fullCfg.Security.SslCaContent == "" || fullCfg.Security.SslCertContent == "" || fullCfg.Security.SslKeyContent == "" {
+					return nil, terror.ErrOpenAPICommonError.Generatef("Invalid security config, full migrate conf's security fields should not be \"\"")
+				}
 				var certAllowedCN []string
 				if fullCfg.Security.CertAllowedCn != nil {
 					certAllowedCN = *fullCfg.Security.CertAllowedCn
@@ -249,6 +252,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 					SSLCertBytes:  []byte(fullCfg.Security.SslCertContent),
 					SSLKeyBytes:   []byte(fullCfg.Security.SslKeyContent),
 					CertAllowedCN: certAllowedCN,
+				}
+				if err := subTaskCfg.LoaderConfig.Security.WriteFiles(subTaskCfg.Name); err != nil {
+					return nil, terror.ErrOpenAPICommonError.Generatef("Save tls config files files, message=%s", err.Error())
 				}
 			}
 			if fullCfg.RangeConcurrency != nil {

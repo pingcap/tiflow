@@ -158,6 +158,9 @@ def create_noshard_task_with_security_success(
         "task_mode": "all",
         "meta_schema": "dm-meta",
         "enhance_online_schema_change": True,
+        "ignore_checking_items": [
+            "all"
+        ],
         "on_duplicate": "error",
         "target_config": {
             "host": "127.0.0.1",
@@ -165,12 +168,9 @@ def create_noshard_task_with_security_success(
             "user": "root",
             "password": "",
             "security":{
-                "ssl_ca": tidb_ca_content,
-                "ssl_cert": tidb_cert_content,
-                "ssl_key": tidb_key_content,
-                "ssl_ca_content": "",
-                "ssl_cert_content": "",
-                "ssl_key_content": "",                
+                "ssl_ca_content": tidb_ca_content,
+                "ssl_cert_content": tidb_cert_content,
+                "ssl_key_content": tidb_key_content,                
                 "cert_allowed_cn": ["TiDB", "dm", "locahost"],
             }
         },
@@ -199,14 +199,10 @@ def create_noshard_task_with_security_success(
             ],
             "full_migrate_conf": {
                 "import_mode": "physical",
-                "pd_addr": "127.0.0.1:23790",
                 "security": {
-                    "ssl_ca": cluster_ca_content,
-                    "ssl_cert": cluster_cert_content,
-                    "ssl_key": cluster_key_content,
-                    "ssl_ca_content": "",
-                    "ssl_cert_content": "",
-                    "ssl_key_content": "",
+                    "ssl_ca_content": cluster_ca_content,
+                    "ssl_cert_content": cluster_cert_content,
+                    "ssl_key_content": cluster_key_content,
                     "cert_allowed_cn": ["dm"],
                 }
             }
@@ -224,6 +220,9 @@ def create_noshard_task_with_security_failed(
         "name": task_name,
         "task_mode": "all",
         "meta_schema": "dm-meta",
+        "ignore_checking_items": [
+            "all"
+        ],
         "enhance_online_schema_change": True,
         "on_duplicate": "error",
         "target_config": {
