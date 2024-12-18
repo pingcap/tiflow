@@ -106,10 +106,10 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 // MakeGlobalConfig converts subtask config to lightning global config.
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
-	if cfg.LoaderConfig.Security != nil {
-		lightningCfg.Security.CAPath = cfg.LoaderConfig.Security.SSLCA
-		lightningCfg.Security.CertPath = cfg.LoaderConfig.Security.SSLCert
-		lightningCfg.Security.KeyPath = cfg.LoaderConfig.Security.SSLKey
+	if cfg.To.Security != nil {
+		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
+		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
+		lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
@@ -279,7 +279,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
-
+	l.logger.Debug("ssl content debug", zap.Any("task cfg", cfg))
+	l.logger.Debug("ssl content debug", zap.String("ca content", string(cfg.Security.CABytes)), zap.String("cert content", string(cfg.Security.CertBytes)), zap.String("key content", string(cfg.Security.KeyBytes)))
+	l.logger.Debug("ssl content debug", zap.String("ca content", string(cfg.TiDB.Security.CABytes)), zap.String("cert content", string(cfg.TiDB.Security.CertBytes)), zap.String("key content", string(cfg.TiDB.Security.KeyBytes)))
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -330,10 +332,10 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		return nil, err
 	}
 	cfg.TiDB.Security = &globalCfg.Security
-	if subtaskCfg.To.Security != nil {
-		cfg.TiDB.Security.CAPath = subtaskCfg.To.Security.SSLCA
-		cfg.TiDB.Security.CertPath = subtaskCfg.To.Security.SSLCert
-		cfg.TiDB.Security.KeyPath = subtaskCfg.To.Security.SSLKey
+	if subtaskCfg.LoaderConfig.Security != nil {
+		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
+		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
