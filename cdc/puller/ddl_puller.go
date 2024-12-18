@@ -198,7 +198,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		}
 	}
 
-	job, err := p.unmarshalDDL(ctx, ddlRawKV)
+	job, err := p.unmarshalDDL(ddlRawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -235,7 +235,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	return nil
 }
 
-func (p *ddlJobPullerImpl) unmarshalDDL(ctx context.Context, rawKV *model.RawKVEntry) (*timodel.Job, error) {
+func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
