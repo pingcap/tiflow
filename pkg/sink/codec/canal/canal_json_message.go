@@ -241,17 +241,15 @@ func canalJSONColumnMap2RowChangeColumns(
 	result := make([]*model.ColumnData, 0, len(cols))
 	for _, columnInfo := range tableInfo.Columns {
 		name := columnInfo.Name.O
+		value, ok := cols[name]
+		if !ok {
+			continue
+		}
 		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
-		}
-		value, ok := cols[name]
-		if !ok {
-			// this should not happen, else we have to check encoding for cols.
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
-				"column value does not found, column: %+v, cols: %+v", name, cols)
 		}
 		col := canalJSONFormatColumn(columnInfo.ID, value, mysqlTypeStr)
 		result = append(result, col)
