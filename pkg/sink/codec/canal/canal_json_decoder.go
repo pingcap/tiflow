@@ -281,7 +281,7 @@ func setColumnInfos(
 	pkNames map[string]struct{},
 ) {
 	mockColumnID := int64(100)
-	for name, _ := range rawColumns {
+	for name := range rawColumns {
 		columnInfo := new(timodel.ColumnInfo)
 		columnInfo.ID = mockColumnID
 		columnInfo.Name = pmodel.NewCIStr(name)
