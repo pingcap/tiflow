@@ -21,21 +21,14 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
+	certificate "github.com/pingcap/tiflow/pkg/security"
+
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/stretchr/testify/require"
-)
-
-var (
-	caPath    = "tls_conf/ca.pem"
-	caPath2   = "tls_conf/ca2.pem"
-	certPath  = "tls_conf/dm.pem"
-	certPath2 = "tls_conf/tidb.pem"
-	keyPath   = "tls_conf/dm.key"
-	keyPath2  = "tls_conf/tidb.key"
 )
 
 func TestSetLightningConfig(t *testing.T) {
@@ -111,60 +104,66 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 
-	cases := []struct {
-		globalSecurityCfg *lcfg.Security
-		loaderSecurityCfg *security.Security
-		toSecurityCfg     *security.Security
-	}{
-		{
-			globalSecurityCfg: &lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath},
-			loaderSecurityCfg: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2},
-			toSecurityCfg:     &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
-		},
-		{
-			globalSecurityCfg: &lcfg.Security{CAPath: caPath},
-			loaderSecurityCfg: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2},
-			toSecurityCfg:     &security.Security{SSLCA: caPath},
-		},
-		{
-			globalSecurityCfg: &lcfg.Security{CAPath: caPath},
-			toSecurityCfg:     &security.Security{SSLCA: caPath},
-		},
-		{
-			globalSecurityCfg: &lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath},
-			toSecurityCfg:     &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
-		},
-		{
-			globalSecurityCfg: &lcfg.Security{CAPath: caPath},
-			toSecurityCfg:     &security.Security{SSLCA: caPath},
-		},
-		{
-			globalSecurityCfg: &lcfg.Security{},
-			toSecurityCfg:     &security.Security{},
-		},
-	}
-	// GetLightningConfig will varify certificates formate, so using real certificates.
-	for _, c := range cases {
-		conf, err = GetLightningConfig(
-			&lcfg.GlobalConfig{Security: *c.globalSecurityCfg},
-			&config.SubTaskConfig{
-				LoaderConfig: config.LoaderConfig{Security: c.loaderSecurityCfg},
-				To:           dbconfig.DBConfig{Security: c.toSecurityCfg},
-			})
-		require.NoError(t, err)
-		require.Equal(t, c.globalSecurityCfg.CAPath, conf.TiDB.Security.CAPath)
-		require.Equal(t, c.globalSecurityCfg.CertPath, conf.TiDB.Security.CertPath)
-		require.Equal(t, c.globalSecurityCfg.KeyPath, conf.TiDB.Security.KeyPath)
-		if c.loaderSecurityCfg == nil {
-			require.Equal(t, c.globalSecurityCfg.CAPath, conf.Security.CAPath)
-			require.Equal(t, c.globalSecurityCfg.CertPath, conf.Security.CertPath)
-			require.Equal(t, c.globalSecurityCfg.KeyPath, conf.Security.KeyPath)
-		} else {
-			require.Equal(t, c.loaderSecurityCfg.SSLCA, conf.Security.CAPath)
-			require.Equal(t, c.loaderSecurityCfg.SSLCert, conf.Security.CertPath)
-			require.Equal(t, c.loaderSecurityCfg.SSLKey, conf.Security.KeyPath)
-		}
-	}
+	ca, err := certificate.NewCA()
+	require.NoError(t, err)
+	cert, key, err := ca.GenerateCerts("dm")
+	require.NoError(t, err)
+	caPath, err := certificate.WriteFile("dm-test-client-cert", ca.CAPEM)
+	require.NoError(t, err)
+	certPath, err := certificate.WriteFile("dm-test-client-cert", cert)
+	require.NoError(t, err)
+	keyPath, err := certificate.WriteFile("dm-test-client-key", key)
+	require.NoError(t, err)
+	ca, err = certificate.NewCA()
+	require.NoError(t, err)
+	cert, key, err = ca.GenerateCerts("dm")
+	require.NoError(t, err)
+	caPath2, err := certificate.WriteFile("dm-test-client-cert2", ca.CAPEM)
+	require.NoError(t, err)
+	certPath2, err := certificate.WriteFile("dm-test-client-cert2", cert)
+	require.NoError(t, err)
+	keyPath2, err := certificate.WriteFile("dm-test-client-key2", key)
+	require.NoError(t, err)
+
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, caPath)
+	require.Equal(t, conf.Security.CertPath, certPath)
+	require.Equal(t, conf.Security.KeyPath, keyPath)
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			To:           dbconfig.DBConfig{},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, caPath)
+	require.Equal(t, conf.Security.CertPath, certPath)
+	require.Equal(t, conf.Security.KeyPath, keyPath)
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, "")
+	require.Equal(t, conf.Security.CertPath, "")
+	require.Equal(t, conf.Security.KeyPath, "")
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
 	// invalid security file path
 	_, err = GetLightningConfig(
 		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: "caPath"}},

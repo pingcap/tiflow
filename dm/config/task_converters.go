@@ -253,6 +253,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 					SSLKeyBytes:   []byte(fullCfg.Security.SslKeyContent),
 					CertAllowedCN: certAllowedCN,
 				}
+				// TODO: Just a workround for using SslContent cannot verify ceritificates when lightning use pdctl lib access PD server
 				if err := subTaskCfg.LoaderConfig.Security.WriteFiles(subTaskCfg.Name); err != nil {
 					return nil, terror.ErrOpenAPICommonError.Generatef("Save tls config files files, message=%s", err.Error())
 				}

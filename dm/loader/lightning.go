@@ -106,7 +106,6 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 // MakeGlobalConfig converts subtask config to lightning global config.
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
-	// use loader's security as global security config
 	if cfg.LoaderConfig.Security != nil {
 		lightningCfg.Security.CAPath = cfg.LoaderConfig.Security.SSLCA
 		lightningCfg.Security.CertPath = cfg.LoaderConfig.Security.SSLCert

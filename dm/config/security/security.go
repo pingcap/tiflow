@@ -17,6 +17,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+
+	certificate "github.com/pingcap/tiflow/pkg/security"
 )
 
 // Security config.
@@ -105,19 +107,15 @@ func (s *Security) Clone() *Security {
 }
 
 func (s *Security) WriteFiles(name string) error {
-	// Initialize file paths in temp dir
-	s.SSLCA = fmt.Sprintf("%s/%s_ca.pem", os.TempDir(), name)
-	s.SSLKey = fmt.Sprintf("%s/%s_dm.pem", os.TempDir(), name)
-	s.SSLCert = fmt.Sprintf("%s/%s_dm.key", os.TempDir(), name)
-
-	if err := os.WriteFile(s.SSLCA, s.SSLCABytes, 0644); err != nil {
-		return fmt.Errorf("failed to save SSL CA: %w", err)
+	var err error
+	if s.SSLCA, err = certificate.WriteFile(fmt.Sprintf("%s_ca.pem", name), s.SSLCABytes); err != nil {
+		return err
 	}
-	if err := os.WriteFile(s.SSLKey, s.SSLKeyBytes, 0644); err != nil {
-		return fmt.Errorf("failed to save SSL Key: %w", err)
+	if s.SSLCert, err = certificate.WriteFile(fmt.Sprintf("%s_dm.pem", name), s.SSLCertBytes); err != nil {
+		return err
 	}
-	if err := os.WriteFile(s.SSLCert, s.SSLCertBytes, 0644); err != nil {
-		return fmt.Errorf("failed to save SSL Cert: %w", err)
+	if s.SSLKey, err = certificate.WriteFile(fmt.Sprintf("%s_dm.key", name), s.SSLKeyBytes); err != nil {
+		return err
 	}
 	return nil
 }
