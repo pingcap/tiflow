@@ -326,20 +326,6 @@ func setIndexes(
 	tableInfo.Indices = append(tableInfo.Indices, indexInfo)
 }
 
-func newTableInfo(msg canalJSONMessageInterface) (*model.TableInfo, error) {
-	schema := *msg.getSchema()
-	table := *msg.getTable()
-	tidbTableInfo := &timodel.TableInfo{}
-	tidbTableInfo.Name = pmodel.NewCIStr(table)
-
-	rawColumns := msg.getData()
-	pkNames := msg.pkNameSet()
-	mysqlType := msg.getMySQLType()
-	setColumnInfos(tidbTableInfo, rawColumns, mysqlType, pkNames)
-	setIndexes(tidbTableInfo, pkNames)
-	return model.WrapTableInfo(100, schema, 1000, tidbTableInfo), nil
-}
-
 // NextRowChangedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
@@ -358,8 +344,6 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			return b.assembleClaimCheckRowChangedEvent(ctx, message.Extensions.ClaimCheckLocation)
 		}
 	}
-
-	//tableInfo := b.queryTableInfo(b.msg.getSchema(), )
 
 	result, err := b.canalJSONMessage2RowChange(b.msg)
 	if err != nil {
