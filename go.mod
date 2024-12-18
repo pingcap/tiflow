@@ -67,14 +67,8 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20241120022153-92b0414aeed8
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-<<<<<<< HEAD
-	github.com/pingcap/tidb v1.1.0-beta.0.20241206091626-2061937ed35b
+	github.com/pingcap/tidb v1.1.0-beta.0.20241213034006-c7f1b95c537a
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20241206091626-2061937ed35b
-=======
-	github.com/pingcap/tidb v1.1.0-beta.0.20241128113414-7518a29fb1d0
-	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20241119124618-50b5cd27d413
->>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -91,12 +85,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20241125064441-5ce6bf1f099c
-=======
-	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20241120024459-05d115b3e88b
->>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20240724132535-fcb34c90790c
 	github.com/tinylib/msgp v1.1.6
@@ -161,7 +150,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
@@ -171,11 +160,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/ks3sdklib/aws-sdk-go v1.2.6 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-<<<<<<< HEAD
-=======
-	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
-	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
->>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pingcap/tipb v0.0.0-20240507090649-2bf6bb0cb996 // indirect
@@ -319,10 +303,6 @@ require (
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
-<<<<<<< HEAD
-=======
-	github.com/pingcap/tipb v0.0.0-20241105053214-f91fdb81a69e // indirect
->>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
