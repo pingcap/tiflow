@@ -307,7 +307,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	result := canalJSONMessage2DDLEvent(b.msg)
-	b.msg = nil
 
 	schema := *b.msg.getSchema()
 	table := *b.msg.getTable()
@@ -319,6 +318,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		}
 		delete(b.tableInfoCache, cacheKey)
 	}
+	b.msg = nil
 	return result, nil
 }
 
