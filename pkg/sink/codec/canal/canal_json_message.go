@@ -154,14 +154,14 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
-func (b *batchDecoder) queryTableInfo(schema, table string, columns []*model.Column, pkNames map[string]struct{}) *model.TableInfo {
+func (b *batchDecoder) queryTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
 	cacheKey := tableKey{
-		schema: schema,
-		table:  table,
+		schema: *msg.getSchema(),
+		table:  *msg.getTable(),
 	}
 	tableInfo, ok := b.tableInfoCache[cacheKey]
 	if !ok {
-		tableInfo = model.BuildTableInfoWithPKNames4Test(schema, table, columns, pkNames)
+		tableInfo = newTableInfo(msg)
 		b.tableInfoCache[cacheKey] = tableInfo
 	}
 	return tableInfo
@@ -185,7 +185,7 @@ func (b *batchDecoder) canalJSONMessage2RowChange(
 	msg canalJSONMessageInterface,
 ) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
-	result.TableInfo = newTableInfo(b.msg)
+	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
 
 	mysqlType := msg.getMySQLType()
