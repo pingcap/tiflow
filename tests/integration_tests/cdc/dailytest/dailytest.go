@@ -54,16 +54,16 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 		// generate insert/update/delete sqls and execute
 		RunDailyTest(sourceDB, TableSQLs, workerCount, jobCount, batch)
 	})
-	//
-	//RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
-	//	// truncate test data
-	//	TruncateTestTable(sourceDB, TableSQLs)
-	//})
-	//
-	//RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
-	//	// drop test table
-	//	DropTestTable(sourceDB, TableSQLs)
-	//})
+
+	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
+		// truncate test data
+		TruncateTestTable(sourceDB, TableSQLs)
+	})
+
+	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
+		// drop test table
+		DropTestTable(sourceDB, TableSQLs)
+	})
 
 	log.S().Info("test pass!!!")
 }

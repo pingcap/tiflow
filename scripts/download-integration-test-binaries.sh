@@ -118,7 +118,7 @@ function download_binaries() {
 
 	# Get sha1 based on branch name.
 	tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-	tikv_sha1="b4bddeeb995e7bedc1973ce9e856eeb2d856ce9b"
+  tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
 	pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
 	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
 
