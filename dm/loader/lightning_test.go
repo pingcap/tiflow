@@ -21,11 +21,10 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
-	certificate "github.com/pingcap/tiflow/pkg/security"
-
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	certificate "github.com/pingcap/tiflow/pkg/security"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/stretchr/testify/require"
