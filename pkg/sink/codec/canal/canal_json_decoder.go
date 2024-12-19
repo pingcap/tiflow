@@ -81,8 +81,17 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	if codecConfig.EnableTiDBExtension {
+		msg = &canalJSONMessageWithTiDBExtension{
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
+		}
+	}
+
 	return &batchDecoder{
 		config:         codecConfig,
+		msg:            msg,
 		storage:        externalStorage,
 		upstreamTiDB:   db,
 		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
@@ -109,18 +118,8 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.data == nil {
 		return model.MessageTypeUnknown, false, nil
 	}
-	var (
-		msg         canalJSONMessageInterface = &JSONMessage{}
-		encodedData []byte
-	)
 
-	if b.config.EnableTiDBExtension {
-		msg = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: &JSONMessage{},
-			Extensions:  &tidbExtension{},
-		}
-	}
-
+	var encodedData []byte
 	if len(b.config.Terminator) > 0 {
 		idx := bytes.IndexAny(b.data, b.config.Terminator)
 		if idx >= 0 {
@@ -139,12 +138,11 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := json.Unmarshal(encodedData, msg); err != nil {
+	if err := json.Unmarshal(encodedData, b.msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
 			zap.Error(err), zap.ByteString("data", encodedData))
 		return model.MessageTypeUnknown, false, err
 	}
-	b.msg = msg
 	return b.msg.messageType(), true, nil
 }
 
@@ -343,7 +341,6 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.msg = nil
 	return result, nil
 }
 
@@ -356,7 +353,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	result := canalJSONMessage2DDLEvent(b.msg)
-
 	schema := *b.msg.getSchema()
 	table := *b.msg.getTable()
 	// if receive a table level DDL, just remove the table info to trigger create a new one.
@@ -367,7 +363,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		}
 		delete(b.tableInfoCache, cacheKey)
 	}
-	b.msg = nil
 	return result, nil
 }
 
@@ -386,6 +381,5 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
-	b.msg = nil
 	return withExtensionEvent.Extensions.WatermarkTs, nil
 }
