@@ -104,6 +104,7 @@ func (d *canalJSONTxnEventDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 	if err != nil {
 		return nil, err
 	}
+	d.msg = nil
 	return result, nil
 }
 

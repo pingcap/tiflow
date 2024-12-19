@@ -16,7 +16,6 @@ package canal
 import (
 	"context"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -94,75 +93,15 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	}
 }
 
-func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	sql := `create table test.person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))`
-	ddlEvent := helper.DDL2Event(sql)
-
-	ctx := context.Background()
-	for _, encodeEnable := range []bool{false, true} {
-		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-		codecConfig.EnableTiDBExtension = encodeEnable
-
-		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		encoder := builder.Build()
-
-		result, err := encoder.EncodeDDLEvent(ddlEvent)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		for _, decodeEnable := range []bool{false, true} {
-			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-			codecConfig.EnableTiDBExtension = decodeEnable
-			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-			require.NoError(t, err)
-			err = decoder.AddKeyValue(nil, result.Value)
-			require.NoError(t, err)
-
-			ty, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
-			require.True(t, hasNext)
-			require.Equal(t, model.MessageTypeDDL, ty)
-
-			consumed, err := decoder.NextDDLEvent()
-			require.Nil(t, err)
-
-			if encodeEnable && decodeEnable {
-				require.Equal(t, ddlEvent.CommitTs, consumed.CommitTs)
-			} else {
-				require.Equal(t, uint64(0), consumed.CommitTs)
-			}
-
-			require.Equal(t, ddlEvent.TableInfo.TableName.Schema, consumed.TableInfo.TableName.Schema)
-			require.Equal(t, ddlEvent.TableInfo.TableName.Table, consumed.TableInfo.TableName.Table)
-			require.Equal(t, ddlEvent.Query, consumed.Query)
-
-			ty, hasNext, err = decoder.HasNext()
-			require.Nil(t, err)
-			require.False(t, hasNext)
-			require.Equal(t, model.MessageTypeUnknown, ty)
-
-			consumed, err = decoder.NextDDLEvent()
-			require.NotNil(t, err)
-			require.Nil(t, consumed)
-		}
-	}
-}
-
 func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 	encodedValue := `{"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"INSERT","es":1668067205238,"ts":1668067206650,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}],"old":null}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"UPDATE","es":1668067229137,"ts":1668067230720,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}]}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"DELETE","es":1668067230388,"ts":1668067231725,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":null}`
-	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.Terminator = "\n"
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
+	decoder := NewCanalJSONTxnEventDecoder(codecConfig)
 
-	err = decoder.AddKeyValue(nil, []byte(encodedValue))
+	err := decoder.AddKeyValue(nil, []byte(encodedValue))
 	require.NoError(t, err)
 
 	cnt := 0
