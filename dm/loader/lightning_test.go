@@ -127,21 +127,34 @@ func TestGetLightiningConfig(t *testing.T) {
 	conf, err = GetLightningConfig(
 		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
 		&config.SubTaskConfig{
-			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
-			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
 		})
 	require.NoError(t, err)
-	require.Equal(t, conf.Security.CAPath, caPath)
-	require.Equal(t, conf.Security.CertPath, certPath)
-	require.Equal(t, conf.Security.KeyPath, keyPath)
-	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
-	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
-	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
+	require.Equal(t, conf.Security.CAPath, caPath2)
+	require.Equal(t, conf.Security.CertPath, certPath2)
+	require.Equal(t, conf.Security.KeyPath, keyPath2)
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			To:           dbconfig.DBConfig{},
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, caPath2)
+	require.Equal(t, conf.Security.CertPath, certPath2)
+	require.Equal(t, conf.Security.KeyPath, keyPath2)
+	require.Equal(t, conf.TiDB.Security.CAPath, "")
+	require.Equal(t, conf.TiDB.Security.CertPath, "")
+	require.Equal(t, conf.TiDB.Security.KeyPath, "")
 	conf, err = GetLightningConfig(
 		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
 		&config.SubTaskConfig{
-			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
-			To:           dbconfig.DBConfig{},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			LoaderConfig: config.LoaderConfig{},
 		})
 	require.NoError(t, err)
 	require.Equal(t, conf.Security.CAPath, caPath)
@@ -150,19 +163,6 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
 	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
 	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
-	conf, err = GetLightningConfig(
-		&lcfg.GlobalConfig{},
-		&config.SubTaskConfig{
-			LoaderConfig: config.LoaderConfig{},
-			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
-		})
-	require.NoError(t, err)
-	require.Equal(t, conf.Security.CAPath, "")
-	require.Equal(t, conf.Security.CertPath, "")
-	require.Equal(t, conf.Security.KeyPath, "")
-	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
-	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
-	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
 	// invalid security file path
 	_, err = GetLightningConfig(
 		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: "caPath"}},
