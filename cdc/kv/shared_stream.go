@@ -344,14 +344,14 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			// 3. is it possible that TiKV is keeping to send events belong to a removed state?
 			//    I guess no because internal errors will cause the changefeed or table stopped,
 			//    and then those regions from the bad requestID will be unsubscribed finally.
-			for _, state := range s.takeStates(subscriptionID) {
-				state.markStopped(&sendRequestToStoreErr{})
-				sfEvent := newEventItem(nil, state, s)
-				slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
-				if err = c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
-					return errors.Trace(err)
-				}
-			}
+			// for _, state := range s.takeStates(subscriptionID) {
+			// 	state.markStopped(&sendRequestToStoreErr{})
+			// 	sfEvent := newEventItem(nil, state, s)
+			// 	slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
+			// 	if err = c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
+			// 		return errors.Trace(err)
+			// 	}
+			// }
 		} else if region.subscribedTable.stopped.Load() {
 			// It can be skipped directly because there must be no pending states from
 			// the stopped subscribedTable, or the special singleRegionInfo for stopping
