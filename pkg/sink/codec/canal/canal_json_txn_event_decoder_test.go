@@ -15,13 +15,14 @@ package canal
 
 import (
 	"context"
+	"testing"
+
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {

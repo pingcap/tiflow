@@ -16,6 +16,7 @@ package canal
 import (
 	"bytes"
 	"encoding/json"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
