@@ -47,8 +47,10 @@ type tableKey struct {
 
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
-	data []byte
-	msg  canalJSONMessageInterface
+	// data    []byte
+	msg     canalJSONMessageInterface
+	decoder *json.Decoder
+	buf     *bytes.Buffer
 
 	config *common.Config
 
@@ -89,9 +91,13 @@ func NewBatchDecoder(
 		}
 	}
 
+	buf := new(bytes.Buffer)
+	decoder := json.NewDecoder(buf)
 	return &batchDecoder{
 		config:         codecConfig,
 		msg:            msg,
+		buf:            buf,
+		decoder:        decoder,
 		storage:        externalStorage,
 		upstreamTiDB:   db,
 		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
@@ -109,40 +115,47 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 
 		return errors.Trace(err)
 	}
-	b.data = value
+	//b.data = value
+	b.buf.Write(value)
 	return nil
 }
 
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if b.data == nil {
+	if b.buf.Len() == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	var encodedData []byte
-	if len(b.config.Terminator) > 0 {
-		idx := bytes.IndexAny(b.data, b.config.Terminator)
-		if idx >= 0 {
-			encodedData = b.data[:idx]
-			b.data = b.data[idx+len(b.config.Terminator):]
-		} else {
-			encodedData = b.data
-			b.data = nil
-		}
-	} else {
-		encodedData = b.data
-		b.data = nil
-	}
-
-	if len(encodedData) == 0 {
-		return model.MessageTypeUnknown, false, nil
-	}
-
-	if err := json.Unmarshal(encodedData, b.msg); err != nil {
-		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err), zap.ByteString("data", encodedData))
+	if err := b.decoder.Decode(b.msg); err != nil {
+		log.Error("canal-json decoder decode failed",
+			zap.Error(err), zap.ByteString("data", b.buf.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
+
+	//var encodedData []byte
+	//if len(b.config.Terminator) > 0 {
+	//	idx := bytes.IndexAny(b.data, b.config.Terminator)
+	//	if idx >= 0 {
+	//		encodedData = b.data[:idx]
+	//		b.data = b.data[idx+len(b.config.Terminator):]
+	//	} else {
+	//		encodedData = b.data
+	//		b.data = nil
+	//	}
+	//} else {
+	//	encodedData = b.data
+	//	b.data = nil
+	//}
+
+	//if len(encodedData) == 0 {
+	//	return model.MessageTypeUnknown, false, nil
+	//}
+
+	//if err := json.Unmarshal(encodedData, b.msg); err != nil {
+	//	log.Error("canal-json decoder unmarshal data failed",
+	//		zap.Error(err), zap.ByteString("data", encodedData))
+	//	return model.MessageTypeUnknown, false, err
+	//}
 	return b.msg.messageType(), true, nil
 }
 
