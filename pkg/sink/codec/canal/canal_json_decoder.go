@@ -59,18 +59,22 @@ func newBufferedJSONDecoder() *bufferedJSONDecoder {
 	}
 }
 
+// Write writes data to the buffer.
 func (b *bufferedJSONDecoder) Write(data []byte) (n int, err error) {
 	return b.buf.Write(data)
 }
 
+// Decode decodes the buffer into the original message.
 func (b *bufferedJSONDecoder) Decode(v interface{}) error {
 	return b.decoder.Decode(v)
 }
 
+// Len returns the length of the buffer.
 func (b *bufferedJSONDecoder) Len() int {
 	return b.buf.Len()
 }
 
+// Bytes returns the buffer content.
 func (b *bufferedJSONDecoder) Bytes() []byte {
 	return b.buf.Bytes()
 }
@@ -141,7 +145,9 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 
 		return errors.Trace(err)
 	}
-	b.decoder.Write(value)
+	if _, err = b.decoder.Write(value); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -156,31 +162,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
-
-	//var encodedData []byte
-	//if len(b.config.Terminator) > 0 {
-	//	idx := bytes.IndexAny(b.data, b.config.Terminator)
-	//	if idx >= 0 {
-	//		encodedData = b.data[:idx]
-	//		b.data = b.data[idx+len(b.config.Terminator):]
-	//	} else {
-	//		encodedData = b.data
-	//		b.data = nil
-	//	}
-	//} else {
-	//	encodedData = b.data
-	//	b.data = nil
-	//}
-
-	//if len(encodedData) == 0 {
-	//	return model.MessageTypeUnknown, false, nil
-	//}
-
-	//if err := json.Unmarshal(encodedData, b.msg); err != nil {
-	//	log.Error("canal-json decoder unmarshal data failed",
-	//		zap.Error(err), zap.ByteString("data", encodedData))
-	//	return model.MessageTypeUnknown, false, err
-	//}
 	return b.msg.messageType(), true, nil
 }
 
