@@ -21,7 +21,10 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	certificate "github.com/pingcap/tiflow/pkg/security"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/stretchr/testify/require"
@@ -99,6 +102,74 @@ func TestGetLightiningConfig(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
+
+	ca, err := certificate.NewCA()
+	require.NoError(t, err)
+	cert, key, err := ca.GenerateCerts("dm")
+	require.NoError(t, err)
+	caPath, err := certificate.WriteFile("dm-test-client-cert", ca.CAPEM)
+	require.NoError(t, err)
+	certPath, err := certificate.WriteFile("dm-test-client-cert", cert)
+	require.NoError(t, err)
+	keyPath, err := certificate.WriteFile("dm-test-client-key", key)
+	require.NoError(t, err)
+	ca, err = certificate.NewCA()
+	require.NoError(t, err)
+	cert, key, err = ca.GenerateCerts("dm")
+	require.NoError(t, err)
+	caPath2, err := certificate.WriteFile("dm-test-client-cert2", ca.CAPEM)
+	require.NoError(t, err)
+	certPath2, err := certificate.WriteFile("dm-test-client-cert2", cert)
+	require.NoError(t, err)
+	keyPath2, err := certificate.WriteFile("dm-test-client-key2", key)
+	require.NoError(t, err)
+
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, caPath)
+	require.Equal(t, conf.Security.CertPath, certPath)
+	require.Equal(t, conf.Security.KeyPath, keyPath)
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
+			To:           dbconfig.DBConfig{},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, caPath)
+	require.Equal(t, conf.Security.CertPath, certPath)
+	require.Equal(t, conf.Security.KeyPath, keyPath)
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
+	conf, err = GetLightningConfig(
+		&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			LoaderConfig: config.LoaderConfig{},
+			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
+		})
+	require.NoError(t, err)
+	require.Equal(t, conf.Security.CAPath, "")
+	require.Equal(t, conf.Security.CertPath, "")
+	require.Equal(t, conf.Security.KeyPath, "")
+	require.Equal(t, conf.TiDB.Security.CAPath, caPath2)
+	require.Equal(t, conf.TiDB.Security.CertPath, certPath2)
+	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath2)
+	// invalid security file path
+	_, err = GetLightningConfig(
+		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: "caPath"}},
+		&config.SubTaskConfig{
+			To: dbconfig.DBConfig{Security: &security.Security{SSLCA: "caPath"}},
+		})
+	require.EqualError(t, err, "could not read ca certificate: open caPath: no such file or directory")
 }
 
 func TestMetricProxies(t *testing.T) {
