@@ -17,12 +17,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -45,10 +45,44 @@ type tableKey struct {
 	table  string
 }
 
+type bufferedJSONDecoder struct {
+	buf     *bytes.Buffer
+	decoder *json.Decoder
+}
+
+func newBufferedJSONDecoder() *bufferedJSONDecoder {
+	buf := new(bytes.Buffer)
+	decoder := json.NewDecoder(buf)
+	return &bufferedJSONDecoder{
+		buf:     buf,
+		decoder: decoder,
+	}
+}
+
+// Write writes data to the buffer.
+func (b *bufferedJSONDecoder) Write(data []byte) (n int, err error) {
+	return b.buf.Write(data)
+}
+
+// Decode decodes the buffer into the original message.
+func (b *bufferedJSONDecoder) Decode(v interface{}) error {
+	return b.decoder.Decode(v)
+}
+
+// Len returns the length of the buffer.
+func (b *bufferedJSONDecoder) Len() int {
+	return b.buf.Len()
+}
+
+// Bytes returns the buffer content.
+func (b *bufferedJSONDecoder) Bytes() []byte {
+	return b.buf.Bytes()
+}
+
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
-	data []byte
-	msg  canalJSONMessageInterface
+	msg     canalJSONMessageInterface
+	decoder *bufferedJSONDecoder
 
 	config *common.Config
 
@@ -81,8 +115,18 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	if codecConfig.EnableTiDBExtension {
+		msg = &canalJSONMessageWithTiDBExtension{
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
+		}
+	}
+
 	return &batchDecoder{
 		config:         codecConfig,
+		msg:            msg,
+		decoder:        newBufferedJSONDecoder(),
 		storage:        externalStorage,
 		upstreamTiDB:   db,
 		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
@@ -100,51 +144,23 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 
 		return errors.Trace(err)
 	}
-	b.data = value
+	if _, err = b.decoder.Write(value); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if b.data == nil {
-		return model.MessageTypeUnknown, false, nil
-	}
-	var (
-		msg         canalJSONMessageInterface = &JSONMessage{}
-		encodedData []byte
-	)
-
-	if b.config.EnableTiDBExtension {
-		msg = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: &JSONMessage{},
-			Extensions:  &tidbExtension{},
-		}
-	}
-
-	if len(b.config.Terminator) > 0 {
-		idx := bytes.IndexAny(b.data, b.config.Terminator)
-		if idx >= 0 {
-			encodedData = b.data[:idx]
-			b.data = b.data[idx+len(b.config.Terminator):]
-		} else {
-			encodedData = b.data
-			b.data = nil
-		}
-	} else {
-		encodedData = b.data
-		b.data = nil
-	}
-
-	if len(encodedData) == 0 {
+	if b.decoder.Len() == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := json.Unmarshal(encodedData, msg); err != nil {
-		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err), zap.ByteString("data", encodedData))
+	if err := b.decoder.Decode(b.msg); err != nil {
+		log.Error("canal-json decoder decode failed",
+			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
-	b.msg = msg
 	return b.msg.messageType(), true, nil
 }
 
@@ -343,7 +359,6 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.msg = nil
 	return result, nil
 }
 
@@ -356,7 +371,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	result := canalJSONMessage2DDLEvent(b.msg)
-
 	schema := *b.msg.getSchema()
 	table := *b.msg.getTable()
 	// if receive a table level DDL, just remove the table info to trigger create a new one.
@@ -367,7 +381,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		}
 		delete(b.tableInfoCache, cacheKey)
 	}
-	b.msg = nil
 	return result, nil
 }
 
@@ -386,6 +399,5 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
-	b.msg = nil
 	return withExtensionEvent.Extensions.WatermarkTs, nil
 }
