@@ -76,7 +76,7 @@ main() {
 
 	# Define download URLs
 	local download_urls=(
-		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_branch}/${tidb_sha1}/linux-amd64/tidb-server.tar.gz"
 		"http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
 		"http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
 		"${GITHUB_RELEASE_URL}/gh-ost-binary-linux-20200828140552.tar.gz"
@@ -95,8 +95,7 @@ main() {
 		download "$url" "$filename" "${TEMP_DIR}/${filename}"
 		case "$filename" in
 		tidb-server.tar.gz)
-			extract "$filename" "$THIRD_BIN_DIR" "bin/tidb-server"
-			mv "${THIRD_BIN_DIR}/bin/tidb-server" "$THIRD_BIN_DIR/"
+			extract "$filename" "$THIRD_BIN_DIR" "tidb-server"
 			;;
 		tidb-enterprise-tools-nightly-linux-amd64.tar.gz)
 			extract "$filename" "$THIRD_BIN_DIR" "tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector"

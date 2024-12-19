@@ -74,10 +74,10 @@ main() {
 
 	# Define download URLs
 	local download_urls=(
-		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-		"${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-		"${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-		"${FILE_SERVER_URL}/download/builds/pingcap/tidb-tools/${tidb_tools_sha1}/centos7/tidb-tools.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_branch}/${tidb_sha1}/linux-amd64/tidb-server.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_branch}/${tikv_sha1}/linux-amd64/tikv-server.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_branch}/${pd_sha1}/linux-amd64/pd-server.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/tidb-tools/master/${tidb_tools_sha1}/linux-amd64/tidb-tools.tar.gz"
 		"${GITHUB_RELEASE_URL}/gh-ost-binary-linux-20200828140552.tar.gz"
 		"${FILE_SERVER_URL}/download/minio.tar.gz"
 	)
@@ -94,20 +94,16 @@ main() {
 		download "$url" "$filename" "${TEMP_DIR}/${filename}"
 		case "$filename" in
 		tidb-server.tar.gz)
-			tar -xz -C "$THIRD_BIN_DIR" bin/tidb-server -f "${TEMP_DIR}/${filename}"
-			mv "${THIRD_BIN_DIR}/bin/tidb-server" "$THIRD_BIN_DIR/"
+			tar -xz -C "$THIRD_BIN_DIR" tidb-server -f "${TEMP_DIR}/${filename}"
 			;;
 		pd-server.tar.gz)
-			tar -xz -C "$THIRD_BIN_DIR" 'bin/*' -f "${TEMP_DIR}/${filename}"
-			mv "${THIRD_BIN_DIR}/bin/"* "$THIRD_BIN_DIR/"
+			tar -xz -C "$THIRD_BIN_DIR" pd-server -f "${TEMP_DIR}/${filename}"
 			;;
 		tikv-server.tar.gz)
-			tar -xz -C "$THIRD_BIN_DIR" bin/tikv-server -f "${TEMP_DIR}/${filename}"
-			mv "${THIRD_BIN_DIR}/bin/tikv-server" "$THIRD_BIN_DIR/"
+			tar -xz -C "$THIRD_BIN_DIR" tikv-server -f "${TEMP_DIR}/${filename}"
 			;;
 		tidb-tools.tar.gz)
-			tar -xz -C "$THIRD_BIN_DIR" 'bin/sync_diff_inspector' -f "${TEMP_DIR}/${filename}"
-			mv "${THIRD_BIN_DIR}/bin/sync_diff_inspector" "$THIRD_BIN_DIR/"
+			tar -xz -C "$THIRD_BIN_DIR" sync_diff_inspector -f "${TEMP_DIR}/${filename}"
 			;;
 		minio.tar.gz | gh-ost-binary-linux-20200828140552.tar.gz)
 			tar -xz -C "$THIRD_BIN_DIR" -f "${TEMP_DIR}/${filename}"
