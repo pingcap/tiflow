@@ -1122,6 +1122,10 @@ function test_tls() {
 		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
 		"" "" ""
 
+	killall -9 tidb-server 2>/dev/null || true
+	killall -9 tikv-server 2>/dev/null || true
+	killall -9 pd-server 2>/dev/null || true
+	run_tidb_server 4000 $TIDB_PASSWORD
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS SUCCESS"
 }
 
