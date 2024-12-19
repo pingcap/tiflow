@@ -17,12 +17,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -69,6 +69,10 @@ func (b *bufferedJSONDecoder) Decode(v interface{}) error {
 
 func (b *bufferedJSONDecoder) Len() int {
 	return b.buf.Len()
+}
+
+func (b *bufferedJSONDecoder) Bytes() []byte {
+	return b.buf.Bytes()
 }
 
 // batchDecoder decodes the byte into the original message.
@@ -149,7 +153,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 
 	if err := b.decoder.Decode(b.msg); err != nil {
 		log.Error("canal-json decoder decode failed",
-			zap.Error(err), zap.ByteString("data", b.buf.Bytes()))
+			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
 
