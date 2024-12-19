@@ -45,12 +45,37 @@ type tableKey struct {
 	table  string
 }
 
+type bufferedJSONDecoder struct {
+	buf     *bytes.Buffer
+	decoder *json.Decoder
+}
+
+func newBufferedJSONDecoder() *bufferedJSONDecoder {
+	buf := new(bytes.Buffer)
+	decoder := json.NewDecoder(buf)
+	return &bufferedJSONDecoder{
+		buf:     buf,
+		decoder: decoder,
+	}
+}
+
+func (b *bufferedJSONDecoder) Write(data []byte) (n int, err error) {
+	return b.buf.Write(data)
+}
+
+func (b *bufferedJSONDecoder) Decode(v interface{}) error {
+	return b.decoder.Decode(v)
+}
+
+func (b *bufferedJSONDecoder) Len() int {
+	return b.buf.Len()
+}
+
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
 	// data    []byte
 	msg     canalJSONMessageInterface
-	decoder *json.Decoder
-	buf     *bytes.Buffer
+	decoder *bufferedJSONDecoder
 
 	config *common.Config
 
@@ -91,13 +116,10 @@ func NewBatchDecoder(
 		}
 	}
 
-	buf := new(bytes.Buffer)
-	decoder := json.NewDecoder(buf)
 	return &batchDecoder{
 		config:         codecConfig,
 		msg:            msg,
-		buf:            buf,
-		decoder:        decoder,
+		decoder:        newBufferedJSONDecoder(),
 		storage:        externalStorage,
 		upstreamTiDB:   db,
 		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
@@ -115,14 +137,13 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 
 		return errors.Trace(err)
 	}
-	//b.data = value
-	b.buf.Write(value)
+	b.decoder.Write(value)
 	return nil
 }
 
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if b.buf.Len() == 0 {
+	if b.decoder.Len() == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
 
