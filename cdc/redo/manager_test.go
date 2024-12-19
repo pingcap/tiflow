@@ -149,37 +149,58 @@ func TestLogManagerInProcessor(t *testing.T) {
 		tableInfo := &model.TableInfo{
 			TableName: model.TableName{Schema: "test", Table: "t"},
 		}
+		span1 := spanz.TableIDToComparableSpan(53)
+		event1 := &model.RowChangedEvent{CommitTs: 120, TableInfo: tableInfo}
+		event1.SetTableID(span1.TableID)
+		event2 := &model.RowChangedEvent{CommitTs: 125, TableInfo: tableInfo}
+		event2.SetTableID(span1.TableID)
+		event3 := &model.RowChangedEvent{CommitTs: 130, TableInfo: tableInfo}
+		event3.SetTableID(span1.TableID)
+
+		span2 := spanz.TableIDToComparableSpan(55)
+		event4 := &model.RowChangedEvent{CommitTs: 130, TableInfo: tableInfo}
+		event4.SetTableID(span2.TableID)
+		event5 := &model.RowChangedEvent{CommitTs: 135, TableInfo: tableInfo}
+		event5.SetTableID(span2.TableID)
+
+		span3 := spanz.TableIDToComparableSpan(57)
+		event6 := &model.RowChangedEvent{CommitTs: 130, TableInfo: tableInfo}
+		event6.SetTableID(span3.TableID)
+
+		span4 := spanz.TableIDToComparableSpan(59)
+		event7 := &model.RowChangedEvent{CommitTs: 128, TableInfo: tableInfo}
+		event7.SetTableID(span4.TableID)
+		event8 := &model.RowChangedEvent{CommitTs: 130, TableInfo: tableInfo}
+		event8.SetTableID(span4.TableID)
+		event9 := &model.RowChangedEvent{CommitTs: 133, TableInfo: tableInfo}
+		event9.SetTableID(span4.TableID)
+
 		testCases := []struct {
 			span tablepb.Span
 			rows []*model.RowChangedEvent
 		}{
 			{
-				span: spanz.TableIDToComparableSpan(53),
+				span: span1,
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
-					{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
-					{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
+					event1, event2, event3,
 				},
 			},
 			{
-				span: spanz.TableIDToComparableSpan(55),
+				span: span2,
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, PhysicalTableID: 55, TableInfo: tableInfo},
-					{CommitTs: 135, PhysicalTableID: 55, TableInfo: tableInfo},
+					event4, event5,
 				},
 			},
 			{
-				span: spanz.TableIDToComparableSpan(57),
+				span: span3,
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, PhysicalTableID: 57, TableInfo: tableInfo},
+					event6,
 				},
 			},
 			{
-				span: spanz.TableIDToComparableSpan(59),
+				span: span4,
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 128, PhysicalTableID: 59, TableInfo: tableInfo},
-					{CommitTs: 130, PhysicalTableID: 59, TableInfo: tableInfo},
-					{CommitTs: 133, PhysicalTableID: 59, TableInfo: tableInfo},
+					event7, event8, event9,
 				},
 			},
 		}
@@ -298,16 +319,21 @@ func TestLogManagerError(t *testing.T) {
 	tableInfo := &model.TableInfo{
 		TableName: model.TableName{Schema: "test", Table: "t"},
 	}
+	span := spanz.TableIDToComparableSpan(53)
+	event1 := &model.RowChangedEvent{CommitTs: 120, TableInfo: tableInfo}
+	event1.SetTableID(span.TableID)
+	event2 := &model.RowChangedEvent{CommitTs: 125, TableInfo: tableInfo}
+	event2.SetTableID(span.TableID)
+	event3 := &model.RowChangedEvent{CommitTs: 130, TableInfo: tableInfo}
+	event3.SetTableID(span.TableID)
 	testCases := []struct {
 		span tablepb.Span
 		rows []writer.RedoEvent
 	}{
 		{
-			span: spanz.TableIDToComparableSpan(53),
+			span: span,
 			rows: []writer.RedoEvent{
-				&model.RowChangedEvent{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
-				&model.RowChangedEvent{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
-				&model.RowChangedEvent{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
+				event1, event2, event3,
 			},
 		},
 	}
@@ -385,10 +411,10 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 					// prepare new row change events
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10
+					event := &model.RowChangedEvent{CommitTs: *maxCommitTs, TableInfo: tableInfo}
+					event.SetTableID(span.TableID)
 					rows = []*model.RowChangedEvent{
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
+						event, event, event,
 					}
 
 					b.StartTimer()

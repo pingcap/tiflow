@@ -648,10 +648,9 @@ func TestToRedoLog(t *testing.T) {
 	}
 	tableInfo := BuildTableInfo("test", "t", cols, [][]int{{1}})
 	event := &RowChangedEvent{
-		StartTs:         100,
-		CommitTs:        1000,
-		PhysicalTableID: 1,
-		TableInfo:       tableInfo,
+		StartTs:   100,
+		CommitTs:  1000,
+		TableInfo: tableInfo,
 		Columns: Columns2ColumnDatas([]*Column{
 			{
 				Name:  "col1",
@@ -663,6 +662,7 @@ func TestToRedoLog(t *testing.T) {
 			},
 		}, tableInfo),
 	}
+	event.SetTableID(1)
 	eventInRedoLog := event.ToRedoLog()
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
 	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)

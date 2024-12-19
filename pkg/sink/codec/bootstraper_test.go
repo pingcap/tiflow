@@ -48,9 +48,9 @@ func getMockTableStatus(tableName string,
 		TotalPartition: totalPartition,
 	}
 	row := &model.RowChangedEvent{
-		PhysicalTableID: tableID,
-		TableInfo:       tableInfo,
+		TableInfo: tableInfo,
 	}
+	row.SetTableID(tableID)
 	tb := newTableStatistic(key, row)
 	return key, row, tb
 }
@@ -192,9 +192,9 @@ func TestUpdateTableStatistic(t *testing.T) {
 	);`
 	tableInfo1 := helper.DDL2Event(sql).TableInfo
 	row1 := &model.RowChangedEvent{
-		PhysicalTableID: tableInfo1.ID,
-		TableInfo:       tableInfo1,
+		TableInfo: tableInfo1,
 	}
+	row1.SetTableID(tableInfo1.ID)
 	tableStatistic := newTableStatistic(model.TopicPartitionKey{}, row1)
 
 	// case 1: The tableStatistic should not be updated if the tableInfo is the same
@@ -205,9 +205,9 @@ func TestUpdateTableStatistic(t *testing.T) {
 	sql = `alter table test.t1 add column address varchar(255) not null;`
 	tableInfo2 := helper.DDL2Event(sql).TableInfo
 	row2 := &model.RowChangedEvent{
-		PhysicalTableID: tableInfo2.ID,
-		TableInfo:       tableInfo2,
+		TableInfo: tableInfo2,
 	}
+	row2.SetTableID(tableInfo2.ID)
 	tableStatistic.update(row2, 1)
 	require.Equal(t, tableInfo2, tableStatistic.tableInfo.Load().(*model.TableInfo))
 
@@ -215,9 +215,9 @@ func TestUpdateTableStatistic(t *testing.T) {
 	sql = `alter table test.t1 rename to test.t2;`
 	tableInfo3 := helper.DDL2Event(sql).TableInfo
 	row3 := &model.RowChangedEvent{
-		PhysicalTableID: tableInfo3.ID,
-		TableInfo:       tableInfo3,
+		TableInfo: tableInfo3,
 	}
+	row3.SetTableID(tableInfo3.ID)
 	tableStatistic.update(row3, 1)
 	require.Equal(t, tableInfo3, tableStatistic.tableInfo.Load().(*model.TableInfo))
 }

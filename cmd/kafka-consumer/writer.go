@@ -382,7 +382,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if w.option.protocol != config.ProtocolSimple {
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
+				row.SetTableID(tableID)
 			}
 			group := eventGroup[tableID]
 			if group == nil {
