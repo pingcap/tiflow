@@ -74,15 +74,21 @@ func main() {
 		log.S().Infof("DefaultValue integration tests take %v", time.Since(start))
 	}()
 	wg.Add(2)
-	go testMultiDDLs([]*sql.DB{sourceDB0, sourceDB1}, &wg)
-	go testGetDefaultValue([]*sql.DB{sourceDB0, sourceDB1}, &wg)
+
+	go func() {
+		defer wg.Done()
+		testMultiDDLs([]*sql.DB{sourceDB0, sourceDB1})
+	}()
+	go func() {
+		defer wg.Done()
+		testGetDefaultValue([]*sql.DB{sourceDB0, sourceDB1})
+	}()
 	wg.Wait()
 	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
-func testGetDefaultValue(srcs []*sql.DB, wg *sync.WaitGroup) {
-	defer wg.Done()
+func testGetDefaultValue(srcs []*sql.DB) {
 	start := time.Now()
 	defer func() {
 		log.S().Infof("testGetDefaultValue take %v", time.Since(start))
@@ -342,9 +348,7 @@ func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table s
 	}
 }
 
-func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func testMultiDDLs(srcs []*sql.DB) {
 	type Unit struct {
 		Fmt          string
 		DefaultValue interface{}
@@ -885,10 +889,4 @@ func mustCreateTable(db *sql.DB, tableName string) {
 	util.MustExec(db, createDatabaseSQL)
 	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExec(db, sql)
-}
-
-func mustCreateTableWithConn(ctx context.Context, conn *sql.Conn, tableName string) {
-	util.MustExecWithConn(ctx, conn, createDatabaseSQL)
-	sql := fmt.Sprintf(createTableSQL, tableName)
-	util.MustExecWithConn(ctx, conn, sql)
 }

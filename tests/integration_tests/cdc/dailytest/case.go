@@ -191,6 +191,8 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 		"insert into eligible_table (uk, ncol) values (2,2);",
 		"ALTER TABLE eligible_table ADD COLUMN c1 INT NOT NULL;",
 		"insert into eligible_table (uk, ncol, c1) values (3,4,5);",
+
+		"CREATE TABLE finish_mark(id int primary key);",
 	}
 	// execute SQL but don't check
 	for _, sql := range sqls {
@@ -216,7 +218,7 @@ TestLoop:
 			if synced {
 				break TestLoop
 			}
-			if tableName == "eligible_table" {
+			if tableName == "finish_mark" {
 				synced = true
 			}
 		}
@@ -227,6 +229,7 @@ TestLoop:
 		"DROP TABLE ineligible_table1;",
 		"DROP TABLE ineligible_table2;",
 		"DROP TABLE eligible_table;",
+		"DROP TABLE finish_mark;",
 	}
 	tr.execSQLs(sqls)
 }
