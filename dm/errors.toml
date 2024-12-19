@@ -929,7 +929,7 @@ workaround = "Please check the `name` config in task configuration file."
 tags = ["internal", "medium"]
 
 [error.DM-config-20020]
-message = "please specify right task-mode, support `full`, `incremental`, `all`"
+message = "please specify right task-mode, support `full`, `incremental`, `all`, `dump`, `load`"
 description = ""
 workaround = "Please check the `task-mode` config in task configuration file."
 tags = ["internal", "medium"]
