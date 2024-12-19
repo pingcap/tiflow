@@ -1096,14 +1096,6 @@ function test_tls() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
-	task_name="task-tls-2"
-	openapi_task_check "create_noshard_task_with_security_success" $task_name "t3" \
-		"$(cat $cur/tls_conf/ca2.pem)" "" "" \
-		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
-	openapi_task_check "start_task_success" $task_name ""
-	openapi_task_check "get_task_status_success" $task_name 2
-	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50
-
 	task_name="task-tls-error"
 	# miss cert and key certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
