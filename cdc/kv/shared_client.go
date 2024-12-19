@@ -447,6 +447,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
 				zap.String("span", region.span.String()),
+				zap.String("span2", region.subscribedTable.span.String()),
 				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
