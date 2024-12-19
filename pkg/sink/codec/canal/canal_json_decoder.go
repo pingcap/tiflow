@@ -81,7 +81,6 @@ func (b *bufferedJSONDecoder) Bytes() []byte {
 
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
-	// data    []byte
 	msg     canalJSONMessageInterface
 	decoder *bufferedJSONDecoder
 
