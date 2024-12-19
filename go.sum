@@ -814,8 +814,8 @@ github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d h1:y3EueKVfVykdpTyfU
 github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
-github.com/pingcap/tidb v1.1.0-beta.0.20241212070939-48962ce74503 h1:AfGe+Md0nhWrmUuPOg7UcZRGTVHRBboHnjiEzLO/oGU=
-github.com/pingcap/tidb v1.1.0-beta.0.20241212070939-48962ce74503/go.mod h1:sqJW2EO+pWCyvg38XK3XLYNB3BPgMErnMkCXilQh1wE=
+github.com/pingcap/tidb v1.1.0-beta.0.20241219101957-a878e1fdf4ca h1:xN/0zsnkgndkQX4r6ssRmxRaEElDZZgCAiPdnQNruAo=
+github.com/pingcap/tidb v1.1.0-beta.0.20241219101957-a878e1fdf4ca/go.mod h1:qnRKViJJWsuVfyYimtgAN6/BrTv1jlN3OuKkVWid6CM=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
 github.com/pingcap/tidb-tools v0.0.0-20240305021104-9f9bea84490b h1:UC4lLT2OBHGImFJbiXQfIxIck7AoFLIiRJ6Eo6uFVaw=
@@ -1009,8 +1009,8 @@ github.com/tidwall/rtree v0.0.0-20180113144539-6cd427091e0e/go.mod h1:/h+UnNGt0I
 github.com/tidwall/tinyqueue v0.0.0-20180302190814-1e39f5511563/go.mod h1:mLqSmt7Dv/CNneF2wfcChfN1rvapyQr01LGKnKex0DQ=
 github.com/tidwall/tinyqueue v0.1.1 h1:SpNEvEggbpyN5DIReaJ2/1ndroY8iyEGxPYxoSaymYE=
 github.com/tidwall/tinyqueue v0.1.1/go.mod h1:O/QNHwrnjqr6IHItYrzoHAKYhBkLI67Q096fQP5zMYw=
-github.com/tikv/client-go/v2 v2.0.8-0.20241125064226-08d0b3b826b3 h1:M15i12ypNUsxuOPJ/zcCxajncJSs4yz0+mYB2RSJS0w=
-github.com/tikv/client-go/v2 v2.0.8-0.20241125064226-08d0b3b826b3/go.mod h1:+vXk4Aex17GnI8gfSMPxrL0SQLbBYgP3Db4FvHiImwM=
+github.com/tikv/client-go/v2 v2.0.8-0.20241212055527-4d50d6744f0c h1:55hXQ+8kmgvUv7W+sSnCyp5BpmeFE9yfXFfYKUokMLw=
+github.com/tikv/client-go/v2 v2.0.8-0.20241212055527-4d50d6744f0c/go.mod h1:+vXk4Aex17GnI8gfSMPxrL0SQLbBYgP3Db4FvHiImwM=
 github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b h1:t2XoZp4UHrkPpYPsxbRTRVExJnriWlh+ZsDIfpYyd98=
 github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b/go.mod h1:7HJMdb0O5umNpZIFt8e/wKAcEmH99n2HsYgXX+vZj3k=
 github.com/tikv/pd/client v0.0.0-20240806105739-10ecdbe92b55 h1:+1unfy0TcJJtud3d7BuYsvNG6tPVuXIH+WiIFhOx1Kc=
