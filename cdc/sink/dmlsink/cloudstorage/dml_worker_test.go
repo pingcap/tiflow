@@ -83,6 +83,14 @@ func TestDMLWorkerRun(t *testing.T) {
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 99, tidbTableInfo)
 	for i := 0; i < 5; i++ {
+		row := &model.RowChangedEvent{
+			TableInfo: tableInfo,
+			Columns: []*model.ColumnData{
+				{ColumnID: 1, Value: 100},
+				{ColumnID: 2, Value: "hello world"},
+			},
+		}
+		row.SetTableID(100)
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: cloudstorage.VersionedTableName{
@@ -92,16 +100,7 @@ func TestDMLWorkerRun(t *testing.T) {
 			event: &dmlsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
 					TableInfo: tableInfo,
-					Rows: []*model.RowChangedEvent{
-						{
-							PhysicalTableID: 100,
-							TableInfo:       tableInfo,
-							Columns: []*model.ColumnData{
-								{ColumnID: 1, Value: 100},
-								{ColumnID: 2, Value: "hello world"},
-							},
-						},
-					},
+					Rows:      []*model.RowChangedEvent{row},
 				},
 			},
 			encodedMsgs: []*common.Message{

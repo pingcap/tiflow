@@ -191,7 +191,7 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 
 	// TODO: we lost the tableID from kafka message
 	if key.Partition != nil {
-		e.PhysicalTableID = *key.Partition
+		e.SetTableID(*key.Partition)
 		e.TableInfo.TableName.IsPartition = true
 	}
 
@@ -201,10 +201,10 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 func rowChangeColumns2CodecColumns(cols []*model.ColumnData, tb *model.TableInfo, onlyHandleKeyColumns bool) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
-        colx := model.GetColumnDataX(col, tb)
-        if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
-            continue
-        }
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
+			continue
+		}
 		c := internal.Column{}
 		c.FromRowChangeColumn(colx)
 		jsonCols[colx.GetName()] = c

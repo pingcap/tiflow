@@ -99,13 +99,13 @@ func TestDeframenter(t *testing.T) {
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
 				row := &model.RowChangedEvent{
-					PhysicalTableID: 100,
-					TableInfo:       tableInfo,
+					TableInfo: tableInfo,
 					Columns: []*model.ColumnData{
 						{ColumnID: 1, Value: j + 1},
 						{ColumnID: 2, Value: "hello world"},
 					},
 				}
+				row.SetTableID(100)
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
 			}
 			err := encoder.AppendTxnEvent(frag.event.Event, nil)
