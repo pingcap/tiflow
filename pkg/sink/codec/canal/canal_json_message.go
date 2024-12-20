@@ -14,12 +14,12 @@
 package canal
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -154,36 +154,68 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
-func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
+func (b *batchDecoder) queryTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
+	cacheKey := tableKey{
+		schema: *msg.getSchema(),
+		table:  *msg.getTable(),
+	}
+	tableInfo, ok := b.tableInfoCache[cacheKey]
+	if !ok {
+		tableInfo = newTableInfo(msg)
+		b.tableInfoCache[cacheKey] = tableInfo
+	}
+	return tableInfo
+}
+
+func newTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
+	schema := *msg.getSchema()
+	table := *msg.getTable()
+	tidbTableInfo := &timodel.TableInfo{}
+	tidbTableInfo.Name = pmodel.NewCIStr(table)
+
+	rawColumns := msg.getData()
+	pkNames := msg.pkNameSet()
+	mysqlType := msg.getMySQLType()
+	setColumnInfos(tidbTableInfo, rawColumns, mysqlType, pkNames)
+	setIndexes(tidbTableInfo, pkNames)
+	return model.WrapTableInfo(100, schema, 1000, tidbTableInfo)
+}
+
+func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, error) {
+	msg := b.msg
 	result := new(model.RowChangedEvent)
+	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
+
 	mysqlType := msg.getMySQLType()
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
-		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-		result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), preCols, msg.pkNameSet())
-		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
-		return result, err
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType, result.TableInfo)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
-	cols, err := canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
-	result.TableInfo = model.BuildTableInfoWithPKNames4Test(*msg.getSchema(), *msg.getTable(), cols, msg.pkNameSet())
-	result.Columns = model.Columns2ColumnDatas(cols, result.TableInfo)
+	result.Columns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType, result.TableInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
-		if len(preCols) < len(cols) {
-			newPreCols := make([]*model.Column, 0, len(preCols))
+		preCols, err := canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType, result.TableInfo)
+		if err != nil {
+			return nil, err
+		}
+		if len(preCols) < len(result.Columns) {
+			newPreCols := make([]*model.ColumnData, 0, len(preCols))
 			j := 0
 			// Columns are ordered by name
-			for _, col := range cols {
-				if j < len(preCols) && col.Name == preCols[j].Name {
+			for _, col := range result.Columns {
+				if j < len(preCols) && col.ColumnID == preCols[j].ColumnID {
 					newPreCols = append(newPreCols, preCols[j])
 					j += 1
 				} else {
@@ -192,45 +224,45 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 			}
 			preCols = newPreCols
 		}
-		if len(preCols) != len(cols) {
-			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", cols))
-		}
-		result.PreColumns = model.Columns2ColumnDatas(preCols, result.TableInfo)
-		if err != nil {
-			return nil, err
+		result.PreColumns = preCols
+		if len(preCols) != len(result.Columns) {
+			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", result.Columns))
 		}
 	}
 
 	return result, nil
 }
 
-func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
-	result := make([]*model.Column, 0, len(cols))
-	for name, value := range cols {
+func canalJSONColumnMap2RowChangeColumns(
+	cols map[string]interface{},
+	mysqlType map[string]string,
+	tableInfo *model.TableInfo,
+) ([]*model.ColumnData, error) {
+	result := make([]*model.ColumnData, 0, len(cols))
+	for _, columnInfo := range tableInfo.Columns {
+		name := columnInfo.Name.O
+		value, ok := cols[name]
+		if !ok {
+			continue
+		}
 		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		col := canalJSONFormatColumn(value, name, mysqlTypeStr)
+		col := canalJSONFormatColumn(columnInfo.ID, value, mysqlTypeStr)
 		result = append(result, col)
 	}
-	if len(result) == 0 {
-		return nil, nil
-	}
-	sort.Slice(result, func(i, j int) bool {
-		return strings.Compare(result[i].Name, result[j].Name) > 0
-	})
+
 	return result, nil
 }
 
-func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
+func canalJSONFormatColumn(columnID int64, value interface{}, mysqlTypeStr string) *model.ColumnData {
 	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
-	result := &model.Column{
-		Type:  mysqlType,
-		Name:  name,
-		Value: value,
+	result := &model.ColumnData{
+		ColumnID: columnID,
+		Value:    value,
 	}
 	if result.Value == nil {
 		return result

@@ -74,7 +74,7 @@ type Config struct {
 	OutputOldValue       bool
 	OutputHandleKey      bool
 
-	// for open protocol
+	// for open protocol, and canal-json
 	OnlyOutputUpdatedColumns bool
 	// Whether old value should be excluded in the output.
 	OpenOutputOldValue bool
