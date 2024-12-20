@@ -26,7 +26,7 @@ func HasDump(taskMode string) bool {
 // HasLoad returns true if taskMode contains load unit.
 func HasLoad(taskMode string) bool {
 	switch taskMode {
-	case ModeAll, ModeFull, ModeLoadSync:
+	case ModeAll, ModeFull, ModeLoad, ModeLoadSync:
 		return true
 	default:
 		return false
