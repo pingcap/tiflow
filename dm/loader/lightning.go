@@ -331,17 +331,23 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	}
 	cfg.TiDB.Security = &globalCfg.Security
 	if subtaskCfg.LoaderConfig.Security != nil {
-		// TODO: Just a workround for using SslContent cannot verify ceritificates when lightning use pdctl lib access PD server
-		// To avoid loss certificate files due to worker restart, rewrite the certificate files when getting the lightning configuration
-		if err := subtaskCfg.LoaderConfig.Security.WriteFiles(subtaskCfg.Name); err != nil {
-			return nil, err
+		if subtaskCfg.LoaderConfig.Security.SSLCA != "" && subtaskCfg.LoaderConfig.Security.SSLCert != "" && subtaskCfg.LoaderConfig.Security.SSLKey != "" {
+			cfg.Security.CAPath = subtaskCfg.Security.SSLCA
+			cfg.Security.CertPath = subtaskCfg.Security.SSLCert
+			cfg.Security.KeyPath = subtaskCfg.Security.SSLKey
+		} else {
+			// TODO: Just a workround for using SslContent cannot verify ceritificates when lightning use pdctl lib access PD server
+			// To avoid loss certificate files due to worker restart, rewrite the certificate files when getting the lightning configuration
+			if err := subtaskCfg.LoaderConfig.Security.WriteFiles(subtaskCfg.Name); err != nil {
+				return nil, err
+			}
+			cfg.Security.CABytes = cfg.Security.CABytes[:0]
+			cfg.Security.CertBytes = cfg.Security.CertBytes[:0]
+			cfg.Security.KeyBytes = cfg.Security.KeyBytes[:0]
+			cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
+			cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
+			cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
 		}
-		cfg.Security.CABytes = cfg.Security.CABytes[:0]
-		cfg.Security.CertBytes = cfg.Security.CertBytes[:0]
-		cfg.Security.KeyBytes = cfg.Security.KeyBytes[:0]
-		cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
-		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
-		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
