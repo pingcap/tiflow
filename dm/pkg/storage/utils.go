@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	gstorage "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
@@ -142,7 +143,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
-		if errors.Cause(err2) == gstorage.ErrObjectNotExist {
+		if errors.Cause(err2) == gstorage.ErrObjectNotExist || bloberror.HasCode(err2, bloberror.BlobNotFound) {
 			// ignore not exist error when we delete files
 			return nil
 		}
@@ -150,7 +151,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	})
 	if err == nil {
 		err = storage.DeleteFile(ctx, "")
-		if errors.Cause(err) == gstorage.ErrObjectNotExist {
+		if errors.Cause(err) == gstorage.ErrObjectNotExist || bloberror.HasCode(err, bloberror.BlobNotFound) {
 			// ignore not exist error when we delete files
 			return nil
 		}
