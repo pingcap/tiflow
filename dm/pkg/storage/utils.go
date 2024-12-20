@@ -25,6 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
+	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
@@ -134,15 +135,16 @@ func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalS
 // RemoveAll remove files in dir.
 func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage) error {
 	var err error
+	var backend *backuppb.StorageBackend
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)
 		if err != nil {
 			return err
 		}
-	}
-	backend, err := bstorage.ParseBackend(dir, nil)
-	if err != nil {
-		return err
+		backend, err = bstorage.ParseBackend(dir, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
