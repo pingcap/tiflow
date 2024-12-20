@@ -63,6 +63,7 @@ jobs:
           sudo cp -r -L /tmp/dm_test/upstream_switch/master/log ./logs/master
           sudo cp -r -L /tmp/dm_test/upstream_switch/worker1/log ./logs/worker1
           sudo cp -r -L /tmp/dm_test/upstream_switch/worker2/log ./logs/worker2
+          sudo cp -r -L /tmp/tidb_logs ./logs/tidb
           sudo chown -R runner ./logs
 
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
