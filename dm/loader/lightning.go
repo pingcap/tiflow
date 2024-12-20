@@ -331,6 +331,11 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	}
 	cfg.TiDB.Security = &globalCfg.Security
 	if subtaskCfg.LoaderConfig.Security != nil {
+		// TODO: Just a workround for using SslContent cannot verify ceritificates when lightning use pdctl lib access PD server
+		// To avoid loss certificate files due to worker restart, rewrite the certificate files when getting the lightning configuration
+		if err := subtaskCfg.LoaderConfig.Security.WriteFiles(subtaskCfg.Name); err != nil {
+			return nil, err
+		}
 		cfg.Security.CABytes = cfg.Security.CABytes[:0]
 		cfg.Security.CertBytes = cfg.Security.CertBytes[:0]
 		cfg.Security.KeyBytes = cfg.Security.KeyBytes[:0]
