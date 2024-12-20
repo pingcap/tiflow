@@ -33,6 +33,7 @@ type canalJSONTxnEventDecoder struct {
 	msg    canalJSONMessageInterface
 }
 
+// NewCanalJSONTxnEventDecoder return a new CanalJSONTxnEventDecoder.
 func NewCanalJSONTxnEventDecoder(
 	codecConfig *common.Config,
 ) *canalJSONTxnEventDecoder {
@@ -41,6 +42,7 @@ func NewCanalJSONTxnEventDecoder(
 	}
 }
 
+// AddKeyValue set the key value to the decoder
 func (d *canalJSONTxnEventDecoder) AddKeyValue(_, value []byte) error {
 	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
@@ -54,6 +56,7 @@ func (d *canalJSONTxnEventDecoder) AddKeyValue(_, value []byte) error {
 	return nil
 }
 
+// HasNext return true if there is any event can be returned.
 func (d *canalJSONTxnEventDecoder) HasNext() (model.MessageType, bool, error) {
 	if d.data == nil {
 		return model.MessageTypeUnknown, false, nil
