@@ -140,19 +140,29 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 			return err
 		}
 	}
+	backend, err := bstorage.ParseBackend(dir, nil)
+	if err != nil {
+		return err
+	}
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
-		if errors.Cause(err2) == gstorage.ErrObjectNotExist || bloberror.HasCode(err2, bloberror.BlobNotFound) {
-			// ignore not exist error when we delete files
+		// ignore not exist error when we delete files and backend is gcs/azure blob storage
+		if backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
+			return nil
+		}
+		if backend.GetAzureBlobStorage() != nil || bloberror.HasCode(err2, bloberror.BlobNotFound) {
 			return nil
 		}
 		return err2
 	})
 	if err == nil {
 		err = storage.DeleteFile(ctx, "")
-		if errors.Cause(err) == gstorage.ErrObjectNotExist || bloberror.HasCode(err, bloberror.BlobNotFound) {
-			// ignore not exist error when we delete files
+		// ignore not exist error when we delete files and backend is gcs/azure blob storage
+		if backend.GetGcs() != nil && errors.Cause(err) == gstorage.ErrObjectNotExist {
+			return nil
+		}
+		if backend.GetAzureBlobStorage() != nil || bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil
 		}
 	}
