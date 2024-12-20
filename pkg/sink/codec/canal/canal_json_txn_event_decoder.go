@@ -160,3 +160,13 @@ func (d *canalJSONTxnEventDecoder) canalJSONMessage2RowChange() (*model.RowChang
 	}
 	return result, nil
 }
+
+// NextResolvedEvent implements the RowEventDecoder interface
+func (d *canalJSONTxnEventDecoder) NextResolvedEvent() (uint64, error) {
+	return 0, nil
+}
+
+// NextDDLEvent implements the RowEventDecoder interface
+func (d *canalJSONTxnEventDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	return nil, nil
+}
