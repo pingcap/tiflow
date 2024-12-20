@@ -151,7 +151,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 		if backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
 			return nil
 		}
-		if backend.GetAzureBlobStorage() != nil || bloberror.HasCode(err2, bloberror.BlobNotFound) {
+		if backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err2, bloberror.BlobNotFound) {
 			return nil
 		}
 		return err2
@@ -162,7 +162,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 		if backend.GetGcs() != nil && errors.Cause(err) == gstorage.ErrObjectNotExist {
 			return nil
 		}
-		if backend.GetAzureBlobStorage() != nil || bloberror.HasCode(err, bloberror.BlobNotFound) {
+		if backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil
 		}
 	}
