@@ -657,49 +657,75 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.ContentCompatible = true
+	codecConfig.OnlyOutputUpdatedColumns = true
 
 	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
 
 	encoder := builder.Build()
 
-	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
-	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
-
-	message := encoder.Build()[0]
-
 	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 	require.NoError(t, err)
 
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeRow)
-
-	decodedEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedEvent.CommitTs, insertEvent.CommitTs)
-	require.Equal(t, decodedEvent.TableInfo.GetSchemaName(), insertEvent.TableInfo.GetSchemaName())
-	require.Equal(t, decodedEvent.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
-
-	obtainedColumns := make(map[string]*model.ColumnData, len(decodedEvent.Columns))
-	for _, column := range decodedEvent.Columns {
-		colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
-		obtainedColumns[colName] = column
+	_, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	events := []*model.RowChangedEvent{
+		insertEvent,
+		updateEvent,
+		deleteEvent,
 	}
-	for _, col := range insertEvent.Columns {
-		colName := insertEvent.TableInfo.ForceGetColumnName(col.ColumnID)
-		decoded, ok := obtainedColumns[colName]
-		require.True(t, ok)
-		switch v := col.Value.(type) {
-		case types.VectorFloat32:
-			require.EqualValues(t, v.String(), decoded.Value)
-		default:
-			require.EqualValues(t, v, decoded.Value)
+
+	for _, event := range events {
+		err = encoder.AppendRowChangedEvent(ctx, "", event, func() {})
+		require.NoError(t, err)
+
+		message := encoder.Build()[0]
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, messageType, model.MessageTypeRow)
+
+		decodedEvent, err := decoder.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, decodedEvent.CommitTs, event.CommitTs)
+		require.Equal(t, decodedEvent.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
+		require.Equal(t, decodedEvent.TableInfo.GetTableName(), event.TableInfo.GetTableName())
+
+		obtainedColumns := make(map[string]*model.ColumnData, len(decodedEvent.Columns))
+		for _, column := range decodedEvent.Columns {
+			colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
+			obtainedColumns[colName] = column
+		}
+		for _, col := range event.Columns {
+			colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+			decoded, ok := obtainedColumns[colName]
+			require.True(t, ok)
+			switch v := col.Value.(type) {
+			case types.VectorFloat32:
+				require.EqualValues(t, v.String(), decoded.Value)
+			default:
+				require.EqualValues(t, v, decoded.Value)
+			}
+		}
+
+		obtainedPreColumns := make(map[string]*model.ColumnData, len(decodedEvent.PreColumns))
+		for _, column := range decodedEvent.PreColumns {
+			colName := decodedEvent.TableInfo.ForceGetColumnName(column.ColumnID)
+			obtainedPreColumns[colName] = column
+		}
+		for _, col := range event.PreColumns {
+			colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
+			decoded, ok := obtainedPreColumns[colName]
+			require.True(t, ok)
+			switch v := col.Value.(type) {
+			case types.VectorFloat32:
+				require.EqualValues(t, v.String(), decoded.Value)
+			default:
+				require.EqualValues(t, v, decoded.Value)
+			}
 		}
 	}
 }

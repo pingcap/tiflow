@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
@@ -82,6 +83,13 @@ func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
 	if ok1 && ok2 {
 		return bytes.Equal(preValueBytes, updatedValueBytes)
 	}
+
+	preValueVector, ok1 := preValue.(types.VectorFloat32)
+	updatedValueVector, ok2 := updatedValue.(types.VectorFloat32)
+	if ok1 && ok2 {
+		return preValueVector.Compare(updatedValueVector) == 0
+	}
+
 	// mounter use the same table info to parse the value,
 	// the value type should be the same
 	return preValue == updatedValue
