@@ -24,12 +24,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
-	"golang.org/x/text/encoding"
 )
 
 type canalJSONTxnEventDecoder struct {
-	data         []byte
-	bytesDecoder *encoding.Decoder
+	data []byte
 
 	config *common.Config
 	msg    canalJSONMessageInterface
