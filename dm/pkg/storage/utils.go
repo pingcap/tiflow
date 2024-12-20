@@ -150,10 +150,10 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
 		// ignore not exist error when we delete files and backend is gcs/azure blob storage
-		if backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
+		if backend != nil && backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
 			return nil
 		}
-		if backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err2, bloberror.BlobNotFound) {
+		if backend != nil && backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err2, bloberror.BlobNotFound) {
 			return nil
 		}
 		return err2
