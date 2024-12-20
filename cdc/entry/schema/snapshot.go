@@ -103,6 +103,7 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 	return nil
 }
 
+<<<<<<< HEAD
 // GetSchemaVersion returns the schema version of the meta.
 func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 	// After we get the schema version at startTs, if the diff corresponding to that version does not exist,
@@ -124,6 +125,12 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(
 	meta *timeta.Meta,
+=======
+// NewSnapshotFromMeta creates a schema snapshot from meta.
+func NewSnapshotFromMeta(
+	id model.ChangeFeedID,
+	meta timeta.Reader,
+>>>>>>> c5b8800f8e (schemaStorage(ticdc): remove `schemaVersion` in `schemaStorage` (#11869))
 	currentTs uint64,
 	forceReplicate bool,
 	filter filter.Filter,
