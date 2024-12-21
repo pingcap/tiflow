@@ -301,7 +301,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
-	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() {
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
+		job.BinlogInfo.SchemaVersion == 0 /* means the ddl is ignored in upstream */ {
 		log.Info("ddl job finishedTs less than puller resolvedTs,"+
 			"discard the ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
