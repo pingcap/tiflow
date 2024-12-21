@@ -186,13 +186,20 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
+<<<<<<< HEAD
 		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 		// Unexecuted DDL jobs should have largest schemaVersions.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 			log.Info("ignore foregone DDL",
+=======
+		// already-executed DDL could filted by finishedTs.
+		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
+			log.Info("schemaStorage: ignore foregone DDL",
+>>>>>>> 7f57e1f548 (ddl(ticdc): ignore ddl with schemaversion 0 (#11856))
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
+				zap.String("state", job.State.String()),
 				zap.Int64("jobID", job.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("schemaVersion", s.schemaVersion),
