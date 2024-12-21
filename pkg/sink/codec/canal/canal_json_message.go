@@ -37,6 +37,9 @@ type canalJSONMessageInterface interface {
 	getSchema() *string
 	getTable() *string
 	getCommitTs() uint64
+	getPhysicalTableID() int64
+	getTableID() int64
+	isPartition() bool
 	getQuery() string
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
@@ -82,6 +85,18 @@ func (c *JSONMessage) getTable() *string {
 // for JSONMessage, we lost the commitTs.
 func (c *JSONMessage) getCommitTs() uint64 {
 	return 0
+}
+
+func (c *JSONMessage) getTableID() int64 {
+	return 0
+}
+
+func (c *JSONMessage) getPhysicalTableID() int64 {
+	return 0
+}
+
+func (c *JSONMessage) isPartition() bool {
+	return false
 }
 
 func (c *JSONMessage) getQuery() string {
@@ -136,6 +151,8 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 
 type tidbExtension struct {
 	CommitTs           uint64 `json:"commitTs,omitempty"`
+	TableID            int64  `json:"tableId,omitempty"`
+	PhysicalTableID    int64  `json:"partitionId,omitempty"`
 	WatermarkTs        uint64 `json:"watermarkTs,omitempty"`
 	OnlyHandleKey      bool   `json:"onlyHandleKey,omitempty"`
 	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
@@ -186,8 +203,9 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	result := new(model.RowChangedEvent)
 	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
-
+	result.PhysicalTableID = msg.getPhysicalTableID()
 	mysqlType := msg.getMySQLType()
+
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
@@ -203,6 +221,8 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	if err != nil {
 		return nil, err
 	}
+	result.TableInfo.TableName.IsPartition = msg.isPartition()
+	result.TableInfo.TableName.TableID = msg.getTableID()
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
