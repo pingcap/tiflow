@@ -197,11 +197,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
+		// already-executed DDL could filted by finishedTs.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
 			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
+				zap.String("state", job.State.String()),
 				zap.Int64("jobID", job.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
