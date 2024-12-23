@@ -18,5 +18,5 @@ fi
 if [[ $# -ge 4 ]]; then
 	echo "$1" | iconv -f utf8 -t $4 | mysql -u$user -h127.0.0.1 -P$2 -p$3 --default-character-set $4 -E >>$OUTFILE
 else
-	mysql -u$user -h127.0.0.1 -P$2 -p$3 --default-character-set utf8 -E -e "$1" >>$OUTFILE
+	MYSQL_PWD=$3 mysql -u$user -h127.0.0.1 -P$2 --default-character-set utf8 -E -e "$1" >>$OUTFILE
 fi

@@ -151,7 +151,9 @@ function run() {
 	pkill -hup tidb-server 2>/dev/null || true
 	wait_process_exit tidb-server
 	# now worker will process some binlog events, save table checkpoint and meet downstream error
+	echo "start incremental_data_2"
 	incremental_data_2
+	echo "finish incremental_data_2"
 	sleep 30
 
 	resume_num=$(grep 'unit process error' $WORK_DIR/worker1/log/dm-worker.log | wc -l)

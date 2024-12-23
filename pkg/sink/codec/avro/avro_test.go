@@ -76,6 +76,7 @@ func TestDMLEventE2E(t *testing.T) {
 			decodedEvent, err := decoder.NextRowChangedEvent()
 			require.NoError(t, err)
 			require.NotNil(t, decodedEvent)
+			require.Equal(t, decodedEvent.GetTableID(), int64(0))
 
 			TeardownEncoderAndSchemaRegistry4Testing()
 		}
@@ -314,7 +315,7 @@ func TestSanitizeName(t *testing.T) {
 		common.SanitizeName("1ColumnNameStartWithNumber"),
 	)
 	require.Equal(t, "A_B", common.SanitizeName("A.B"))
-	require.Equal(t, "columnNameWith______", common.SanitizeName("columnNameWith中文"))
+	require.Equal(t, "columnNameWith__", common.SanitizeName("columnNameWith中文"))
 }
 
 func TestGetAvroNamespace(t *testing.T) {
