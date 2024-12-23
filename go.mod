@@ -69,11 +69,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20241120022153-92b0414aeed8
 	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-<<<<<<< HEAD
-	github.com/pingcap/tidb v1.1.0-beta.0.20241120103608-82376c7732c1
-=======
-	github.com/pingcap/tidb v1.1.0-beta.0.20241128113414-7518a29fb1d0
->>>>>>> 690b2a954f (*: prompt k8s.io/api version (#11866))
+	github.com/pingcap/tidb v1.1.0-beta.0.20241128162802-793e77ce3706
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20241120103608-82376c7732c1
 	github.com/prometheus/client_golang v1.20.5
@@ -93,7 +89,7 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20241120024459-05d115b3e88b
+	github.com/tikv/client-go/v2 v2.0.8-0.20241121061241-006dfb024c26
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20241111073742-238d4d79ea31
 	github.com/tinylib/msgp v1.1.6
