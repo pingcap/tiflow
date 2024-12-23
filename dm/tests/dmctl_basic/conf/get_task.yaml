@@ -132,6 +132,7 @@ loaders:
     range-concurrency: 0
     compress-kv-pairs: ""
     pd-addr: ""
+    security: null
 syncers:
   sync-01:
     meta-file: ""

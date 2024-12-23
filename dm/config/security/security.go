@@ -17,6 +17,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+
+	certificate "github.com/pingcap/tiflow/pkg/security"
 )
 
 // Security config.
@@ -83,6 +85,9 @@ func (s *Security) ClearSSLBytesData() {
 	s.SSLCABytes = s.SSLCABytes[:0]
 	s.SSLKeyBytes = s.SSLKeyBytes[:0]
 	s.SSLCertBytes = s.SSLCertBytes[:0]
+	s.SSLCA = ""
+	s.SSLCert = ""
+	s.SSLKey = ""
 }
 
 // Clone returns a deep copy of Security.
@@ -95,5 +100,22 @@ func (s *Security) Clone() *Security {
 	clone.SSLCABytes = append([]byte(nil), s.SSLCABytes...)
 	clone.SSLKeyBytes = append([]byte(nil), s.SSLKeyBytes...)
 	clone.SSLCertBytes = append([]byte(nil), s.SSLCertBytes...)
+	clone.SSLCA = s.SSLCA
+	clone.SSLCert = s.SSLCert
+	clone.SSLKey = s.SSLKey
 	return &clone
+}
+
+func (s *Security) WriteFiles(name string) error {
+	var err error
+	if s.SSLCA, err = certificate.WriteFile(fmt.Sprintf("%s_ca.pem", name), s.SSLCABytes); err != nil {
+		return err
+	}
+	if s.SSLCert, err = certificate.WriteFile(fmt.Sprintf("%s_dm.pem", name), s.SSLCertBytes); err != nil {
+		return err
+	}
+	if s.SSLKey, err = certificate.WriteFile(fmt.Sprintf("%s_dm.key", name), s.SSLKeyBytes); err != nil {
+		return err
+	}
+	return nil
 }
