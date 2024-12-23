@@ -60,19 +60,23 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 
 // Resolve will get events where CommitTs is less than resolveTs.
 func (g *eventsGroup) Resolve(resolve uint64, protocol config.Protocol) []*model.RowChangedEvent {
-	switch protocol {
-	case config.ProtocolCanalJSON:
-		sort.Slice(g.events, func(i, j int) bool {
-			return g.events[i].CommitTs < g.events[j].CommitTs
-		})
-	default:
-		if !sort.SliceIsSorted(g.events, func(i, j int) bool {
-			return g.events[i].CommitTs < g.events[j].CommitTs
-		}) {
-			log.Warn("events are not sorted", zap.Int32("partition", g.partition),
-				zap.Int64("tableID", g.tableID), zap.Int("eventCount", len(g.events)))
-		}
-	}
+	//switch protocol {
+	//case config.ProtocolCanalJSON:
+	//	sort.Slice(g.events, func(i, j int) bool {
+	//		return g.events[i].CommitTs < g.events[j].CommitTs
+	//	})
+	//default:
+	//	if !sort.SliceIsSorted(g.events, func(i, j int) bool {
+	//		return g.events[i].CommitTs < g.events[j].CommitTs
+	//	}) {
+	//		log.Warn("events are not sorted", zap.Int32("partition", g.partition),
+	//			zap.Int64("tableID", g.tableID), zap.Int("eventCount", len(g.events)))
+	//	}
+	//}
+
+	sort.Slice(g.events, func(i, j int) bool {
+		return g.events[i].CommitTs < g.events[j].CommitTs
+	})
 
 	i := sort.Search(len(g.events), func(i int) bool {
 		return g.events[i].CommitTs > resolve
