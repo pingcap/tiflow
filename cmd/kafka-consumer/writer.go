@@ -493,14 +493,16 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, group *eventsGroup,
 				zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 				zap.Int32("partition", progress.partition), zap.Int64("tableID", group.tableID),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
-				zap.String("table", row.TableInfo.GetTableName()))
+				zap.String("table", row.TableInfo.GetTableName()),
+				zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 		}
 		log.Warn("Row changed event fall back, ignore it, since consumer read old offset message",
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.Int32("partition", progress.partition), zap.Int64("tableID", group.tableID),
 			zap.String("schema", row.TableInfo.GetSchemaName()),
-			zap.String("table", row.TableInfo.GetTableName()))
+			zap.String("table", row.TableInfo.GetTableName()),
+			zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 		return
 	}
 	group.Append(row, offset)
