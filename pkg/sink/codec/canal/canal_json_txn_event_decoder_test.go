@@ -29,7 +29,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	ctx := context.Background()
 
-	for _, encodeEnable := range []bool{false, true} {
+	for _, encodeEnable := range []bool{true, false} {
 		encodeConfig := common.NewConfig(config.ProtocolCanalJSON)
 		encodeConfig.EnableTiDBExtension = encodeEnable
 		encodeConfig.Terminator = config.CRLF
@@ -45,7 +45,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		require.Equal(t, 1, len(messages))
 		msg := messages[0]
 
-		for _, decodeEnable := range []bool{false, true} {
+		for _, decodeEnable := range []bool{true, false} {
 			decodeConfig := common.NewConfig(config.ProtocolCanalJSON)
 			decodeConfig.EnableTiDBExtension = decodeEnable
 
@@ -63,6 +63,8 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 			if encodeEnable && decodeEnable {
 				require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
+				require.Equal(t, insertEvent.GetTableID(), decodedEvent.GetTableID())
+				require.Equal(t, insertEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
 			}
 			require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 			require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
