@@ -113,63 +113,138 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.NoError(t, err)
 	keyPath, err := certificate.WriteFile("dm-test-client-key", key)
 	require.NoError(t, err)
-	ca, err = certificate.NewCA()
+	ca2, err := certificate.NewCA()
 	require.NoError(t, err)
-	cert, key, err = ca.GenerateCerts("dm")
+	cert2, key2, err := ca2.GenerateCerts("dm")
 	require.NoError(t, err)
-	caPath2, err := certificate.WriteFile("dm-test-client-cert2", ca.CAPEM)
+	caPath2, err := certificate.WriteFile("dm-test-client-cert2", ca2.CAPEM)
 	require.NoError(t, err)
-	certPath2, err := certificate.WriteFile("dm-test-client-cert2", cert)
+	certPath2, err := certificate.WriteFile("dm-test-client-cert2", cert2)
 	require.NoError(t, err)
-	keyPath2, err := certificate.WriteFile("dm-test-client-key2", key)
+	keyPath2, err := certificate.WriteFile("dm-test-client-key2", key2)
 	require.NoError(t, err)
-
-	conf, err = GetLightningConfig(
-		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
-		&config.SubTaskConfig{
-			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
-			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
-		})
-	require.NoError(t, err)
-	require.Equal(t, conf.Security.CAPath, caPath2)
-	require.Equal(t, conf.Security.CertPath, certPath2)
-	require.Equal(t, conf.Security.KeyPath, keyPath2)
-	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
-	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
-	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
-	conf, err = GetLightningConfig(
-		&lcfg.GlobalConfig{},
-		&config.SubTaskConfig{
-			To:           dbconfig.DBConfig{},
-			LoaderConfig: config.LoaderConfig{Security: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2}},
-		})
-	require.NoError(t, err)
-	require.Equal(t, conf.Security.CAPath, caPath2)
-	require.Equal(t, conf.Security.CertPath, certPath2)
-	require.Equal(t, conf.Security.KeyPath, keyPath2)
-	require.Equal(t, conf.TiDB.Security.CAPath, "")
-	require.Equal(t, conf.TiDB.Security.CertPath, "")
-	require.Equal(t, conf.TiDB.Security.KeyPath, "")
-	conf, err = GetLightningConfig(
-		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: caPath, CertPath: certPath, KeyPath: keyPath}},
-		&config.SubTaskConfig{
-			To:           dbconfig.DBConfig{Security: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath}},
-			LoaderConfig: config.LoaderConfig{},
-		})
-	require.NoError(t, err)
-	require.Equal(t, conf.Security.CAPath, caPath)
-	require.Equal(t, conf.Security.CertPath, certPath)
-	require.Equal(t, conf.Security.KeyPath, keyPath)
-	require.Equal(t, conf.TiDB.Security.CAPath, caPath)
-	require.Equal(t, conf.TiDB.Security.CertPath, certPath)
-	require.Equal(t, conf.TiDB.Security.KeyPath, keyPath)
-	// invalid security file path
-	_, err = GetLightningConfig(
-		&lcfg.GlobalConfig{Security: lcfg.Security{CAPath: "caPath"}},
-		&config.SubTaskConfig{
-			To: dbconfig.DBConfig{Security: &security.Security{SSLCA: "caPath"}},
-		})
-	require.EqualError(t, err, "could not read ca certificate: open caPath: no such file or directory")
+	cases := []struct {
+		dbSecurity *security.Security
+		pdSecurity *security.Security
+		checkPath  bool
+		err        error
+	}{
+		// init security with certificates file path
+		{
+			dbSecurity: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
+			pdSecurity: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2},
+			checkPath:  true, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
+			pdSecurity: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
+			checkPath:  true, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCA: caPath, SSLCert: certPath, SSLKey: keyPath},
+			pdSecurity: nil,
+			checkPath:  true, err: nil,
+		},
+		{
+			dbSecurity: nil,
+			pdSecurity: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2},
+			checkPath:  true, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCA: "invalid/path"},
+			pdSecurity: &security.Security{SSLCA: caPath2, SSLCert: certPath2, SSLKey: keyPath2},
+			checkPath:  true, err: errors.New("could not read ca certificate: open invalid/path: no such file or directory"),
+		},
+		// init security with certificates content
+		{
+			dbSecurity: &security.Security{SSLCABytes: ca.CAPEM, SSLCertBytes: cert, SSLKeyBytes: key},
+			pdSecurity: &security.Security{SSLCABytes: ca2.CAPEM, SSLCertBytes: cert2, SSLKeyBytes: key2},
+			checkPath:  false, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCABytes: ca.CAPEM, SSLCertBytes: cert, SSLKeyBytes: key},
+			pdSecurity: &security.Security{SSLCABytes: ca2.CAPEM, SSLCertBytes: cert2, SSLKeyBytes: key2, SSLCA: caPath2},
+			checkPath:  true, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCABytes: ca.CAPEM, SSLCertBytes: cert, SSLKeyBytes: key},
+			pdSecurity: &security.Security{SSLCABytes: ca.CAPEM, SSLCertBytes: cert, SSLKeyBytes: key},
+			checkPath:  false, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCABytes: ca.CAPEM, SSLCertBytes: cert, SSLKeyBytes: key},
+			pdSecurity: nil,
+			checkPath:  false, err: nil,
+		},
+		{
+			dbSecurity: nil,
+			pdSecurity: &security.Security{SSLCABytes: ca2.CAPEM, SSLCertBytes: cert2, SSLKeyBytes: key2},
+			checkPath:  false, err: nil,
+		},
+		{
+			dbSecurity: &security.Security{SSLCABytes: []byte("fake ca"), SSLCertBytes: []byte("fake cert"), SSLKeyBytes: []byte("fake key")},
+			pdSecurity: &security.Security{SSLCABytes: ca2.CAPEM, SSLCertBytes: cert2, SSLKeyBytes: key2},
+			err:        errors.New("could not load client key pair: tls: failed to find any PEM data in certificate input"),
+		},
+	}
+	for _, c := range cases {
+		var (
+			globalCfg lcfg.GlobalConfig
+			dbCfg     dbconfig.DBConfig
+			loaderCfg config.LoaderConfig
+		)
+		if c.dbSecurity != nil {
+			globalCfg.Security = lcfg.Security{
+				CAPath: c.dbSecurity.SSLCA, CertPath: c.dbSecurity.SSLCert, KeyPath: c.dbSecurity.SSLKey,
+				CABytes: c.dbSecurity.SSLCABytes, CertBytes: c.dbSecurity.SSLCertBytes, KeyBytes: c.dbSecurity.SSLKeyBytes,
+			}
+			dbCfg.Security = &security.Security{
+				SSLCA: c.dbSecurity.SSLCA, SSLCert: c.dbSecurity.SSLCert, SSLKey: c.dbSecurity.SSLKey,
+				SSLCABytes: c.dbSecurity.SSLCABytes, SSLCertBytes: c.dbSecurity.SSLCertBytes, SSLKeyBytes: c.dbSecurity.SSLKeyBytes,
+			}
+		}
+		if c.pdSecurity != nil {
+			loaderCfg.Security = &security.Security{
+				SSLCA: c.pdSecurity.SSLCA, SSLCert: c.pdSecurity.SSLCert, SSLKey: c.pdSecurity.SSLKey,
+				SSLCABytes: c.pdSecurity.SSLCABytes, SSLCertBytes: c.pdSecurity.SSLCertBytes, SSLKeyBytes: c.pdSecurity.SSLKeyBytes,
+			}
+		}
+		conf, err = GetLightningConfig(&globalCfg, &config.SubTaskConfig{To: dbCfg, LoaderConfig: loaderCfg})
+		if c.err == nil {
+			if c.pdSecurity != nil {
+				if c.checkPath {
+					require.Equal(t, loaderCfg.Security.SSLCA, conf.Security.CAPath)
+					require.Equal(t, loaderCfg.Security.SSLCert, conf.Security.CertPath)
+					require.Equal(t, loaderCfg.Security.SSLKey, conf.Security.KeyPath)
+				}
+				require.Equal(t, loaderCfg.Security.SSLCABytes, conf.Security.CABytes)
+				require.Equal(t, loaderCfg.Security.SSLCertBytes, conf.Security.CertBytes)
+				require.Equal(t, loaderCfg.Security.SSLKeyBytes, conf.Security.KeyBytes)
+			}
+			if c.dbSecurity != nil {
+				if c.checkPath {
+					require.Equal(t, dbCfg.Security.SSLCA, conf.TiDB.Security.CAPath)
+					require.Equal(t, dbCfg.Security.SSLCert, conf.TiDB.Security.CertPath)
+					require.Equal(t, dbCfg.Security.SSLKey, conf.TiDB.Security.KeyPath)
+				}
+				require.Equal(t, dbCfg.Security.SSLCABytes, conf.TiDB.Security.CABytes)
+				require.Equal(t, dbCfg.Security.SSLCertBytes, conf.TiDB.Security.CertBytes)
+				require.Equal(t, dbCfg.Security.SSLKeyBytes, conf.TiDB.Security.KeyBytes)
+				if c.pdSecurity == nil {
+					if c.checkPath {
+						require.Equal(t, dbCfg.Security.SSLCA, conf.Security.CAPath)
+						require.Equal(t, dbCfg.Security.SSLCert, conf.Security.CertPath)
+						require.Equal(t, dbCfg.Security.SSLKey, conf.Security.KeyPath)
+					}
+					require.Equal(t, dbCfg.Security.SSLCABytes, conf.Security.CABytes)
+					require.Equal(t, dbCfg.Security.SSLCertBytes, conf.Security.CertBytes)
+					require.Equal(t, dbCfg.Security.SSLKeyBytes, conf.Security.KeyBytes)
+				}
+			}
+		} else {
+			require.Equal(t, c.err.Error(), err.Error())
+		}
+	}
 }
 
 func TestMetricProxies(t *testing.T) {
