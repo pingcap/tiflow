@@ -35,10 +35,10 @@ var (
 			"import_mode": "physical",
 			"pd_addr": "127.0.0.1:2379",
 			"security": {
-				"ssl_ca_content": "ca1",
-				"ssl_cert_content": "cert1",
-				"ssl_key_content": "key1",
-				"cert_allowed_cn": ["PD1", "PD2"]
+			  "ssl_ca_content": "ca1",
+			  "ssl_cert_content": "cert1",
+			  "ssl_key_content": "key1",
+			  "cert_allowed_cn": ["PD1", "PD2"]
 			}
 		  },
 		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
@@ -59,10 +59,10 @@ var (
 		  "password": "123456",
 		  "port": 4000,
 		  "security": {
-		      "ssl_ca_content": "ca2",
-			  "ssl_cert_content": "cert2",
-			  "ssl_key_content": "key2",
-			  "cert_allowed_cn": ["TiDB1", "TiDB2"]
+		    "ssl_ca_content": "ca2",
+			"ssl_cert_content": "cert2",
+			"ssl_key_content": "key2",
+			"cert_allowed_cn": ["TiDB1", "TiDB2"]
 		  },
 		  "user": "root"
 		},
