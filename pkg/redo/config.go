@@ -60,6 +60,11 @@ const (
 	// `8*64MB = 512MB` by default.
 	DefaultFlushWorkerNum = 8
 
+	// MaxEncodingWorkerNum is the max number of encoding workers.
+	MaxEncodingWorkerNum = 512
+	// MaxFlushWorkerNum is the max number of flush workers.
+	MaxFlushWorkerNum = 256
+
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
 	// DefaultDirMode is the default mode when operation dir
