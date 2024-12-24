@@ -104,6 +104,7 @@ var (
 	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricGetStoreErr                 = eventFeedErrorCounter.WithLabelValues("GetStoreErr")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
 )
@@ -1492,3 +1493,7 @@ func (e *connectToStoreErr) Error() string { return "connect to store error" }
 type sendRequestToStoreErr struct{}
 
 func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
+
+type getStoreErr struct{}
+
+func (e *getStoreErr) Error() string { return "get store error" }

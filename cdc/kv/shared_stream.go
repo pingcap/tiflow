@@ -125,11 +125,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 					// It means it's a special task for stopping the table.
 					continue
 				}
-<<<<<<< HEAD
-				c.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
-=======
-				c.onRegionFail(newRegionErrorInfo(region, regionErr))
->>>>>>> 4624acb2f2 (puller: fix retry logic when check store version failed (#11903))
+				c.onRegionFail(newRegionErrorInfo(sri, regionErr))
 			}
 			if err := util.Hang(ctx, time.Second); err != nil {
 				return err
