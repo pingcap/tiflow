@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
@@ -101,8 +102,11 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 					zap.Error(err))
 				if errors.Cause(err) == context.Canceled {
 					return nil
+				} else if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
+					regionErr = &getStoreErr{}
+				} else {
+					regionErr = &sendRequestToStoreErr{}
 				}
-				regionErr = &getStoreErr{}
 			} else {
 				if canceled := stream.run(ctx, c, r); canceled {
 					return nil
