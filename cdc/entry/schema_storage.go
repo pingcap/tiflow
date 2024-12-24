@@ -53,21 +53,11 @@ type SchemaStorage interface {
 	DoGC(ts uint64) (lastSchemaTs uint64)
 }
 
-<<<<<<< HEAD
 type schemaStorageImpl struct {
-	snaps         []*schema.Snapshot
-	snapsMu       sync.RWMutex
-	gcTs          uint64
-	resolvedTs    uint64
-	schemaVersion int64
-=======
-type schemaStorage struct {
-	snaps   []*schema.Snapshot
-	snapsMu sync.RWMutex
-
+	snaps      []*schema.Snapshot
+	snapsMu    sync.RWMutex
 	gcTs       uint64
 	resolvedTs uint64
->>>>>>> c5b8800f8e (schemaStorage(ticdc): remove `schemaVersion` in `schemaStorage` (#11869))
 
 	forceReplicate bool
 
@@ -82,14 +72,8 @@ func NewSchemaStorage(
 	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
 	var (
-<<<<<<< HEAD
-		snap    *schema.Snapshot
-		err     error
-		version int64
-=======
 		snap *schema.Snapshot
 		err  error
->>>>>>> c5b8800f8e (schemaStorage(ticdc): remove `schemaVersion` in `schemaStorage` (#11869))
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
@@ -197,15 +181,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
-<<<<<<< HEAD
-		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
-		// Unexecuted DDL jobs should have largest schemaVersions.
-		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-			log.Info("ignore foregone DDL",
-=======
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
 			log.Info("schemaStorage: ignore foregone DDL",
->>>>>>> c5b8800f8e (schemaStorage(ticdc): remove `schemaVersion` in `schemaStorage` (#11869))
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
@@ -239,17 +216,6 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
-<<<<<<< HEAD
-=======
-	log.Info("schemaStorage: update snapshot by the DDL job",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("schema", job.SchemaName),
-		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
-		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-		zap.String("role", s.role.String()))
->>>>>>> c5b8800f8e (schemaStorage(ticdc): remove `schemaVersion` in `schemaStorage` (#11869))
 	return nil
 }
 
