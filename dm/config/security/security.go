@@ -103,7 +103,8 @@ func (s *Security) Clone() *Security {
 	return &clone
 }
 
-func (s *Security) WriteFiles(fileName string) error {
+// WriteTLSContentToFiles will overwrite tls content to temp file and update path fields
+func (s *Security) WriteTLSContentToFiles(fileName string) error {
 	var err error
 	if s.SSLCA, err = certificate.WriteFile(fileName, s.SSLCABytes); err != nil {
 		return err
