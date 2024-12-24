@@ -267,11 +267,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 
-		oldConditions := make(map[string]interface{}, len(message.pkNameSet()))
-		for name := range message.pkNameSet() {
-			conditions[name] = message.getOld()[name]
-		}
-		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, oldConditions)
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		old, _, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
