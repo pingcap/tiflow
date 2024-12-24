@@ -9,16 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function run() {
-	# storage is not supported yet.
-	if [ "$SINK_TYPE" == "storage" ]; then
-		return
-	fi
-
-	# TODO(dongmen): enable pulsar in the future.
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		exit 0
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -43,15 +33,17 @@ function run() {
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI ;;
+	storage) run_storage_consumer $WORK_DIR $SINK_URI $CUR/conf/changefeed.toml "" ;;
+	pulsar) run_pulsar_consumer --upstream-uri $SINK_URI --config $CUR/conf/changefeed.toml ;;
 	esac
-	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql_file $CUR/data/virtual.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists generate_column.t ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists generate_column.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	if [[ "$SINK_TYPE" != "storage" && "$SINK_TYPE" != "pulsar" ]]; then
+		run_sql_file $CUR/data/stored.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+		check_table_exists generate_column.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	fi
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
 	cleanup_process $CDC_BINARY
 }
 
