@@ -1080,16 +1080,31 @@ function test_tls() {
 	# create source2 successfully
 	openapi_source_check "create_source2_success"
 
-	echo "start downstream TiDB cluster with TLS"
+	echo "kill tidb and start downstream TiDB cluster with different TLS certificates"
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
 	killall -9 pd-server 2>/dev/null || true
-	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf
+	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca.pem dm.pem dm.key ca2.pem tidb.pem tidb.key
 
 	task_name="task-tls-1"
-	openapi_task_check "create_noshard_task_with_security_success" $task_name "" \
+	openapi_task_check "create_noshard_task_with_db_cluster_security_success" $task_name "" \
 		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
 		"$(cat $cur/tls_conf/ca.pem)" "$(cat $cur/tls_conf/dm.pem)" "$(cat $cur/tls_conf/dm.key)"
+	openapi_task_check "start_task_success" $task_name ""
+	openapi_task_check "get_task_status_success" $task_name 2
+	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	echo "kill tidb and start downstream TiDB cluster with same TLS certificates"
+	killall -9 tidb-server 2>/dev/null || true
+	killall -9 tikv-server 2>/dev/null || true
+	killall -9 pd-server 2>/dev/null || true
+	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca2.pem tidb.pem tidb.key ca2.pem tidb.pem tidb.key
+
+	task_name="task-tls-2"
+	openapi_task_check "create_noshard_task_with_db_security_success" $task_name "" \
+		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)"
 	openapi_task_check "start_task_success" $task_name ""
 	openapi_task_check "get_task_status_success" $task_name 2
 	openapi_task_check "get_task_status_success_with_retry" $task_name "Sync" "Running" 50

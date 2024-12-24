@@ -330,24 +330,32 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		return nil, err
 	}
 	cfg.TiDB.Security = &globalCfg.Security
+	// TODO: Just a workround since using SslContent cannot verify certificates correctly when lightning use pdctl lib access PD server.
+	// Write certificates content to file when loader using SslContent or set db security only.
 	if subtaskCfg.LoaderConfig.Security != nil {
-		if subtaskCfg.LoaderConfig.Security.SSLCA != "" && subtaskCfg.LoaderConfig.Security.SSLCert != "" && subtaskCfg.LoaderConfig.Security.SSLKey != "" {
-			cfg.Security.CAPath = subtaskCfg.Security.SSLCA
-			cfg.Security.CertPath = subtaskCfg.Security.SSLCert
-			cfg.Security.KeyPath = subtaskCfg.Security.SSLKey
-		} else {
-			// TODO: Just a workround for using SslContent cannot verify ceritificates when lightning use pdctl lib access PD server
-			// To avoid loss certificate files due to worker restart, rewrite the certificate files when getting the lightning configuration
+		if len(subtaskCfg.LoaderConfig.Security.SSLCABytes) != 0 && len(subtaskCfg.LoaderConfig.Security.SSLCertBytes) != 0 && len(subtaskCfg.LoaderConfig.Security.SSLKeyBytes) != 0 {
 			if err := subtaskCfg.LoaderConfig.Security.WriteFiles(subtaskCfg.Name); err != nil {
 				return nil, err
 			}
-			cfg.Security.CABytes = cfg.Security.CABytes[:0]
-			cfg.Security.CertBytes = cfg.Security.CertBytes[:0]
-			cfg.Security.KeyBytes = cfg.Security.KeyBytes[:0]
-			cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
-			cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
-			cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
 		}
+		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
+		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
+		cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
+		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
+		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
+	} else if subtaskCfg.To.Security != nil {
+		if len(subtaskCfg.To.Security.SSLCABytes) != 0 && len(subtaskCfg.To.Security.SSLCertBytes) != 0 && len(subtaskCfg.To.Security.SSLKeyBytes) != 0 {
+			if err := subtaskCfg.To.Security.WriteFiles(subtaskCfg.Name); err != nil {
+				return nil, err
+			}
+		}
+		cfg.Security.CABytes = subtaskCfg.To.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.To.Security.SSLCertBytes
+		cfg.Security.KeyBytes = subtaskCfg.To.Security.SSLKeyBytes
+		cfg.Security.CAPath = subtaskCfg.To.Security.SSLCA
+		cfg.Security.CertPath = subtaskCfg.To.Security.SSLCert
+		cfg.Security.KeyPath = subtaskCfg.To.Security.SSLKey
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.

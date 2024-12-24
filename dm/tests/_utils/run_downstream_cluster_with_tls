@@ -4,6 +4,12 @@
 set -eux
 WORK_DIR="${1}_deploy_tidb"
 CONF_DIR=$2
+CLUSTER_CA_FILE=$3
+CLUSTER_CERT_FILE=$4
+CLUSTER_KEY_FILE=$5
+DB_CA_FILE=$6
+DB_CERT_FILE=$7
+DB_KEY_FILE=$8
 
 export PD_PEER_ADDR_TLS="127.0.0.1:23800"
 export PD_ADDR_TLS="127.0.0.1:23790"
@@ -25,10 +31,10 @@ start_pd() {
 # The number of replicas for each region.
 max-replicas = 1
 [security]
-cacert-path = "$CONF_DIR/ca.pem"
-cert-path = "$CONF_DIR/dm.pem"
-key-path = "$CONF_DIR/dm.key"
-cert-verify-cn = ["TiDB", "dm", "localhost"]
+cacert-path = "$CONF_DIR/$CLUSTER_CA_FILE"
+cert-path = "$CONF_DIR/$CLUSTER_CERT_FILE"
+key-path = "$CONF_DIR/$CLUSTER_KEY_FILE"
+cert-verify-cn = ["TiDB", "tidb", "dm", "localhost"]
 EOF
 
 	bin/pd-server --version
@@ -42,8 +48,8 @@ EOF
 	sleep 5
 	i=0
 	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/ca.pem" --cert "$CONF_DIR/dm.pem" \
-			--key "$CONF_DIR/dm.key" "https://$PD_ADDR_TLS/pd/api/v1/version" || echo "")
+		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/$CLUSTER_CA_FILE" --cert "$CONF_DIR/$CLUSTER_CERT_FILE" \
+			--key "$CONF_DIR/$CLUSTER_KEY_FILE" "https://$PD_ADDR_TLS/pd/api/v1/version" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start PD success'
@@ -57,9 +63,9 @@ EOF
 		echo 'Waiting for PD ready...'
 		sleep 3
 	done
-	echo "curl PD port with wrong TLS config"
-	if ! output=$(curl --cacert "$CONF_DIR/ca2.pem" --cert "$CONF_DIR/tidb.pem" \
-		--key "$CONF_DIR/tidb.key" "https://$PD_ADDR_TLS/pd/api/v1/version" 2>&1); then
+	echo "curl PD port with DB TLS config"
+	if ! output=$(curl --cacert "$CONF_DIR/$DB_CA_FILE" --cert "$CONF_DIR/$DB_CERT_FILE" \
+		--key "$CONF_DIR/$DB_KEY_FILE" "https://$PD_ADDR_TLS/pd/api/v1/version" 2>&1); then
 		echo "$output"
 	fi
 }
@@ -69,10 +75,10 @@ start_tikv() {
 
 	cat >"$WORK_DIR/tikv-tls.toml" <<EOF
 [security]
-ca-path = "$CONF_DIR/ca.pem"
-cert-path = "$CONF_DIR/dm.pem"
-key-path = "$CONF_DIR/dm.key"
-cert-verify-cn = ["TiDB", "dm", "localhost"]
+ca-path = "$CONF_DIR/$CLUSTER_CA_FILE"
+cert-path = "$CONF_DIR/$CLUSTER_CERT_FILE"
+key-path = "$CONF_DIR/$CLUSTER_KEY_FILE"
+cert-verify-cn = ["TiDB", "tidb", "dm", "localhost"]
 EOF
 	mkdir -p "$WORK_DIR/tikv-tls"
 	bin/tikv-server --version
@@ -87,8 +93,8 @@ EOF
 	sleep 5
 	i=0
 	while true; do
-		response=$(curl -s "https://$PD_ADDR_TLS/pd/api/v1/cluster/status" --cacert "$CONF_DIR/ca.pem" --cert "$CONF_DIR/dm.pem" \
-			--key "$CONF_DIR/dm.key" || echo "")
+		response=$(curl -s "https://$PD_ADDR_TLS/pd/api/v1/cluster/status" --cacert "$CONF_DIR/$CLUSTER_CA_FILE" --cert "$CONF_DIR/$CLUSTER_CERT_FILE" \
+			--key "$CONF_DIR/$CLUSTER_KEY_FILE" || echo "")
 
 		if [ -z "$response" ]; then
 			echo "Failed to connect to PD server"
@@ -118,13 +124,13 @@ socket = "/tmp/tidb-tls.sock"
 [status]
 status-port = $TIDB_STATUS_PORT_TLS
 [security]
-ssl-ca = "$CONF_DIR/ca2.pem"
-ssl-cert = "$CONF_DIR/tidb.pem"
-ssl-key = "$CONF_DIR/tidb.key"
-cluster-ssl-ca = "$CONF_DIR/ca.pem"
-cluster-ssl-cert = "$CONF_DIR/dm.pem"
-cluster-ssl-key = "$CONF_DIR/dm.key"
-cluster-verify-cn = ["TiDB", "dm" , "localhost"]
+ssl-ca = "$CONF_DIR/$DB_CA_FILE"
+ssl-cert = "$CONF_DIR/$DB_CERT_FILE"
+ssl-key = "$CONF_DIR/$DB_KEY_FILE"
+cluster-ssl-ca = "$CONF_DIR/$CLUSTER_CA_FILE"
+cluster-ssl-cert = "$CONF_DIR/$CLUSTER_CERT_FILE"
+cluster-ssl-key = "$CONF_DIR/$CLUSTER_KEY_FILE"
+cluster-verify-cn = ["TiDB", "tidb", "dm" , "localhost"]
 EOF
 	mkdir -p "$WORK_DIR/tidb-tls"
 	bin/tidb-server \
@@ -136,8 +142,8 @@ EOF
 	sleep 5
 	i=0
 	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/ca.pem" \
-			--cert "$CONF_DIR/dm.pem" --key "$CONF_DIR/dm.key" "https://$TIDB_STATUS_ADDR_TLS/status" || echo "")
+		response=$(curl -s -o /dev/null -w "%{http_code}" --cacert "$CONF_DIR/$CLUSTER_CA_FILE" \
+			--cert "$CONF_DIR/$CLUSTER_CERT_FILE" --key "$CONF_DIR/$CLUSTER_KEY_FILE" "https://$TIDB_STATUS_ADDR_TLS/status" || echo "")
 		echo "curl response: $response"
 		if [ "$response" -eq 200 ]; then
 			echo 'Start TiDB success'
@@ -161,11 +167,11 @@ start_tidb
 echo "Show databases without TLS"
 mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 -E -e "SHOW DATABASES;"
 echo "Show database with TLS"
-mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 --ssl-ca $CONF_DIR/ca2.pem \
-	--ssl-cert $CONF_DIR/tidb.pem --ssl-key $CONF_DIR/tidb.key --ssl-mode=VERIFY_CA -E -e "SHOW DATABASES;"
-echo "Show databases with invalid TLS"
+mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 --ssl-ca $CONF_DIR/$DB_CA_FILE \
+	--ssl-cert $CONF_DIR/$DB_CERT_FILE --ssl-key $CONF_DIR/$DB_KEY_FILE --ssl-mode=VERIFY_CA -E -e "SHOW DATABASES;"
+echo "Show databases with CLUSTER TLS"
 if ! output=$(mysql -uroot -h"$TIDB_IP_TLS" -P"$TIDB_PORT_TLS" --default-character-set=utf8 \
-	--ssl-ca "$CONF_DIR/ca.pem" --ssl-cert "$CONF_DIR/dm.pem" --ssl-key "$CONF_DIR/dm.key" \
+	--ssl-ca "$CONF_DIR/$CLUSTER_CA_FILE" --ssl-cert "$CONF_DIR/$CLUSTER_CERT_FILE" --ssl-key "$CONF_DIR/$CLUSTER_KEY_FILE" \
 	--ssl-mode=VERIFY_CA -E -e "SHOW DATABASES;" 2>&1); then
 	echo "$output"
 fi
