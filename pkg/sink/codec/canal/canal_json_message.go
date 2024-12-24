@@ -171,6 +171,21 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
+func (c *canalJSONMessageWithTiDBExtension) getTableID() int64 {
+	return c.Extensions.TableID
+}
+
+func (c *canalJSONMessageWithTiDBExtension) getPhysicalTableID() int64 {
+	if c.Extensions.PhysicalTableID != 0 {
+		return c.Extensions.PhysicalTableID
+	}
+	return c.Extensions.TableID
+}
+
+func (c *canalJSONMessageWithTiDBExtension) isPartition() bool {
+	return c.Extensions.PhysicalTableID != 0
+}
+
 func (b *batchDecoder) queryTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
 	cacheKey := tableKey{
 		schema: *msg.getSchema(),
