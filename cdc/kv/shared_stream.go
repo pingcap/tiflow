@@ -347,7 +347,9 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			if s.multiplexing != nil {
 				req := &cdcpb.ChangeDataRequest{
 					RequestId: uint64(subscriptionID),
-					Request:   &cdcpb.ChangeDataRequest_Deregister_{},
+					Request: &cdcpb.ChangeDataRequest_Deregister_{
+						Deregister: &cdcpb.ChangeDataRequest_Deregister{},
+					},
 				}
 				if err = doSend(s.multiplexing, req, subscriptionID); err != nil {
 					return err
