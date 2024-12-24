@@ -76,5 +76,5 @@ services:
     networks:
       db-networks:
         ipv4_address: 172.28.128.8
-    image: pingcap/tidb:latest
+    image: pingcap/tidb:nightly
     restart: always
