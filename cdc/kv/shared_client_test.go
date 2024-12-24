@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/store/mockstore/mockcopr"
@@ -253,6 +254,105 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	events2 <- makeTsEvent(11, ts, uint64(subID))
 	// After trying to receive something from a failed store,
 	// it should auto switch to other stores and fetch events finally.
+	select {
+	case event := <-eventCh:
+		checkTsEvent(event.RegionFeedEvent, ts)
+	case <-time.After(5 * time.Second):
+		require.True(t, false, "reconnection not succeed in 5 second")
+	}
+}
+
+func TestGetStoreFailed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	events1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataServer(events1)
+	server1, addr1 := newMockService(ctx, t, srv1, wg)
+
+	rpcClient, cluster, pdClient, _ := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+
+	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{}, nil)
+
+	regionCache := tikv.NewRegionCache(pdClient)
+
+	pdClock := pdutil.NewClock4Test()
+
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	require.Nil(t, err)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, model.ChangeFeedID{})
+
+	invalidStore1 := "localhost:1"
+	invalidStore2 := "localhost:2"
+	cluster.AddStore(1, addr1)
+	cluster.AddStore(2, invalidStore1)
+	cluster.AddStore(3, invalidStore2)
+	cluster.Bootstrap(11, []uint64{1, 2, 3}, []uint64{4, 5, 6}, 4)
+
+	client := NewSharedClient(
+		model.ChangeFeedID{ID: "test"},
+		&config.ServerConfig{
+			KVClient: &config.KVClientConfig{
+				WorkerConcurrent:     1,
+				GrpcStreamConcurrent: 1,
+				AdvanceIntervalInMs:  10,
+			},
+			Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}},
+		},
+		false, pdClient, grpcPool, regionCache, pdClock, lockResolver,
+	)
+
+	defer func() {
+		cancel()
+		client.Close()
+		_ = kvStorage.Close()
+		regionCache.Close()
+		pdClient.Close()
+		srv1.wg.Wait()
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(ctx)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}()
+
+	failpoint.Enable("github.com/pingcap/tiflow/pkg/version/GetStoreFailed", `return(true)`)
+	subID := client.AllocSubscriptionID()
+	span := tablepb.Span{TableID: 1, StartKey: []byte("a"), EndKey: []byte("b")}
+	eventCh := make(chan MultiplexingEvent, 50)
+	client.Subscribe(subID, span, 1, eventCh)
+
+	makeTsEvent := func(regionID, ts, requestID uint64) *cdcpb.ChangeDataEvent {
+		return &cdcpb.ChangeDataEvent{
+			Events: []*cdcpb.Event{
+				{
+					RegionId:  regionID,
+					RequestId: requestID,
+					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
+				},
+			},
+		}
+	}
+
+	checkTsEvent := func(event model.RegionFeedEvent, ts uint64) {
+		require.Equal(t, ts, event.Resolved.ResolvedTs)
+	}
+
+	events1 <- mockInitializedEvent(11, uint64(subID))
+	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
+	events1 <- makeTsEvent(11, ts, uint64(subID))
+	select {
+	case <-eventCh:
+		require.True(t, false, "should not get event when get store failed")
+	case <-time.After(5 * time.Second):
+	}
+	failpoint.Disable("github.com/pingcap/tiflow/pkg/version/GetStoreFailed")
 	select {
 	case event := <-eventCh:
 		checkTsEvent(event.RegionFeedEvent, ts)

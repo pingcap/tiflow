@@ -4,6 +4,7 @@ go 1.23
 
 require (
 	cloud.google.com/go/storage v1.39.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/IBM/sarama v1.41.2
@@ -129,7 +130,6 @@ require (
 
 require (
 	cloud.google.com/go/kms v1.15.8 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
