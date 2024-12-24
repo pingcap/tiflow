@@ -51,6 +51,9 @@ type requestedStream struct {
 
 	// tableExclusives means one GRPC stream is exclusive by one table.
 	tableExclusives chan tableExclusive
+
+	// sfEventsCache is used to cache the resolvedTsBatch events
+	sfEventsCache []*statefulEvent
 }
 
 type tableExclusive struct {
@@ -62,6 +65,11 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 	stream := newRequestedStream(streamIDGen.Add(1))
 	stream.logRegionDetails = c.logRegionDetails
 	stream.requests = chann.NewAutoDrainChann[regionInfo]()
+
+	stream.sfEventsCache = make([]*statefulEvent, len(c.workers))
+	for i := 0; i < len(stream.sfEventsCache); i++ {
+		stream.sfEventsCache[i] = new(statefulEvent)
+	}
 
 	waitForPreFetching := func() error {
 		if stream.preFetchForConnecting != nil {
@@ -507,8 +515,8 @@ func (s *requestedStream) sendRegionChangeEvents(
 }
 
 func (s *requestedStream) sendResolvedTs(
-	ctx context.Context, c *SharedClient, resolvedTs *cdcpb.ResolvedTs,
-	tableSubID SubscriptionID,
+	ctx context.Context, c *SharedClient,
+	resolvedTs *cdcpb.ResolvedTs, tableSubID SubscriptionID,
 ) error {
 	var subscriptionID SubscriptionID
 	if tableSubID == invalidSubscriptionID {
@@ -516,24 +524,23 @@ func (s *requestedStream) sendResolvedTs(
 	} else {
 		subscriptionID = tableSubID
 	}
-	sfEvents := make([]statefulEvent, len(c.workers))
 	for _, regionID := range resolvedTs.Regions {
 		slot := hashRegionID(regionID, len(c.workers))
-		if sfEvents[slot].stream == nil {
-			sfEvents[slot] = newResolvedTsBatch(resolvedTs.Ts, s)
+		if s.sfEventsCache[slot].stream == nil {
+			s.sfEventsCache[slot].resetResolvedTs(resolvedTs.Ts, s)
 		}
-		x := &sfEvents[slot].resolvedTsBatch
+		x := &s.sfEventsCache[slot].resolvedTsBatch
 		if state := s.getState(subscriptionID, regionID); state != nil {
 			x.regions = append(x.regions, state)
 		}
 	}
 
-	for i, sfEvent := range sfEvents {
+	for i, sfEvent := range s.sfEventsCache {
 		if len(sfEvent.resolvedTsBatch.regions) > 0 {
-			sfEvent.stream = s
-			if err := c.workers[i].sendEvent(ctx, sfEvent); err != nil {
+			if err := c.workers[i].sendEvent(ctx, *sfEvent); err != nil {
 				return err
 			}
+			sfEvent.clear()
 		}
 	}
 	return nil
