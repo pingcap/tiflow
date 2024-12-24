@@ -661,8 +661,17 @@ func (s *eventFeedSession) requestRegionToStore(
 					time.Sleep(delay)
 				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
+				var regionErr error
+				var scheduleReload bool
+				if cerror.Is(err, cerror.ErrGetAllStoresFailed) {
+					regionErr = &getStoreErr{}
+					scheduleReload = true
+				} else {
+					regionErr = &connectToStoreErr{}
+					scheduleReload = regionScheduleReload
+				}
+				s.client.regionCache.OnSendFail(bo, rpcCtx, scheduleReload, err)
+				errInfo := newRegionErrorInfo(sri, regionErr)
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
