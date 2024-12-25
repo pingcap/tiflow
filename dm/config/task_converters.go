@@ -586,10 +586,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			},
 		}
 		if targetSchema != "" {
-			tableMigrateRule.Target = &struct {
-				Schema *string `json:"schema,omitempty"`
-				Table  *string `json:"table,omitempty"`
-			}{
+			tableMigrateRule.Target = &openapi.TableMigrateRuleTarget{
 				Schema: &targetSchema,
 			}
 			if targetTable != "" {

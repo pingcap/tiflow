@@ -433,18 +433,11 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		sourceSchema := task.TableMigrateRule[0].Source.Schema
 		targetSchema := *task.TableMigrateRule[0].Target.Schema
 		// only route schema
-		task.TableMigrateRule[0].Source = struct {
-			Schema     string `json:"schema"`
-			SourceName string `json:"source_name"`
-			Table      string `json:"table"`
-		}{
+		task.TableMigrateRule[0].Source = openapi.TableMigrateRuleSource{
 			SourceName: source1Name,
 			Schema:     sourceSchema,
 		}
-		task.TableMigrateRule[0].Target = &struct {
-			Schema *string `json:"schema,omitempty"`
-			Table  *string `json:"table,omitempty"`
-		}{
+		task.TableMigrateRule[0].Target = &openapi.TableMigrateRuleTarget{
 			Schema: &targetSchema,
 		}
 		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
@@ -478,38 +471,24 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		// only route table will meet error
 		sourceTable := "tb"
 		targetTable := "tb1"
-		task.TableMigrateRule[0].Source = struct {
-			Schema     string `json:"schema"`
-			SourceName string `json:"source_name"`
-			Table      string `json:"table"`
-		}{
+		task.TableMigrateRule[0].Source = openapi.TableMigrateRuleSource{
 			SourceName: source1Name,
 			Schema:     sourceSchema,
 			Table:      sourceTable,
 		}
-		task.TableMigrateRule[0].Target = &struct {
-			Schema *string `json:"schema,omitempty"`
-			Table  *string `json:"table,omitempty"`
-		}{
+		task.TableMigrateRule[0].Target = &openapi.TableMigrateRuleTarget{
 			Table: &targetTable,
 		}
 		_, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
 		require.True(t, terror.ErrConfigGenTableRouter.Equal(err))
 
 		// route both
-		task.TableMigrateRule[0].Source = struct {
-			Schema     string `json:"schema"`
-			SourceName string `json:"source_name"`
-			Table      string `json:"table"`
-		}{
+		task.TableMigrateRule[0].Source = openapi.TableMigrateRuleSource{
 			SourceName: source1Name,
 			Schema:     sourceSchema,
 			Table:      sourceTable,
 		}
-		task.TableMigrateRule[0].Target = &struct {
-			Schema *string `json:"schema,omitempty"`
-			Table  *string `json:"table,omitempty"`
-		}{
+		task.TableMigrateRule[0].Target = &openapi.TableMigrateRuleTarget{
 			Schema: &targetSchema,
 			Table:  &targetTable,
 		}
@@ -552,11 +531,7 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// no route and sync one schema
-		task.TableMigrateRule[0].Source = struct {
-			Schema     string `json:"schema"`
-			SourceName string `json:"source_name"`
-			Table      string `json:"table"`
-		}{
+		task.TableMigrateRule[0].Source = openapi.TableMigrateRuleSource{
 			SourceName: source1Name,
 			Schema:     sourceSchema,
 			Table:      "",
