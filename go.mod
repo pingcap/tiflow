@@ -18,7 +18,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220905074648-403033efad45
+	github.com/chaos-mesh/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
 	github.com/chzyer/readline v1.5.1
 	github.com/cockroachdb/pebble v1.1.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
@@ -409,7 +409,7 @@ replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
-replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
+replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
 
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
 // Please remove these dependencies.
