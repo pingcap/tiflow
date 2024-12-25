@@ -330,8 +330,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		return nil, err
 	}
 	cfg.TiDB.Security = &globalCfg.Security
-	// TODO: Just a workround since using SslContent cannot verify certificates correctly when lightning use pdctl lib access PD server.
-	// Write certificates content to file when loader using SslContent or set db security only.
+	// TODO: Using TLS content cannot verify certificates correctly when lightning access PD server.
+	// Workround is also need to set TLS path instead of only set TLS content.
+	// Write TLS content to file when loader using TLS content or set db security only.
 	if subtaskCfg.LoaderConfig.Security != nil {
 		// Only when ssl content is set and ssl file path is not set, the file will be written
 		if len(subtaskCfg.LoaderConfig.Security.SSLCABytes) != 0 && len(subtaskCfg.LoaderConfig.Security.SSLCertBytes) != 0 &&
@@ -348,7 +349,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
 		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
 	} else if subtaskCfg.To.Security != nil {
-		// Only when ssl content is set and ssl file path is not set, the file will be written
+		// Only when ssl content is set and ssl file path is not set, the file will be written.
+		// Using db security as lightning default security config.
 		if len(subtaskCfg.To.Security.SSLCABytes) != 0 && len(subtaskCfg.To.Security.SSLCertBytes) != 0 && len(subtaskCfg.To.Security.SSLKeyBytes) != 0 &&
 			subtaskCfg.To.Security.SSLCA == "" && subtaskCfg.To.Security.SSLCert == "" && subtaskCfg.To.Security.SSLKey == "" {
 			if err := subtaskCfg.To.Security.WriteTLSContentToFiles(subtaskCfg.Name); err != nil {
