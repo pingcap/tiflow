@@ -19,7 +19,6 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
@@ -59,19 +58,12 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 }
 
 // Resolve will get events where CommitTs is less than resolveTs.
-func (g *eventsGroup) Resolve(resolve uint64, protocol config.Protocol) []*model.RowChangedEvent {
-	switch protocol {
-	case config.ProtocolCanalJSON:
-		sort.Slice(g.events, func(i, j int) bool {
-			return g.events[i].CommitTs < g.events[j].CommitTs
-		})
-	default:
-		if !sort.SliceIsSorted(g.events, func(i, j int) bool {
-			return g.events[i].CommitTs < g.events[j].CommitTs
-		}) {
-			log.Warn("events are not sorted", zap.Int32("partition", g.partition),
-				zap.Int64("tableID", g.tableID), zap.Int("eventCount", len(g.events)))
-		}
+func (g *eventsGroup) Resolve(resolve uint64) []*model.RowChangedEvent {
+	if !sort.SliceIsSorted(g.events, func(i, j int) bool {
+		return g.events[i].CommitTs < g.events[j].CommitTs
+	}) {
+		log.Warn("events are not sorted", zap.Int32("partition", g.partition),
+			zap.Int64("tableID", g.tableID), zap.Int("eventCount", len(g.events)))
 	}
 
 	i := sort.Search(len(g.events), func(i int) bool {
@@ -80,7 +72,6 @@ func (g *eventsGroup) Resolve(resolve uint64, protocol config.Protocol) []*model
 
 	result := g.events[:i]
 	g.events = g.events[i:]
-
 	if len(result) != 0 && len(g.events) != 0 {
 		log.Warn("not all events resolved",
 			zap.Int32("partition", g.partition), zap.Int64("tableID", g.tableID),

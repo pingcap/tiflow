@@ -379,7 +379,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			tableID := row.GetTableID()
-			if w.option.protocol != config.ProtocolSimple {
+			switch w.option.protocol {
+			case config.ProtocolSimple, config.ProtocolCanalJSON:
+			default:
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 				row.PhysicalTableID = tableID
@@ -426,7 +428,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 func (w *writer) resolveRowChangedEvents(eventGroup map[int64]*eventsGroup, newWatermark uint64, progress *partitionProgress) {
 	for tableID, group := range eventGroup {
-		events := group.Resolve(newWatermark, w.option.protocol)
+		events := group.Resolve(newWatermark)
 		if len(events) == 0 {
 			continue
 		}
