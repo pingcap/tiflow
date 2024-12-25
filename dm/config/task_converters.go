@@ -575,11 +575,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	ruleMap := map[string]struct{}{}
 	appendOneRule := func(sourceName, schemaPattern, tablePattern, targetSchema, targetTable string) {
 		tableMigrateRule := openapi.TaskTableMigrateRule{
-			Source: struct {
-				Schema     string `json:"schema"`
-				SourceName string `json:"source_name"`
-				Table      string `json:"table"`
-			}{
+			Source: openapi.TableMigrateRuleSource{
 				Schema:     schemaPattern,
 				SourceName: sourceName,
 				Table:      tablePattern,
