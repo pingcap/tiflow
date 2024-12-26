@@ -294,7 +294,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 
 	progress := w.progresses[partition]
 	decoder := progress.decoder
-	eventGroup := progress.eventGroups
 	if err := decoder.AddKeyValue(key, value); err != nil {
 		log.Panic("add key value to the decoder failed",
 			zap.Int32("partition", partition), zap.Any("offset", offset), zap.Error(err))
@@ -345,10 +344,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				for _, row := range cachedEvents {
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
 					tableID := row.GetTableID()
-					group, ok := eventGroup[tableID]
+					group, ok := progress.eventGroups[tableID]
 					if !ok {
 						group = NewEventsGroup(partition, tableID)
-						eventGroup[tableID] = group
+						progress.eventGroups[tableID] = group
 					}
 					w.appendRow2Group(row, group, progress, offset)
 				}
@@ -386,10 +385,10 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 				row.PhysicalTableID = tableID
 			}
-			group := eventGroup[tableID]
+			group := progress.eventGroups[tableID]
 			if group == nil {
 				group = NewEventsGroup(partition, tableID)
-				eventGroup[tableID] = group
+				progress.eventGroups[tableID] = group
 			}
 			w.appendRow2Group(row, group, progress, offset)
 		case model.MessageTypeResolved:
@@ -404,7 +403,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 
-			w.resolveRowChangedEvents(eventGroup, newWatermark, progress)
+			w.resolveRowChangedEvents(progress, newWatermark)
 			progress.updateWatermark(newWatermark, offset)
 			needFlush = true
 		default:
@@ -426,8 +425,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	return w.Write(ctx, messageType)
 }
 
-func (w *writer) resolveRowChangedEvents(eventGroup map[int64]*eventsGroup, newWatermark uint64, progress *partitionProgress) {
-	for tableID, group := range eventGroup {
+func (w *writer) resolveRowChangedEvents(progress *partitionProgress, newWatermark uint64) {
+	for tableID, group := range progress.eventGroups {
 		events := group.Resolve(newWatermark)
 		if len(events) == 0 {
 			continue
