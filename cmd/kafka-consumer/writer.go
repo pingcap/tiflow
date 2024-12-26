@@ -92,9 +92,10 @@ func newPartitionProgress(partition int32, decoder codec.RowEventDecoder) *parti
 func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Offset) {
 	watermark := p.loadWatermark()
 	if newWatermark >= watermark {
-		p.watermark = watermark
+		p.watermark = newWatermark
 		p.watermarkOffset = offset
-		log.Info("watermark received", zap.Int32("partition", p.partition), zap.Any("offset", offset), zap.Uint64("watermark", watermark))
+		log.Info("watermark received", zap.Int32("partition", p.partition), zap.Any("offset", offset),
+			zap.Uint64("watermark", newWatermark))
 		return
 	}
 	if offset > p.watermarkOffset {
