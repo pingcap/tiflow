@@ -76,16 +76,16 @@ type partitionProgress struct {
 	watermarkOffset kafka.Offset
 
 	tableSinkMap map[model.TableID]tablesink.TableSink
-
-	eventGroups map[int64]*eventsGroup
-	decoder     codec.RowEventDecoder
+	eventGroups  map[model.TableID]*eventsGroup
+	decoder      codec.RowEventDecoder
 }
 
 func newPartitionProgress(partition int32, decoder codec.RowEventDecoder) *partitionProgress {
 	return &partitionProgress{
-		partition:   partition,
-		eventGroups: make(map[int64]*eventsGroup),
-		decoder:     decoder,
+		partition:    partition,
+		eventGroups:  make(map[model.TableID]*eventsGroup),
+		tableSinkMap: make(map[model.TableID]tablesink.TableSink),
+		decoder:      decoder,
 	}
 }
 
