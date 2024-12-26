@@ -17,15 +17,18 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -37,10 +40,49 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
+type tableKey struct {
+	schema string
+	table  string
+}
+
+type bufferedJSONDecoder struct {
+	buf     *bytes.Buffer
+	decoder *json.Decoder
+}
+
+func newBufferedJSONDecoder() *bufferedJSONDecoder {
+	buf := new(bytes.Buffer)
+	decoder := json.NewDecoder(buf)
+	return &bufferedJSONDecoder{
+		buf:     buf,
+		decoder: decoder,
+	}
+}
+
+// Write writes data to the buffer.
+func (b *bufferedJSONDecoder) Write(data []byte) (n int, err error) {
+	return b.buf.Write(data)
+}
+
+// Decode decodes the buffer into the original message.
+func (b *bufferedJSONDecoder) Decode(v interface{}) error {
+	return b.decoder.Decode(v)
+}
+
+// Len returns the length of the buffer.
+func (b *bufferedJSONDecoder) Len() int {
+	return b.buf.Len()
+}
+
+// Bytes returns the buffer content.
+func (b *bufferedJSONDecoder) Bytes() []byte {
+	return b.buf.Bytes()
+}
+
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
-	data []byte
-	msg  canalJSONMessageInterface
+	msg     canalJSONMessageInterface
+	decoder *bufferedJSONDecoder
 
 	config *common.Config
 
@@ -48,6 +90,8 @@ type batchDecoder struct {
 
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
+
+	tableInfoCache map[tableKey]*model.TableInfo
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -71,11 +115,22 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	if codecConfig.EnableTiDBExtension {
+		msg = &canalJSONMessageWithTiDBExtension{
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
+		}
+	}
+
 	return &batchDecoder{
-		config:       codecConfig,
-		storage:      externalStorage,
-		upstreamTiDB: db,
-		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		config:         codecConfig,
+		msg:            msg,
+		decoder:        newBufferedJSONDecoder(),
+		storage:        externalStorage,
+		upstreamTiDB:   db,
+		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
+		tableInfoCache: make(map[tableKey]*model.TableInfo),
 	}, nil
 }
 
@@ -89,51 +144,23 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 
 		return errors.Trace(err)
 	}
-	b.data = value
+	if _, err = b.decoder.Write(value); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if b.data == nil {
-		return model.MessageTypeUnknown, false, nil
-	}
-	var (
-		msg         canalJSONMessageInterface = &JSONMessage{}
-		encodedData []byte
-	)
-
-	if b.config.EnableTiDBExtension {
-		msg = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: &JSONMessage{},
-			Extensions:  &tidbExtension{},
-		}
-	}
-
-	if len(b.config.Terminator) > 0 {
-		idx := bytes.IndexAny(b.data, b.config.Terminator)
-		if idx >= 0 {
-			encodedData = b.data[:idx]
-			b.data = b.data[idx+len(b.config.Terminator):]
-		} else {
-			encodedData = b.data
-			b.data = nil
-		}
-	} else {
-		encodedData = b.data
-		b.data = nil
-	}
-
-	if len(encodedData) == 0 {
+	if b.decoder.Len() == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := json.Unmarshal(encodedData, msg); err != nil {
-		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err), zap.ByteString("data", encodedData))
+	if err := b.decoder.Decode(b.msg); err != nil {
+		log.Error("canal-json decoder decode failed",
+			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
-	b.msg = msg
 	return b.msg.messageType(), true, nil
 }
 
@@ -206,18 +233,15 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		table     = message.Table
 		eventType = message.EventType
 	)
-
-	handleKeyData := message.getData()
-	pkNames := make([]string, 0, len(handleKeyData))
-	for name := range handleKeyData {
-		pkNames = append(pkNames, name)
+	conditions := make(map[string]interface{}, len(message.pkNameSet()))
+	for name := range message.pkNameSet() {
+		conditions[name] = message.getData()[name]
 	}
-
 	result := &canalJSONMessageWithTiDBExtension{
 		JSONMessage: &JSONMessage{
 			Schema:  schema,
 			Table:   table,
-			PKNames: pkNames,
+			PKNames: message.PKNames,
 
 			EventType: eventType,
 		},
@@ -227,7 +251,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 	}
 	switch eventType {
 	case "INSERT":
-		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
@@ -235,7 +259,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 	case "UPDATE":
-		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
@@ -243,14 +267,14 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		result.MySQLType = mysqlType
 		result.Data = []map[string]interface{}{data}
 
-		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
+		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		old, _, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
 		result.Old = []map[string]interface{}{old}
 	case "DELETE":
-		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
+		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
@@ -261,6 +285,52 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 
 	b.msg = result
 	return b.NextRowChangedEvent()
+}
+
+func setColumnInfos(
+	tableInfo *timodel.TableInfo,
+	rawColumns map[string]interface{},
+	mysqlType map[string]string,
+	pkNames map[string]struct{},
+) {
+	mockColumnID := int64(100)
+	for name := range rawColumns {
+		columnInfo := new(timodel.ColumnInfo)
+		columnInfo.ID = mockColumnID
+		columnInfo.Name = pmodel.NewCIStr(name)
+		if utils.IsBinaryMySQLType(mysqlType[name]) {
+			columnInfo.AddFlag(mysql.BinaryFlag)
+		}
+		if _, isPK := pkNames[name]; isPK {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+		}
+		tableInfo.Columns = append(tableInfo.Columns, columnInfo)
+		mockColumnID++
+	}
+}
+
+func setIndexes(
+	tableInfo *timodel.TableInfo,
+	pkNames map[string]struct{},
+) {
+	indexColumns := make([]*timodel.IndexColumn, 0, len(pkNames))
+	for idx, col := range tableInfo.Columns {
+		name := col.Name.O
+		if _, ok := pkNames[name]; ok {
+			indexColumns = append(indexColumns, &timodel.IndexColumn{
+				Name:   pmodel.NewCIStr(name),
+				Offset: idx,
+			})
+		}
+	}
+	indexInfo := &timodel.IndexInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("primary"),
+		Columns: indexColumns,
+		Unique:  true,
+		Primary: true,
+	}
+	tableInfo.Indices = append(tableInfo.Indices, indexInfo)
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface
@@ -282,11 +352,10 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 
-	result, err := canalJSONMessage2RowChange(b.msg)
+	result, err := b.canalJSONMessage2RowChange()
 	if err != nil {
 		return nil, err
 	}
-	b.msg = nil
 	return result, nil
 }
 
@@ -299,7 +368,16 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	result := canalJSONMessage2DDLEvent(b.msg)
-	b.msg = nil
+	schema := *b.msg.getSchema()
+	table := *b.msg.getTable()
+	// if receive a table level DDL, just remove the table info to trigger create a new one.
+	if schema != "" && table != "" {
+		cacheKey := tableKey{
+			schema: schema,
+			table:  table,
+		}
+		delete(b.tableInfoCache, cacheKey)
+	}
 	return result, nil
 }
 
@@ -318,6 +396,5 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
-	b.msg = nil
 	return withExtensionEvent.Extensions.WatermarkTs, nil
 }

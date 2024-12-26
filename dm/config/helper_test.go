@@ -36,6 +36,10 @@ func TestTaskModeHasFunction(t *testing.T) {
 	require.False(t, HasLoad(ModeDump))
 	require.False(t, HasSync(ModeDump))
 
+	require.False(t, HasDump(ModeLoad))
+	require.True(t, HasLoad(ModeLoad))
+	require.False(t, HasSync(ModeLoad))
+
 	require.False(t, HasDump(ModeLoadSync))
 	require.True(t, HasLoad(ModeLoadSync))
 	require.True(t, HasSync(ModeLoadSync))
