@@ -441,7 +441,7 @@ func decodeColumns(
 	if rawData == nil {
 		return nil
 	}
-	var result []*model.ColumnData
+	result := make([]*model.ColumnData, 0, len(tableInfo.Columns))
 	for _, info := range tableInfo.Columns {
 		value, ok := rawData[info.Name.O]
 		if !ok {
@@ -554,7 +554,7 @@ func (a *jsonMarshaller) newDMLMessage(
 		Version:            defaultVersion,
 		Schema:             event.TableInfo.GetSchemaName(),
 		Table:              event.TableInfo.GetTableName(),
-		TableID:            event.TableInfo.ID,
+		TableID:            event.GetTableID(),
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),
 		SchemaVersion:      event.TableInfo.UpdateTS,

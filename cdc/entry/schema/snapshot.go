@@ -109,24 +109,6 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 	return nil
 }
 
-// GetSchemaVersion returns the schema version of the meta.
-func GetSchemaVersion(meta timeta.Reader) (int64, error) {
-	// After we get the schema version at startTs, if the diff corresponding to that version does not exist,
-	// it means that the job is not committed yet, so we should subtract one from the version, i.e., version--.
-	version, err := meta.GetSchemaVersion()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	diff, err := meta.GetSchemaDiff(version)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if diff == nil {
-		version--
-	}
-	return version, nil
-}
-
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
@@ -570,9 +552,6 @@ func (s *Snapshot) SchemaCount() (count int) {
 
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
-
 	schemas := make([]string, 0, s.inner.schemas.Len())
 	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))

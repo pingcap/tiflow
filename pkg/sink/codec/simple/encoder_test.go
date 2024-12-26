@@ -203,6 +203,78 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	require.Nil(t, decodedRow)
 }
 
+func TestE2EPartitionTable(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	createPartitionTableDDL := helper.DDL2Event(`create table test.t(a int primary key, b int) partition by range (a) (
+		partition p0 values less than (10),
+		partition p1 values less than (20),
+		partition p2 values less than MAXVALUE)`)
+	require.NotNil(t, createPartitionTableDDL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, 1)`, "test", "t", "p0")
+	require.NotNil(t, insertEvent)
+
+	insertEvent1 := helper.DML2Event(`insert into test.t values (11, 11)`, "test", "t", "p1")
+	require.NotNil(t, insertEvent1)
+
+	insertEvent2 := helper.DML2Event(`insert into test.t values (21, 21)`, "test", "t", "p2")
+	require.NotNil(t, insertEvent2)
+
+	events := []*model.RowChangedEvent{insertEvent, insertEvent1, insertEvent2}
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
+
+		decoder, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		message, err := enc.EncodeDDLEvent(createPartitionTableDDL)
+		require.NoError(t, err)
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, tp)
+
+		decodedDDL, err := decoder.NextDDLEvent()
+		require.NoError(t, err)
+		require.NotNil(t, decodedDDL)
+
+		for _, event := range events {
+			err = enc.AppendRowChangedEvent(ctx, "", event, nil)
+			require.NoError(t, err)
+			message := enc.Build()[0]
+
+			err = decoder.AddKeyValue(message.Key, message.Value)
+			require.NoError(t, err)
+			tp, hasNext, err := decoder.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, tp)
+
+			decodedEvent, err := decoder.NextRowChangedEvent()
+			require.NoError(t, err)
+			// table id should be set to the partition table id, the PhysicalTableID
+			require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
+		}
+	}
+}
+
 func TestEncodeDDLSequence(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1141,6 +1213,86 @@ func TestEncoderOtherTypes(t *testing.T) {
 			decoded, ok := decodedColumns[colName]
 			require.True(t, ok)
 			require.EqualValues(t, expected.Value, decoded.Value)
+		}
+	}
+}
+
+func TestE2EPartitionTableDMLBeforeDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	createPartitionTableDDL := helper.DDL2Event(`create table test.t(a int primary key, b int) partition by range (a) (
+		partition p0 values less than (10),
+		partition p1 values less than (20),
+		partition p2 values less than MAXVALUE)`)
+	require.NotNil(t, createPartitionTableDDL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, 1)`, "test", "t", "p0")
+	require.NotNil(t, insertEvent)
+
+	insertEvent1 := helper.DML2Event(`insert into test.t values (11, 11)`, "test", "t", "p1")
+	require.NotNil(t, insertEvent1)
+
+	insertEvent2 := helper.DML2Event(`insert into test.t values (21, 21)`, "test", "t", "p2")
+	require.NotNil(t, insertEvent2)
+
+	events := []*model.RowChangedEvent{insertEvent, insertEvent1, insertEvent2}
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+
+		enc := builder.Build()
+
+		decoder, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		codecConfig.EncodingFormat = format
+		for _, event := range events {
+			err = enc.AppendRowChangedEvent(ctx, "", event, nil)
+			require.NoError(t, err)
+			message := enc.Build()[0]
+
+			err = decoder.AddKeyValue(message.Key, message.Value)
+			require.NoError(t, err)
+			tp, hasNext, err := decoder.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, tp)
+
+			decodedEvent, err := decoder.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.Nil(t, decodedEvent)
+		}
+
+		message, err := enc.EncodeDDLEvent(createPartitionTableDDL)
+		require.NoError(t, err)
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, tp)
+
+		decodedDDL, err := decoder.NextDDLEvent()
+		require.NoError(t, err)
+		require.NotNil(t, decodedDDL)
+
+		cachedEvents := decoder.GetCachedEvents()
+		for idx, decodedRow := range cachedEvents {
+			require.NotNil(t, decodedRow)
+			require.NotNil(t, decodedRow.TableInfo)
+			require.Equal(t, decodedRow.GetTableID(), events[idx].GetTableID())
 		}
 	}
 }

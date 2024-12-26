@@ -21,9 +21,11 @@ import (
 	"strings"
 
 	gstorage "cloud.google.com/go/storage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
+	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
@@ -133,8 +135,13 @@ func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalS
 // RemoveAll remove files in dir.
 func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage) error {
 	var err error
+	var backend *backuppb.StorageBackend
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)
+		if err != nil {
+			return err
+		}
+		backend, err = bstorage.ParseBackend(dir, nil)
 		if err != nil {
 			return err
 		}
@@ -142,16 +149,22 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
-		if errors.Cause(err2) == gstorage.ErrObjectNotExist {
-			// ignore not exist error when we delete files
+		// ignore not exist error when we delete files and backend is gcs/azure blob storage
+		if backend != nil && backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
+			return nil
+		}
+		if backend != nil && backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err2, bloberror.BlobNotFound) {
 			return nil
 		}
 		return err2
 	})
 	if err == nil {
 		err = storage.DeleteFile(ctx, "")
-		if errors.Cause(err) == gstorage.ErrObjectNotExist {
-			// ignore not exist error when we delete files
+		// ignore not exist error when we delete files and backend is gcs/azure blob storage
+		if backend != nil && backend.GetGcs() != nil && errors.Cause(err) == gstorage.ErrObjectNotExist {
+			return nil
+		}
+		if backend != nil && backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil
 		}
 	}
