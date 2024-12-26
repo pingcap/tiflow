@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
@@ -90,14 +89,28 @@ func newPartitionProgress(partition int32, decoder codec.RowEventDecoder) *parti
 	}
 }
 
-func (p *partitionProgress) updateWatermark(watermark uint64, offset kafka.Offset) {
-	atomic.StoreUint64(&p.watermark, watermark)
-	p.watermarkOffset = offset
-	log.Info("watermark received", zap.Int32("partition", p.partition), zap.Any("offset", offset), zap.Uint64("watermark", watermark))
+func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Offset) {
+	watermark := p.loadWatermark()
+	if newWatermark >= watermark {
+		p.watermark = watermark
+		p.watermarkOffset = offset
+		log.Info("watermark received", zap.Int32("partition", p.partition), zap.Any("offset", offset), zap.Uint64("watermark", watermark))
+		return
+	}
+	if offset > p.watermarkOffset {
+		log.Panic("partition resolved ts fallback",
+			zap.Int32("partition", p.partition),
+			zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
+			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
+	}
+	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+		zap.Int32("partition", p.partition),
+		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
+		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
 }
 
 func (p *partitionProgress) loadWatermark() uint64 {
-	return atomic.LoadUint64(&p.watermark)
+	return p.watermark
 }
 
 type writer struct {
@@ -388,12 +401,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					zap.ByteString("value", value), zap.Error(err))
 			}
 
-			if w.checkOldMessageForWatermark(newWatermark, partition, offset) {
-				continue
-			}
-
-			w.resolveRowChangedEvents(progress, newWatermark)
 			progress.updateWatermark(newWatermark, offset)
+			w.resolveRowChangedEvents(progress, newWatermark)
 			needFlush = true
 		default:
 			log.Panic("unknown message type", zap.Any("messageType", messageType),
@@ -448,25 +457,6 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, off
 			zap.Int64("tableID", row.GetTableID()), zap.Any("row", row),
 		)
 	}
-}
-
-func (w *writer) checkOldMessageForWatermark(newWatermark uint64, partition int32, offset kafka.Offset) bool {
-	progress := w.progresses[partition]
-	watermark := progress.loadWatermark()
-	if newWatermark >= watermark {
-		return false
-	}
-	if offset > progress.watermarkOffset {
-		log.Panic("partition resolved ts fallback",
-			zap.Int32("partition", partition),
-			zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset))
-	}
-	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
-		zap.Int32("partition", partition),
-		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset))
-	return true
 }
 
 func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partitionProgress, offset kafka.Offset) {
