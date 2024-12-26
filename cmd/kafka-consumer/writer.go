@@ -293,8 +293,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 	)
 
 	progress := w.progresses[partition]
-	decoder := progress.decoder
-	if err := decoder.AddKeyValue(key, value); err != nil {
+	if err := progress.decoder.AddKeyValue(key, value); err != nil {
 		log.Panic("add key value to the decoder failed",
 			zap.Int32("partition", partition), zap.Any("offset", offset), zap.Error(err))
 	}
@@ -304,7 +303,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 		messageType model.MessageType
 	)
 	for {
-		ty, hasNext, err := decoder.HasNext()
+		ty, hasNext, err := progress.decoder.HasNext()
 		if err != nil {
 			log.Panic("decode message key failed",
 				zap.Int32("partition", partition), zap.Any("offset", offset), zap.Error(err))
@@ -329,15 +328,15 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			// then cause the consumer panic, but it was a duplicate one.
 			// so we only handle DDL received from partition-0 should be enough.
 			// but all DDL event messages should be consumed.
-			ddl, err := decoder.NextDDLEvent()
+			ddl, err := progress.decoder.NextDDLEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
 					zap.ByteString("value", value), zap.Error(err))
 			}
 
-			if simple, ok := decoder.(*simple.Decoder); ok {
-				cachedEvents := simple.GetCachedEvents()
+			if dec, ok := progress.decoder.(*simple.Decoder); ok {
+				cachedEvents := dec.GetCachedEvents()
 				if len(cachedEvents) != 0 {
 					log.Info("simple protocol resolved cached events", zap.Int("resolvedCount", len(cachedEvents)))
 				}
@@ -349,7 +348,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 						group = NewEventsGroup(partition, tableID)
 						progress.eventGroups[tableID] = group
 					}
-					w.appendRow2Group(row, group, progress, offset)
+					w.appendRow2Group(row, progress, offset)
 				}
 			}
 
@@ -363,7 +362,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			needFlush = true
 		case model.MessageTypeRow:
-			row, err := decoder.NextRowChangedEvent()
+			row, err := progress.decoder.NextRowChangedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
@@ -390,9 +389,9 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				group = NewEventsGroup(partition, tableID)
 				progress.eventGroups[tableID] = group
 			}
-			w.appendRow2Group(row, group, progress, offset)
+			w.appendRow2Group(row, progress, offset)
 		case model.MessageTypeResolved:
-			newWatermark, err := decoder.NextResolvedEvent()
+			newWatermark, err := progress.decoder.NextResolvedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
@@ -480,10 +479,11 @@ func (w *writer) checkOldMessageForWatermark(newWatermark uint64, partition int3
 	return true
 }
 
-func (w *writer) appendRow2Group(row *model.RowChangedEvent, group *eventsGroup, progress *partitionProgress, offset kafka.Offset) {
+func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partitionProgress, offset kafka.Offset) {
 	// if the kafka cluster is normal, this should not hit.
 	// else if the cluster is abnormal, the consumer may consume old message, then cause the watermark fallback.
 	watermark := progress.loadWatermark()
+	group := progress.eventGroups[row.GetTableID()]
 	if row.CommitTs < watermark {
 		log.Warn("RowChanged Event fallback row, since les than the partition watermark, ignore it",
 			zap.Int64("tableID", row.GetTableID()), zap.Int32("partition", progress.partition),
