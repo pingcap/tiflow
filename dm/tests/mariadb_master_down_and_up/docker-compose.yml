@@ -38,5 +38,5 @@ services:
     hostname: tidb
     ports:
       - "4000:4000"
-    image: pingcap/tidb:latest
+    image: pingcap/tidb:nightly
     restart: always
