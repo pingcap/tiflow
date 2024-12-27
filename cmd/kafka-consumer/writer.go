@@ -487,7 +487,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		return
 	}
 	switch w.option.protocol {
-	case config.ProtocolSimple, config.ProtocolOpen:
+	case config.ProtocolSimple, config.ProtocolOpen, config.ProtocolCanalJSON:
 		// simple protocol set the table id for all row message, it can be known which table the row message belongs to,
 		// also consider the table partition.
 		// open protocol set the partition table id if the table is partitioned.
@@ -503,9 +503,6 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 			zap.String("protocol", w.option.protocol.String()), zap.Bool("IsPartition", row.TableInfo.TableName.IsPartition))
 		return
 	default:
-		// canal-json does not set table id for all messages.
-		// in the partition table case, all partition tables have the same table id, use the same progress,
-		// so it's hard to know whether the fallback row comes from the same table partition or not, so do not ignore the row.
 	}
 	log.Warn("RowChangedEvent fallback row, since less than the group high watermark, do not ignore it",
 		zap.Int64("tableID", tableID), zap.Int32("partition", partition),
