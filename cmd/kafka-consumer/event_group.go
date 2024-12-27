@@ -51,7 +51,7 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 		zap.Any("offset", offset),
 		zap.Uint64("commitTs", row.CommitTs),
 		zap.Uint64("highWatermark", g.highWatermark),
-		zap.Int64("physicalTableID", row.GetTableID()),
+		zap.Int64("tableID", row.GetTableID()),
 		zap.String("schema", row.TableInfo.GetSchemaName()),
 		zap.String("table", row.TableInfo.GetTableName()),
 		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
