@@ -123,10 +123,14 @@ func newSink(ctx context.Context,
 
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 				if s.cancelErr == nil {
 					return
 				}
 				err = s.cancelErr
+=======
+				err = context.Cause(ctx)
+>>>>>>> 0f4a8a1fcb (kafka(ticdc): fix kafka dml sink report error to sink manager (#9879) (#9894)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 			}
 			select {
 			case errCh <- err:
