@@ -36,7 +36,7 @@ func NewEventsGroup(partition int32, tableID int64) *eventsGroup {
 	return &eventsGroup{
 		partition: partition,
 		tableID:   tableID,
-		events:    make([]*model.RowChangedEvent, 0),
+		events:    make([]*model.RowChangedEvent, 0, 1024),
 	}
 }
 
