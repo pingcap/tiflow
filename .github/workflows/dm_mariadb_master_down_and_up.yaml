@@ -40,6 +40,8 @@ jobs:
 
       - name: Setup containers
         run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
           docker-compose -f ./dm/tests/mariadb_master_down_and_up/docker-compose.yml up -d
 
       - name: Run test cases
