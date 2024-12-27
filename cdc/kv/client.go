@@ -108,6 +108,7 @@ var (
 	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricGetStoreErr                 = eventFeedErrorCounter.WithLabelValues("GetStoreErr")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
 )
@@ -685,8 +686,17 @@ func (s *eventFeedSession) requestRegionToStore(
 					time.Sleep(delay)
 				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
+				var regionErr error
+				var scheduleReload bool
+				if cerror.Is(err, cerror.ErrGetAllStoresFailed) {
+					regionErr = &getStoreErr{}
+					scheduleReload = true
+				} else {
+					regionErr = &connectToStoreErr{}
+					scheduleReload = regionScheduleReload
+				}
+				s.client.regionCache.OnSendFail(bo, rpcCtx, scheduleReload, err)
+				errInfo := newRegionErrorInfo(sri, regionErr)
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
@@ -961,6 +971,10 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		metricConnectToStoreErr.Inc()
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
+	case *getStoreErr:
+		metricGetStoreErr.Inc()
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span)
+		return nil
 	default:
 		//[TODO] Move all OnSendFail logic here
 		// We expect some unknown error to trigger RegionCache recheck its store state and change leader to peer to
@@ -1514,3 +1528,7 @@ func (e *connectToStoreErr) Error() string { return "connect to store error" }
 type sendRequestToStoreErr struct{}
 
 func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
+
+type getStoreErr struct{}
+
+func (e *getStoreErr) Error() string { return "get store error" }
