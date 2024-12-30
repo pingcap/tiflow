@@ -304,7 +304,7 @@ type LoaderConfig struct {
 	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
 	// now only creating task by OpenAPI will use the `Security` field to connect PD.
 	// TODO: support setting `Security` by dmctl
-	Security *security.Security `toml:"security" json:"security" yaml:"security"`
+	Security *security.Security `yaml:"-" toml:"security" json:"security"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
