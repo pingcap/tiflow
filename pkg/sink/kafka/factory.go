@@ -257,6 +257,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
+		Headers:   message.Headers(),
 		Key:       sarama.StringEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,

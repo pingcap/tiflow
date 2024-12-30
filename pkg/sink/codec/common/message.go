@@ -16,8 +16,10 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
 	"time"
 
+	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -50,7 +52,20 @@ type Message struct {
 // We didn't append any `Headers` when send the message, so ignore the calculations related to it.
 // If `ProducerMessage` Headers fields used, this method should also adjust.
 func (m *Message) Length() int {
-	return len(m.Key) + len(m.Value) + MaxRecordOverhead
+	headers := m.Headers()
+	var headerLen int
+	for _, header := range headers {
+		headerLen += len(header.Key) + len(header.Value) + 2*binary.MaxVarintLen32
+	}
+	return headerLen + len(m.Key) + len(m.Value) + MaxRecordOverhead
+}
+
+// Headers returns the headers of Kafka message
+func (m *Message) Headers() []sarama.RecordHeader {
+	headers := []sarama.RecordHeader{
+		{Key: []byte("commitTs"), Value: []byte(strconv.FormatUint(m.Ts, 10))},
+	}
+	return headers
 }
 
 // PhysicalTime returns physical time part of Ts in time.Time
