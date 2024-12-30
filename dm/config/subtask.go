@@ -53,6 +53,7 @@ const (
 	ModeFull      = "full"
 	ModeIncrement = "incremental"
 	ModeDump      = "dump"
+	ModeLoad      = "load"
 	ModeLoadSync  = "load&sync"
 
 	DefaultShadowTableRules = "^_(.+)_(?:new|gho)$"
@@ -347,8 +348,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	// adjust dir, no need to do for load&sync mode because it needs its own s3 repository
-	if HasLoad(c.Mode) && c.Mode != ModeLoadSync {
+	// adjust dir. Do not do this for both load and load&sync mode, as they are standalone
+	// mode and should take LoaderConfig.Dir as is
+	if HasLoad(c.Mode) && c.Mode != ModeLoadSync && c.Mode != ModeLoad {
 		// check
 		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode == LoadModeLoader {

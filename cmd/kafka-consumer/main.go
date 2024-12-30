@@ -38,7 +38,6 @@ func main() {
 		upstreamURIStr string
 		configFile     string
 	)
-
 	groupID := fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 	consumerOption := newOption()
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
@@ -84,6 +83,7 @@ func main() {
 	consumer := newConsumer(ctx, consumerOption)
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {
+		log.Info("profiling is enabled")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
