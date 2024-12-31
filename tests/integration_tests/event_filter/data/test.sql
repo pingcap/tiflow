@@ -90,3 +90,9 @@ CREATE TABLE t_alter
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
   
+
+CREATE TABLE t_name (
+                    id INT,
+                    name varchar(128),
+                    PRIMARY KEY (id)
+);
