@@ -153,9 +153,9 @@ func (s *SinkFactory) CreateTableSink(
 // NOTICE: This only used for the consumer. Please do not use it in the processor.
 func (s *SinkFactory) CreateTableSinkForConsumer(
 	changefeedID model.ChangeFeedID,
-	span tablepb.Span, startTs model.Ts,
+	span tablepb.Span, startTs model.Ts, withTxn bool,
 ) tablesink.TableSink {
-	if s.txnSink != nil {
+	if s.txnSink != nil && withTxn {
 		return tablesink.New(changefeedID, span, startTs, s.txnSink,
 			// IgnoreStartTs is true because the consumer can
 			// **not** get the start ts of the row changed event.

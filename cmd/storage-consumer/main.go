@@ -345,7 +345,7 @@ func (c *consumer) emitDMLEvents(
 				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					spanz.TableIDToComparableSpan(tableID),
-					row.CommitTs)
+					row.CommitTs, true)
 			}
 
 			_, ok := c.tableTsMap[tableID]

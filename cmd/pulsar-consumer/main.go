@@ -568,7 +568,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					tableSink := c.sinkFactory.CreateTableSinkForConsumer(
 						model.DefaultChangeFeedID("pulsar-consumer"),
 						spanz.TableIDToComparableSpan(tableID),
-						events[0].CommitTs)
+						events[0].CommitTs, true)
 
 					log.Info("table sink created", zap.Any("tableID", tableID),
 						zap.Any("tableSink", tableSink.GetCheckpointTs()))
