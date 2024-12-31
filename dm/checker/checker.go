@@ -438,9 +438,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		// Adjust will raise error when this field is empty, so we set any non empty value here.
 		lCfg.Mydumper.SourceDir = "noop://"
-		if lightningCheckGroupOnlyTableEmpty(c.checkingItems) {
-			lCfg.TiDB.PdAddr = "noop:2379"
-		}
 		err = lCfg.Adjust(ctx)
 		if err != nil {
 			return err
@@ -548,16 +545,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
-}
-
-func lightningCheckGroupOnlyTableEmpty(checkingItems map[string]string) bool {
-	for _, item := range config.LightningPrechecks {
-		if _, ok := checkingItems[item]; ok && item != config.LightningTableEmptyChecking {
-			return false
-		}
-	}
-	_, ok := checkingItems[config.LightningTableEmptyChecking]
-	return ok
 }
 
 func (c *Checker) fetchSourceTargetDB(

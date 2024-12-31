@@ -17,6 +17,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+
+	certificate "github.com/pingcap/tiflow/pkg/security"
 )
 
 // Security config.
@@ -95,5 +97,23 @@ func (s *Security) Clone() *Security {
 	clone.SSLCABytes = append([]byte(nil), s.SSLCABytes...)
 	clone.SSLKeyBytes = append([]byte(nil), s.SSLKeyBytes...)
 	clone.SSLCertBytes = append([]byte(nil), s.SSLCertBytes...)
+	clone.SSLCA = s.SSLCA
+	clone.SSLCert = s.SSLCert
+	clone.SSLKey = s.SSLKey
 	return &clone
+}
+
+// WriteTLSContentToFiles write tls content to temp file and update tls path fields.
+func (s *Security) WriteTLSContentToFiles(fileName string) error {
+	var err error
+	if s.SSLCA, err = certificate.WriteFile(fileName, s.SSLCABytes); err != nil {
+		return err
+	}
+	if s.SSLCert, err = certificate.WriteFile(fileName, s.SSLCertBytes); err != nil {
+		return err
+	}
+	if s.SSLKey, err = certificate.WriteFile(fileName, s.SSLKeyBytes); err != nil {
+		return err
+	}
+	return nil
 }
