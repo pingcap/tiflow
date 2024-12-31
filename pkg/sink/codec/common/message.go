@@ -64,6 +64,7 @@ func (m *Message) Length() int {
 func (m *Message) Headers() []sarama.RecordHeader {
 	headers := []sarama.RecordHeader{
 		{Key: []byte("commitTs"), Value: []byte(strconv.FormatUint(m.Ts, 10))},
+		{Key: []byte("table"), Value: []byte(m.GetTable())},
 	}
 	return headers
 }
