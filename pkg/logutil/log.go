@@ -16,12 +16,12 @@ package logutil
 import (
 	"bytes"
 	"context"
-	"github.com/IBM/sarama"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
