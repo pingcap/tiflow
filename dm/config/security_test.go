@@ -172,7 +172,7 @@ func (c *testTLSConfig) TestClone() {
 	c.Require().NotEqual(s, clone)
 }
 
-func (c *testTLSConfig) TestWriteTLSContentToFiles() {
+func TestWriteTLSContentToFiles(t *testing.T) {
 	taskName := "TestWriteTLSContentToFiles"
 	s := &security.Security{
 		SSLCA:         "a",
@@ -184,8 +184,8 @@ func (c *testTLSConfig) TestWriteTLSContentToFiles() {
 		SSLCertBytes:  []byte("g"),
 	}
 	err := s.WriteTLSContentToFiles(taskName)
-	c.Require().NoError(err)
-	c.Require().Contains(s.SSLCA, taskName)
-	c.Require().Contains(s.SSLCert, taskName)
-	c.Require().Contains(s.SSLKey, taskName)
+	require.NoError(t, err)
+	require.Contains(t, s.SSLCA, taskName)
+	require.Contains(t, s.SSLCert, taskName)
+	require.Contains(t, s.SSLKey, taskName)
 }
