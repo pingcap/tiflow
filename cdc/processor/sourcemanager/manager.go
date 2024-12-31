@@ -258,7 +258,7 @@ func (m *SourceManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
-
+	m.puller.Close()
 	log.Info("All pullers have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
