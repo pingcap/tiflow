@@ -330,7 +330,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		return nil, err
 	}
 	cfg.TiDB.Security = &globalCfg.Security
-	// TODO: Using TLS content cannot verify certificates correctly when lightning access PD server.
+	// TODO: avoid writing to local file. right now we don't know how to verify certificates correctly using TLS content in a short time, but we have a time schedule to keep.
 	// Workround is also need to set TLS path instead of only set TLS content.
 	// Write TLS content to file when loader using TLS content or set db security only.
 	if subtaskCfg.LoaderConfig.Security != nil {
