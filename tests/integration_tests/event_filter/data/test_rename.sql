@@ -6,7 +6,7 @@ VALUES (1, 'guagua');
 INSERT INTO t_name
 VALUES (2, 'huahua');
 
-RENAME TABLE t_name MODIFY t_rename BIGINT;
+RENAME TABLE t_name TO t_rename;
 
 INSERT INTO t_rename
 VALUES (3, 'xigua');
