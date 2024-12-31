@@ -164,7 +164,9 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
 
 // Close implements util.Runnable.
-func (p *ddlJobPullerImpl) Close() {}
+func (p *ddlJobPullerImpl) Close() {
+	p.mp.Close()
+}
 
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
