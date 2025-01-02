@@ -1092,6 +1092,10 @@ func (d *DDLEvent) FromJobWithArgs(
 	case model.ActionDropView:
 		d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`",
 			d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
+	case model.ActionRenameTable:
+		d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+			preTableInfo.TableName.Schema, preTableInfo.TableName.Table,
+			tableInfo.TableName.Schema, tableInfo.TableName.Table)
 	case model.ActionRenameTables:
 		oldTableName := preTableInfo.Name.O
 		newTableName := tableInfo.Name.O
