@@ -165,7 +165,9 @@ func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
 
 // Close implements util.Runnable.
 func (p *ddlJobPullerImpl) Close() {
-	p.mp.Close()
+	if p.mp != nil {
+		p.mp.Close()
+	}
 }
 
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
@@ -763,7 +765,9 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 // Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
 	h.cancel()
-	h.ddlJobPuller.Close()
+	if h.ddlJobPuller != nil {
+		h.ddlJobPuller.Close()
+	}
 	log.Info("DDL puller closed",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
