@@ -329,6 +329,41 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
+	cfg.TiDB.Security = &globalCfg.Security
+	// TODO: avoid writing to local file. right now we don't know how to verify certificates correctly using TLS content in a short time, but we have a time schedule to keep.
+	// Workround is also need to set TLS path instead of only set TLS content.
+	// Write TLS content to file when loader using TLS content or set db security only.
+	if subtaskCfg.LoaderConfig.Security != nil {
+		// Only when ssl content is set and ssl file path is not set, the file will be written
+		if len(subtaskCfg.LoaderConfig.Security.SSLCABytes) != 0 && len(subtaskCfg.LoaderConfig.Security.SSLCertBytes) != 0 &&
+			len(subtaskCfg.LoaderConfig.Security.SSLKeyBytes) != 0 && subtaskCfg.LoaderConfig.Security.SSLCA == "" &&
+			subtaskCfg.LoaderConfig.Security.SSLCert == "" && subtaskCfg.LoaderConfig.Security.SSLKey == "" {
+			if err := subtaskCfg.LoaderConfig.Security.WriteTLSContentToFiles(subtaskCfg.Name); err != nil {
+				return nil, err
+			}
+		}
+		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
+		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
+		cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
+		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
+		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
+	} else if subtaskCfg.To.Security != nil {
+		// Only when ssl content is set and ssl file path is not set, the file will be written.
+		// Using db security as lightning default security config.
+		if len(subtaskCfg.To.Security.SSLCABytes) != 0 && len(subtaskCfg.To.Security.SSLCertBytes) != 0 && len(subtaskCfg.To.Security.SSLKeyBytes) != 0 &&
+			subtaskCfg.To.Security.SSLCA == "" && subtaskCfg.To.Security.SSLCert == "" && subtaskCfg.To.Security.SSLKey == "" {
+			if err := subtaskCfg.To.Security.WriteTLSContentToFiles(subtaskCfg.Name); err != nil {
+				return nil, err
+			}
+		}
+		cfg.Security.CABytes = subtaskCfg.To.Security.SSLCABytes
+		cfg.Security.CertBytes = subtaskCfg.To.Security.SSLCertBytes
+		cfg.Security.KeyBytes = subtaskCfg.To.Security.SSLKeyBytes
+		cfg.Security.CAPath = subtaskCfg.To.Security.SSLCA
+		cfg.Security.CertPath = subtaskCfg.To.Security.SSLCert
+		cfg.Security.KeyPath = subtaskCfg.To.Security.SSLKey
+	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
@@ -340,6 +375,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		// NOTE: If we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
+			return nil, err
+		}
+		if err := cfg.TiDB.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
 		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
@@ -657,7 +695,7 @@ func connParamFromConfig(config *lcfg.Config) *common.MySQLConnectParam {
 		SQLMode:  mysql.DefaultSQLMode,
 		// TODO: keep same as Lightning defaultMaxAllowedPacket later
 		MaxAllowedPacket:         64 * 1024 * 1024,
-		TLSConfig:                config.Security.TLSConfig,
-		AllowFallbackToPlaintext: config.Security.AllowFallbackToPlaintext,
+		TLSConfig:                config.TiDB.Security.TLSConfig,
+		AllowFallbackToPlaintext: config.TiDB.Security.AllowFallbackToPlaintext,
 	}
 }
