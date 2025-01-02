@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -301,6 +302,9 @@ type LoaderConfig struct {
 	RangeConcurrency    int                          `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
 	CompressKVPairs     string                       `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
 	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
+	// now only creating task by OpenAPI will use the `Security` field to connect PD.
+	// TODO: support setting `Security` by dmctl
+	Security *security.Security `yaml:"-" toml:"security" json:"security"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -669,7 +673,7 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigNeedUniqueTaskName.Generate()
 	}
 	switch c.TaskMode {
-	case ModeFull, ModeIncrement, ModeAll, ModeDump, ModeLoadSync:
+	case ModeFull, ModeIncrement, ModeAll, ModeDump, ModeLoad, ModeLoadSync:
 	default:
 		return terror.ErrConfigInvalidTaskMode.Generate()
 	}
@@ -774,9 +778,9 @@ func (c *TaskConfig) adjust() error {
 		instanceIDs[inst.SourceID] = i
 
 		switch c.TaskMode {
-		case ModeFull, ModeAll, ModeDump:
+		case ModeFull, ModeAll, ModeDump, ModeLoad:
 			if inst.Meta != nil {
-				log.L().Warn("metadata will not be used. for Full mode, incremental sync will never occur; for All mode, the meta dumped by MyDumper will be used", zap.Int("mysql instance", i), zap.String("task mode", c.TaskMode))
+				log.L().Warn("metadata will not be used. for Full/Dump/Load mode, incremental sync will never occur; for All mode, the meta dumped by MyDumper will be used", zap.Int("mysql instance", i), zap.String("task mode", c.TaskMode))
 			}
 		case ModeIncrement:
 			if inst.Meta == nil {
