@@ -45,6 +45,9 @@ function run() {
 	check_table_exists "event_filter.t_truncate" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "event_filter.t_alter" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "event_filter.t_name" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_name1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_name2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_name3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	# check those rows that are not filtered are synced to downstream
 	run_sql "select count(1) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -63,6 +66,9 @@ function run() {
 	run_sql "ALTER TABLE event_filter.t_alter MODIFY t_bigint BIGINT;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql_file $CUR/data/test_alter.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "RENAME TABLE event_filter.t_name TO event_filter.t_rename;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "RENAME TABLE event_filter.t_name1 TO event_filter.t_rename1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "RENAME TABLE event_filter.t_name2 TO event_filter.t_rename2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "RENAME TABLE event_filter.t_name3 TO event_filter.t_rename3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql_file $CUR/data/test_rename.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "create table event_filter.finish_mark(id int primary key);" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "event_filter.finish_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
