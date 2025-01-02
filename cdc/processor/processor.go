@@ -1090,5 +1090,7 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 func (d *ddlHandler) WaitForReady(_ context.Context) {}
 
 func (d *ddlHandler) Close() {
-	d.puller.Close()
+	if d.puller != nil {
+		d.puller.Close()
+	}
 }
