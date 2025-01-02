@@ -1,5 +1,5 @@
 [filter]
-rules = ["event_filter.*", "test.a*"] # replicate all tables in the event_filter database
+rules = ["event_filter.*"] # replicate all tables in the event_filter database
 # This event filter rules will apply to table t1 only.
 [[filter.event-filters]]
 matcher = ["event_filter.t1"]
@@ -15,5 +15,5 @@ matcher = ["event_filter.t_alter"]
 ignore-event = ["alter table"]
 
 [[filter.event-filters]]
-matcher = ["event_filter.t_rename"]
+matcher = ["event_filter.t_name"]
 ignore-event = ["rename table"]
