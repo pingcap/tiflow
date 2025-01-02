@@ -524,27 +524,6 @@ type SyncStatus struct {
 	UnresolvedGroups []ShardingGroup `json:"unresolved_groups"`
 }
 
-// source-related configuration
-type TableMigrateRuleSource struct {
-	// schema name, wildcard support
-	Schema string `json:"schema"`
-
-	// source name
-	SourceName string `json:"source_name"`
-
-	// table name, wildcard support
-	Table string `json:"table"`
-}
-
-// downstream-related configuration
-type TableMigrateRuleTarget struct {
-	// schema name, does not support wildcards
-	Schema *string `json:"schema,omitempty"`
-
-	// table name, does not support wildcards
-	Table *string `json:"table,omitempty"`
-}
-
 // schema name list
 type TableNameList []string
 
@@ -721,10 +700,31 @@ type TaskTableMigrateRule struct {
 	BinlogFilterRule *[]string `json:"binlog_filter_rule,omitempty"`
 
 	// source-related configuration
-	Source TableMigrateRuleSource `json:"source"`
+	Source TaskTableMigrateRuleSource `json:"source"`
 
 	// downstream-related configuration
-	Target *TableMigrateRuleTarget `json:"target,omitempty"`
+	Target *TaskTableMigrateRuleTarget `json:"target,omitempty"`
+}
+
+// source-related configuration
+type TaskTableMigrateRuleSource struct {
+	// schema name, wildcard support
+	Schema string `json:"schema"`
+
+	// source name
+	SourceName string `json:"source_name"`
+
+	// table name, wildcard support
+	Table string `json:"table"`
+}
+
+// downstream-related configuration
+type TaskTableMigrateRuleTarget struct {
+	// schema name, does not support wildcards
+	Schema *string `json:"schema,omitempty"`
+
+	// table name, does not support wildcards
+	Table *string `json:"table,omitempty"`
 }
 
 // downstream database configuration

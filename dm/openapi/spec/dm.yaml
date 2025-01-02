@@ -1412,7 +1412,7 @@ components:
         - "user"
         - "enable_gtid"
         - "enable"
-    TableMigrateRuleSource:
+    TaskTableMigrateRuleSource:
       description: source-related configuration
       properties:
         source_name:
@@ -1431,7 +1431,7 @@ components:
         - "source_name"
         - "schema"
         - "table"
-    TableMigrateRuleTarget:
+    TaskTableMigrateRuleTarget:
       type: object
       description: downstream-related configuration
       properties:
@@ -1676,11 +1676,9 @@ components:
       description: "upstream table to downstream migrate rules"
       properties:
         source:
-          description: source-related configuration
-          $ref: "#/components/schemas/TableMigrateRuleSource"
+          $ref: "#/components/schemas/TaskTableMigrateRuleSource"
         target:
-          description: downstream-related configuration
-          $ref: "#/components/schemas/TableMigrateRuleTarget"
+          $ref: "#/components/schemas/TaskTableMigrateRuleTarget"
         binlog_filter_rule:
           type: array
           description: "filter rule name"
