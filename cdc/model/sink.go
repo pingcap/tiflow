@@ -1093,8 +1093,11 @@ func (d *DDLEvent) FromJobWithArgs(
 		d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`",
 			d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
 	case model.ActionRenameTable:
+		// Note: preTableInfo may not be accurate for rename table
+		// because if rename table ddl' finished ts is 100,
+		// TODO: add more explanation
 		d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
-			preTableInfo.TableName.Schema, preTableInfo.TableName.Table,
+			job.InvolvingSchemaInfo[0].Database, job.InvolvingSchemaInfo[0].Table,
 			tableInfo.TableName.Schema, tableInfo.TableName.Table)
 	case model.ActionRenameTables:
 		oldTableName := preTableInfo.Name.O
