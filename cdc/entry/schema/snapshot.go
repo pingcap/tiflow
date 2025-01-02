@@ -134,7 +134,7 @@ func NewSnapshotFromMeta(
 	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
 	for _, dbinfo := range dbinfos {
-		log.Info("load database", zap.Int64("dbID", dbinfo.ID), zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
+		log.Info("load database", zap.Uint64("currentTs", currentTs), zap.Int64("dbID", dbinfo.ID), zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
 			log.Debug("ignore database", zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
 			continue
