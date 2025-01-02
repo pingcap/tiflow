@@ -96,3 +96,18 @@ CREATE TABLE t_name (
                     name varchar(128),
                     PRIMARY KEY (id)
 );
+CREATE TABLE t_name1 (
+                    id INT,
+                    name varchar(128),
+                    PRIMARY KEY (id)
+);
+CREATE TABLE t_name2 (
+                    id INT,
+                    name varchar(128),
+                    PRIMARY KEY (id)
+);
+CREATE TABLE t_name3 (
+                    id INT,
+                    name varchar(128),
+                    PRIMARY KEY (id)
+);
