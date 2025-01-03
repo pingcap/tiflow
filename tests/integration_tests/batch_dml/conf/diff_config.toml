@@ -13,7 +13,11 @@ source-instances = ["mysql1"]
 
 target-instance = "tidb0"
 
+<<<<<<< HEAD:tests/integration_tests/batch_dml/conf/diff_config.toml
 target-check-tables = ["batch_update_to_no_batch.?*"]
+=======
+target-check-tables = ["event_filter.t_normal", "event_filter.t_truncate", "event_filter.t_alter", "event_filter.t_name*", "event_filter.t_rename*"]
+>>>>>>> 1e1f271387 (filter(ticdc): fix incorrect event filter with "rename" DDLs (#11956)):tests/integration_tests/event_filter/conf/diff_config.toml
 
 [data-sources]
 [data-sources.mysql1]
