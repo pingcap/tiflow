@@ -525,10 +525,10 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				continue
 			}
 			tableID := row.GetTableID()
-			switch w.option.protocol {
+			switch c.option.protocol {
 			case config.ProtocolSimple, config.ProtocolCanalJSON:
 			default:
-				tableID = w.fakeTableIDGenerator.
+				tableID = c.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 				row.TableInfo.TableName.TableID = tableID
 			}
