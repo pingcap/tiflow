@@ -1,0 +1,54 @@
+# Diff Configuration.
+
+######################### Global config #########################
+
+
+# how many goroutines are created to check data
+check-thread-count = 4
+
+# set false if just want compare data by checksum, will skip select data when checksum is not equal.
+# set true if want compare all different rows, will slow down the total compare time.
+export-fix-sql = true
+
+# ignore check table's data
+check-struct-only = false
+
+######################### Databases config #########################
+[data-sources.mysql1]
+    host = "127.0.0.1"#MYSQL_HOST
+    port = 3306#MYSQL_PORT
+    user = "root"
+    password = ""
+
+    # remove comment if use tidb's snapshot data
+    # snapshot = "2016-10-08 16:45:26"
+
+[data-sources.mysql]
+    host = "127.0.0.1"#MYSQL_HOST
+    port = 3306#MYSQL_PORT
+    user = "root"
+    password = ""
+    # remove comment if use tidb's snapshot data
+    # snapshot = "2016-10-08 16:45:26"
+
+[table-configs]
+[table-configs.config1]
+target-tables = ["diff_test.test"]
+chunk-size = 500
+######################### Task config #########################
+[task]
+    # 1 fix sql: fix-target-TIDB1.sql
+    # 2 log: sync-diff.log
+    # 3 summary: summary.txt
+    # 4 checkpoint: a dir
+    output-dir = "/tmp/tidb_tools_test/sync_diff_inspector/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "mysql"
+
+    # tables need to check.
+    target-check-tables = ["diff_test.test"]
+
+    # extra table config
+    target-configs= ["config1"]
