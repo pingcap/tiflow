@@ -28,11 +28,13 @@ import (
 func TestShouldSkipDDL(t *testing.T) {
 	t.Parallel()
 	type innerCase struct {
-		schema  string
-		table   string
-		query   string
-		ddlType timodel.ActionType
-		skip    bool
+		schema    string
+		table     string
+		preSchema string
+		preTable  string
+		query     string
+		ddlType   timodel.ActionType
+		skip      bool
 	}
 
 	type testCase struct {
@@ -280,6 +282,74 @@ func TestShouldSkipDDL(t *testing.T) {
 				TableName: model.TableName{
 					Schema: c.schema,
 					Table:  c.table,
+				},
+			},
+			Query: c.query,
+			Type:  c.ddlType,
+		}
+		skip, err := f.shouldSkipDDL(ddl)
+		if c.ddlType == timodel.ActionRenameTable || c.ddlType == timodel.ActionRenameTables {
+			require.ErrorIs(t, err, cerror.ErrTableIneligible)
+			require.Equal(t, true, skip, "case: %+v", c)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, c.skip, skip, "case: %+v", c)
+		}
+	}
+	case7 := testCase{
+		cfg: &config.FilterConfig{
+			Rules: []string{"*.t1", "*.t2"},
+			EventFilters: []*config.EventFilterRule{
+				{
+					Matcher:     []string{"*.t1"},
+					IgnoreEvent: allEventTypes,
+				},
+			},
+		},
+		cases: []innerCase{
+			{
+				schema:    "test",
+				table:     "t2",
+				preSchema: "test",
+				preTable:  "t1",
+				query:     "no matter",
+				ddlType:   timodel.ActionRenameTable,
+				skip:      true,
+			},
+			{
+				schema:    "test",
+				table:     "t3",
+				preSchema: "test",
+				preTable:  "t1",
+				query:     "no matter",
+				ddlType:   timodel.ActionRenameTable,
+				skip:      true,
+			},
+			{
+				schema:    "test",
+				table:     "t1",
+				preSchema: "test",
+				preTable:  "t2",
+				query:     "no matter",
+				ddlType:   timodel.ActionRenameTable,
+				skip:      false,
+			},
+		},
+	}
+	f, err = newSQLEventFilter(case7.cfg)
+	require.NoError(t, err)
+	for _, c := range case7.cases {
+		ddl := &model.DDLEvent{
+			TableInfo: &model.TableInfo{
+				TableName: model.TableName{
+					Schema: c.schema,
+					Table:  c.table,
+				},
+			},
+			PreTableInfo: &model.TableInfo{
+				TableName: model.TableName{
+					Schema: c.preSchema,
+					Table:  c.preTable,
 				},
 			},
 			Query: c.query,
