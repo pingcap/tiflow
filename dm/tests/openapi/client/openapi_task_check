@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import requests
+import time
 
 SHARD_TASK_NAME = "test-shard"
 LOAD_TASK_NAME = "test-load"
@@ -147,6 +148,181 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
+
+def create_noshard_task_with_db_cluster_security_success(
+        task_name, target_table,
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "ignore_checking_items": [
+            "all"
+        ],
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+            "security":{
+                "ssl_ca_content": tidb_ca_content,
+                "ssl_cert_content": tidb_cert_content,
+                "ssl_key_content": tidb_key_content,                
+                "cert_allowed_cn": ["tidb", "locahost"],
+            }
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+            "full_migrate_conf": {
+                "import_mode": "physical",
+                "security": {
+                    "ssl_ca_content": cluster_ca_content,
+                    "ssl_cert_content": cluster_cert_content,
+                    "ssl_key_content": cluster_key_content,
+                    "cert_allowed_cn": ["dm"],
+                }
+            }
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_with_db_cluster_security_success resp=", resp.json())
+    assert resp.status_code == 201
+
+def create_noshard_task_with_db_security_success(
+        task_name, target_table,
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content=""): 
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "ignore_checking_items": [
+            "all"
+        ],
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+            "security":{
+                "ssl_ca_content": tidb_ca_content,
+                "ssl_cert_content": tidb_cert_content,
+                "ssl_key_content": tidb_key_content,                
+                "cert_allowed_cn": ["tidb", "locahost"],
+            }
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+            "full_migrate_conf": {
+                "import_mode": "physical",
+            }
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_with_db_security_success resp=", resp.json())
+    assert resp.status_code == 201
+
+def create_noshard_task_with_security_failed(
+        task_name, target_table,
+        tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
+        cluster_ca_content="",cluster_cert_content="",cluster_key_content=""): 
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm-meta",
+        "ignore_checking_items": [
+            "all"
+        ],
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+            "security":{
+                "ssl_ca_content": tidb_ca_content,
+                "ssl_cert_content": tidb_cert_content,
+                "ssl_key_content": tidb_key_content,             
+                "cert_allowed_cn": ["tidb", "locahost"],
+            }
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": target_table},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+            ],
+            "full_migrate_conf": {
+                "import_mode": "physical",
+                "pd_addr": "127.0.0.1:23790",
+                "security": {
+                    "ssl_ca_content": cluster_ca_content,
+                    "ssl_cert_content": cluster_cert_content,
+                    "ssl_key_content": cluster_key_content,
+                    "cert_allowed_cn": ["dm"],
+                }
+            }
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_with_security_failed resp=", resp.json())        
+    assert resp.status_code == 400
+    
 
 def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
     task = {
@@ -452,6 +628,19 @@ def get_task_status_success(task_name, total):
     assert resp.status_code == 200
     print("get_task_status_success resp=", data)
     assert data["total"] == int(total)
+
+def get_task_status_success_with_retry(task_name, expected_unit, expected_stage, retries=50):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    for _ in range(int(retries)):
+        resp = requests.get(url=url)
+        data = resp.json()
+        assert resp.status_code == 200
+        print("get_task_status_success_with_retry resp=", data)
+        for item in data.get("data", []):
+            if item.get("unit") ==  expected_unit and item.get("stage") == expected_stage:
+                return
+            time.sleep(2)
+    assert False
 
 def check_sync_task_status_success(
     task_name,
@@ -881,6 +1070,10 @@ if __name__ == "__main__":
         "check_sync_task_status_success": check_sync_task_status_success,
         "check_load_task_finished_status_success": check_load_task_finished_status_success,
         "check_dump_task_finished_status_success": check_dump_task_finished_status_success,
+        "create_noshard_task_with_db_cluster_security_success": create_noshard_task_with_db_cluster_security_success,
+        "create_noshard_task_with_db_security_success": create_noshard_task_with_db_security_success,
+        "create_noshard_task_with_security_failed": create_noshard_task_with_security_failed,
+        "get_task_status_success_with_retry":get_task_status_success_with_retry,
     }
 
     func = FUNC_MAP[sys.argv[1]]

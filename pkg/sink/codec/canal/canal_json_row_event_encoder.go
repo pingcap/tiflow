@@ -255,6 +255,18 @@ func newJSONMessageForDML(
 		out.RawByte('{')
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
+		out.RawByte(',')
+
+		// the logical table id
+		out.RawString("\"tableId\":")
+		out.Int64(e.TableInfo.ID)
+
+		// the physical table id
+		if e.TableInfo.IsPartitionTable() {
+			out.RawByte(',')
+			out.RawString("\"partitionId\":")
+			out.Int64(e.GetTableID())
+		}
 
 		// only send handle key may happen in 2 cases:
 		// 1. delete event, and set only handle key config. no need to encode `onlyHandleKey` field

@@ -17,7 +17,7 @@ x-node: &default-node
 services:
   mariadb_master:
     <<: *default-node
-    image: mariadb:10.1
+    image: mariadb:11.3 # change to latest after fix https://github.com/pingcap/tiflow/issues/11784
     command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=1 --gtid_domain_id=0 --binlog-format=ROW
     container_name: mariadb_master
     hostname: mariadb_master
@@ -26,7 +26,7 @@ services:
 
   mariadb_slave:
     <<: *default-node
-    image: mariadb:10.1
+    image: mariadb:11.3
     command: --log-bin=/var/lib/mysql/mysql-bin --log_slave_updates=ON --server-id=2 --gtid_domain_id=0 --binlog-format=ROW
     container_name: mariadb_slave
     hostname: mariadb_slave
@@ -38,5 +38,5 @@ services:
     hostname: tidb
     ports:
       - "4000:4000"
-    image: pingcap/tidb:latest
+    image: pingcap/tidb:nightly
     restart: always
