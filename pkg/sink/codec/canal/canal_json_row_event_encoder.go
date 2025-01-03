@@ -399,16 +399,14 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 	m := &common.Message{
-		Key:       nil,
-		Value:     value,
-		Ts:        e.CommitTs,
-		TableID:   e.Table.TableID,
-		HandleKey: e.GetHandleKeyColumnValues(),
-		Schema:    &e.Table.Schema,
-		Table:     &e.Table.Table,
-		Type:      model.MessageTypeRow,
-		Protocol:  config.ProtocolCanalJSON,
-		Callback:  callback,
+		Key:      nil,
+		Value:    value,
+		Ts:       e.CommitTs,
+		Schema:   &e.Table.Schema,
+		Table:    &e.Table.Table,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolCanalJSON,
+		Callback: callback,
 	}
 	m.IncRowsCount()
 

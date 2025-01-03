@@ -104,20 +104,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	m := &common.Message{
-		Key:       key,
-		Value:     value,
-		Ts:        e.CommitTs,
-		TableID:   e.Table.TableID,
-		HandleKey: e.GetHandleKeyColumnValues(),
-		Schema:    &e.Table.Schema,
-		Table:     &e.Table.Table,
-		Type:      model.MessageTypeRow,
-		Protocol:  config.ProtocolOpen,
-		Callback:  callback,
-	}
-
-	length := m.Length() + 16 + 8
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
 		if d.config.LargeMessageHandle.Disabled() {
 			log.Warn("Single message is too large for open-protocol",

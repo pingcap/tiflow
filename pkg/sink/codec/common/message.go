@@ -14,14 +14,11 @@
 package common
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -38,9 +35,7 @@ const MaxRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
 type Message struct {
 	Key       []byte
 	Value     []byte
-	Ts        uint64 // reserved for possible output sorting
-	TableID   int64
-	HandleKey []string
+	Ts        uint64            // reserved for possible output sorting
 	Schema    *string           // schema
 	Table     *string           // table
 	Type      model.MessageType // type
@@ -58,31 +53,10 @@ func (m *Message) String() string {
 }
 
 // Length returns the expected size of the Kafka message
+// We didn't append any `Headers` when send the message, so ignore the calculations related to it.
+// If `ProducerMessage` Headers fields used, this method should also adjust.
 func (m *Message) Length() int {
-	headers := m.Headers()
-	var headerLen int
-	for _, header := range headers {
-		headerLen += len(header.Key) + len(header.Value) + 2*binary.MaxVarintLen32
-	}
-	return headerLen + len(m.Key) + len(m.Value) + MaxRecordOverhead
-}
-
-// Headers returns the headers of Kafka message
-func (m *Message) Headers() []sarama.RecordHeader {
-	var handleKey bytes.Buffer
-	for idx, key := range m.HandleKey {
-		handleKey.WriteString(key)
-		if idx != len(m.HandleKey)-1 {
-			handleKey.WriteString(",")
-		}
-	}
-	handle := handleKey.Bytes()
-	headers := []sarama.RecordHeader{
-		{Key: []byte("tableID"), Value: []byte(strconv.FormatUint(uint64(m.TableID), 10))},
-		{Key: []byte("commitTs"), Value: []byte(strconv.FormatUint(m.Ts, 10))},
-		{Key: []byte("handleKey"), Value: handle},
-	}
-	return headers
+	return len(m.Key) + len(m.Value) + MaxRecordOverhead
 }
 
 // PhysicalTime returns physical time part of Ts in time.Time
