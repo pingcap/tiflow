@@ -224,11 +224,13 @@ func initMySQLLogger() error {
 // initSaramaLogger hacks logger used in sarama lib
 func initSaramaLogger(level zapcore.Level) error {
 	// only available less than info level
-	logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "sarama")), level)
-	if err != nil {
-		return errors.Trace(err)
+	if !zapcore.InfoLevel.Enabled(level) {
+		logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "sarama")), level)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		sarama.Logger = logger
 	}
-	sarama.Logger = logger
 	return nil
 }
 

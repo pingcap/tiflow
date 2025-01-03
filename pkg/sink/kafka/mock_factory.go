@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -168,14 +167,15 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 
 // AsyncSend implement the AsyncProducer interface.
 func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
-	partition int32, message *common.Message,
+	partition int32, key []byte, value []byte,
+	callback func(),
 ) error {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
-		Key:       sarama.StringEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Metadata:  message.Callback,
+		Key:       sarama.StringEncoder(key),
+		Value:     sarama.ByteEncoder(value),
+		Metadata:  callback,
 	}
 	select {
 	case <-ctx.Done():

@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"
@@ -365,7 +364,8 @@ func (a *asyncWriter) Close() {
 // AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
 func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
-	partition int32, message *common.Message,
+	partition int32, key []byte, value []byte,
+	callback func(),
 ) error {
 	select {
 	case <-ctx.Done():
@@ -375,9 +375,9 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 	return a.w.WriteMessages(ctx, kafka.Message{
 		Topic:      topic,
 		Partition:  int(partition),
-		Key:        message.Key,
-		Value:      message.Value,
-		WriterData: message.Callback,
+		Key:        key,
+		Value:      value,
+		WriterData: callback,
 	})
 }
 
