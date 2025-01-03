@@ -1412,6 +1412,37 @@ components:
         - "user"
         - "enable_gtid"
         - "enable"
+    TaskTableMigrateRuleSource:
+      description: source-related configuration
+      properties:
+        source_name:
+          type: string
+          description: source name
+          example: "source-name"
+        schema:
+          type: string
+          description: schema name, wildcard support
+          example: "db-*"
+        table:
+          type: string
+          description: table name, wildcard support
+          example: "tb-*"
+      required:
+        - "source_name"
+        - "schema"
+        - "table"
+    TaskTableMigrateRuleTarget:
+      type: object
+      description: downstream-related configuration
+      properties:
+        schema:
+          type: string
+          description: schema name, does not support wildcards
+          example: "db1"
+        table:
+          type: string
+          description: table name, does not support wildcards
+          example: "tb1"        
     ShardingGroup:
       type: object
       properties:
@@ -1646,37 +1677,9 @@ components:
       description: "upstream table to downstream migrate rules"
       properties:
         source:
-          type: object
-          description: source-related configuration
-          properties:
-            source_name:
-              type: string
-              description: source name
-              example: "source-name"
-            schema:
-              type: string
-              description: schema name, wildcard support
-              example: "db-*"
-            table:
-              type: string
-              description: table name, wildcard support
-              example: "tb-*"
-          required:
-            - "source_name"
-            - "schema"
-            - "table"
+          $ref: "#/components/schemas/TaskTableMigrateRuleSource"
         target:
-          type: object
-          description: downstream-related configuration
-          properties:
-            schema:
-              type: string
-              description: schema name, does not support wildcards
-              example: "db1"
-            table:
-              type: string
-              description: table name, does not support wildcards
-              example: "tb1"
+          $ref: "#/components/schemas/TaskTableMigrateRuleTarget"
         binlog_filter_rule:
           type: array
           description: "filter rule name"

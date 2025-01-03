@@ -703,25 +703,31 @@ type TaskTableMigrateRule struct {
 	BinlogFilterRule *[]string `json:"binlog_filter_rule,omitempty"`
 
 	// source-related configuration
-	Source struct {
-		// schema name, wildcard support
-		Schema string `json:"schema"`
-
-		// source name
-		SourceName string `json:"source_name"`
-
-		// table name, wildcard support
-		Table string `json:"table"`
-	} `json:"source"`
+	Source TaskTableMigrateRuleSource `json:"source"`
 
 	// downstream-related configuration
-	Target *struct {
-		// schema name, does not support wildcards
-		Schema *string `json:"schema,omitempty"`
+	Target *TaskTableMigrateRuleTarget `json:"target,omitempty"`
+}
 
-		// table name, does not support wildcards
-		Table *string `json:"table,omitempty"`
-	} `json:"target,omitempty"`
+// source-related configuration
+type TaskTableMigrateRuleSource struct {
+	// schema name, wildcard support
+	Schema string `json:"schema"`
+
+	// source name
+	SourceName string `json:"source_name"`
+
+	// table name, wildcard support
+	Table string `json:"table"`
+}
+
+// downstream-related configuration
+type TaskTableMigrateRuleTarget struct {
+	// schema name, does not support wildcards
+	Schema *string `json:"schema,omitempty"`
+
+	// table name, does not support wildcards
+	Table *string `json:"table,omitempty"`
 }
 
 // downstream database configuration
