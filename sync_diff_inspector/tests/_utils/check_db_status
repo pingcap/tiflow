@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# argument 1 is the host
+# argument 2 is the port
+# argument 3 is the database service's name
+
+for i in {1..20}
+do
+    if mysqladmin -h "$1" -P "$2" -u root --default-character-set utf8 ping > /dev/null 2>&1
+    then
+        echo "$3 is alive"
+        exit 0
+    fi
+
+    echo "$3 is not alive, will try again"
+    sleep 2
+done
+
+echo "$3 is not alive"
+cat "$4"
+exit 2

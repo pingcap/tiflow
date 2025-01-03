@@ -208,7 +208,7 @@ func StartGCSavepointUpdateService(ctx context.Context, pdCli pd.Client, db *sql
 		return nil
 	}
 	// get latest snapshot
-	snapshotTS, err := parseSnapshotToTSO(db, snapshot)
+	snapshotTS, err := ParseSnapshotToTSO(db, snapshot)
 	if tidbVersion.Compare(*autoGCSafePointVersion) > 0 {
 		log.Info("tidb support auto gc safepoint", zap.Stringer("version", tidbVersion))
 		if err != nil {
@@ -250,7 +250,7 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, snapshotTS 
 	}
 }
 
-func parseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
+func ParseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
 	snapshotTS, err := strconv.ParseUint(snapshot, 10, 64)
 	if err == nil {
 		return snapshotTS, nil

@@ -50,6 +50,29 @@ func fileExists(name string) bool {
 	return !os.IsNotExist(err)
 }
 
+// GetSnapsnot get the snapshot
+func GetSnapshot(latestSnap []string, snap string, db *sql.DB) string {
+	if len(latestSnap) != 1 {
+		return snap
+	}
+
+	latestSnapshotVal, err := utils.ParseSnapshotToTSO(db, latestSnap[0])
+	if err != nil || latestSnapshotVal == 0 {
+		return snap
+	}
+
+	snapshotVal, err := utils.ParseSnapshotToTSO(db, snap)
+	if err != nil {
+		return latestSnap[0]
+	}
+
+	// compare the snapshot and choose the small one to lock
+	if latestSnapshotVal < snapshotVal {
+		return latestSnap[0]
+	}
+	return snap
+}
+
 const (
 	// checkpointFile represents the checkpoints' file name which used for save and loads chunks
 	checkpointFile = "sync_diff_checkpoints.pb"
@@ -340,15 +363,7 @@ func (df *Diff) startGCKeeperForTiDB(ctx context.Context, db *sql.DB, snap strin
 			return
 		}
 
-		if len(latestSnap) == 1 {
-			if len(snap) == 0 {
-				snap = latestSnap[0]
-			}
-			// compare the snapshot and choose the small one to lock
-			if strings.Compare(latestSnap[0], snap) < 0 {
-				snap = latestSnap[0]
-			}
-		}
+		snap = GetSnapshot(latestSnap, snap, db)
 
 		err = utils.StartGCSavepointUpdateService(ctx, pdCli, db, snap)
 		if err != nil {
@@ -445,7 +460,7 @@ func (df *Diff) consume(ctx context.Context, rangeInfo *splitter.RangeInfo) bool
 		// If an error occurs during the checksum phase, skip the data compare phase.
 		state = checkpoints.FailedState
 		df.report.SetTableMeetError(schema, table, err)
-	} else if !isEqual && df.exportFixSQL {
+	} else if !isEqual {
 		state = checkpoints.FailedState
 		// if the chunk's checksum differ, try to do binary check
 		info := rangeInfo
@@ -610,7 +625,13 @@ func (df *Diff) compareChecksumAndGetCount(ctx context.Context, tableRange *spli
 	if upstreamInfo.Count == downstreamInfo.Count && upstreamInfo.Checksum == downstreamInfo.Checksum {
 		return true, upstreamInfo.Count, downstreamInfo.Count, nil
 	}
-	log.Debug("checksum doesn't match", zap.Any("chunk id", tableRange.ChunkRange.Index), zap.String("table", df.workSource.GetTables()[tableRange.GetTableIndex()].Table), zap.Int64("upstream chunk size", upstreamInfo.Count), zap.Int64("downstream chunk size", downstreamInfo.Count), zap.Uint64("upstream checksum", upstreamInfo.Checksum), zap.Uint64("downstream checksum", downstreamInfo.Checksum))
+	log.Debug("checksum doesn't match, need to compare rows",
+		zap.Any("chunk id", tableRange.ChunkRange.Index),
+		zap.String("table", df.workSource.GetTables()[tableRange.GetTableIndex()].Table),
+		zap.Int64("upstream chunk size", upstreamInfo.Count),
+		zap.Int64("downstream chunk size", downstreamInfo.Count),
+		zap.Uint64("upstream checksum", upstreamInfo.Checksum),
+		zap.Uint64("downstream checksum", downstreamInfo.Checksum))
 	return false, upstreamInfo.Count, downstreamInfo.Count, nil
 }
 
@@ -650,11 +671,17 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 		if lastUpstreamData == nil {
 			// don't have source data, so all the targetRows's data is redundant, should be deleted
 			for lastDownstreamData != nil {
-				sql := df.downstream.GenerateFixSQL(source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 				rowsDelete++
-				log.Debug("[delete]", zap.String("sql", sql))
 
-				dml.sqls = append(dml.sqls, sql)
+				if df.exportFixSQL {
+					sql := df.downstream.GenerateFixSQL(
+						source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
+					)
+					log.Debug("[delete]", zap.String("sql", sql))
+
+					dml.sqls = append(dml.sqls, sql)
+				}
+
 				equal = false
 				lastDownstreamData, err = downstreamRowsIterator.Next()
 				if err != nil {
@@ -667,11 +694,13 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 		if lastDownstreamData == nil {
 			// target lack some data, should insert the last source datas
 			for lastUpstreamData != nil {
-				sql := df.downstream.GenerateFixSQL(source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 				rowsAdd++
-				log.Debug("[insert]", zap.String("sql", sql))
+				if df.exportFixSQL {
+					sql := df.downstream.GenerateFixSQL(source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
+					log.Debug("[insert]", zap.String("sql", sql))
 
-				dml.sqls = append(dml.sqls, sql)
+					dml.sqls = append(dml.sqls, sql)
+				}
 				equal = false
 
 				lastUpstreamData, err = upstreamRowsIterator.Next()
@@ -698,22 +727,34 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 		switch cmp {
 		case 1:
 			// delete
-			sql = df.downstream.GenerateFixSQL(source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 			rowsDelete++
-			log.Debug("[delete]", zap.String("sql", sql))
+			if df.exportFixSQL {
+				sql = df.downstream.GenerateFixSQL(
+					source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
+				)
+				log.Debug("[delete]", zap.String("sql", sql))
+			}
 			lastDownstreamData = nil
 		case -1:
 			// insert
-			sql = df.downstream.GenerateFixSQL(source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 			rowsAdd++
-			log.Debug("[insert]", zap.String("sql", sql))
+			if df.exportFixSQL {
+				sql = df.downstream.GenerateFixSQL(
+					source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
+				)
+				log.Debug("[insert]", zap.String("sql", sql))
+			}
 			lastUpstreamData = nil
 		case 0:
 			// update
-			sql = df.downstream.GenerateFixSQL(source.Replace, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 			rowsAdd++
 			rowsDelete++
-			log.Debug("[update]", zap.String("sql", sql))
+			if df.exportFixSQL {
+				sql = df.downstream.GenerateFixSQL(
+					source.Replace, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
+				)
+				log.Debug("[update]", zap.String("sql", sql))
+			}
 			lastUpstreamData = nil
 			lastDownstreamData = nil
 		}
@@ -722,6 +763,13 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 	}
 	dml.rowAdd = rowsAdd
 	dml.rowDelete = rowsDelete
+
+	log.Debug("compareRows",
+		zap.Bool("equal", equal),
+		zap.Int("rowsAdd", rowsAdd),
+		zap.Int("rowsDelete", rowsDelete),
+		zap.Any("chunk id", rangeInfo.ChunkRange.Index),
+		zap.String("table", df.workSource.GetTables()[rangeInfo.GetTableIndex()].Table))
 	return equal, nil
 }
 

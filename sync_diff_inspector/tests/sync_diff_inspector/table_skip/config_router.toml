@@ -1,0 +1,61 @@
+# Diff Configuration.
+
+######################### Global config #########################
+
+# The number of goroutines created to check data. The number of connections between upstream and downstream databases are slightly greater than this value
+check-thread-count = 4
+
+# If enabled, SQL statements is exported to fix inconsistent tables
+export-fix-sql = true
+
+# Only compares the table structure instead of the data
+check-struct-only = false
+
+# skip validation for tables that don't exist upstream or downstream
+skip-non-existing-table = true
+######################### Datasource config #########################
+[data-sources.mysql1]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = ""
+
+    route-rules = ["rule1"]
+
+[data-sources.mysql2]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = ""
+
+    route-rules = ["rule2"]
+
+[data-sources.tidb0]
+    host = "127.0.0.1"
+    port = 4000
+    user = "root"
+    password = ""
+
+########################### Routes ###########################
+[routes.rule1]
+schema-pattern = "skip_test"        # Matches the schema name of the data source. Supports the wildcards "*" and "?"
+table-pattern = "t[1-2]"  # Matches the table name of the data source. Supports the wildcards "*" and "?"
+target-schema = "skip_test"         # The name of the schema in the target database
+target-table = "t5"       # The name of the target table
+
+[routes.rule2]
+schema-pattern = "skip_test"
+table-pattern = "t0"
+target-schema = "skip_test"
+target-table = "t5"
+
+######################### Task config #########################
+[task]
+    output-dir = "/tmp/tidb_tools_test/sync_diff_inspector/output"
+
+    source-instances = ["mysql1", "mysql2"]
+
+    target-instance = "tidb0"
+
+    # The tables of downstream databases to be compared. Each table needs to contain the schema name and the table name, separated by '.'
+    target-check-tables = ["skip_test.t5"]
