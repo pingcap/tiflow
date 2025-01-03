@@ -239,8 +239,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// no operation
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
@@ -274,8 +274,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 		}}...,
 	)
 
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	done = p.IsAddTableSpanFinished(span, true)
@@ -297,8 +297,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// table-1: `prepared` -> `replicating`
@@ -307,7 +307,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, tablepb.TableStateReplicating, state)
 
 	err = p.Close()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Nil(t, p.agent)
 }
 
@@ -329,8 +329,8 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// no operation
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
@@ -364,8 +364,8 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 		}}...,
 	)
 
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	done = p.IsAddTableSpanFinished(span, true)
@@ -397,8 +397,8 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.Equal(t, model.Ts(60), stats.ResolvedTs)
 	require.Equal(t, model.Ts(50), stats.BarrierTs)
 
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// table-1: `prepared` -> `replicating`
@@ -407,7 +407,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.Equal(t, tablepb.TableStateReplicating, state)
 
 	err = p.Close()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Nil(t, p.agent)
 }
 
@@ -419,14 +419,14 @@ func TestProcessorError(t *testing.T) {
 
 	// init tick
 	require.Nil(t, p.lazyInit(ctx))
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// send a abnormal error
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
+	err, _ = p.Tick(ctx, changefeed)
 	require.Error(t, err)
 	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
@@ -444,14 +444,14 @@ func TestProcessorError(t *testing.T) {
 	p, tester, changefeed = initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	require.Nil(t, p.lazyInit(ctx))
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// send a normal error
 	p.sinkManager.errors <- context.Canceled
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
+	err, _ = p.Tick(ctx, changefeed)
 	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
@@ -499,20 +499,20 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// Do a no operation tick to lazy init the processor.
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// add tables
 	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 20}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 30}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
 
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// push the resolvedTs and checkpointTs
@@ -520,8 +520,8 @@ func TestProcessorClose(t *testing.T) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
@@ -539,24 +539,24 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// Do a no operation tick to lazy init the processor.
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// add tables
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 20}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 30}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// send error
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
+	err, _ = p.Tick(ctx, changefeed)
 	require.Error(t, err)
 	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
@@ -587,16 +587,16 @@ func TestPositionDeleted(t *testing.T) {
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	// Do a no operation tick to lazy init the processor.
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// add table
 	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 40}, false)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, done)
 
 	// some others delete the task position
@@ -609,8 +609,8 @@ func TestPositionDeleted(t *testing.T) {
 	// position created again
 	checkChangefeedNormal(changefeed)
 	createTaskPosition(changefeed, p.captureInfo)
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 	require.Equal(t, &model.TaskPosition{}, changefeed.TaskPositions[p.captureInfo.ID])
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
@@ -635,8 +635,8 @@ func TestSchemaGC(t *testing.T) {
 	updateChangeFeedPosition(t, tester,
 		model.DefaultChangeFeedID("changefeed-id-test"),
 		50)
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// GC Ts should be (checkpoint - 1).
@@ -660,7 +660,7 @@ func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTes
 		CheckpointTs: checkpointTs,
 	}
 	valueBytes, err := json.Marshal(cfStatus)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	tester.MustUpdate(keyStr, valueBytes)
 }
@@ -702,24 +702,24 @@ func TestUpdateBarrierTs(t *testing.T) {
 	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	// Do a no operation tick to lazy init the processor.
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	span := spanz.TableIDToComparableSpan(1)
 	done, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{CheckpointTs: 5}, false)
 	require.True(t, done)
-	require.Nil(t, err)
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// Global resolved ts has advanced while schema storage stalls.
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return status, true, nil
 	})
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	status := p.sinkManager.r.GetTableStats(span)
@@ -727,8 +727,8 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	// Schema storage has advanced too.
 	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	status = p.sinkManager.r.GetTableStats(span)
@@ -746,13 +746,13 @@ func TestProcessorLiveness(t *testing.T) {
 
 	// First tick for creating position.
 	require.Nil(t, p.lazyInit(ctx))
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// Second tick for init.
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 
 	// Changing p.liveness affects p.agent liveness.
 	p.liveness.Store(model.LivenessCaptureStopping)
@@ -783,17 +783,17 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	require.Nil(t, p.lazyInit(ctx))
 
 	// First tick for creating position.
-	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ := p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	// Second tick for init.
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 
 	// TODO(qupeng): third tick for handle a warning.
-	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	require.Nil(t, err)
+	err, _ = p.Tick(ctx, changefeed)
+	require.NoError(t, err)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
