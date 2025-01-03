@@ -361,6 +361,16 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	return eg.Wait()
 }
 
+// Close closes the puller.
+func (p *MultiplexingPuller) Close() {
+	if p.client != nil {
+		p.client.Close()
+	}
+	log.Info("MultiplexingPuller is closed",
+		zap.String("namespace", p.changefeed.Namespace),
+		zap.String("changefeed", p.changefeed.ID))
+}
+
 // runEventHandler consumes events from inputCh:
 // 1. If the event is a kv event, consume by calling progress.consume.f.
 // 2. If the event is a resolved event, send it to the resolvedEventsCache of the corresponding progress.
