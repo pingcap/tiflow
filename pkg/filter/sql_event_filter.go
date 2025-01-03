@@ -144,7 +144,7 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (skip bool, err erro
 			log.Warn("sql event filter doesn't find old table info when the event type is `rename table`",
 				zap.String("schema", schema),
 				zap.String("table", table),
-				zap.String("type", ddl.Type.String()),
+				zap.Stringer("type", ddl.Type),
 				zap.String("query", ddl.Query))
 			return true, cerror.ErrTableIneligible.GenWithStackByArgs(ddl.TableInfo.TableName)
 		}
