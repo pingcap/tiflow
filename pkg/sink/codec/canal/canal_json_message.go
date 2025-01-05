@@ -222,7 +222,7 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	mysqlType := msg.getMySQLType()
 	result.TableInfo.TableName.IsPartition = msg.isPartition()
 	result.TableInfo.TableName.TableID = msg.getTableID()
-	
+
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
