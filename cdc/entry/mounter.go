@@ -728,20 +728,21 @@ func (m *mounter) mountRowKVEntry(
 		}
 	}
 
-	return &model.RowChangedEvent{
-		StartTs:         row.StartTs,
-		CommitTs:        row.CRTs,
-		RowID:           intRowID,
-		HandleKey:       row.RecordID,
-		PhysicalTableID: row.PhysicalTableID,
-		TableInfo:       tableInfo,
-		Columns:         cols,
-		PreColumns:      preCols,
+	event := &model.RowChangedEvent{
+		StartTs:    row.StartTs,
+		CommitTs:   row.CRTs,
+		RowID:      intRowID,
+		HandleKey:  row.RecordID,
+		TableInfo:  tableInfo,
+		Columns:    cols,
+		PreColumns: preCols,
 
 		Checksum: checksum,
 
 		ApproximateDataSize: dataSize,
-	}, rawRow, nil
+	}
+	event.SetTableID(row.PhysicalTableID)
+	return event, rawRow, nil
 }
 
 var emptyBytes = make([]byte, 0)

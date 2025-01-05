@@ -391,7 +391,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			default:
 				tableID = w.fakeTableIDGenerator.
 					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
+				row.SetTableID(tableID)
 			}
 			w.appendRow2Group(row, progress, offset)
 		case model.MessageTypeResolved:

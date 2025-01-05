@@ -31,23 +31,16 @@ import (
 func TestWriteDDL(t *testing.T) {
 	t.Parallel()
 
+	event1 := &model.RowChangedEvent{CommitTs: 11, TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t1"}}}
+	event1.SetTableID(11)
+
+	event2 := &model.RowChangedEvent{CommitTs: 15, TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t2"}}}
+	event2.SetTableID(12)
+
+	event3 := &model.RowChangedEvent{CommitTs: 8, TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t3"}}}
+	event3.SetTableID(12)
 	rows := []writer.RedoEvent{
-		nil,
-		&model.RowChangedEvent{
-			PhysicalTableID: 11,
-			CommitTs:        11,
-			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t1"}},
-		},
-		&model.RowChangedEvent{
-			PhysicalTableID: 12,
-			CommitTs:        15,
-			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t2"}},
-		},
-		&model.RowChangedEvent{
-			PhysicalTableID: 12,
-			CommitTs:        8,
-			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t2"}},
-		},
+		nil, event1, event2, event3,
 	}
 	testWriteEvents(t, rows)
 }

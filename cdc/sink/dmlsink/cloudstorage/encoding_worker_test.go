@@ -76,6 +76,24 @@ func TestEncodeEvents(t *testing.T) {
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
 
+	event1 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: []*model.ColumnData{
+			{ColumnID: 1, Value: 100},
+			{ColumnID: 2, Value: "hello world"},
+		},
+	}
+	event1.SetTableID(100)
+
+	event2 := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: []*model.ColumnData{
+			{ColumnID: 1, Value: 200},
+			{ColumnID: 2, Value: "你好，世界"},
+		},
+	}
+	event2.SetTableID(100)
+
 	err := encodingWorker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
@@ -89,22 +107,7 @@ func TestEncodeEvents(t *testing.T) {
 			Event: &model.SingleTableTxn{
 				TableInfo: tableInfo,
 				Rows: []*model.RowChangedEvent{
-					{
-						PhysicalTableID: 100,
-						TableInfo:       tableInfo,
-						Columns: []*model.ColumnData{
-							{ColumnID: 1, Value: 100},
-							{ColumnID: 2, Value: "hello world"},
-						},
-					},
-					{
-						PhysicalTableID: 100,
-						TableInfo:       tableInfo,
-						Columns: []*model.ColumnData{
-							{ColumnID: 1, Value: 200},
-							{ColumnID: 2, Value: "你好，世界"},
-						},
-					},
+					event1, event2,
 				},
 			},
 		},
@@ -140,18 +143,17 @@ func TestEncodingWorkerRun(t *testing.T) {
 		},
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
+	row := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: []*model.ColumnData{
+			{ColumnID: 1, Value: 100},
+			{ColumnID: 2, Value: "hello world"},
+		},
+	}
+	row.SetTableID(100)
 	event := &model.SingleTableTxn{
 		TableInfo: tableInfo,
-		Rows: []*model.RowChangedEvent{
-			{
-				PhysicalTableID: 100,
-				TableInfo:       tableInfo,
-				Columns: []*model.ColumnData{
-					{ColumnID: 1, Value: 100},
-					{ColumnID: 2, Value: "hello world"},
-				},
-			},
-		},
+		Rows:      []*model.RowChangedEvent{row},
 	}
 
 	for i := 0; i < 3; i++ {

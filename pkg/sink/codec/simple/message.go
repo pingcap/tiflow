@@ -385,12 +385,12 @@ func buildRowChangedEvent(
 	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool, db *sql.DB,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
-		CommitTs:        msg.CommitTs,
-		PhysicalTableID: msg.TableID,
-		TableInfo:       tableInfo,
-		Columns:         decodeColumns(msg.Data, tableInfo),
-		PreColumns:      decodeColumns(msg.Old, tableInfo),
+		CommitTs:   msg.CommitTs,
+		TableInfo:  tableInfo,
+		Columns:    decodeColumns(msg.Data, tableInfo),
+		PreColumns: decodeColumns(msg.Old, tableInfo),
 	}
+	result.SetTableID(msg.TableID)
 
 	if enableRowChecksum && msg.Checksum != nil {
 		result.Checksum = &integrity.Checksum{
