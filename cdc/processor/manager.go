@@ -38,6 +38,9 @@ type commandTp int
 const (
 	commandTpUnknown commandTp = iota
 	commandTpWriteDebugInfo
+)
+
+const (
 	processorLogsWarnDuration = 1 * time.Second
 )
 
@@ -108,13 +111,13 @@ func NewManager(
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (m *managerImpl) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*orchestrator.GlobalReactorState)
 	m.handleCommand()
 
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active(m.captureInfo.ID) {
+		if !changefeedState.Active() {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
@@ -156,7 +159,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		if createTaskPosition(changefeedState, p.captureInfo) {
 			continue
 		}
-		err, warning := p.Tick(stdCtx, changefeedState.Info, changefeedState.Status)
+		err, warning := p.Tick(ctx, changefeedState)
 		if warning != nil {
 			patchProcessorWarning(p.captureInfo, changefeedState, warning)
 		}
@@ -176,7 +179,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 	}
 
-	if err := m.upstreamManager.Tick(stdCtx, globalState); err != nil {
+	if err = m.upstreamManager.Tick(ctx, globalState); err != nil {
 		return state, errors.Trace(err)
 	}
 	return state, nil
@@ -279,26 +282,27 @@ func patchProcessorWarning(captureInfo *model.CaptureInfo,
 
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
 	processor, exist := m.processors[changefeedID]
-	if exist {
-		startTime := time.Now()
-		err := processor.Close()
-		costTime := time.Since(startTime)
-		if costTime > processorLogsWarnDuration {
-			log.Warn("processor close took too long",
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
-				zap.String("capture", m.captureInfo.ID),
-				zap.Duration("duration", costTime))
-		}
-		m.metricProcessorCloseDuration.Observe(costTime.Seconds())
-		if err != nil {
-			log.Warn("failed to close processor",
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
-				zap.Error(err))
-		}
-		delete(m.processors, changefeedID)
+	if !exist {
+		return
 	}
+	startTime := time.Now()
+	err := processor.Close()
+	costTime := time.Since(startTime)
+	if costTime > processorLogsWarnDuration {
+		log.Warn("processor close took too long",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("capture", m.captureInfo.ID),
+			zap.Duration("duration", costTime))
+	}
+	m.metricProcessorCloseDuration.Observe(costTime.Seconds())
+	if err != nil {
+		log.Warn("failed to close processor",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Error(err))
+	}
+	delete(m.processors, changefeedID)
 }
 
 // Close the manager itself and all processors.

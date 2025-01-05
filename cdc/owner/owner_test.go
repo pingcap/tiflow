@@ -573,14 +573,14 @@ func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
 	query := &Query{Tp: QueryHealth}
 
 	// no changefeed at the first, should be healthy
-	err := o.handleQueries(query)
+	err := o.handleQueries(query, nil)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// 1 changefeed, state is nil
 	cf := &changefeed{}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, nil)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
@@ -590,7 +590,7 @@ func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
 	}
 	cf.latestInfo = state.Info
 	cf.latestStatus = state.Status
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, nil)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
@@ -599,7 +599,7 @@ func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
 		latestInfo: &model.ChangeFeedInfo{State: model.StateNormal},
 		scheduler:  &healthScheduler{init: true},
 	}
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, nil)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 }
@@ -615,13 +615,13 @@ func TestIsHealthy(t *testing.T) {
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err := o.handleQueries(query)
+	err := o.handleQueries(query, nil)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	o.changefeedTicked = true
 	// Unhealthy, cdc cluster version is inconsistent
-	o.captures = map[model.CaptureID]*model.CaptureInfo{
+	captures := map[model.CaptureID]*model.CaptureInfo{
 		"1": {
 			Version: version.MinTiCDCVersion.String(),
 		},
@@ -629,14 +629,14 @@ func TestIsHealthy(t *testing.T) {
 			Version: version.MaxTiCDCVersion.String(),
 		},
 	}
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// make all captures version consistent.
-	o.captures["2"].Version = version.MinTiCDCVersion.String()
+	captures["2"].Version = version.MinTiCDCVersion.String()
 	// Healthy, no changefeed.
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
@@ -647,20 +647,20 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &healthScheduler{init: true}
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
@@ -670,7 +670,7 @@ func TestIsHealthy(t *testing.T) {
 		scheduler:  &healthScheduler{init: false},
 	}
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(query, captures)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 }
