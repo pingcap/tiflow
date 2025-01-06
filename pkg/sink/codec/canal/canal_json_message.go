@@ -259,13 +259,13 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 			}
 		}
 		return fmt.Errorf("cannot found partition for column value %s", columnValue)
+	// todo: support following rule if meet the corresponding workload
 	case pmodel.PartitionTypeHash:
 	case pmodel.PartitionTypeKey:
 	case pmodel.PartitionTypeList:
 	case pmodel.PartitionTypeNone:
 	default:
 	}
-	event.PhysicalTableID = physicalTableID
 	return fmt.Errorf("manually set partition id for partition type %s not supported yet", event.TableInfo.Partition.Type)
 }
 
