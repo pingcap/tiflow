@@ -154,7 +154,6 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 }
 
 // skipDDLEvent skips ddl event by its type and query.
-<<<<<<< HEAD
 func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 	schema := ddl.TableInfo.TableName.Schema
 	table := ddl.TableInfo.TableName.Table
@@ -166,14 +165,7 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 	f.pLock.Unlock()
 	if err != nil {
 		return false, err
-=======
-func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (skip bool, err error) {
-	if len(f.rules) == 0 {
-		return false, nil
 	}
-	evenType := ddlToEventType(ddl.Type)
-	schema := ddl.TableInfo.TableName.Schema
-	table := ddl.TableInfo.TableName.Table
 	if evenType == bf.RenameTable {
 		if ddl.PreTableInfo == nil {
 			log.Warn("sql event filter doesn't find old table info when the event type is `rename table`",
@@ -185,7 +177,6 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (skip bool, err erro
 		}
 		schema = ddl.PreTableInfo.TableName.Schema
 		table = ddl.PreTableInfo.TableName.Table
->>>>>>> 1e1f271387 (filter(ticdc): fix incorrect event filter with "rename" DDLs (#11956))
 	}
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
