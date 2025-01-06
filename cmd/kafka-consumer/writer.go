@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -116,10 +115,9 @@ func (p *partitionProgress) loadWatermark() uint64 {
 type writer struct {
 	option *option
 
-	ddlList              []*model.DDLEvent
-	ddlWithMaxCommitTs   *model.DDLEvent
-	ddlSink              ddlsink.Sink
-	fakeTableIDGenerator *common.FakeTableIDAllocator
+	ddlList            []*model.DDLEvent
+	ddlWithMaxCommitTs *model.DDLEvent
+	ddlSink            ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -130,9 +128,8 @@ type writer struct {
 
 func newWriter(ctx context.Context, o *option) *writer {
 	w := &writer{
-		option:               o,
-		fakeTableIDGenerator: common.NewFakeTableIDAllocator(),
-		progresses:           make([]*partitionProgress, o.partitionNum),
+		option:     o,
+		progresses: make([]*partitionProgress, o.partitionNum),
 	}
 	var (
 		db  *sql.DB
@@ -380,13 +377,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
-
-			switch w.option.protocol {
-			case config.ProtocolOpen, config.ProtocolSimple, config.ProtocolCanalJSON:
-			default:
-				row.PhysicalTableID = w.fakeTableIDGenerator.
-					AllocateTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName())
-			}
 			w.appendRow2Group(row, progress, offset)
 		case model.MessageTypeResolved:
 			newWatermark, err := progress.decoder.NextResolvedEvent()
