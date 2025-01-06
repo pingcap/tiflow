@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"math"
 	"strings"
 	"unsafe"
@@ -386,4 +387,25 @@ func UnsafeBytesToString(b []byte) string {
 // UnsafeStringToBytes create byte slice from string without copying
 func UnsafeStringToBytes(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&s))
+}
+
+type FakeTableIDAllocator struct {
+	tableIDs       map[string]int64
+	currentTableID int64
+}
+
+func NewFakeTableIDAllocator() *FakeTableIDAllocator {
+	return &FakeTableIDAllocator{
+		tableIDs: make(map[string]int64),
+	}
+}
+
+func (g *FakeTableIDAllocator) AllocateTableID(schema, table string, originTableID int64) int64 {
+	key := fmt.Sprintf("`%s`.`%s`.`%d`", quotes.EscapeName(schema), quotes.EscapeName(table), originTableID)
+	if tableID, ok := g.tableIDs[key]; ok {
+		return tableID
+	}
+	g.currentTableID++
+	g.tableIDs[key] = g.currentTableID
+	return g.currentTableID
 }

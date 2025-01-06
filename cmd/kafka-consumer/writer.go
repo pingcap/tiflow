@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -32,10 +31,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -120,7 +119,7 @@ type writer struct {
 	ddlList              []*model.DDLEvent
 	ddlWithMaxCommitTs   *model.DDLEvent
 	ddlSink              ddlsink.Sink
-	fakeTableIDGenerator *fakeTableIDGenerator
+	fakeTableIDGenerator *common.FakeTableIDAllocator
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -131,11 +130,9 @@ type writer struct {
 
 func newWriter(ctx context.Context, o *option) *writer {
 	w := &writer{
-		option: o,
-		fakeTableIDGenerator: &fakeTableIDGenerator{
-			tableIDs: make(map[string]int64),
-		},
-		progresses: make([]*partitionProgress, o.partitionNum),
+		option:               o,
+		fakeTableIDGenerator: common.NewFakeTableIDAllocator(),
+		progresses:           make([]*partitionProgress, o.partitionNum),
 	}
 	var (
 		db  *sql.DB
@@ -390,7 +387,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			case config.ProtocolSimple, config.ProtocolCanalJSON:
 			default:
 				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
+					AllocateTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
 				row.PhysicalTableID = tableID
 			}
 			w.appendRow2Group(row, progress, offset)
@@ -513,21 +510,6 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns),
 		zap.String("protocol", w.option.protocol.String()))
 	group.Append(row, offset)
-}
-
-type fakeTableIDGenerator struct {
-	tableIDs       map[string]int64
-	currentTableID int64
-}
-
-func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, tableID int64) int64 {
-	key := fmt.Sprintf("`%s`.`%s`.`%d`", quotes.EscapeName(schema), quotes.EscapeName(table), tableID)
-	if tableID, ok := g.tableIDs[key]; ok {
-		return tableID
-	}
-	g.currentTableID++
-	g.tableIDs[key] = g.currentTableID
-	return g.currentTableID
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, watermark uint64) {

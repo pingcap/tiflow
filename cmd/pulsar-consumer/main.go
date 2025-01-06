@@ -524,15 +524,15 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				continue
 			}
-			var partitionID int64
-			if row.TableInfo.IsPartitionTable() {
-				partitionID = row.GetTableID()
-			}
+			tableID := row.GetTableID()
 			// use schema, table and tableID to identify a table
-			tableID := c.fakeTableIDGenerator.
-				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-			row.TableInfo.TableName.TableID = tableID
-
+			switch c.option.protocol {
+			case config.ProtocolCanalJSON:
+			default:
+				tableID = c.fakeTableIDGenerator.
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
+				row.PhysicalTableID = tableID
+			}
 			group, ok := c.eventGroups[tableID]
 			if !ok {
 				group = newEventsGroup()
