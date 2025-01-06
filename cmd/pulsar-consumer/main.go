@@ -127,11 +127,6 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 		if err != nil {
 			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
-		if enableTiDBExtension {
-			if o.protocol != config.ProtocolCanalJSON && o.protocol != config.ProtocolAvro {
-				log.Panic("enable-tidb-extension only work with canal-json / avro")
-			}
-		}
 		o.enableTiDBExtension = enableTiDBExtension
 	}
 
@@ -180,10 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
-	},
-		logutil.WithInitGRPCLogger(),
-		logutil.WithInitSaramaLogger(),
-	)
+	})
 	if err != nil {
 		log.Error("init logger failed", zap.Error(err))
 		return
@@ -215,7 +207,7 @@ func run(cmd *cobra.Command, args []string) {
 	defer pulsarConsumer.Close()
 	msgChan := pulsarConsumer.Chan()
 
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -228,7 +220,7 @@ func run(cmd *cobra.Command, args []string) {
 				log.Debug(fmt.Sprintf("Received message msgId: %#v -- content: '%s'\n",
 					consumerMsg.ID(),
 					string(consumerMsg.Payload())))
-				err := consumer.HandleMsg(consumerMsg.Message)
+				err = consumer.HandleMsg(consumerMsg.Message)
 				if err != nil {
 					log.Panic("Error consuming message", zap.Error(err))
 				}
@@ -243,7 +235,7 @@ func run(cmd *cobra.Command, args []string) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := consumer.Run(ctx); err != nil {
+		if err = consumer.Run(ctx); err != nil {
 			if err != context.Canceled {
 				log.Panic("Error running consumer", zap.Error(err))
 			}
@@ -327,6 +319,8 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 
 // partitionSinks maintained for each partition, it may sync data for multiple tables.
 type partitionSinks struct {
+	decoder codec.RowEventDecoder
+
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
@@ -353,8 +347,7 @@ type Consumer struct {
 
 	codecConfig *common.Config
 
-	option  *ConsumerOption
-	decoder codec.RowEventDecoder
+	option *ConsumerOption
 }
 
 // NewConsumer creates a new cdc pulsar consumer
@@ -373,21 +366,17 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	if c.codecConfig.Protocol != config.ProtocolCanalJSON {
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
-	}
-
 	decoder, err := canal.NewBatchDecoder(ctx, c.codecConfig, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	c.decoder = decoder
-
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
 	for i := 0; i < o.partitionNum; i++ {
-		c.sinks[i] = &partitionSinks{}
+		c.sinks[i] = &partitionSinks{
+			decoder: decoder,
+		}
 	}
 
 	changefeedID := model.DefaultChangeFeedID("pulsar-consumer")
@@ -451,7 +440,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 		panic("sink should initialized")
 	}
 
-	decoder := c.decoder
+	decoder := sink.decoder
 	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
 		return errors.Trace(err)
@@ -683,7 +672,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			// 4. flush all the DMLs that commitTs <= globalResolvedTs
-			if err := c.forEachSink(func(sink *partitionSinks) error {
+			if err = c.forEachSink(func(sink *partitionSinks) error {
 				return flushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 			}); err != nil {
 				return errors.Trace(err)
