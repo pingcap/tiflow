@@ -41,7 +41,6 @@ import (
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
@@ -336,12 +335,11 @@ type partitionSinks struct {
 
 // Consumer represents a local pulsar consumer
 type Consumer struct {
-	eventGroups          map[int64]*eventsGroup
-	ddlList              []*model.DDLEvent
-	ddlListMu            sync.Mutex
-	lastReceivedDDL      *model.DDLEvent
-	ddlSink              ddlsink.Sink
-	fakeTableIDGenerator *fakeTableIDGenerator
+	eventGroups     map[int64]*eventsGroup
+	ddlList         []*model.DDLEvent
+	ddlListMu       sync.Mutex
+	lastReceivedDDL *model.DDLEvent
+	ddlSink         ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -371,10 +369,6 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	}
 	config.GetGlobalServerConfig().TZ = o.timezone
 	c.tz = tz
-
-	c.fakeTableIDGenerator = &fakeTableIDGenerator{
-		tableIDs: make(map[string]int64),
-	}
 
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
@@ -432,10 +426,6 @@ func (g *eventsGroup) Append(e *model.RowChangedEvent) {
 }
 
 func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
-	sort.Slice(g.events, func(i, j int) bool {
-		return g.events[i].CommitTs < g.events[j].CommitTs
-	})
-
 	i := sort.Search(len(g.events), func(i int) bool {
 		return g.events[i].CommitTs > resolveTs
 	})
@@ -525,14 +515,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				continue
 			}
 			tableID := row.GetTableID()
-			// use schema, table and tableID to identify a table
-			switch c.option.protocol {
-			case config.ProtocolCanalJSON:
-			default:
-				tableID = c.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
-			}
 			group, ok := c.eventGroups[tableID]
 			if !ok {
 				group = newEventsGroup()
@@ -751,25 +733,4 @@ func flushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs
 			return nil
 		}
 	}
-}
-
-type fakeTableIDGenerator struct {
-	tableIDs       map[string]int64
-	currentTableID int64
-	mu             sync.Mutex
-}
-
-func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	key := quotes.QuoteSchema(schema, table)
-	if partition != 0 {
-		key = fmt.Sprintf("%s.`%d`", key, partition)
-	}
-	if tableID, ok := g.tableIDs[key]; ok {
-		return tableID
-	}
-	g.currentTableID++
-	g.tableIDs[key] = g.currentTableID
-	return g.currentTableID
 }
