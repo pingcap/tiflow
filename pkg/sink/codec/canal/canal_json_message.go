@@ -237,8 +237,12 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 	switch event.TableInfo.Partition.Type {
 	case pmodel.PartitionTypeRange:
 		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
+		columns := event.Columns
+		if columns == nil {
+			columns = event.PreColumns
+		}
 		var columnValue string
-		for _, col := range event.Columns {
+		for _, col := range columns {
 			if col.ColumnID == targetColumnID {
 				columnValue = model.ColumnValueString(col.Value)
 				break
