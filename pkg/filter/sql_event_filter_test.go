@@ -237,6 +237,12 @@ func TestShouldSkipDDL(t *testing.T) {
 						Table:  c.table,
 					},
 				},
+				PreTableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: c.preSchema,
+						Table:  c.preTable,
+					},
+				},
 				Query: c.query,
 				Type:  c.ddlType,
 			}
