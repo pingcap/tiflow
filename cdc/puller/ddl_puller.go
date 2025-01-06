@@ -97,6 +97,36 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	return p.run(ctx)
 }
 
+<<<<<<< HEAD
+=======
+// WaitForReady implements util.Runnable.
+func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (p *ddlJobPullerImpl) Close() {
+	if p.mp != nil {
+		p.mp.Close()
+	}
+}
+
+// Output implements DDLJobPuller, it returns the output channel of DDL job.
+func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
+	return p.outputCh
+}
+
+// Input receives the raw kv entry and put it into the input channel.
+func (p *ddlJobPullerImpl) Input(
+	ctx context.Context,
+	rawDDL *model.RawKVEntry,
+	_ []tablepb.Span,
+	_ model.ShouldSplitKVEntry,
+) error {
+	p.sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawDDL))
+	return nil
+}
+
+// handleRawKVEntry converts the raw kv entry to DDL job and sends it to the output channel.
+>>>>>>> 80f49c6bd2 (puller: close kvclient correctly when stopping a processor (#11957))
 func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
 	if ddlRawKV == nil {
 		return nil
@@ -794,6 +824,12 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
 
+	defer func() {
+		log.Info("DDL puller stopped",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+	}()
+
 	return g.Wait()
 }
 
@@ -811,10 +847,13 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 
 // Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
-	log.Info("close the ddl puller",
+	h.cancel()
+	if h.ddlJobPuller != nil {
+		h.ddlJobPuller.Close()
+	}
+	log.Info("DDL puller closed",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
-	h.cancel()
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {

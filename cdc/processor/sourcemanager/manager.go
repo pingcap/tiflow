@@ -280,11 +280,18 @@ func (m *SourceManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
+<<<<<<< HEAD
 	m.tablePullers.Range(func(span tablepb.Span, value interface{}) bool {
 		value.(pullerwrapper.Wrapper).Close()
 		return true
 	})
 	log.Info("All pullers have been closed",
+=======
+	if m.puller != nil {
+		m.puller.Close()
+	}
+	log.Info("SourceManager puller have been closed",
+>>>>>>> 80f49c6bd2 (puller: close kvclient correctly when stopping a processor (#11957))
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))

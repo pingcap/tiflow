@@ -277,7 +277,24 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	return g.Wait()
 }
 
+<<<<<<< HEAD
 func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan kv.MultiplexingEvent) error {
+=======
+// Close closes the puller.
+func (p *MultiplexingPuller) Close() {
+	if p.client != nil {
+		p.client.Close()
+	}
+	log.Info("MultiplexingPuller is closed",
+		zap.String("namespace", p.changefeed.Namespace),
+		zap.String("changefeed", p.changefeed.ID))
+}
+
+// runEventHandler consumes events from inputCh:
+// 1. If the event is a kv event, consume by calling progress.consume.f.
+// 2. If the event is a resolved event, send it to the resolvedEventsCache of the corresponding progress.
+func (p *MultiplexingPuller) runEventHandler(ctx context.Context, inputCh <-chan kv.MultiplexingEvent) error {
+>>>>>>> 80f49c6bd2 (puller: close kvclient correctly when stopping a processor (#11957))
 	for {
 		var e kv.MultiplexingEvent
 		select {
