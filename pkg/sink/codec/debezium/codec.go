@@ -72,6 +72,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				writer.WriteStringField("type", "boolean")
 				writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 				writer.WriteStringField("field", col.Name)
+				if col.Default != nil {
+					writer.WriteAnyField("default", col.Default)
+				}
 			})
 		} else {
 			writer.WriteObjectElement(func() {
@@ -83,6 +86,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					writer.WriteStringField("length", fmt.Sprintf("%d", n))
 				})
 				writer.WriteStringField("field", col.Name)
+				if col.Default != nil {
+					writer.WriteAnyField("default", col.Default)
+				}
 			})
 		}
 
@@ -92,6 +98,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				writer.WriteAnyField("default", col.Default)
+			}
 		})
 
 	case mysql.TypeEnum:
@@ -101,9 +110,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.data.Enum")
 			writer.WriteIntField("version", 1)
 			writer.WriteObjectField("parameters", func() {
-				writer.WriteStringField("allowed", strings.Join(ft.GetElems(), ","))
+				elems := ft.GetElems()
+				parameters := make([]string, 0, len(elems))
+				for _, ele := range elems {
+					parameters = append(parameters, common.EscapeEnumAndSetOptions(ele))
+				}
+				writer.WriteStringField("allowed", strings.Join(parameters, ","))
 			})
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				writer.WriteAnyField("default", col.Default)
+			}
 		})
 
 	case mysql.TypeSet:
@@ -116,13 +133,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				writer.WriteStringField("allowed", strings.Join(ft.GetElems(), ","))
 			})
 			writer.WriteStringField("field", col.Name)
-		})
-
-	case mysql.TypeNewDecimal:
-		writer.WriteObjectElement(func() {
-			writer.WriteStringField("type", "double")
-			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
-			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				writer.WriteAnyField("default", col.Default)
+			}
 		})
 
 	case mysql.TypeDate, mysql.TypeNewDate:
@@ -132,6 +145,18 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.time.Date")
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeDatetime:
@@ -145,6 +170,19 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			}
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
+					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
+						writer.WriteAnyField("default", 0)
+					}
+					return
+				}
+				writer.WriteStringField("default", v)
+			}
 		})
 
 	case mysql.TypeTimestamp:
@@ -154,6 +192,19 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.time.ZonedTimestamp")
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
+					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
+						writer.WriteAnyField("default", 0)
+					}
+					return
+				}
+				writer.WriteStringField("default", v)
+			}
 		})
 
 	case mysql.TypeDuration:
@@ -163,6 +214,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.time.MicroTime")
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeJSON:
@@ -172,6 +234,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.data.Json")
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				writer.WriteAnyField("default", col.Default)
+			}
 		})
 
 	case mysql.TypeTiny: // TINYINT
@@ -179,6 +244,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "int16")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeShort: // SMALLINT
@@ -190,6 +266,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			}
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeInt24: // MEDIUMINT
@@ -197,17 +284,39 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "int32")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeLong: // INT
 		writer.WriteObjectElement(func() {
-			if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			if col.Flag.IsUnsigned() {
 				writer.WriteStringField("type", "int64")
 			} else {
 				writer.WriteStringField("type", "int32")
 			}
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeLonglong: // BIGINT
@@ -215,6 +324,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "int64")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeFloat:
@@ -222,13 +342,37 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("type", "float")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
-	case mysql.TypeDouble:
+	case mysql.TypeDouble, mysql.TypeNewDecimal:
+		// https://dev.mysql.com/doc/refman/8.4/en/numeric-types.html
+		// MySQL also treats REAL as a synonym for DOUBLE PRECISION (a nonstandard variation), unless the REAL_AS_FLOAT SQL mode is enabled.
 		writer.WriteObjectElement(func() {
 			writer.WriteStringField("type", "double")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	case mysql.TypeYear:
@@ -238,6 +382,17 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			writer.WriteStringField("name", "io.debezium.time.Year")
 			writer.WriteIntField("version", 1)
 			writer.WriteStringField("field", col.Name)
+			if col.Default != nil {
+				v, ok := col.Default.(string)
+				if !ok {
+					return
+				}
+				floatV, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return
+				}
+				writer.WriteFloat64Field("default", floatV)
+			}
 		})
 
 	default:
@@ -487,6 +642,9 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeLonglong:
+		// Note: Although Debezium's doc claims to use INT32 for INT, but it
+		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
+		// So we only handle with TypeLonglong here.
 		if col.Flag.IsUnsigned() {
 			// Handle with BIGINT UNSIGNED.
 			// Debezium always produce INT64 instead of UINT64 for BIGINT.
@@ -501,7 +659,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteInt64Field(col.Name, int64(v))
 			return nil
 		}
-
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
 		// So we only handle with TypeLonglong here.
@@ -516,7 +673,43 @@ func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, v
 	writer.WriteBase64StringField(fieldName, value)
 }
 
-func (c *dbzCodec) EncodeRowChangedEvent(
+// EncodeKey encode RowChangedEvent into key message
+func (c *dbzCodec) EncodeKey(
+	e *model.RowChangedEvent,
+	dest io.Writer,
+) error {
+	// schema field describes the structure of the primary key, or the unique key if the table does not have a primary key, for the table that was changed.
+	// see https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-events
+	cols, colInfos := e.HandleKeyColInfos()
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(jWriter)
+
+	var err error
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			for i, col := range cols {
+				err = c.writeDebeziumFieldValue(jWriter, col, colInfos[i].Ft)
+			}
+		})
+		if !c.config.DebeziumDisableSchema {
+			jWriter.WriteObjectField("schema", func() {
+				jWriter.WriteStringField("type", "struct")
+				jWriter.WriteStringField("name",
+					fmt.Sprintf("%s.Key", getSchemaTopicName(c.clusterID, e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName())))
+				jWriter.WriteBoolField("optional", false)
+				jWriter.WriteArrayField("fields", func() {
+					for i, col := range cols {
+						c.writeDebeziumFieldSchema(jWriter, col, colInfos[i].Ft)
+					}
+				})
+			})
+		}
+	})
+	return err
+}
+
+// EncodeValue encode RowChangedEvent into value message
+func (c *dbzCodec) EncodeValue(
 	e *model.RowChangedEvent,
 	dest io.Writer,
 ) error {
@@ -597,10 +790,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 			jWriter.WriteObjectField("schema", func() {
 				jWriter.WriteStringField("type", "struct")
 				jWriter.WriteBoolField("optional", false)
-				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope",
-					c.clusterID,
-					e.TableInfo.GetSchemaName(),
-					e.TableInfo.GetTableName()))
+				jWriter.WriteStringField("name",
+					fmt.Sprintf("%s.Envelope", getSchemaTopicName(c.clusterID, e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName())))
 				jWriter.WriteIntField("version", 1)
 				jWriter.WriteArrayField("fields", func() {
 					// schema is the same for `before` and `after`. So we build a new buffer to
@@ -627,10 +818,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
-							c.clusterID,
-							e.TableInfo.GetSchemaName(),
-							e.TableInfo.GetTableName()))
+						jWriter.WriteStringField("name",
+							fmt.Sprintf("%s.Value", getSchemaTopicName(c.clusterID, e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName())))
 						jWriter.WriteStringField("field", "before")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)
@@ -639,10 +828,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
-							c.clusterID,
-							e.TableInfo.GetSchemaName(),
-							e.TableInfo.GetTableName()))
+						jWriter.WriteStringField("name",
+							fmt.Sprintf("%s.Value", getSchemaTopicName(c.clusterID, e.TableInfo.GetSchemaName(), e.TableInfo.GetTableName())))
 						jWriter.WriteStringField("field", "after")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)
@@ -788,4 +975,11 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 	})
 
 	return err
+}
+
+func getSchemaTopicName(namespace string, schema string, table string) string {
+	return fmt.Sprintf("%s.%s.%s",
+		common.SanitizeName(namespace),
+		common.SanitizeName(schema),
+		common.SanitizeTopicName(table))
 }
