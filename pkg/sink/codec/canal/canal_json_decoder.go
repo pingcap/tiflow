@@ -18,6 +18,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -91,7 +95,8 @@ type batchDecoder struct {
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
 
-	tableInfoCache map[tableKey]*model.TableInfo
+	tableInfoCache     map[tableKey]*model.TableInfo
+	partitionInfoCache map[tableKey]*timodel.PartitionInfo
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -124,13 +129,14 @@ func NewBatchDecoder(
 	}
 
 	return &batchDecoder{
-		config:         codecConfig,
-		msg:            msg,
-		decoder:        newBufferedJSONDecoder(),
-		storage:        externalStorage,
-		upstreamTiDB:   db,
-		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
-		tableInfoCache: make(map[tableKey]*model.TableInfo),
+		config:             codecConfig,
+		msg:                msg,
+		decoder:            newBufferedJSONDecoder(),
+		storage:            externalStorage,
+		upstreamTiDB:       db,
+		bytesDecoder:       charmap.ISO8859_1.NewDecoder(),
+		tableInfoCache:     make(map[tableKey]*model.TableInfo),
+		partitionInfoCache: make(map[tableKey]*timodel.PartitionInfo),
 	}, nil
 }
 
@@ -370,14 +376,31 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	result := canalJSONMessage2DDLEvent(b.msg)
 	schema := *b.msg.getSchema()
 	table := *b.msg.getTable()
+	cacheKey := tableKey{
+		schema: schema,
+		table:  table,
+	}
 	// if receive a table level DDL, just remove the table info to trigger create a new one.
 	if schema != "" && table != "" {
-		cacheKey := tableKey{
-			schema: schema,
-			table:  table,
-		}
 		delete(b.tableInfoCache, cacheKey)
+		delete(b.partitionInfoCache, cacheKey)
 	}
+
+	stmt, err := parser.New().ParseOneStmt(result.Query, "", "")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if v, ok := stmt.(*ast.CreateTableStmt); ok {
+		tableInfo, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), v)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		partitions := tableInfo.GetPartitionInfo()
+		if partitions != nil {
+			b.partitionInfoCache[cacheKey] = partitions
+		}
+	}
+
 	return result, nil
 }
 
