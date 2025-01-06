@@ -191,7 +191,7 @@ func TestShouldSkipDDL(t *testing.T) {
 				EventFilters: []*config.EventFilterRule{
 					{
 						Matcher:     []string{"*.t1"},
-						IgnoreEvent: []bf.EventType{bf.AllEvent},
+						IgnoreEvent: []bf.EventType{bf.AllDDL},
 					},
 				},
 			},
