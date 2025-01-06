@@ -42,29 +42,45 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 }
 
 func TestDMLE2E(t *testing.T) {
-	_, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	createTableDDLEvent, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	for _, enableTiDBExtension := range []bool{true, false} {
+	for _, enableTiDBExtension := range []bool{false, true} {
 		codecConfig.EnableTiDBExtension = enableTiDBExtension
 		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 		require.NoError(t, err)
-
 		encoder := builder.Build()
 
-		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 		require.NoError(t, err)
 
-		message := encoder.Build()[0]
-
-		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+		message, err := encoder.EncodeDDLEvent(createTableDDLEvent)
 		require.NoError(t, err)
 
 		err = decoder.AddKeyValue(message.Key, message.Value)
 		require.NoError(t, err)
 
 		messageType, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, messageType, model.MessageTypeDDL)
+
+		decodedDDL, err := decoder.NextDDLEvent()
+		require.NoError(t, err)
+		if enableTiDBExtension {
+			require.Equal(t, createTableDDLEvent.CommitTs, decodedDDL.CommitTs)
+		}
+		require.Equal(t, createTableDDLEvent.Query, decodedDDL.Query)
+
+		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+		require.NoError(t, err)
+
+		message = encoder.Build()[0]
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = decoder.HasNext()
 		require.NoError(t, err)
 		require.True(t, hasNext)
 		require.Equal(t, messageType, model.MessageTypeRow)
@@ -76,7 +92,9 @@ func TestDMLE2E(t *testing.T) {
 		if enableTiDBExtension {
 			require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
 			require.Equal(t, insertEvent.GetTableID(), decodedEvent.GetTableID())
-			require.Equal(t, insertEvent.TableInfo.IsPartitionTable(), decodedEvent.TableInfo.IsPartitionTable())
+		} else {
+			require.NotZero(t, decodedEvent.GetTableID())
+			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.ID)
 		}
 		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
@@ -734,17 +752,6 @@ func TestE2EPartitionTable(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
 	helper.Tk().MustExec("use test")
 
 	createPartitionTableDDL := helper.DDL2Event(`create table test.t(a int primary key, b int) partition by range (a) (
@@ -762,24 +769,94 @@ func TestE2EPartitionTable(t *testing.T) {
 	insertEvent2 := helper.DML2Event(`insert into test.t values (21, 21)`, "test", "t", "p2")
 	require.NotNil(t, insertEvent2)
 
-	events := []*model.RowChangedEvent{insertEvent, insertEvent1, insertEvent2}
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	for _, enableTiDBExtension := range []bool{false, true} {
+		codecConfig.EnableTiDBExtension = enableTiDBExtension
 
-	for _, event := range events {
-		err = encoder.AppendRowChangedEvent(ctx, "", event, nil)
+		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 		require.NoError(t, err)
-		message := encoder.Build()[0]
+		encoder := builder.Build()
+
+		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		message, err := encoder.EncodeDDLEvent(createPartitionTableDDL)
+		require.NoError(t, err)
 
 		err = decoder.AddKeyValue(message.Key, message.Value)
 		require.NoError(t, err)
+
 		tp, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, tp)
+
+		decodedDDL, err := decoder.NextDDLEvent()
+		require.NoError(t, err)
+		require.NotNil(t, decodedDDL)
+
+		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, nil)
+		require.NoError(t, err)
+		message = encoder.Build()[0]
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err = decoder.HasNext()
 		require.NoError(t, err)
 		require.True(t, hasNext)
 		require.Equal(t, model.MessageTypeRow, tp)
 
 		decodedEvent, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
-		require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
-		require.Equal(t, decodedEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
-		require.Equal(t, decodedEvent.TableInfo.IsPartitionTable(), event.TableInfo.IsPartitionTable())
+
+		if enableTiDBExtension {
+			require.Equal(t, decodedEvent.GetTableID(), insertEvent.GetTableID())
+		} else {
+			require.NotZero(t, decodedEvent.GetTableID())
+			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[0].ID)
+		}
+
+		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent1, nil)
+		require.NoError(t, err)
+		message = encoder.Build()[0]
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err = decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, tp)
+
+		decodedEvent, err = decoder.NextRowChangedEvent()
+		require.NoError(t, err)
+
+		if enableTiDBExtension {
+			require.Equal(t, decodedEvent.GetTableID(), insertEvent1.GetTableID())
+		} else {
+			require.NotZero(t, decodedEvent.GetTableID())
+			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[1].ID)
+		}
+
+		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent2, nil)
+		require.NoError(t, err)
+		message = encoder.Build()[0]
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err = decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, tp)
+
+		decodedEvent, err = decoder.NextRowChangedEvent()
+		require.NoError(t, err)
+
+		if enableTiDBExtension {
+			require.Equal(t, decodedEvent.GetTableID(), insertEvent2.GetTableID())
+		} else {
+			require.NotZero(t, decodedEvent.GetTableID())
+			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[2].ID)
+		}
 	}
 }

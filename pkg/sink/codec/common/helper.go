@@ -400,12 +400,21 @@ func NewFakeTableIDAllocator() *FakeTableIDAllocator {
 	}
 }
 
-func (g *FakeTableIDAllocator) AllocateTableID(schema, table string, originTableID int64) int64 {
-	key := fmt.Sprintf("`%s`.`%s`.`%d`", quotes.EscapeName(schema), quotes.EscapeName(table), originTableID)
+func (g *FakeTableIDAllocator) allocateByKey(key string) int64 {
 	if tableID, ok := g.tableIDs[key]; ok {
 		return tableID
 	}
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
+}
+
+func (g *FakeTableIDAllocator) AllocateTableID(schema, table string) int64 {
+	key := fmt.Sprintf("`%s`.`%s`", quotes.EscapeName(schema), quotes.EscapeName(table))
+	return g.allocateByKey(key)
+}
+
+func (g *FakeTableIDAllocator) AllocatePartitionID(schema, table, name string) int64 {
+	key := fmt.Sprintf("`%s`.`%s`.`%s`", quotes.EscapeName(schema), quotes.EscapeName(table), quotes.EscapeName(name))
+	return g.allocateByKey(key)
 }

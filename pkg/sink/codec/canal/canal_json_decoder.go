@@ -97,6 +97,8 @@ type batchDecoder struct {
 
 	tableInfoCache     map[tableKey]*model.TableInfo
 	partitionInfoCache map[tableKey]*timodel.PartitionInfo
+
+	tableIDAllocator *common.FakeTableIDAllocator
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -137,6 +139,7 @@ func NewBatchDecoder(
 		bytesDecoder:       charmap.ISO8859_1.NewDecoder(),
 		tableInfoCache:     make(map[tableKey]*model.TableInfo),
 		partitionInfoCache: make(map[tableKey]*timodel.PartitionInfo),
+		tableIDAllocator:   common.NewFakeTableIDAllocator(),
 	}, nil
 }
 
