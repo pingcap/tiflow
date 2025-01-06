@@ -350,9 +350,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				cachedEvents := dec.GetCachedEvents()
 				for _, row := range cachedEvents {
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
-					tableID := row.GetTableID()
 					log.Info("simple protocol cached event resolved, append to the group",
-						zap.Int64("tableID", tableID), zap.Uint64("commitTs", row.CommitTs),
+						zap.Int64("tableID", row.GetTableID()), zap.Uint64("commitTs", row.CommitTs),
 						zap.Int32("partition", partition), zap.Any("offset", offset))
 					w.appendRow2Group(row, progress, offset)
 				}
@@ -382,13 +381,11 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
-			tableID := row.GetTableID()
 			switch w.option.protocol {
 			case config.ProtocolSimple, config.ProtocolCanalJSON:
 			default:
-				tableID = w.fakeTableIDGenerator.
-					AllocateTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
+				row.PhysicalTableID = w.fakeTableIDGenerator.
+					AllocateTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName())
 			}
 			w.appendRow2Group(row, progress, offset)
 		case model.MessageTypeResolved:
