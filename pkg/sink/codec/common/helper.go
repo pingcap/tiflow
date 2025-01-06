@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"math"
 	"strings"
 	"unsafe"
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 )
 

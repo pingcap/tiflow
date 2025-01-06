@@ -382,7 +382,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
 
 			switch w.option.protocol {
-			case config.ProtocolSimple, config.ProtocolCanalJSON:
+			case config.ProtocolOpen, config.ProtocolSimple, config.ProtocolCanalJSON:
 			default:
 				row.PhysicalTableID = w.fakeTableIDGenerator.
 					AllocateTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName())
