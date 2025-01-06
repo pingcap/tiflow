@@ -1393,7 +1393,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
 
-									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag) || mysql.HasOnUpdateNowFlag(flag)
+									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag) || mysql.HasOnUpdateNowFlag(flag) && mysql.HasNotNullFlag(flag)
 									jWriter.WriteBoolField("autoIncremented", autoIncrementFlag)
 									jWriter.WriteBoolField("generated", autoIncrementFlag)
 								})
