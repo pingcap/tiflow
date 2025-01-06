@@ -353,7 +353,8 @@ type Consumer struct {
 
 	codecConfig *common.Config
 
-	option *ConsumerOption
+	option  *ConsumerOption
+	decoder codec.RowEventDecoder
 }
 
 // NewConsumer creates a new cdc pulsar consumer
@@ -372,9 +373,15 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
+	if c.codecConfig.Protocol != config.ProtocolCanalJSON {
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
+
+	decoder, err := canal.NewBatchDecoder(ctx, c.codecConfig, nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	c.decoder = decoder
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
@@ -444,25 +451,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 		panic("sink should initialized")
 	}
 
-	ctx := context.Background()
-	var (
-		decoder codec.RowEventDecoder
-		err     error
-	)
-
-	switch c.codecConfig.Protocol {
-	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, nil)
-		if err != nil {
-			return err
-		}
-	default:
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	decoder := c.decoder
 	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
 		return errors.Trace(err)
