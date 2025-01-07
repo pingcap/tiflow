@@ -10,7 +10,6 @@ check_db_status "${MYSQL_HOST}" "${MYSQL_PORT}" mysql "."
 BASE_DIR=/tmp/tidb_tools_test/sync_diff_inspector
 OUT_DIR=$BASE_DIR/output
 
-
 mkdir -p $OUT_DIR || true
 
 echo "use importer to generate test data"
@@ -29,7 +28,7 @@ mysql -h ${MYSQL_HOST} -P ${MYSQL_PORT} -u root -e "select * from diff_test.test
 
 echo "use sync_diff_inspector to compare data"
 # sync diff tidb-tidb
-sync_diff_inspector --config=./config_base_tidb.toml > $OUT_DIR/diff.output
+sync_diff_inspector --config=./config_base_tidb.toml >$OUT_DIR/diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 
 echo "analyze table, and will use tidb's statistical information to split chunks"
@@ -40,28 +39,28 @@ mysql -uroot -h 127.0.0.1 -P 4000 -e "analyze table diff_test.test"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "explain select * from diff_test.test where aa > 1"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "explain select * from diff_test.test where \`table\` > 1"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "show stats_buckets"
-sync_diff_inspector --config=./config_base_tidb.toml > $OUT_DIR/diff.output
+sync_diff_inspector --config=./config_base_tidb.toml >$OUT_DIR/diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 check_not_contains "split range by random" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 
 echo "test 'exclude-tables' config"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "create table if not exists diff_test.should_not_compare (id int)"
-sync_diff_inspector --config=./config_base_tidb.toml > $OUT_DIR/diff.log
+sync_diff_inspector --config=./config_base_tidb.toml >$OUT_DIR/diff.log
 # doesn't contain the table's result in check report
 check_not_contains "[table=should_not_compare]" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 
 # sync diff tidb-mysql
-sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_mysql.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" > ./config_base_mysql_.toml
+sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_mysql.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config_base_mysql_.toml
 sync_diff_inspector --config=./config_base_mysql_.toml #> $OUT_DIR/diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 
 for script in ./*/run.sh; do
-    test_name="$(basename "$(dirname "$script")")"
-    echo "---------------------------------------"
-    echo "Running test $script..."
-    echo "---------------------------------------"
-    sh "$script"
+	test_name="$(basename "$(dirname "$script")")"
+	echo "---------------------------------------"
+	echo "Running test $script..."
+	echo "---------------------------------------"
+	sh "$script"
 done
