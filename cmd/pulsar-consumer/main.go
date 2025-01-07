@@ -501,6 +501,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				zap.Int64("tableID", row.GetTableID()),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()),
+				zap.Uint64("commitTs", row.CommitTs),
 				zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
@@ -547,6 +548,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
+			log.Info("resolved ts updated", zap.Uint64("resolvedTs", ts))
 		}
 
 	}
@@ -563,7 +565,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Panic("DDL CommitTs < lastReceivedDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("lastReceivedDDLCommitTs", c.lastReceivedDDL.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	}
 
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
@@ -571,12 +573,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.lastReceivedDDL {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	c.lastReceivedDDL = ddl
 }
 
@@ -612,16 +614,16 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 }
 
 // getMinResolvedTs returns the minimum resolvedTs of all the partitionSinks
-func (c *Consumer) getMinResolvedTs() (result uint64, err error) {
-	result = uint64(math.MaxUint64)
-	err = c.forEachSink(func(sink *partitionSinks) error {
+func (c *Consumer) getMinResolvedTs() uint64 {
+	result := uint64(math.MaxUint64)
+	_ = c.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
 		if a < result {
 			result = a
 		}
 		return nil
 	})
-	return result, err
+	return result
 }
 
 // Run the Consumer
@@ -633,11 +635,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			// 1. Get the minimum resolvedTs of all the partitionSinks
-			minResolvedTs, err := c.getMinResolvedTs()
-			if err != nil {
-				return errors.Trace(err)
-			}
+			minResolvedTs := c.getMinResolvedTs()
 
 			// 2. check if there is a DDL event that can be executed
 			//   if there is, execute it and update the minResolvedTs
@@ -675,7 +673,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			// 4. flush all the DMLs that commitTs <= globalResolvedTs
-			if err = c.forEachSink(func(sink *partitionSinks) error {
+			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return flushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 			}); err != nil {
 				return errors.Trace(err)
