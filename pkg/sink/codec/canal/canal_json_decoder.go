@@ -127,17 +127,8 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	var msg canalJSONMessageInterface = &JSONMessage{}
-	if codecConfig.EnableTiDBExtension {
-		msg = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: &JSONMessage{},
-			Extensions:  &tidbExtension{},
-		}
-	}
-
 	return &batchDecoder{
 		config:             codecConfig,
-		msg:                msg,
 		decoder:            newBufferedJSONDecoder(),
 		storage:            externalStorage,
 		upstreamTiDB:       db,
@@ -170,12 +161,20 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := b.decoder.Decode(b.msg); err != nil {
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	if b.config.EnableTiDBExtension {
+		msg = &canalJSONMessageWithTiDBExtension{
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
+		}
+	}
+
+	if err := b.decoder.Decode(msg); err != nil {
 		log.Error("canal-json decoder decode failed",
 			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
-	log.Info("canal-json decode message", zap.Any("message", b.msg))
+	b.msg = msg
 	return b.msg.messageType(), true, nil
 }
 
@@ -393,8 +392,6 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if schema != "" && table != "" {
 		delete(b.tableInfoCache, cacheKey)
 		delete(b.partitionInfoCache, cacheKey)
-
-		log.Info("DDL received, delete item from cache", zap.Any("cacheKey", cacheKey))
 	}
 
 	stmt, err := parser.New().ParseOneStmt(result.Query, "", "")
