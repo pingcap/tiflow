@@ -206,7 +206,13 @@ func (b *batchDecoder) queryTableInfo(msg canalJSONMessageInterface) *model.Tabl
 			}
 		}
 		b.tableInfoCache[cacheKey] = tableInfo
+		log.Info("canal-json store table info", zap.Any("cacheKey", cacheKey),
+			zap.String("schemaName", tableInfo.GetSchemaName()), zap.String("tableName", tableInfo.GetTableName()),
+			zap.Any("tableInfo", tableInfo))
 	}
+	log.Info("canal-json set table info", zap.Any("cacheKey", cacheKey),
+		zap.String("schemaName", tableInfo.GetSchemaName()), zap.String("tableName", tableInfo.GetTableName()),
+		zap.Any("tableInfo", tableInfo))
 	return tableInfo
 }
 

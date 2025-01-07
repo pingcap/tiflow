@@ -387,6 +387,8 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if schema != "" && table != "" {
 		delete(b.tableInfoCache, cacheKey)
 		delete(b.partitionInfoCache, cacheKey)
+
+		log.Info("DDL received, delete item from cache", zap.Any("cacheKey", cacheKey))
 	}
 
 	stmt, err := parser.New().ParseOneStmt(result.Query, "", "")
