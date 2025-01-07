@@ -103,5 +103,4 @@ func TestGetSnapshot(t *testing.T) {
 		val := GetSnapshot(cs.latestSnapshot, cs.snapshot, conn)
 		require.Equal(t, cs.expected, val, "case %d", i)
 	}
-
 }
