@@ -281,6 +281,8 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
 	mysqlType := msg.getMySQLType()
+	result.TableInfo.TableName.IsPartition = msg.isPartition()
+	result.TableInfo.TableName.TableID = msg.getTableID()
 
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
