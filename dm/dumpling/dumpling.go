@@ -335,9 +335,23 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.Password = db.Password
 	dumpConfig.OutputDirPath = cfg.Dir // use LoaderConfig.Dir as output dir
 	dumpConfig.CollationCompatible = cfg.CollationCompatible
-	tableFilter, err := filter.ParseMySQLReplicationRules(cfg.BAList)
-	if err != nil {
-		return nil, err
+	var (
+		tableFilter filter.Filter
+		err         error
+	)
+	if cfg.BAList == nil {
+		// If no block-allow-list is set, system tables are filtered by default.
+		// Different with Dumpling, dm's case sensitivity is determined by the `lower_case_table_names` parameter from upstream,
+		// so filter both uppercase and lowercase tables.
+		tableFilter, err = filter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		tableFilter, err = filter.ParseMySQLReplicationRules(cfg.BAList)
+		if err != nil {
+			return nil, err
+		}
 	}
 	dumpConfig.TableFilter = tableFilter
 	dumpConfig.CompleteInsert = true // always keep column name in `INSERT INTO` statements.

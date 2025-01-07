@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
@@ -234,4 +235,53 @@ func genDumpCfg(t *testing.T) *config.SubTaskConfig {
 			}},
 		},
 	}
+}
+
+func TestBAlist(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// case sensitive and set block-allow-list
+	cfg := genDumpCfg(t)
+	cfg.CaseSensitive = true
+	m := NewDumpling(cfg)
+	err := m.Init(ctx)
+	require.NoError(t, err)
+	tableFilter, err := tfilter.ParseMySQLReplicationRules(cfg.BAList)
+	require.NoError(t, err)
+	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
+
+	// case insensitive and set block-allow-list
+	cfg = genDumpCfg(t)
+	cfg.CaseSensitive = false
+	m = NewDumpling(cfg)
+	err = m.Init(ctx)
+	require.NoError(t, err)
+	tableFilter, err = tfilter.ParseMySQLReplicationRules(cfg.BAList)
+	require.NoError(t, err)
+	tableFilter = tfilter.CaseInsensitive(tableFilter)
+	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
+
+	// case sensitive and not set block-allow-list
+	cfg = genDumpCfg(t)
+	cfg.BAList = nil
+	cfg.CaseSensitive = true
+	m = NewDumpling(cfg)
+	err = m.Init(ctx)
+	require.NoError(t, err)
+	tableFilter, err = tfilter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
+	require.NoError(t, err)
+	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
+
+	// case insensitive and not set block-allow-list
+	cfg = genDumpCfg(t)
+	cfg.BAList = nil
+	cfg.CaseSensitive = false
+	m = NewDumpling(cfg)
+	err = m.Init(ctx)
+	require.NoError(t, err)
+	tableFilter, err = tfilter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
+	require.NoError(t, err)
+	tableFilter = tfilter.CaseInsensitive(tableFilter)
+	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
 }

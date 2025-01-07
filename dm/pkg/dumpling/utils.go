@@ -36,6 +36,7 @@ import (
 
 // DefaultTableFilter is the default table filter for dumpling.
 var DefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
+var SystemTableFilterLowercase = []string{"!/^(mysql|sys|information_schema|performance_schema|metrics_schema|inspection_schema)$/.*"}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
