@@ -84,19 +84,17 @@ type ConsumerOption struct {
 
 func newConsumerOption() *ConsumerOption {
 	return &ConsumerOption{
-		protocol: config.ProtocolDefault,
+		protocol: config.ProtocolCanalJSON,
+		// the default value of partitionNum is 1
+		partitionNum: 1,
 	}
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
 func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
-	// the default value of partitionNum is 1
-	o.partitionNum = 1
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-
 	o.address = strings.Split(upstreamURI.Host, ",")
 
 	replicaConfig := config.GetDefaultReplicaConfig()
@@ -114,11 +112,11 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 		if err != nil {
 			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 		}
-		if !sutil.IsPulsarSupportedProtocols(protocol) {
-			log.Panic("unsupported protocol, pulsar sink currently only support these protocols: [canal-json, canal, maxwell]",
-				zap.String("protocol", s))
-		}
 		o.protocol = protocol
+	}
+	if !sutil.IsPulsarSupportedProtocols(o.protocol) {
+		log.Panic("unsupported protocol, pulsar sink currently only support these protocols: [canal-json]",
+			zap.String("protocol", s))
 	}
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
@@ -171,7 +169,7 @@ func main() {
 	}
 }
 
-func run(cmd *cobra.Command, args []string) {
+func run(_ *cobra.Command, _ []string) {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
@@ -371,14 +369,14 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 	c.sinks = make([]*partitionSinks, o.partitionNum)
-	ctx, cancel := context.WithCancel(ctx)
-	errChan := make(chan error, 1)
 	for i := 0; i < o.partitionNum; i++ {
 		c.sinks[i] = &partitionSinks{
 			decoder: decoder,
 		}
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	errChan := make(chan error, 1)
 	changefeedID := model.DefaultChangeFeedID("pulsar-consumer")
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
@@ -440,9 +438,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 	c.sinksMu.Lock()
 	sink := c.sinks[0]
 	c.sinksMu.Unlock()
-	if sink == nil {
-		panic("sink should initialized")
-	}
 
 	decoder := sink.decoder
 	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {

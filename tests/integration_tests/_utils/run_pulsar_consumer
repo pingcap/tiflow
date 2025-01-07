@@ -13,6 +13,6 @@ cd $workdir
 downstream_uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false"
 
 # output debug log to allow us to check the consumer's behavior when it encounters errors
-cdc_pulsar_consumer --log-file $workdir/cdc_pulsar_consumer$log_suffix.log --log-level debug --downstream-uri ${downstream_uri} "$@" >>$workdir/cdc_pulsar_consumer_stdout$log_suffix.log 2>&1 &
+cdc_pulsar_consumer --log-file $workdir/cdc_pulsar_consumer$log_suffix.log --log-level info --downstream-uri ${downstream_uri} "$@" >>$workdir/cdc_pulsar_consumer_stdout$log_suffix.log 2>&1 &
 
 cd $pwd
