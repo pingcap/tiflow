@@ -90,7 +90,7 @@ func (d *defragmenter) writeMsgsConsecutive(
 }
 
 func (d *defragmenter) dispatchFragToDMLWorker(frag eventFragment) {
-	tableName := frag.versionedTable.TableNameWithPhysicTableID
+	tableName := frag.versionedTable.TableNameWithTableID
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 	workerID := d.hasher.Sum32() % uint32(len(d.outputChs))

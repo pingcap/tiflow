@@ -62,7 +62,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	defer cancel()
 
 	table := VersionedTableName{
-		TableNameWithPhysicTableID: model.TableName{
+		TableNameWithTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
@@ -218,7 +218,7 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 
 	mockClock.Set(time.Date(2023, 3, 9, 23, 59, 59, 0, time.UTC))
 	table := VersionedTableName{
-		TableNameWithPhysicTableID: model.TableName{
+		TableNameWithTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
@@ -316,8 +316,8 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	}
 
 	table := VersionedTableName{
-		TableNameWithPhysicTableID: tableInfo.TableName,
-		TableInfoVersion:           tableInfo.Version,
+		TableNameWithTableID: tableInfo.TableName,
+		TableInfoVersion:     tableInfo.Version,
 	}
 
 	err := f.CheckOrWriteSchema(ctx, table, tableInfo)

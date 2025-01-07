@@ -72,8 +72,11 @@ type eventFragment struct {
 // messages to individual dmlWorkers.
 // The dmlWorkers will write the encoded messages to external storage in parallel between different tables.
 type DMLSink struct {
-	changefeedID         model.ChangeFeedID
-	scheme               string
+	changefeedID model.ChangeFeedID
+	scheme       string
+
+	config *cloudstorage.Config
+
 	outputRawChangeEvent bool
 	// last sequence number
 	lastSeqNum uint64
@@ -147,6 +150,7 @@ func NewDMLSink(ctx context.Context,
 	s := &DMLSink{
 		changefeedID:         changefeedID,
 		scheme:               strings.ToLower(sinkURI.Scheme),
+		config:               cfg,
 		outputRawChangeEvent: replicaConfig.Sink.CloudStorageConfig.GetOutputRawChangeEvent(),
 		encodingWorkers:      make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:              make([]*dmlWorker, cfg.WorkerCount),
@@ -249,11 +253,15 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 
+		tableID := txn.Event.GetPhysicalTableID()
+		if !s.config.EnablePartitionSeparator && txn.Event.TableInfo.IsPartitionTable() {
+			tableID = txn.Event.GetLogicalTableID()
+		}
 		tbl := cloudstorage.VersionedTableName{
-			TableNameWithPhysicTableID: model.TableName{
+			TableNameWithTableID: model.TableName{
 				Schema:      txn.Event.TableInfo.GetSchemaName(),
 				Table:       txn.Event.TableInfo.GetTableName(),
-				TableID:     txn.Event.GetPhysicalTableID(),
+				TableID:     tableID,
 				IsPartition: txn.Event.TableInfo.IsPartitionTable(),
 			},
 			TableInfoVersion: txn.Event.TableInfoVersion,

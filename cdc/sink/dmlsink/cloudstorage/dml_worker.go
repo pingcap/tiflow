@@ -233,8 +233,8 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				log.Debug("write file to storage success", zap.Int("workerID", d.id),
 					zap.String("namespace", d.changeFeedID.Namespace),
 					zap.String("changefeed", d.changeFeedID.ID),
-					zap.String("schema", table.TableNameWithPhysicTableID.Schema),
-					zap.String("table", table.TableNameWithPhysicTableID.Table),
+					zap.String("schema", table.TableNameWithTableID.Schema),
+					zap.String("table", table.TableNameWithTableID.Table),
 					zap.String("path", dataFilePath),
 				)
 			}

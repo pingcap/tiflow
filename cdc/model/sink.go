@@ -1160,6 +1160,11 @@ func (t *SingleTableTxn) GetPhysicalTableID() int64 {
 	return t.PhysicalTableID
 }
 
+// GetLogicalTableID returns the logical table id of the table in the transaction
+func (t *SingleTableTxn) GetLogicalTableID() int64 {
+	return t.TableInfo.TableName.TableID
+}
+
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
 func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string, outputRawChangeEvent bool) error {
 	if sink.IsMySQLCompatibleScheme(scheme) || outputRawChangeEvent {
