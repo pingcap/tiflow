@@ -4,7 +4,7 @@ protocol = "canal-json"
 terminator = "\n"
 # Directory date separator, Optional values are `none`, `year`, `month`, `date`. The default value is none.
 date-separator = 'day'
-# Enable partition separator. The default value is false.
+# Enable partition separator. The default value is true.
 enable-partition-separator = true
 
 [sink.csv]

@@ -27,7 +27,7 @@ ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2;
 insert into t2 values (100),(101),(102),(103),(104),(105); /*these values will be replicated to in downstream t2*/
 insert into t1 values (25),(29); /*these values will be replicated to in downstream t1.p3*/
 
-/* exchange partition ccase 2: source table and target table in different database */
+/* exchange partition case 2: source table and target table in different database */
 create database `partition_table2`;
 create table partition_table2.t2 (a int primary key);
 ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE partition_table2.t2;
