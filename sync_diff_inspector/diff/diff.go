@@ -50,7 +50,7 @@ func fileExists(name string) bool {
 	return !os.IsNotExist(err)
 }
 
-// GetSnapsnot get the snapshot
+// GetSnapshot get the snapshot
 func GetSnapshot(latestSnap []string, snap string, db *sql.DB) string {
 	if len(latestSnap) != 1 {
 		return snap

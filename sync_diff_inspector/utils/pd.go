@@ -250,6 +250,7 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, snapshotTS 
 	}
 }
 
+// ParseSnapshotToTSO parse snapshot string to TSO
 func ParseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
 	snapshotTS, err := strconv.ParseUint(snapshot, 10, 64)
 	if err == nil {
