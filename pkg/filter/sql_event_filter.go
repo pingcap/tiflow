@@ -168,6 +168,18 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if evenType == bf.RenameTable {
+		if ddl.PreTableInfo == nil {
+			log.Warn("sql event filter doesn't find old table info when the event type is `rename table`",
+				zap.String("schema", schema),
+				zap.String("table", table),
+				zap.Stringer("type", ddl.Type),
+				zap.String("query", ddl.Query))
+			return true, cerror.ErrTableIneligible.GenWithStackByArgs(ddl.TableInfo.TableName)
+		}
+		schema = ddl.PreTableInfo.TableName.Schema
+		table = ddl.PreTableInfo.TableName.Table
+	}
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
 			zap.String("type", ddl.Type.String()),
