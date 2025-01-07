@@ -72,11 +72,9 @@ type eventFragment struct {
 // messages to individual dmlWorkers.
 // The dmlWorkers will write the encoded messages to external storage in parallel between different tables.
 type DMLSink struct {
-	changefeedID model.ChangeFeedID
-	scheme       string
-
-	config *cloudstorage.Config
-
+	changefeedID         model.ChangeFeedID
+	scheme               string
+	config               *cloudstorage.Config
 	outputRawChangeEvent bool
 	// last sequence number
 	lastSeqNum uint64
@@ -254,6 +252,8 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		}
 
 		tableID := txn.Event.GetPhysicalTableID()
+		// If EnablePartitionSeparator is false, all partition data will be written to the same directory.
+		// So we need to use the logical table ID to manage file index between different partitions.
 		if !s.config.EnablePartitionSeparator && txn.Event.TableInfo.IsPartitionTable() {
 			tableID = txn.Event.GetLogicalTableID()
 		}
