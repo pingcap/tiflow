@@ -1,0 +1,8 @@
+[sink]
+protocol = "canal-json"
+# Line terminator. Empty value means "\r\n" (CRLF) is line terminators. The default value is empty.
+terminator = "\n"
+# Directory date separator, Optional values are `none`, `year`, `month`, `date`. The default value is none.
+date-separator = 'none'
+# Disable partition separator. The default value is true.
+enable-partition-separator = false
