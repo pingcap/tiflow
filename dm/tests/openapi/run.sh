@@ -189,7 +189,6 @@ function test_dump_and_load_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump & load TASK"
 	prepare_database
 
-
 	# create source successfully
 	openapi_source_check "create_source1_success"
 	# get source list success
@@ -205,9 +204,9 @@ function test_dump_and_load_task() {
 
 	# create task success: not valid task create request
 	openapi_task_check "create_task_failed"
-	
+
 	init_dump_data
-	
+
 	dump_task_name="test-dump-1"
 	# create dump task from mysql without table filter success and valid stage is "Stopped"
 	openapi_task_check "create_dump_task_without_table_filter_success" $dump_task_name
