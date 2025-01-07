@@ -156,6 +156,46 @@ func TestGenerateDataFilePath(t *testing.T) {
 	require.Equal(t, "test/table1/5/2023-01-01/CDC000002.json", path)
 }
 
+func TestGenerateDataFilePathWithPartitionTable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	table := VersionedTableName{
+		TableNameWithTableID: model.TableName{
+			Schema:      "test",
+			Table:       "table1",
+			TableID:     100,
+			IsPartition: true,
+		},
+		TableInfoVersion: 5,
+	}
+
+	// EnablePartitionSeparator is false
+	dir := t.TempDir()
+	f := testFilePathGenerator(ctx, t, dir)
+	f.config.EnablePartitionSeparator = false
+	f.versionMap[table] = table.TableInfoVersion
+	path, err := f.GenerateDataFilePath(ctx, table, "")
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/CDC000001.json", path)
+	path, err = f.GenerateDataFilePath(ctx, table, "")
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/CDC000002.json", path)
+
+	// EnablePartitionSeparator is true
+	f = testFilePathGenerator(ctx, t, dir)
+	f.config.EnablePartitionSeparator = true
+	f.versionMap[table] = table.TableInfoVersion
+	path, err = f.GenerateDataFilePath(ctx, table, "")
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/100/CDC000001.json", path)
+	path, err = f.GenerateDataFilePath(ctx, table, "")
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/100/CDC000002.json", path)
+}
+
 func TestFetchIndexFromFileName(t *testing.T) {
 	t.Parallel()
 
