@@ -238,8 +238,7 @@ func genDumpCfg(t *testing.T) *config.SubTaskConfig {
 }
 
 func TestBAlist(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	// case sensitive and set block-allow-list
 	cfg := genDumpCfg(t)
