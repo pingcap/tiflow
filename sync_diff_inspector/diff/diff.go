@@ -229,7 +229,7 @@ func (df *Diff) initCheckpoint() error {
 	return nil
 }
 
-func encodeConfig(config *report.Config) ([]byte, error) {
+func encodeReportConfig(config *report.Config) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if err := toml.NewEncoder(buf).Encode(config); err != nil {
 		return nil, errors.Trace(err)
@@ -261,12 +261,12 @@ func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
 	sourceBytes := make([][]byte, len(sourceConfigs))
 	var err error
 	for i := range sourceBytes {
-		sourceBytes[i], err = encodeConfig(sourceConfigs[i])
+		sourceBytes[i], err = encodeReportConfig(sourceConfigs[i])
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 	}
-	targetBytes, err := encodeConfig(targetConfig)
+	targetBytes, err := encodeReportConfig(targetConfig)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
