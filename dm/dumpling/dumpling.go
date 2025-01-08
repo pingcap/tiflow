@@ -343,6 +343,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		// If no block-allow-list is set, system tables are filtered by default.
 		// Different with Dumpling, dm's case sensitivity is determined by the `lower_case_table_names` parameter from upstream,
 		// so filter both uppercase and lowercase tables.
+		// TODO: use `dutils.SystemTableFilterLowercase` is workround, need to update TiDB library to be compatible with case sensitivity.
 		tableFilter, err = filter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
 		if err != nil {
 			return nil, err
