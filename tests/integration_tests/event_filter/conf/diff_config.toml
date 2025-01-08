@@ -13,7 +13,7 @@ source-instances = ["tidb0"]
 
 target-instance = "mysql1"
 
-target-check-tables = ["event_filter.t_normal", "event_filter.t_truncate", "event_filter.t_alter"]
+target-check-tables = ["event_filter.t_normal", "event_filter.t_truncate", "event_filter.t_alter", "event_filter.t_name*", "event_filter.t_rename*"]
 
 [data-sources]
 [data-sources.tidb0]
