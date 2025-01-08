@@ -166,7 +166,7 @@ func rowChangeToMsg(
 	return key, value, nil
 }
 
-func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
+func (b *BatchDecoder) msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
@@ -193,6 +193,8 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	if key.Partition != nil {
 		e.PhysicalTableID = *key.Partition
 		e.TableInfo.TableName.IsPartition = true
+	} else {
+		e.PhysicalTableID = b.tableIDAllocator.AllocateTableID(key.Schema, key.Table)
 	}
 
 	return e
@@ -201,10 +203,10 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 func rowChangeColumns2CodecColumns(cols []*model.ColumnData, tb *model.TableInfo, onlyHandleKeyColumns bool) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
-        colx := model.GetColumnDataX(col, tb)
-        if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
-            continue
-        }
+		colx := model.GetColumnDataX(col, tb)
+		if colx.ColumnData == nil || onlyHandleKeyColumns && !colx.GetFlag().IsHandleKey() {
+			continue
+		}
 		c := internal.Column{}
 		c.FromRowChangeColumn(colx)
 		jsonCols[colx.GetName()] = c
