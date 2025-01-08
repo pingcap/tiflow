@@ -385,6 +385,11 @@ func (s *schemaStorage) skipJob(job *timodel.Job) bool {
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
 		zap.String("role", s.role.String()))
+	if job.BinlogInfo.TableInfo != nil {
+		log.Info("handle DDL new commit",
+			zap.String("DDL", job.Query), zap.Stringer("job", job),
+			zap.Any("tableInfo", job.BinlogInfo.TableInfo))
+	}
 	return !job.IsDone()
 }
 
