@@ -18,7 +18,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -48,10 +47,6 @@ import (
 type tableKey struct {
 	schema string
 	table  string
-}
-
-func (k tableKey) String() string {
-	return fmt.Sprintf("%s.%s", k.schema, k.table)
 }
 
 type bufferedJSONDecoder struct {
