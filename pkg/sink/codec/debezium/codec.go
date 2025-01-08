@@ -246,6 +246,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					return
 				}
 				if v == "CURRENT_TIMESTAMP" {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteStringField("default", "1970-01-01T00:00:00Z")
+					}
 					return
 				}
 				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
@@ -703,7 +706,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 		if v == "CURRENT_TIMESTAMP" {
-			writer.WriteNullField(col.GetName())
+			if mysql.HasNotNullFlag(ft.GetFlag()) {
+				writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			} else {
+				writer.WriteNullField(col.GetName())
+			}
 			return nil
 		}
 		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
@@ -1386,7 +1393,9 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
 
-									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag)
+									updateNowWithTimestamp := mysql.HasOnUpdateNowFlag(flag) && jdbcType == internal.JavaSQLTypeTIMESTAMP_WITH_TIMEZONE
+									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag) || updateNowWithTimestamp
+
 									jWriter.WriteBoolField("autoIncremented", autoIncrementFlag)
 									jWriter.WriteBoolField("generated", autoIncrementFlag)
 								})
