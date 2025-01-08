@@ -268,7 +268,7 @@ func TestBAlist(t *testing.T) {
 	m = NewDumpling(cfg)
 	err = m.Init(ctx)
 	require.NoError(t, err)
-	tableFilter, err = tfilter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
+	tableFilter, err = tfilter.Parse(dutils.DefaultTableFilter)
 	require.NoError(t, err)
 	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
 
@@ -279,7 +279,7 @@ func TestBAlist(t *testing.T) {
 	m = NewDumpling(cfg)
 	err = m.Init(ctx)
 	require.NoError(t, err)
-	tableFilter, err = tfilter.Parse(append(dutils.DefaultTableFilter, dutils.SystemTableFilterLowercase...))
+	tableFilter, err = tfilter.Parse(dutils.DefaultTableFilter)
 	require.NoError(t, err)
 	tableFilter = tfilter.CaseInsensitive(tableFilter)
 	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)

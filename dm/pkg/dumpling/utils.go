@@ -35,10 +35,9 @@ import (
 )
 
 // DefaultTableFilter is the default table filter for dumpling.
-var (
-	DefaultTableFilter         = []string{"*.*", export.DefaultTableFilter}
-	SystemTableFilterLowercase = []string{"!/^(mysql|sys|information_schema|performance_schema|metrics_schema|inspection_schema)$/.*"}
-)
+// Different with Dumpling, dm's case sensitivity is determined by the `lower_case_table_names` parameter from upstream,
+// so filter both uppercase and lowercase tables.
+var DefaultTableFilter = []string{"*.*", export.DefaultTableFilter, "!/^(information_schema|performance_schema|metrics_schema|inspection_schema)$/.*"}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
