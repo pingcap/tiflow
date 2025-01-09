@@ -284,7 +284,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 		}
 	}
 
-	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DefaultTableFilter, filters) {
+	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual([]string{"*.*", export.DefaultTableFilter}, filters) {
 		ff, err2 := export.ParseTableFilter(tablesList, filters)
 		if err2 != nil {
 			return err2
