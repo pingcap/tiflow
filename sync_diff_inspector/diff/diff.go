@@ -863,7 +863,7 @@ func (df *Diff) removeSQLFiles(checkPointID *chunk.CID) error {
 			if len(fileIDSubstrs) != 3 {
 				return nil
 			}
-			tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := utils.GetCIDFromSQLFileName(fileIDSubstrs[2])
+			tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := utils.GetChunkIDFromSQLFileName(fileIDSubstrs[2])
 			if err != nil {
 				return errors.Trace(err)
 			}

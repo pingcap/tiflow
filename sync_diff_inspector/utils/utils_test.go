@@ -510,8 +510,8 @@ func TestGetSQLFileName(t *testing.T) {
 	require.Equal(t, GetSQLFileName(index), "1:2-3:4")
 }
 
-func TestGetCIDFromSQLFileName(t *testing.T) {
-	tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := GetCIDFromSQLFileName("11:12-13:14")
+func TestGetChunkIDFromSQLFileName(t *testing.T) {
+	tableIndex, bucketIndexLeft, bucketIndexRight, chunkIndex, err := GetChunkIDFromSQLFileName("11:12-13:14")
 	require.NoError(t, err)
 	require.Equal(t, tableIndex, 11)
 	require.Equal(t, bucketIndexLeft, 12)

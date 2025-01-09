@@ -68,8 +68,8 @@ type CID struct {
 	ChunkCnt int `json:"chunk-count"`
 }
 
-// GetInitCID return an empty CID
-func GetInitCID() *CID {
+// GetInitChunkID return an empty CID
+func GetInitChunkID() *CID {
 	return &CID{
 		TableIndex:       -1,
 		BucketIndexLeft:  -1,

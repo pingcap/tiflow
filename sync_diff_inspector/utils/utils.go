@@ -1022,8 +1022,8 @@ func GetSQLFileName(index *chunk.CID) string {
 	return fmt.Sprintf("%d:%d-%d:%d", index.TableIndex, index.BucketIndexLeft, index.BucketIndexRight, index.ChunkIndex)
 }
 
-// GetCIDFromSQLFileName convert the filename to chunk's `Index`.
-func GetCIDFromSQLFileName(fileIDStr string) (int, int, int, int, error) {
+// GetChunkIDFromSQLFileName convert the filename to chunk's `Index`.
+func GetChunkIDFromSQLFileName(fileIDStr string) (int, int, int, int, error) {
 	ids := strings.Split(fileIDStr, ":")
 	tableIndex, err := strconv.Atoi(ids[0])
 	if err != nil {

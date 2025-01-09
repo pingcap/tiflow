@@ -211,7 +211,7 @@ func (cp *Checkpoint) Init() {
 		Nodes: make([]*Node, 0),
 		CurrentSavedNode: &Node{
 			ChunkRange: &chunk.Range{
-				Index:   chunk.GetInitCID(),
+				Index:   chunk.GetInitChunkID(),
 				IsFirst: true,
 				IsLast:  true,
 			},
