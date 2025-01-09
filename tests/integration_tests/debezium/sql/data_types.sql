@@ -37,8 +37,7 @@ CREATE TABLE t_datetime(
   col_5   DATETIME(5),
   col_6   DATETIME(6),
   col_z   DATETIME DEFAULT 0,
-  -- TODO:
-  -- col_default_current_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+  col_default_current_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
   pk      INT PRIMARY KEY
 );
 
@@ -52,7 +51,7 @@ INSERT INTO t_datetime VALUES (
   '2023-11-16 12:34:56.123456',
   '2023-11-16 12:34:56.123456',
   NULL,
-  -- '2023-11-16 12:34:56.123456',
+  '2023-11-16 12:34:56.123456',
   1
 );
 
@@ -66,7 +65,7 @@ INSERT INTO t_datetime VALUES (
   '2023-11-16 12:34:56',
   '2023-11-16 12:34:56',
   NULL,
-  -- '2023-11-16 12:34:56',
+  '2023-11-16 12:34:56',
   2
 );
 
@@ -82,7 +81,7 @@ INSERT INTO t_datetime VALUES (
   '2023-11-16 12:34:56.123456',
   '2023-11-16 12:34:56.123456',
   NULL,
-  -- '2023-11-16 12:34:56.123456',
+  '2023-11-16 12:34:56.123456',
   3
 );
 
@@ -98,7 +97,7 @@ INSERT INTO t_datetime VALUES (
   NULL,
   NULL,
   NULL,
-  -- NULL,
+  NULL,
   4
 );
 
