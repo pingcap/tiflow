@@ -15,7 +15,6 @@ package debezium
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"strconv"
@@ -53,6 +52,7 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
 			if err != nil {
+				log.Error("write Debezium field value meet error", zap.Error(err))
 				break
 			}
 		}
@@ -68,13 +68,25 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 	switch col.GetType() {
 	case mysql.TypeBit:
 		n := ft.GetFlen()
+		var v uint64
+		var err error
+		if col.GetDefaultValue() != nil {
+			val, ok := col.GetDefaultValue().(string)
+			if !ok {
+				return
+			}
+			v, err = strconv.ParseUint(parseBit(val, n), 2, 64)
+			if err != nil {
+				return
+			}
+		}
 		if n == 1 {
 			writer.WriteObjectElement(func() {
 				writer.WriteStringField("type", "boolean")
 				writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
-					writer.WriteAnyField("default", col.GetDefaultValue())
+					writer.WriteBoolField("default", v != 0) // bool
 				}
 			})
 		} else {
@@ -88,7 +100,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				})
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
-					writer.WriteAnyField("default", col.GetDefaultValue())
+					c.writeBinaryField(writer, "default", getBitFromUint64(n, v)) // binary
 				}
 			})
 		}
@@ -151,12 +163,24 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				floatV, err := strconv.ParseFloat(v, 64)
+				t, err := time.Parse("2006-01-02", v)
 				if err != nil {
+					// For example, time may be invalid like 1000-00-00
+					// return nil, nil
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteInt64Field("default", 0)
+					}
 					return
 				}
-
-				writer.WriteFloat64Field("default", floatV)
+				year := t.Year()
+				if year < 70 {
+					// treats "0018" as 2018
+					t = t.AddDate(2000, 0, 0)
+				} else if year < 100 {
+					//  treats "0099" as 1999
+					t = t.AddDate(1900, 0, 0)
+				}
+				writer.WriteInt64Field("default", t.UTC().Unix()/60/60/24)
 			}
 		})
 
@@ -176,13 +200,35 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
-					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
-						writer.WriteAnyField("default", 0)
+				if v == "CURRENT_TIMESTAMP" {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+				if err != nil {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+				gt, err := t.GoTime(time.UTC)
+				if err != nil {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteInt64Field("default", 0)
 					}
 					return
 				}
-				writer.WriteStringField("default", v)
+				year := gt.Year()
+				if year < 70 {
+					// treats "0018" as 2018
+					gt = gt.AddDate(2000, 0, 0)
+				} else if year < 100 {
+					//  treats "0099" as 1999
+					gt = gt.AddDate(1900, 0, 0)
+				}
+				if ft.GetDecimal() <= 3 {
+					writer.WriteInt64Field("default", gt.UnixMilli())
+				} else {
+					writer.WriteInt64Field("default", gt.UnixMicro())
+				}
 			}
 		})
 
@@ -198,13 +244,36 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				if _, err := time.Parse("2006-01-02 15:04:05.999999", v); err != nil {
-					if mysql.HasNotNullFlag(ft.GetFlag()) || v == "CURRENT_TIMESTAMP" {
-						writer.WriteAnyField("default", 0)
+				if v == "CURRENT_TIMESTAMP" {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteStringField("default", "1970-01-01T00:00:00Z")
 					}
 					return
 				}
-				writer.WriteStringField("default", v)
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+				if err != nil {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+				if t.Compare(types.MinTimestamp) < 0 {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteStringField("default", "1970-01-01T00:00:00Z")
+					}
+					return
+				}
+				gt, err := t.GoTime(time.UTC)
+				if err != nil {
+					writer.WriteInt64Field("default", 0)
+					return
+				}
+				str := gt.Format("2006-01-02T15:04:05")
+				fsp := ft.GetDecimal()
+				if fsp > 0 {
+					tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
+					str = str + tmp[:1+fsp]
+				}
+				str += "Z"
+				writer.WriteStringField("default", str)
 			}
 		})
 
@@ -220,11 +289,11 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if !ok {
 					return
 				}
-				floatV, err := strconv.ParseFloat(v, 64)
+				d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 				if err != nil {
 					return
 				}
-				writer.WriteFloat64Field("default", floatV)
+				writer.WriteInt64Field("default", d.Microseconds())
 			}
 		})
 
@@ -340,7 +409,11 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 
 	case mysql.TypeFloat:
 		writer.WriteObjectElement(func() {
-			writer.WriteStringField("type", "float")
+			if ft.GetDecimal() != -1 {
+				writer.WriteStringField("type", "double")
+			} else {
+				writer.WriteStringField("type", "float")
+			}
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
 			if col.GetDefaultValue() != nil {
@@ -392,6 +465,13 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if err != nil {
 					return
 				}
+				if floatV < 70 {
+					// treats "DEFAULT 1" as 2001
+					floatV += 2000
+				} else if floatV < 100 {
+					//  treats "DEFAULT 99" as 1999
+					floatV += 1900
+				}
 				writer.WriteFloat64Field("default", floatV)
 			}
 		})
@@ -424,172 +504,188 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	col model.ColumnDataX,
 	ft *types.FieldType,
 ) error {
-	if col.Value == nil {
+	value := getValue(col)
+	if value == nil {
 		writer.WriteNullField(col.GetName())
 		return nil
 	}
 	switch col.GetType() {
 	case mysql.TypeBit:
-		v, ok := col.Value.(uint64)
-		if !ok {
+		n := ft.GetFlen()
+		var v uint64
+		switch val := value.(type) {
+		case uint64:
+			v = val
+		case string:
+			hexValue, err := strconv.ParseUint(parseBit(val, n), 2, 64)
+			if err != nil {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type string for bit column %s, error:%s",
+					col.GetName(), err.Error())
+			}
+			v = hexValue
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for bit column %s",
 				col.Value,
 				col.GetName())
 		}
-
 		// Debezium behavior:
 		// BIT(1) → BOOLEAN
 		// BIT(>1) → BYTES		The byte[] contains the bits in little-endian form and is sized to
 		//						contain the specified number of bits.
-		n := ft.GetFlen()
 		if n == 1 {
 			writer.WriteBoolField(col.GetName(), v != 0)
 			return nil
 		} else {
-			var buf [8]byte
-			binary.LittleEndian.PutUint64(buf[:], v)
-			numBytes := n / 8
-			if n%8 != 0 {
-				numBytes += 1
-			}
-			c.writeBinaryField(writer, col.GetName(), buf[:numBytes])
+			c.writeBinaryField(writer, col.GetName(), getBitFromUint64(n, v))
 			return nil
 		}
 
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		v, ok := col.Value.([]byte)
-		if !ok {
-			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-				"unexpected column value type %T for string column %s",
-				col.Value,
-				col.GetName())
+		isBinary := col.GetFlag().IsBinary()
+		switch v := value.(type) {
+		case []byte:
+			if !isBinary {
+				writer.WriteStringField(col.GetName(), string(hack.String(v)))
+			} else {
+				c.writeBinaryField(writer, col.GetName(), v)
+			}
+		case string:
+			if isBinary {
+				c.writeBinaryField(writer, col.GetName(), hack.Slice(v))
+			}
+			writer.WriteStringField(col.GetName(), v)
 		}
-
-		if col.GetFlag().IsBinary() {
-			c.writeBinaryField(writer, col.GetName(), v)
-			return nil
-		} else {
-			writer.WriteStringField(col.GetName(), string(hack.String(v)))
-			return nil
-		}
+		return nil
 
 	case mysql.TypeEnum:
-		v, ok := col.Value.(uint64)
+		v, ok := value.(uint64)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for enum column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), enumVar.Name)
 		return nil
 
 	case mysql.TypeSet:
-		v, ok := col.Value.(uint64)
+		v, ok := value.(uint64)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for set column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		setVar, err := types.ParseSetValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.
 			writer.WriteStringField(col.GetName(), "")
 			return nil
 		}
-
 		writer.WriteStringField(col.GetName(), setVar.Name)
 		return nil
 
 	case mysql.TypeNewDecimal:
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for decimal column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		floatV, err := strconv.ParseFloat(v, 64)
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteFloat64Field(col.GetName(), floatV)
 		return nil
 
 	case mysql.TypeDate, mysql.TypeNewDate:
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for date column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
 		t, err := time.Parse("2006-01-02", v)
 		if err != nil {
 			// For example, time may be invalid like 1000-00-00
 			// return nil, nil
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
-				return nil
 			} else {
 				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			return nil
+		}
+		year := t.Year()
+		if year < 70 {
+			// treats "0018" as 2018
+			t = t.AddDate(2000, 0, 0)
+		} else if year < 100 {
+			//  treats "0099" as 1999
+			t = t.AddDate(1900, 0, 0)
 		}
 
-		writer.WriteInt64Field(col.GetName(), t.Unix()/60/60/24)
+		writer.WriteInt64Field(col.GetName(), t.UTC().Unix()/60/60/24)
 		return nil
 
 	case mysql.TypeDatetime:
 		// Debezium behavior from doc:
 		// > Such columns are converted into epoch milliseconds or microseconds based on the
 		// > column's precision by using UTC.
-
-		// TODO: For Default Value = CURRENT_TIMESTAMP, the result is incorrect.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for datetime column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
-		t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+		if v == "CURRENT_TIMESTAMP" {
+			writer.WriteInt64Field(col.GetName(), 0)
+			return nil
+		}
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 		if err != nil {
-			// For example, time may be 1000-00-00
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
+		}
+		gt, err := t.GoTime(time.UTC)
+		if err != nil {
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
 				writer.WriteInt64Field(col.GetName(), 0)
-				return nil
 			} else {
 				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			return nil
 		}
-
+		year := gt.Year()
+		if year < 70 {
+			// treats "0018" as 2018
+			gt = gt.AddDate(2000, 0, 0)
+		} else if year < 100 {
+			//  treats "0099" as 1999
+			gt = gt.AddDate(1900, 0, 0)
+		}
 		if ft.GetDecimal() <= 3 {
-			writer.WriteInt64Field(col.GetName(), t.UnixMilli())
-			return nil
+			writer.WriteInt64Field(col.GetName(), gt.UnixMilli())
 		} else {
-			writer.WriteInt64Field(col.GetName(), t.UnixMicro())
-			return nil
+			writer.WriteInt64Field(col.GetName(), gt.UnixMicro())
 		}
+		return nil
 
 	case mysql.TypeTimestamp:
 		// Debezium behavior from doc:
@@ -601,33 +697,48 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// > based on the server (or session's) current time zone. The time zone will be queried from
 		// > the server by default. If this fails, it must be specified explicitly by the database
 		// > connectionTimeZone MySQL configuration option.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for timestamp column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
-		t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
-		if err != nil {
-			// For example, time may be invalid like 1000-00-00
+		if v == "CURRENT_TIMESTAMP" {
 			if mysql.HasNotNullFlag(ft.GetFlag()) {
-				t = time.Unix(0, 0)
+				writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
 			} else {
 				writer.WriteNullField(col.GetName())
-				return nil
 			}
+			return nil
 		}
-
-		str := t.UTC().Format("2006-01-02T15:04:05")
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
+		if err != nil {
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
+		}
+		if t.Compare(types.MinTimestamp) < 0 {
+			if col.Value == nil {
+				writer.WriteNullField(col.GetName())
+			} else {
+				writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			}
+			return nil
+		}
+		gt, err := t.GoTime(c.config.TimeZone)
+		if err != nil {
+			return cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				err)
+		}
+		str := gt.UTC().Format("2006-01-02T15:04:05")
 		fsp := ft.GetDecimal()
 		if fsp > 0 {
-			tmp := fmt.Sprintf(".%06d", t.Nanosecond()/1000)
+			tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
 			str = str + tmp[:1+fsp]
 		}
 		str += "Z"
-
 		writer.WriteStringField(col.GetName(), str)
 		return nil
 
@@ -635,62 +746,207 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		// Debezium behavior from doc:
 		// > Represents the time value in microseconds and does not include
 		// > time zone information. MySQL allows M to be in the range of 0-6.
-		v, ok := col.Value.(string)
+		v, ok := value.(string)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for time column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
-
-		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+		d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				err)
 		}
-
 		writer.WriteInt64Field(col.GetName(), d.Microseconds())
 		return nil
 
-	case mysql.TypeLonglong:
+	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
-		// So we only handle with TypeLonglong here.
-		if col.GetFlag().IsUnsigned() {
-			// Handle with BIGINT UNSIGNED.
-			// Debezium always produce INT64 instead of UINT64 for BIGINT.
-			v, ok := col.Value.(uint64)
-			if !ok {
+		isUnsigned := col.GetFlag().IsUnsigned()
+		maxValue := types.GetMaxValue(ft)
+		minValue := types.GetMinValue(ft)
+		switch v := value.(type) {
+		case uint64:
+			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-					"unexpected column value type %T for unsigned bigint column %s",
-					col.Value,
+					"unexpected column value type %T for unsigned int column %s",
+					value,
 					col.GetName())
 			}
-
-			writer.WriteInt64Field(col.GetName(), int64(v))
-			return nil
+			if ft.GetType() == mysql.TypeLonglong && v == maxValue.GetUint64() || v > maxValue.GetUint64() {
+				writer.WriteAnyField(col.GetName(), -1)
+			} else {
+				writer.WriteInt64Field(col.GetName(), int64(v))
+			}
+		case int64:
+			if isUnsigned {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type %T for int column %s",
+					value,
+					col.GetName())
+			}
+			if v < minValue.GetInt64() || v > maxValue.GetInt64() {
+				writer.WriteAnyField(col.GetName(), -1)
+			} else {
+				writer.WriteInt64Field(col.GetName(), v)
+			}
+		case string:
+			if isUnsigned {
+				t, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for unsigned int column %s",
+						col.GetName())
+				}
+				if ft.GetType() == mysql.TypeLonglong && t == maxValue.GetUint64() || t > maxValue.GetUint64() {
+					writer.WriteAnyField(col.GetName(), -1)
+				} else {
+					writer.WriteInt64Field(col.GetName(), int64(t))
+				}
+			} else {
+				t, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for int column %s",
+						col.GetName())
+				}
+				if t < minValue.GetInt64() || t > maxValue.GetInt64() {
+					writer.WriteAnyField(col.GetName(), -1)
+				} else {
+					writer.WriteInt64Field(col.GetName(), t)
+				}
+			}
 		}
+		return nil
+
+	case mysql.TypeDouble, mysql.TypeFloat:
+		if v, ok := value.(string); ok {
+			val, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type string for int column %s",
+					col.GetName())
+			}
+			writer.WriteFloat64Field(col.GetName(), val)
+		} else {
+			writer.WriteAnyField(col.GetName(), value)
+		}
+		return nil
 
 	case mysql.TypeTiDBVectorFloat32:
-		v, ok := col.Value.(types.VectorFloat32)
+		v, ok := value.(types.VectorFloat32)
 		if !ok {
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for unsigned vector column %s",
-				col.Value,
+				value,
 				col.GetName())
 		}
 		writer.WriteStringField(col.GetName(), v.String())
 		return nil
 	}
 
-	writer.WriteAnyField(col.GetName(), col.Value)
+	writer.WriteAnyField(col.GetName(), value)
 	return nil
 }
 
 func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, value []byte) {
 	// TODO: Deal with different binary output later.
 	writer.WriteBase64StringField(fieldName, value)
+}
+
+func (c *dbzCodec) writeSourceSchema(writer *util.JSONWriter) {
+	writer.WriteObjectElement(func() {
+		writer.WriteStringField("type", "struct")
+		writer.WriteArrayField("fields", func() {
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "version")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "connector")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "name")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "ts_ms")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("name", "io.debezium.data.Enum")
+				writer.WriteIntField("version", 1)
+				writer.WriteObjectField("parameters", func() {
+					writer.WriteStringField("allowed", "true,last,false,incremental")
+				})
+				writer.WriteStringField("default", "false")
+				writer.WriteStringField("field", "snapshot")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "db")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "sequence")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "table")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "server_id")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "gtid")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "file")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "pos")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int32")
+				writer.WriteBoolField("optional", false)
+				writer.WriteStringField("field", "row")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "int64")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "thread")
+			})
+			writer.WriteObjectElement(func() {
+				writer.WriteStringField("type", "string")
+				writer.WriteBoolField("optional", true)
+				writer.WriteStringField("field", "query")
+			})
+		})
+		writer.WriteBoolField("optional", false)
+		writer.WriteStringField("name", "io.debezium.connector.mysql.Source")
+		writer.WriteStringField("field", "source")
+	})
 }
 
 // EncodeKey encode RowChangedEvent into key message
@@ -770,7 +1026,6 @@ func (c *dbzCodec) EncodeValue(
 			// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 			jWriter.WriteNullField("transaction")
-
 			if e.IsInsert() {
 				// op: Mandatory string that describes the type of operation that caused the connector to generate the event.
 				// Valid values are:
@@ -833,6 +1088,16 @@ func (c *dbzCodec) EncodeValue(
 							colx := model.GetColumnDataX(col, e.TableInfo)
 							c.writeDebeziumFieldSchema(fieldsWriter, colx, colInfos[i].Ft)
 						}
+						if e.TableInfo.HasVirtualColumns() {
+							for _, colInfo := range e.TableInfo.Columns {
+								if model.IsColCDCVisible(colInfo) {
+									continue
+								}
+								data := &model.ColumnData{ColumnID: colInfo.ID}
+								colx := model.GetColumnDataX(data, e.TableInfo)
+								c.writeDebeziumFieldSchema(fieldsWriter, colx, &colInfo.FieldType)
+							}
+						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()
 					}
@@ -856,106 +1121,7 @@ func (c *dbzCodec) EncodeValue(
 							jWriter.WriteRaw(fieldsJSON)
 						})
 					})
-					jWriter.WriteObjectElement(func() {
-						jWriter.WriteStringField("type", "struct")
-						jWriter.WriteArrayField("fields", func() {
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "version")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "connector")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "name")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "ts_ms")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("name", "io.debezium.data.Enum")
-								jWriter.WriteIntField("version", 1)
-								jWriter.WriteObjectField("parameters", func() {
-									jWriter.WriteStringField("allowed", "true,last,false,incremental")
-								})
-								jWriter.WriteStringField("default", "false")
-								jWriter.WriteStringField("field", "snapshot")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "db")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "sequence")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "table")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "server_id")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "gtid")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "file")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "pos")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int32")
-								jWriter.WriteBoolField("optional", false)
-								jWriter.WriteStringField("field", "row")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "int64")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "thread")
-							})
-							jWriter.WriteObjectElement(func() {
-								jWriter.WriteStringField("type", "string")
-								jWriter.WriteBoolField("optional", true)
-								jWriter.WriteStringField("field", "query")
-							})
-							// Below are extra TiDB fields
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "int64")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "commit_ts")
-							// })
-							// jWriter.WriteObjectElement(func() {
-							// 	jWriter.WriteStringField("type", "string")
-							// 	jWriter.WriteBoolField("optional", false)
-							// 	jWriter.WriteStringField("field", "cluster_id")
-							// })
-						})
-						jWriter.WriteBoolField("optional", false)
-						jWriter.WriteStringField("name", "io.debezium.connector.mysql.Source")
-						jWriter.WriteStringField("field", "source")
-					})
+					c.writeSourceSchema(jWriter)
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "string")
 						jWriter.WriteBoolField("optional", false)
@@ -994,13 +1160,5 @@ func (c *dbzCodec) EncodeValue(
 			})
 		}
 	})
-
 	return err
-}
-
-func getSchemaTopicName(namespace string, schema string, table string) string {
-	return fmt.Sprintf("%s.%s.%s",
-		common.SanitizeName(namespace),
-		common.SanitizeName(schema),
-		common.SanitizeTopicName(table))
 }
