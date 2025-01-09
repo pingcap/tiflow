@@ -90,12 +90,9 @@ func TestDMLE2E(t *testing.T) {
 
 		require.True(t, decodedEvent.IsInsert())
 		if enableTiDBExtension {
-			require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
-			require.Equal(t, insertEvent.GetTableID(), decodedEvent.GetTableID())
-		} else {
-			require.NotZero(t, decodedEvent.GetTableID())
-			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.ID)
+			require.Equal(t, insertEvent.GetCommitTs(), decodedEvent.GetCommitTs())
 		}
+		require.NotZero(t, decodedEvent.GetTableID())
 		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
 		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
 
@@ -793,13 +790,8 @@ func TestE2EPartitionTable(t *testing.T) {
 
 		decodedEvent, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
-
-		if enableTiDBExtension {
-			require.Equal(t, decodedEvent.GetTableID(), insertEvent.GetTableID())
-		} else {
-			require.NotZero(t, decodedEvent.GetTableID())
-			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[0].ID)
-		}
+		require.NotZero(t, decodedEvent.GetTableID())
+		require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[0].ID)
 
 		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent1, nil)
 		require.NoError(t, err)
@@ -815,12 +807,8 @@ func TestE2EPartitionTable(t *testing.T) {
 		decodedEvent, err = decoder.NextRowChangedEvent()
 		require.NoError(t, err)
 
-		if enableTiDBExtension {
-			require.Equal(t, decodedEvent.GetTableID(), insertEvent1.GetTableID())
-		} else {
-			require.NotZero(t, decodedEvent.GetTableID())
-			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[1].ID)
-		}
+		require.NotZero(t, decodedEvent.GetTableID())
+		require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[1].ID)
 
 		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent2, nil)
 		require.NoError(t, err)
@@ -836,11 +824,7 @@ func TestE2EPartitionTable(t *testing.T) {
 		decodedEvent, err = decoder.NextRowChangedEvent()
 		require.NoError(t, err)
 
-		if enableTiDBExtension {
-			require.Equal(t, decodedEvent.GetTableID(), insertEvent2.GetTableID())
-		} else {
-			require.NotZero(t, decodedEvent.GetTableID())
-			require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[2].ID)
-		}
+		require.NotZero(t, decodedEvent.GetTableID())
+		require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[2].ID)
 	}
 }
