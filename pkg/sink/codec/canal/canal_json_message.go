@@ -38,6 +38,8 @@ type canalJSONMessageInterface interface {
 	getSchema() *string
 	getTable() *string
 	getCommitTs() uint64
+	getPhysicalTableID() int64
+	getTableID() int64
 	getQuery() string
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
@@ -82,6 +84,14 @@ func (c *JSONMessage) getTable() *string {
 
 // for JSONMessage, we lost the commitTs.
 func (c *JSONMessage) getCommitTs() uint64 {
+	return 0
+}
+
+func (c *JSONMessage) getTableID() int64 {
+	return 0
+}
+
+func (c *JSONMessage) getPhysicalTableID() int64 {
 	return 0
 }
 
