@@ -777,21 +777,62 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
-		// So we only handle with TypeLonglong here.
-		if col.Flag.IsUnsigned() {
-			// Handle with BIGINT UNSIGNED.
-			// Debezium always produce INT64 instead of UINT64 for BIGINT.
-			v, ok := value.(uint64)
-			if !ok {
+		isUnsigned := col.Flag.IsUnsigned()
+		maxValue := types.GetMaxValue(ft)
+		minValue := types.GetMinValue(ft)
+		switch v := value.(type) {
+		case uint64:
+			if !isUnsigned {
 				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 					"unexpected column value type %T for unsigned int column %s",
 					value,
 					col.Name)
 			}
-
-			writer.WriteInt64Field(col.Name, int64(v))
-			return nil
+			if ft.GetType() == mysql.TypeLonglong && v == maxValue.GetUint64() || v > maxValue.GetUint64() {
+				writer.WriteAnyField(col.Name, -1)
+			} else {
+				writer.WriteInt64Field(col.Name, int64(v))
+			}
+		case int64:
+			if isUnsigned {
+				return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+					"unexpected column value type %T for int column %s",
+					value,
+					col.Name)
+			}
+			if v < minValue.GetInt64() || v > maxValue.GetInt64() {
+				writer.WriteAnyField(col.Name, -1)
+			} else {
+				writer.WriteInt64Field(col.Name, v)
+			}
+		case string:
+			if isUnsigned {
+				t, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for unsigned int column %s",
+						col.Name)
+				}
+				if ft.GetType() == mysql.TypeLonglong && t == maxValue.GetUint64() || t > maxValue.GetUint64() {
+					writer.WriteAnyField(col.Name, -1)
+				} else {
+					writer.WriteInt64Field(col.Name, int64(t))
+				}
+			} else {
+				t, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+						"unexpected column value type string for int column %s",
+						col.Name)
+				}
+				if t < minValue.GetInt64() || t > maxValue.GetInt64() {
+					writer.WriteAnyField(col.Name, -1)
+				} else {
+					writer.WriteInt64Field(col.Name, t)
+				}
+			}
 		}
+		return nil
 	case mysql.TypeDouble, mysql.TypeFloat:
 		if v, ok := value.(string); ok {
 			val, err := strconv.ParseFloat(v, 64)
