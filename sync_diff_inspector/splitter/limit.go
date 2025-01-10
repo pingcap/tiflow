@@ -211,7 +211,6 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		if dataMap == nil {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
-			bucketID++
 			progress.UpdateTotal(lmt.progressID, 1, true)
 			select {
 			case <-ctx.Done():

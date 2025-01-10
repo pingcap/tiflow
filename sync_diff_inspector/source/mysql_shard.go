@@ -150,11 +150,9 @@ func (s *MySQLSources) GetCountForLackTable(ctx context.Context, tableRange *spl
 	var totalCount int64
 
 	matchSources := getMatchedSourcesForTable(s.sourceTablesMap, table)
-	if matchSources != nil {
-		for _, ms := range matchSources {
-			count, _ := dbutil.GetRowCount(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, "", nil)
-			totalCount += count
-		}
+	for _, ms := range matchSources {
+		count, _ := dbutil.GetRowCount(ctx, ms.DBConn, ms.OriginSchema, ms.OriginTable, "", nil)
+		totalCount += count
 	}
 	return totalCount
 }
