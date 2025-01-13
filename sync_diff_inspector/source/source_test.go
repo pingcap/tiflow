@@ -27,7 +27,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
@@ -293,7 +292,7 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 		"`c` char(120) NOT NULL DEFAULT '', " +
 		"PRIMARY KEY (`id`), KEY `k_1` (`k`))"
 
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 
 	table1 := &common.TableDiff{
@@ -625,7 +624,7 @@ func TestTiDBRouter(t *testing.T) {
 func prepareTiDBTables(t *testing.T, tableCases []*tableCaseType) []*common.TableDiff {
 	tableDiffs := make([]*common.TableDiff, 0, len(tableCases))
 	for n, tableCase := range tableCases {
-		tableInfo, err := dbutiltest.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
+		tableInfo, err := utils.GetTableInfoBySQL(tableCase.createTableSQL, parser.New())
 		require.NoError(t, err)
 		tableDiffs = append(tableDiffs, &common.TableDiff{
 			Schema: "source_test",

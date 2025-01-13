@@ -24,10 +24,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,10 +45,10 @@ func TestReport(t *testing.T) {
 
 	report := NewReport(task)
 	createTableSQL1 := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo1, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo1, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 	createTableSQL2 := "create table `atest`.`atbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := utils.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 
 	tableDiffs := []*common.TableDiff{
@@ -162,7 +162,7 @@ func TestCalculateTotal(t *testing.T) {
 
 	report := NewReport(task)
 	createTableSQL := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	tableDiffs := []*common.TableDiff{
@@ -209,7 +209,7 @@ func TestCalculateTotal(t *testing.T) {
 func TestPrint(t *testing.T) {
 	report := NewReport(task)
 	createTableSQL := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	tableDiffs := []*common.TableDiff{
@@ -275,13 +275,13 @@ func TestPrint(t *testing.T) {
 func TestGetSnapshot(t *testing.T) {
 	report := NewReport(task)
 	createTableSQL1 := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo1, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo1, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 	createTableSQL2 := "create table `atest`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := utils.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 	createTableSQL3 := "create table `xtest`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo3, err := dbutiltest.GetTableInfoBySQL(createTableSQL3, parser.New())
+	tableInfo3, err := utils.GetTableInfoBySQL(createTableSQL3, parser.New())
 	require.NoError(t, err)
 
 	tableDiffs := []*common.TableDiff{
@@ -392,16 +392,16 @@ func TestCommitSummary(t *testing.T) {
 	outputDir := "./"
 	report := NewReport(&config.TaskConfig{OutputDir: outputDir, FixDir: task.FixDir})
 	createTableSQL1 := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo1, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo1, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 	createTableSQL2 := "create table `atest`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
+	tableInfo2, err := utils.GetTableInfoBySQL(createTableSQL2, parser.New())
 	require.NoError(t, err)
 	createTableSQL3 := "create table `xtest`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo3, err := dbutiltest.GetTableInfoBySQL(createTableSQL3, parser.New())
+	tableInfo3, err := utils.GetTableInfoBySQL(createTableSQL3, parser.New())
 	require.NoError(t, err)
 	createTableSQL4 := "create table `xtest`.`tb1`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo4, err := dbutiltest.GetTableInfoBySQL(createTableSQL4, parser.New())
+	tableInfo4, err := utils.GetTableInfoBySQL(createTableSQL4, parser.New())
 	require.NoError(t, err)
 	tableDiffs := []*common.TableDiff{
 		{

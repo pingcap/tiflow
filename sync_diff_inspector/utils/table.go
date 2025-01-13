@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tidb/pkg/util/mock"
 )
 
@@ -191,5 +190,44 @@ func GetTableInfo(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return dbutiltest.GetTableInfoBySQL(createTableSQL, parser2)
+	return GetTableInfoBySQL(createTableSQL, parser2)
+}
+
+// GetTableInfoBySQL gets the table info from SQL.
+func GetTableInfoBySQL(createTableSQL string, parser2 *parser.Parser) (table *model.TableInfo, err error) {
+	stmt, err := parser2.ParseOneStmt(createTableSQL, "", "")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	s, ok := stmt.(*ast.CreateTableStmt)
+	if ok {
+		table, err := ddl.BuildTableInfoWithStmt(metabuild.NewContext(), s, mysql.DefaultCharset, "", nil)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		// put primary key in indices
+		if table.PKIsHandle {
+			pkIndex := &model.IndexInfo{
+				Name:    pmodel.NewCIStr("PRIMARY"),
+				Primary: true,
+				State:   model.StatePublic,
+				Unique:  true,
+				Tp:      pmodel.IndexTypeBtree,
+				Columns: []*model.IndexColumn{
+					{
+						Name:   table.GetPkName(),
+						Length: types.UnspecifiedLength,
+					},
+				},
+			}
+
+			table.Indices = append(table.Indices, pkIndex)
+		}
+
+		return table, nil
+	}
+
+	return nil, errors.Errorf("get table info from sql %s failed", createTableSQL)
 }

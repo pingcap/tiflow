@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestIndexFieldsSimple(t *testing.T) {
 		"`c` char(120) NOT NULL DEFAULT '', " +
 		"PRIMARY KEY (`id`), KEY `k_1` (`k`))"
 
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 
 	fields, err := indexFieldsFromConfigString("k", tableInfo)
@@ -61,7 +61,7 @@ func TestIndexFieldsComposite(t *testing.T) {
 		"KEY `k_1` (`k`)," +
 		"UNIQUE INDEX `c_1` (`c`))"
 
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 
 	fields, err := indexFieldsFromConfigString("id, k", tableInfo)
@@ -92,7 +92,7 @@ func TestIndexFieldsEmpty(t *testing.T) {
 		"`c` char(120) NOT NULL DEFAULT '', " +
 		"PRIMARY KEY (`id`), KEY `k_1` (`k`))"
 
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL1, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
 	require.NoError(t, err)
 
 	fields, err := indexFieldsFromConfigString("", tableInfo)
