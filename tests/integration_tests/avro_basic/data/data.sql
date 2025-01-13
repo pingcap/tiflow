@@ -172,6 +172,7 @@ create table t1(
 );
 
 insert into t1(id) values(1);
+update t1 set c1 = "null", c2 = "NULL", c3 = NULL where id = 1;
 
 create table finish_mark
 (
