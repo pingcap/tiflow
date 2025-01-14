@@ -682,3 +682,9 @@ func TestCompareBlob(t *testing.T) {
 		}
 	}
 }
+
+func TestSQLWithInvalidOptions(t *testing.T) {
+	tblInfo, err := GetTableInfoBySQL("CREATE TABLE `t4` (`create_by` datetime NOT NULL DEFAULT '0000-00-00 00:00:00')", parser.New())
+	require.NoError(t, err)
+	require.Equal(t, tblInfo.Columns[0].DefaultValue.(string), "0000-00-00 00:00:00")
+}

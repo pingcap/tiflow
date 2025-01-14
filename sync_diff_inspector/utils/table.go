@@ -203,7 +203,7 @@ func GetTableInfoBySQL(createTableSQL string, parser2 *parser.Parser) (table *mo
 
 	s, ok := stmt.(*ast.CreateTableStmt)
 	if ok {
-		table, err := ddl.BuildTableInfoWithStmt(metabuild.NewContext(), s, mysql.DefaultCharset, "", nil)
+		table, err := ddl.BuildTableInfoWithStmt(metabuild.NewNonStrictContext(), s, mysql.DefaultCharset, "", nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
