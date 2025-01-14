@@ -244,6 +244,22 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 		return fmt.Errorf("cannot found partition for column value %s", columnValue)
 	// todo: support following rule if meet the corresponding workload
 	case pmodel.PartitionTypeHash:
+		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
+		columns := event.Columns
+		if columns == nil {
+			columns = event.PreColumns
+		}
+		var columnValue int64
+		for _, col := range columns {
+			if col.ColumnID == targetColumnID {
+				columnValue = col.Value.(int64)
+				break
+			}
+		}
+		result := columnValue % int64(len(event.TableInfo.Partition.Definitions))
+		partitionID := event.TableInfo.GetPartitionInfo().Definitions[result].ID
+		event.PhysicalTableID = partitionID
+		return nil
 	case pmodel.PartitionTypeKey:
 	case pmodel.PartitionTypeList:
 	case pmodel.PartitionTypeNone:
