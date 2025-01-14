@@ -166,13 +166,16 @@ insert into t(c_tinyint, c_mediumint, c_int, c_bigint, a) values (5, "234", 6, 7
 
 create table t1(
     id int primary key,
-    c1 varchar(255) DEFAULT "null",
-    c2 varchar(255) DEFAULT "NULL",
-    c3 varchar(255) DEFAULT NULL
+    c1 varchar(255) default "null",
+    c2 varchar(255) default "NULL",
+    c3 varchar(255) default null
 );
 
 insert into t1(id) values(1);
-update t1 set c1 = "null", c2 = "NULL", c3 = NULL where id = 1;
+update t1 set c1 = "null", c2 = "NULL", c3 = null where id = 1;
+alter table t1 add column col json not null;
+alter table t1 modify column col json default null;
+insert into t1(id) values(2);
 
 create table finish_mark
 (
