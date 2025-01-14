@@ -164,7 +164,11 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
 
 // Close implements util.Runnable.
-func (p *ddlJobPullerImpl) Close() {}
+func (p *ddlJobPullerImpl) Close() {
+	if p.mp != nil {
+		p.mp.Close()
+	}
+}
 
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
@@ -714,6 +718,12 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
 
+	defer func() {
+		log.Info("DDL puller stopped",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+	}()
+
 	return g.Wait()
 }
 
@@ -731,10 +741,13 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 
 // Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
-	log.Info("close the ddl puller",
+	h.cancel()
+	if h.ddlJobPuller != nil {
+		h.ddlJobPuller.Close()
+	}
+	log.Info("DDL puller closed",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
-	h.cancel()
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {
