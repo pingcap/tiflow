@@ -227,11 +227,16 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 			}
 		}
 		for _, partition := range event.TableInfo.Partition.Definitions {
-			if partition.LessThan[0] == "MAXVALUE" {
+			lessThan := partition.LessThan[0]
+			if lessThan == "MAXVALUE" {
 				event.PhysicalTableID = partition.ID
 				return nil
 			}
-			if strings.Compare(columnValue, partition.LessThan[0]) == -1 {
+			if len(columnValue) < len(lessThan) {
+				event.PhysicalTableID = partition.ID
+				return nil
+			}
+			if strings.Compare(columnValue, lessThan) == -1 {
 				event.PhysicalTableID = partition.ID
 				return nil
 			}

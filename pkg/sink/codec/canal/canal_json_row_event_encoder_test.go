@@ -729,6 +729,63 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	}
 }
 
+func TestE2EPartitionTableByRange(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test")
+
+	createTableDDLEvent := helper.DDL2Event(`create table t (id int primary key, a int) PARTITION BY RANGE ( id ) (
+		PARTITION p0 VALUES LESS THAN (6),
+		PARTITION p1 VALUES LESS THAN (11),
+		PARTITION p2 VALUES LESS THAN (21))`)
+	require.NotNil(t, createTableDDLEvent)
+
+	insertEvent := helper.DML2Event(`insert into t (id) values (6)`, "test", "t", "p1")
+	require.NotNil(t, insertEvent)
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+
+	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	message, err := encoder.EncodeDDLEvent(createTableDDLEvent)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	tp, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeDDL, tp)
+
+	decodedDDL, err := decoder.NextDDLEvent()
+	require.NoError(t, err)
+	require.NotNil(t, decodedDDL)
+
+	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, nil)
+	require.NoError(t, err)
+	message = encoder.Build()[0]
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+	tp, hasNext, err = decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, tp)
+
+	decodedEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.NotZero(t, decodedEvent.GetTableID())
+	require.Equal(t, decodedEvent.GetTableID(), decodedEvent.TableInfo.GetPartitionInfo().Definitions[1].ID)
+}
+
 func TestE2EPartitionTable(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
