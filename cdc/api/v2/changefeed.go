@@ -944,6 +944,10 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		cfg.ReplicaConfig.SyncedStatus.CheckpointInterval = status.CheckpointInterval
 		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
 	}
+	if err := c.BindJSON(cfg); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
 
 	// try to get pd client to get pd time, and determine synced status based on the pd time
 	var pdClient pd.Client
@@ -959,7 +963,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 		if err != nil {
 			// case 1. we can't get pd client, pd may be unavailable.
 			//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
