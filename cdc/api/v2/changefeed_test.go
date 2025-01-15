@@ -77,7 +77,7 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 
-	case 1: json format mismatches with the spec.
+	// case 1: json format mismatches with the spec.
 	errConfig := struct {
 		ID        string `json:"changefeed_id"`
 		Namespace string `json:"namespace"`
