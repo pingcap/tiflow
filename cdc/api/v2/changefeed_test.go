@@ -76,7 +76,7 @@ func TestCreateChangefeed(t *testing.T) {
 	ctrl := mock_controller.NewMockController(gomock.NewController(t))
 	cp.EXPECT().GetController().Return(ctrl, nil).AnyTimes()
 
-	case 1: json format mismatches with the spec.
+	// case 1: json format mismatches with the spec.
 	errConfig := struct {
 		ID        string `json:"changefeed_id"`
 		Namespace string `json:"namespace"`

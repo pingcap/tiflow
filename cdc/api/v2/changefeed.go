@@ -69,7 +69,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 	var pdClient pd.Client
 	var kvStorage kv.Storage
-	var etcdCli *clientv3.Client
 	// if PDAddrs is empty, use the default pdClient
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
@@ -79,7 +78,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		}
 		pdClient = up.PDClient
 		kvStorage = up.KVStorage
-		etcdCli = h.capture.GetEtcdClient().GetEtcdClient().Unwrap()
 	} else {
 		credential := cfg.PDConfig.toCredential()
 		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -87,7 +85,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		var err error
 		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
 			return
 		}
 		defer pdClient.Close()
@@ -95,17 +93,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		kvStorage, err = h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 		if err != nil {
 			_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
-			return
-		}
-		// cannot create changefeed if there are running lightning/restore tasks
-		tlsCfg, err := credential.ToTLSConfig()
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-		etcdCli, err = h.helpers.getEtcdClient(ctx, cfg.PDAddrs, tlsCfg)
-		if err != nil {
-			_ = c.Error(err)
 			return
 		}
 	}
@@ -154,6 +141,23 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
 
+	var etcdCli *clientv3.Client
+	if len(cfg.PDAddrs) == 0 {
+		etcdCli = h.capture.GetEtcdClient().GetEtcdClient().Unwrap()
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		// cannot create changefeed if there are running lightning/restore tasks
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		etcdCli, err = h.helpers.getEtcdClient(ctx, cfg.PDAddrs, tlsCfg)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}
 	err = hasRunningImport(ctx, etcdCli)
 	if err != nil {
 		log.Error("failed to create changefeed", zap.Error(err))
