@@ -939,9 +939,11 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		cfg.ReplicaConfig.SyncedStatus.CheckpointInterval = status.CheckpointInterval
 		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
 	}
-	if err := c.BindJSON(cfg); err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
+	if c.Request.Body != nil && c.Request.ContentLength > 0 {
+		if err := c.BindJSON(cfg); err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
 	}
 
 	// try to get pd client to get pd time, and determine synced status based on the pd time
