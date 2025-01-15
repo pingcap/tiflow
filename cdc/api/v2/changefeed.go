@@ -1114,12 +1114,3 @@ func getCaptureDefaultUpstream(cp capture.Capture) (*upstream.Upstream, error) {
 	}
 	return up, nil
 }
-
-func getUpstreamPDConfig(up *upstream.Upstream) PDConfig {
-	return PDConfig{
-		PDAddrs:  up.PdEndpoints,
-		KeyPath:  up.SecurityConfig.KeyPath,
-		CAPath:   up.SecurityConfig.CAPath,
-		CertPath: up.SecurityConfig.CertPath,
-	}
-}
