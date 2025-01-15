@@ -684,7 +684,13 @@ func TestCompareBlob(t *testing.T) {
 }
 
 func TestSQLWithInvalidOptions(t *testing.T) {
+	// Test parse SQL with invalid default value
 	tblInfo, err := GetTableInfoBySQL("CREATE TABLE `t4` (`create_by` datetime NOT NULL DEFAULT '0000-00-00 00:00:00')", parser.New())
 	require.NoError(t, err)
 	require.Equal(t, tblInfo.Columns[0].DefaultValue.(string), "0000-00-00 00:00:00")
+
+	// Test parse SQL with other charset
+	tblInfo, err = GetTableInfoBySQL("create table t1 (id int, name varchar(20), primary key(`id`)) character set gbk", parser.New())
+	require.NoError(t, err)
+	require.Equal(t, tblInfo.Charset, "gbk")
 }
