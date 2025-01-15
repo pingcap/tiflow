@@ -647,6 +647,8 @@ func TestVerifyTable(t *testing.T) {
 
 	// case 2: kv create failed
 	updateCfg := getDefaultVerifyTableConfig()
+	// arbitrary pd address to trigger create new pd client
+	updateCfg.PDAddrs = []string{"http://127.0.0.1:2379"}
 	body, err := json.Marshal(&updateCfg)
 	require.Nil(t, err)
 	helpers.EXPECT().
