@@ -345,6 +345,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		kvStore, err = h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
 		if err != nil {
 			_ = c.Error(errors.Trace(err))
+			return
 		}
 	}
 
