@@ -77,7 +77,7 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 
-	// case 1: json format mismatches with the spec.
+	case 1: json format mismatches with the spec.
 	errConfig := struct {
 		ID        string `json:"changefeed_id"`
 		Namespace string `json:"namespace"`
@@ -110,7 +110,7 @@ func TestCreateChangefeed(t *testing.T) {
 		ID:        changeFeedID.ID,
 		Namespace: changeFeedID.Namespace,
 		SinkURI:   blackholeSink,
-		PDAddrs:   []string{},
+		PDAddrs:   []string{"http://127.0.0.1:2379"}, // arbitrary pd address to trigger create new pd client
 	}
 	body, err := json.Marshal(&cfConfig)
 	require.Nil(t, err)
