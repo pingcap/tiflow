@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## test the same logic as `sync_status``, but with redo mode
+## test the same logic as `sync_status`, but with redo mode
 
 #!/bin/bash
 
