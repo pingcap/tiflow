@@ -61,7 +61,10 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// According to the https://github.com/IBM/sarama/issues/2619,
 	// sarama may send message out of order even set the `config.Net.MaxOpenRequest` to 1,
 	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
-	config.Producer.Retry.Max = 0
+	// config.Producer.Retry.Max = 0
+	config.Producer.Idempotent = true
+	// config.Net.MaxOpenRequests = 1
+	config.Producer.RequiredAcks = sarama.WaitForAll
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0
@@ -69,7 +72,6 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.Flush.Frequency = time.Duration(0)
 	config.Producer.Flush.MaxMessages = o.MaxMessages
 
-	config.Net.MaxOpenRequests = 1
 	config.Net.DialTimeout = o.DialTimeout
 	config.Net.WriteTimeout = o.WriteTimeout
 	config.Net.ReadTimeout = o.ReadTimeout
@@ -78,7 +80,6 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
 	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
