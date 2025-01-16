@@ -19,14 +19,13 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRowData(t *testing.T) {
 	createTableSQL := "create table test.test(id int(24), name varchar(24), age int(24), primary key(id, name));"
-	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
 	require.NoError(t, err)
 
 	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)

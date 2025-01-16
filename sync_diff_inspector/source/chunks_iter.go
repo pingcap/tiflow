@@ -28,9 +28,6 @@ import (
 
 // ChunksIterator is used for single mysql/tidb source.
 type ChunksIterator struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-
 	ID            *chunk.CID
 	tableAnalyzer TableAnalyzer
 
@@ -39,7 +36,8 @@ type ChunksIterator struct {
 	errCh            chan error
 	splitThreadCount int
 
-	pool *utils.WorkerPool
+	cancel context.CancelFunc
+	pool   *utils.WorkerPool
 }
 
 // NewChunksIterator returns a new iterator
@@ -52,9 +50,6 @@ func NewChunksIterator(
 ) (*ChunksIterator, error) {
 	ctxx, cancel := context.WithCancel(ctx)
 	iter := &ChunksIterator{
-		ctx:    ctxx,
-		cancel: cancel,
-
 		splitThreadCount: splitThreadCount,
 		tableAnalyzer:    analyzer,
 		TableDiffs:       tableDiffs,
@@ -62,18 +57,15 @@ func NewChunksIterator(
 		// reserve 30 capacity for each goroutine on average
 		chunksCh: make(chan *splitter.RangeInfo, 30*splitThreadCount),
 		errCh:    make(chan error, len(tableDiffs)),
+		cancel:   cancel,
 		pool:     utils.NewWorkerPool(uint(splitThreadCount), "chunks producer"),
 	}
-	go iter.produceChunks(startRange)
+	go iter.produceChunks(ctxx, startRange)
 	return iter, nil
 }
 
-func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
-	defer func() {
-		t.pool.WaitFinished()
-		close(t.chunksCh)
-	}()
-
+func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter.RangeInfo) {
+	defer close(t.chunksCh)
 	nextTableIndex := 0
 
 	// If chunkRange
@@ -81,11 +73,10 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 		curIndex := startRange.GetTableIndex()
 		curTable := t.TableDiffs[curIndex]
 		nextTableIndex = curIndex + 1
-
 		// if this chunk is empty, data-check for this table should be skipped
 		if startRange.ChunkRange.Type != chunk.Empty {
 			t.pool.Apply(func() {
-				chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(t.ctx, curTable, startRange)
+				chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, curTable, startRange)
 				if err != nil {
 					t.errCh <- errors.Trace(err)
 					return
@@ -102,7 +93,7 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 					}
 					c.Index.TableIndex = curIndex
 					select {
-					case <-t.ctx.Done():
+					case <-ctx.Done():
 						log.Info("Stop do produce chunks by context done")
 						return
 					case t.chunksCh <- &splitter.RangeInfo{
@@ -125,7 +116,7 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 				progressID := dbutil.TableName(table.Schema, table.Table)
 				progress.StartTable(progressID, 1, true)
 				select {
-				case <-t.ctx.Done():
+				case <-ctx.Done():
 					log.Info("Stop do produce chunks by context done")
 					return
 				case t.chunksCh <- &splitter.RangeInfo{
@@ -146,7 +137,7 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 
 		t.pool.Apply(func() {
 			table := t.TableDiffs[curTableIndex]
-			chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(t.ctx, table, nil)
+			chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, table, nil)
 			if err != nil {
 				t.errCh <- errors.Trace(err)
 				return
@@ -163,7 +154,7 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 				}
 				c.Index.TableIndex = curTableIndex
 				select {
-				case <-t.ctx.Done():
+				case <-ctx.Done():
 					log.Info("Stop do produce chunks by context done")
 					return
 				case t.chunksCh <- &splitter.RangeInfo{
@@ -175,6 +166,7 @@ func (t *ChunksIterator) produceChunks(startRange *splitter.RangeInfo) {
 			}
 		})
 	}
+	t.pool.WaitFinished()
 }
 
 // Next returns the next chunk

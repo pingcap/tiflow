@@ -6,6 +6,7 @@
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
+	sync-diff-inspector \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
 	format-makefiles check-makefiles oauth2_server prepare_test_binaries
 
@@ -219,14 +220,13 @@ check_third_party_binary:
 	@which bin/pd-server
 	@which bin/tiflash
 	@which bin/pd-ctl
-	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer oauth2_server sync-diff-inspector
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -253,7 +253,7 @@ build_mysql_integration_test_images: ## Build MySQL integration test images with
 build_mysql_integration_test_images: clean_integration_test_containers
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml build --no-cache
 
-integration_test_kafka: check_third_party_binary
+integration_test_kafka: check_third_party_binary sync-diff-inspector
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
 integration_test_storage:
@@ -385,6 +385,9 @@ clean:
 	rm -rf tools/bin
 	rm -rf tools/include
 
+sync-diff-inspector:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector
+
 dm: dm-master dm-worker dmctl dm-syncer
 
 dm-master:
@@ -443,7 +446,7 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
 	$(FAILPOINT_DISABLE)
 
-dm_integration_test_build: check_failpoint_ctl
+dm_integration_test_build: check_failpoint_ctl sync-diff-inspector
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/dm/... \
@@ -495,9 +498,8 @@ install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
 
-check_third_party_binary_for_dm:
+check_third_party_binary_for_dm : sync-diff-inspector
 	@which bin/tidb-server
-	@which bin/sync_diff_inspector
 	@which mysql
 	@which bin/minio
 
@@ -554,7 +556,7 @@ tiflow-chaos-case:
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: check_third_party_binary_for_engine
+engine_integration_test: check_third_party_binary_for_engine sync-diff-inspector
 	mkdir -p /tmp/tiflow_engine_test || true
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
 	./engine/test/utils/check_log.sh
@@ -566,7 +568,6 @@ check_third_party_binary_for_engine:
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
 	@which mc || (echo "mc not found in ${PATH}, you can use 'make bin/mc' and move bin/mc to ${PATH}"; exit 1)
-	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
@@ -580,9 +581,6 @@ check_cdc_integration_test:
 
 bin/mc:
 	./scripts/download-mc.sh
-
-bin/sync_diff_inspector:
-	./scripts/download-sync-diff.sh
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)
