@@ -401,8 +401,18 @@ func rowToAvroSchema(
 			}
 		} else {
 			if col.Flag.IsNullable() {
+				// the string literal "null" must be coerced to a `nil`
+				// see https://github.com/linkedin/goavro/blob/5ec5a5ee7ec82e16e6e2b438d610e1cab2588393/record.go#L109-L114
 				// https://stackoverflow.com/questions/22938124/avro-field-default-values
+				defaultFirst := false
 				if defaultValue == nil {
+					defaultFirst = true
+				} else if s, ok := defaultValue.(string); ok && s == "null" {
+					defaultFirst = true
+				} else if b, ok := defaultValue.([]byte); ok && string(b) == "null" {
+					defaultFirst = true
+				}
+				if defaultFirst {
 					field["type"] = []interface{}{"null", avroType}
 				} else {
 					field["type"] = []interface{}{avroType, "null"}
