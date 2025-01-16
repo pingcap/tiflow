@@ -46,7 +46,7 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 	if row.CommitTs > g.highWatermark {
 		g.highWatermark = row.CommitTs
 	}
-	log.Info("DML event received",
+	log.Debug("DML event received",
 		zap.Int32("partition", g.partition),
 		zap.Any("offset", offset),
 		zap.Uint64("commitTs", row.CommitTs),
