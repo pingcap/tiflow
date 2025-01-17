@@ -168,7 +168,8 @@ create table t1(
     id int primary key,
     c1 varchar(255) default "null",
     c2 varchar(255) default "NULL",
-    c3 varchar(255) default null
+    c3 varchar(255) default null,
+    c4 varbinary(100) DEFAULT b'01101110011101010110110001101100'
 );
 
 insert into t1(id) values(1);
