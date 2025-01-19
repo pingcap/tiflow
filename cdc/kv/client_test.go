@@ -431,7 +431,7 @@ func TestGetStoreFailed(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
