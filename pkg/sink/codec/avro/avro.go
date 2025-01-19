@@ -560,12 +560,10 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 			}
 		} else {
 			if colx.GetFlag().IsNullable() {
+				// the string literal "null" must be coerced to a `nil`
+				// see https://github.com/linkedin/goavro/blob/5ec5a5ee7ec82e16e6e2b438d610e1cab2588393/record.go#L109-L114
 				// https://stackoverflow.com/questions/22938124/avro-field-default-values
-<<<<<<< HEAD
-				if defaultValue == nil {
-=======
 				if defaultValue == nil || defaultValue == "null" {
->>>>>>> 2e6f4b1cde (sink(ticdc): fix incorrect encoding default value in Avro protocol (#12018))
 					field["type"] = []interface{}{"null", avroType}
 				} else {
 					field["type"] = []interface{}{avroType, "null"}
