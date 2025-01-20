@@ -123,13 +123,6 @@ func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems 
 		return errors.Trace(err)
 	}
 
-	if metaData.IsDefined("sink", "enable-partition-separator") {
-		log.Warn("sink.enable-partition-separator is deprecated and will be removed in future versions. " +
-			"The default value for sink.enable-partition-separator is true. " +
-			"Changing it to false may lead to data inconsistency issues. " +
-			"Please update your configuration as needed.")
-	}
-
 	// check if item is a ignoreCheckItem
 	hasIgnoreItem := func(item []string) bool {
 		for _, ignoreCheckItem := range ignoreCheckItems {
