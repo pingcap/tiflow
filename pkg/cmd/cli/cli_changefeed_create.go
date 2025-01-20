@@ -200,8 +200,8 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 
 		if metaData.IsDefined("sink", "enable-partition-separator") {
 			cmd.Println(color.HiYellowString("sink.enable-partition-separator is deprecated and will be removed in future versions. " +
-				"The default value for sink.enable-partition-separator is true. " +
-				"Changing it to false may lead to data inconsistency issues. " +
+				"The default value for sink.enable-partition-separator is `true`. " +
+				"Changing it to `false` may lead to data inconsistency issues. " +
 				"Please update your configuration as needed."))
 		}
 	}
