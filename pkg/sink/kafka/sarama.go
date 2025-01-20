@@ -63,7 +63,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
 	// config.Producer.Retry.Max = 0
 	config.Producer.Idempotent = true
-	// config.Net.MaxOpenRequests = 1
+	config.Net.MaxOpenRequests = 1
 	config.Producer.RequiredAcks = sarama.WaitForAll
 
 	// make sure sarama producer flush messages as soon as possible.
