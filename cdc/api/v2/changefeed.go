@@ -24,12 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
-	tidbkv "github.com/pingcap/tidb/kv"
-=======
-	"github.com/pingcap/tidb/pkg/kv"
-	tidbkv "github.com/pingcap/tidb/pkg/kv"
->>>>>>> ef964545cc (api(cdc): fix create changefeed after scale-in pd (#12003))
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -82,26 +77,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 			_ = c.Error(err)
 			return
 		}
-<<<<<<< HEAD
-		cfg.PDConfig = getUpstreamPDConfig(up)
-	}
-	credential := cfg.PDConfig.toCredential()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
-		return
-	}
-	defer pdClient.Close()
-
-	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
-		return
-=======
 		pdClient = up.PDClient
 		kvStorage = up.KVStorage
 	} else {
@@ -116,12 +91,11 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		}
 		defer pdClient.Close()
 		// verify tables todo: del kvstore
-		kvStorage, err = h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
+		kvStorage, err = h.helpers.createTiStore(cfg.PDAddrs, credential)
 		if err != nil {
 			_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 			return
 		}
->>>>>>> ef964545cc (api(cdc): fix create changefeed after scale-in pd (#12003))
 	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
@@ -173,23 +147,13 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 			_ = c.Error(err)
 			return
 		}
-		etcdCli, err = h.helpers.getEtcdClient(ctx, cfg.PDAddrs, tlsCfg)
+		etcdCli, err = h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
 	}
-<<<<<<< HEAD
-
-	cli, err := h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	err = hasRunningImport(ctx, cli)
-=======
 	err = hasRunningImport(ctx, etcdCli)
->>>>>>> ef964545cc (api(cdc): fix create changefeed after scale-in pd (#12003))
 	if err != nil {
 		log.Error("failed to create changefeed", zap.Error(err))
 		_ = c.Error(
@@ -344,8 +308,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	ctx := c.Request.Context()
-	var kvStore tidbkv.Storage
+	var kvStore kv.Storage
 	// if PDAddrs is empty, use the default upstream
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
@@ -353,39 +316,15 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 			_ = c.Error(err)
 			return
 		}
-<<<<<<< HEAD
-		cfg.PDConfig = getUpstreamPDConfig(up)
-	}
-	credential := cfg.PDConfig.toCredential()
-=======
 		kvStore = up.KVStorage
 	} else {
 		credential := cfg.PDConfig.toCredential()
 		var err error
-		kvStore, err = h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
+		kvStore, err = h.helpers.createTiStore(cfg.PDAddrs, credential)
 		if err != nil {
 			_ = c.Error(errors.Trace(err))
 			return
 		}
-	}
-
-	uri, err := url.Parse(cfg.SinkURI)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	scheme := uri.Scheme
-	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
-		return r == '/'
-	})
-	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
-	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
->>>>>>> ef964545cc (api(cdc): fix create changefeed after scale-in pd (#12003))
-
-	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(err)
-		return
 	}
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := h.helpers.
@@ -492,7 +431,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	var storage tidbkv.Storage
+	var storage kv.Storage
 	// if PDAddrs is not empty, use it to create a new kvstore
 	// Note: upManager is nil in some unit test cases
 	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
