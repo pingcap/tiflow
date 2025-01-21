@@ -97,16 +97,9 @@ func TestCreateChangefeed(t *testing.T) {
 		SinkURI string   `json:"sink_uri"`
 		PDAddrs []string `json:"pd_addrs"`
 	}{
-<<<<<<< HEAD
 		ID:      changeFeedID.ID,
 		SinkURI: blackholeSink,
-		PDAddrs: []string{},
-=======
-		ID:        changeFeedID.ID,
-		Namespace: changeFeedID.Namespace,
-		SinkURI:   blackholeSink,
-		PDAddrs:   []string{"http://127.0.0.1:2379"}, // arbitrary pd address to trigger create new pd client
->>>>>>> ef964545cc (api(cdc): fix create changefeed after scale-in pd (#12003))
+		PDAddrs: []string{"http://127.0.0.1:2379"}, // arbitrary pd address to trigger create new pd client
 	}
 	body, err := json.Marshal(&cfConfig)
 	require.Nil(t, err)
