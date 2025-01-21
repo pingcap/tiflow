@@ -24,7 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -68,30 +68,34 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	var pdClient pd.Client
+	var kvStorage kv.Storage
+	// if PDAddrs is empty, use the default pdClient
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		cfg.PDConfig = getUpstreamPDConfig(up)
-	}
-	credential := cfg.PDConfig.toCredential()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
-		return
-	}
-	defer pdClient.Close()
-
-	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
-		return
+		pdClient = up.PDClient
+		kvStorage = up.KVStorage
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		var err error
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
+			return
+		}
+		defer pdClient.Close()
+		// verify tables todo: del kvstore
+		kvStorage, err = h.helpers.createTiStore(cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
+			return
+		}
 	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
@@ -132,19 +136,24 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
 
-	// cannot create changefeed if there are running lightning/restore tasks
-	tlsCfg, err := credential.ToTLSConfig()
-	if err != nil {
-		_ = c.Error(err)
-		return
+	var etcdCli *clientv3.Client
+	if len(cfg.PDAddrs) == 0 {
+		etcdCli = h.capture.GetEtcdClient().GetEtcdClient().Unwrap()
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		// cannot create changefeed if there are running lightning/restore tasks
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		etcdCli, err = h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
 	}
-
-	cli, err := h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	err = hasRunningImport(ctx, cli)
+	err = hasRunningImport(ctx, etcdCli)
 	if err != nil {
 		log.Error("failed to create changefeed", zap.Error(err))
 		_ = c.Error(
@@ -299,20 +308,23 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	var kvStore kv.Storage
+	// if PDAddrs is empty, use the default upstream
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		cfg.PDConfig = getUpstreamPDConfig(up)
-	}
-	credential := cfg.PDConfig.toCredential()
-
-	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(err)
-		return
+		kvStore = up.KVStorage
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		var err error
+		kvStore, err = h.helpers.createTiStore(cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(errors.Trace(err))
+			return
+		}
 	}
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := h.helpers.
@@ -419,7 +431,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	var storage tidbkv.Storage
+	var storage kv.Storage
 	// if PDAddrs is not empty, use it to create a new kvstore
 	// Note: upManager is nil in some unit test cases
 	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
@@ -866,48 +878,55 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		cfg.ReplicaConfig.SyncedStatus.CheckpointInterval = status.CheckpointInterval
 		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
 	}
+	if c.Request.Body != nil && c.Request.ContentLength > 0 {
+		if err := c.BindJSON(cfg); err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
+	}
 
 	// try to get pd client to get pd time, and determine synced status based on the pd time
+	var pdClient pd.Client
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		cfg.PDConfig = getUpstreamPDConfig(up)
-	}
-	credential := cfg.PDConfig.toCredential()
+		pdClient = up.PDClient
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		// case 1. we can't get pd client, pd may be unavailable.
-		//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
-		//         otherwise, if pd is unavailable, we decide data whether is synced based on
-		//         the time difference between current time and lastSyncedTs.
-		var message string
-		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
-			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
-			message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
-		} else {
-			message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
-				"If pd is offline, please check whether we satisfy the condition that "+
-				"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
-				"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+		if err != nil {
+			// case 1. we can't get pd client, pd may be unavailable.
+			//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
+			//         otherwise, if pd is unavailable, we decide data whether is synced based on
+			//         the time difference between current time and lastSyncedTs.
+			var message string
+			if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
+				cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
+				message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
+			} else {
+				message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
+					"If pd is offline, please check whether we satisfy the condition that "+
+					"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
+					"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
+			}
+			c.JSON(http.StatusOK, SyncedStatus{
+				Synced:           false,
+				SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+				PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+				LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+				NowTs:            model.JSONTime(time.Unix(0, 0)),
+				Info:             message,
+			})
+			return
 		}
-		c.JSON(http.StatusOK, SyncedStatus{
-			Synced:           false,
-			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
-			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
-			NowTs:            model.JSONTime(time.Unix(0, 0)),
-			Info:             message,
-		})
-		return
+		defer pdClient.Close()
 	}
-	defer pdClient.Close()
 	// get time from pd
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
@@ -1026,13 +1045,4 @@ func getCaptureDefaultUpstream(cp capture.Capture) (*upstream.Upstream, error) {
 		return nil, errors.Trace(err)
 	}
 	return up, nil
-}
-
-func getUpstreamPDConfig(up *upstream.Upstream) PDConfig {
-	return PDConfig{
-		PDAddrs:  up.PdEndpoints,
-		KeyPath:  up.SecurityConfig.KeyPath,
-		CAPath:   up.SecurityConfig.CAPath,
-		CertPath: up.SecurityConfig.CertPath,
-	}
 }
