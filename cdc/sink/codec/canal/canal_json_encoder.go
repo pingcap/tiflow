@@ -349,7 +349,8 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(c.config.Terminator) > 0 {
+
+	if c.config.IsStorageScheme && len(c.config.Terminator) > 0 {
 		value = append(value, c.config.Terminator...)
 	}
 
