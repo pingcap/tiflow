@@ -337,6 +337,24 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
+<<<<<<< HEAD
+=======
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
+		job.BinlogInfo.SchemaVersion == 0 /* means the ddl is ignored in upstream */ {
+		log.Info("ddl job finishedTs less than puller resolvedTs,"+
+			"discard the ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
+		return true, nil
+	}
+
+>>>>>>> 7f57e1f548 (ddl(ticdc): ignore ddl with schemaversion 0 (#11856))
 	defer func() {
 		if skip && err == nil {
 			log.Info("ddl job schema or table does not match, discard it",

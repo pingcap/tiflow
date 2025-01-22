@@ -31,6 +31,7 @@ storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_t
 declare -A groups
 groups=(
 	# Note: only the tests in the first three groups are running in storage sink pipeline.
+<<<<<<< HEAD
 	["G00"]="$mysql_only $kafka_only $storage_only"
 	["G01"]="$mysql_only_http $kafka_only_protocol $storage_only_canal_json multi_tables_ddl"
 	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
@@ -50,6 +51,44 @@ groups=(
 	# currently G16 is not running in kafka pipeline
 	["G16"]='owner_resign processor_etcd_worker_delay sink_hang'
 	["G17"]='clustered_index processor_resolved_ts_fallback'
+=======
+	# G00
+	"$mysql_only $kafka_only $storage_only"
+	# G01
+	"$mysql_only_http $kafka_only_protocol $storage_only_canal_json multi_tables_ddl"
+	# G02
+	"$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
+	# G03
+	'row_format drop_many_tables processor_stop_delay partition_table ddl_with_exists'
+	# G04
+	'foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
+	# G05
+	'charset_gbk ddl_manager multi_source vector'
+	# G06
+	'sink_retry changefeed_error ddl_sequence resourcecontrol'
+	# G07 pulsar oauth2 authentication enabled
+	'kv_client_stream_reconnect cdc split_region'
+	# G08
+	'processor_err_chan changefeed_reconstruct multi_capture synced_status_with_redo'
+	# G09
+	'gc_safepoint changefeed_pause_resume cli_with_auth savepoint synced_status'
+	# G10
+	'default_value simple cdc_server_tips event_filter sql_mode'
+	# G11
+	'resolve_lock move_table autorandom generate_column'
+	# G12
+	'many_pk_or_uk capture_session_done_during_task ddl_attributes'
+	# G13 pulsar mtls authentication enabled
+	'tiflash region_merge common_1'
+	# G14
+	'changefeed_finish force_replicate_table'
+	# G15
+	'new_ci_collation batch_add_table multi_rocks ci_collation_compatibility'
+	# G16, currently G16 is not running in kafka pipeline
+	'owner_resign processor_etcd_worker_delay sink_hang'
+	# G17
+	'clustered_index processor_resolved_ts_fallback'
+>>>>>>> 7f57e1f548 (ddl(ticdc): ignore ddl with schemaversion 0 (#11856))
 	# only run the following tests in mysql pipeline
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
