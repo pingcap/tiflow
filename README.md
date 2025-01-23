@@ -1,4 +1,4 @@
-# TiFlow
+# TiFlowi
 
 [![LICENSE](https://img.shields.io/github/license/pingcap/tiflow.svg)](https://github.com/pingcap/tiflow/blob/master/LICENSE)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/pingcap/tiflow)
