@@ -90,7 +90,7 @@ done
 
 if [[ "$group" == "others" ]]; then
 	if [[ -z $others ]]; then
-		echo "All CDC integration test cases are added to groups"
+		echo "All CDC integration test cases are added to groups hyy"
 		exit 0
 	fi
 	echo "Error: "$others" is not added to any group in tests/integration_tests/run_group.sh"
