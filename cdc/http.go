@@ -38,7 +38,7 @@ func RegisterRoutes(
 	capture capture.Capture,
 	registry prometheus.Gatherer,
 ) {
-	// online docs
+	// Online docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API V1
