@@ -108,6 +108,7 @@ function test_worker_handle_multi_tls_tasks() {
 	cp $cur/conf/dm-worker2.toml $WORK_DIR/
 	cp $cur/conf/dm-task.yaml $WORK_DIR/
 	cp $cur/conf/dm-task-2.yaml $WORK_DIR/
+	cp $cur/conf/dm-task-3.yaml $WORK_DIR/
 
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
@@ -116,6 +117,7 @@ function test_worker_handle_multi_tls_tasks() {
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-2.yaml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-3.yaml
 
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
 	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
@@ -138,6 +140,8 @@ function test_worker_handle_multi_tls_tasks() {
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"start-task $WORK_DIR/dm-task-2.yaml --remove-meta=true"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task-3.yaml --remove-meta=true"
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
@@ -145,6 +149,10 @@ function test_worker_handle_multi_tls_tasks() {
 		"\"unit\": \"Sync\"" 1
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test2" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test3" \
 		"\"result\": true" 2 \
 		"\"unit\": \"Sync\"" 1
 
