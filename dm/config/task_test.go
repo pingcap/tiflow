@@ -1196,3 +1196,30 @@ func TestTaskYamlForDowngrade(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originCfg.TargetDB.Password, decryptedPass)
 }
+
+func TestSyncerYamlForDowngrade(t *testing.T) {
+	syncerConfigName := "syncer-1"
+	originCfg := TaskConfig{
+		Name:     "test",
+		TaskMode: ModeFull,
+		MySQLInstances: []*MySQLInstance{
+			{
+				SourceID:         "mysql-3306",
+				SyncerConfigName: syncerConfigName,
+			},
+		},
+		TargetDB: &dbconfig.DBConfig{
+			Password: "123456",
+		},
+		Syncers: map[string]*SyncerConfig{
+			syncerConfigName: {
+				AutoIDCacheSize: 100,
+			},
+		},
+	}
+	content, err := originCfg.YamlForDowngrade()
+	require.NoError(t, err)
+	newCfg := &TaskConfig{}
+	require.NoError(t, newCfg.FromYaml(content))
+	require.NotEqual(t, originCfg.Syncers[syncerConfigName].AutoIDCacheSize, newCfg.Syncers[syncerConfigName].AutoIDCacheSize)
+}
