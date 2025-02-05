@@ -117,7 +117,7 @@ function download_binaries() {
 	# tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
 	# tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
 	# pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
-	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+	tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/release-8.1/sha1")
 	tidb_sha1=80db67052c0b1d89ab5ea94d6efa576a2191432d
 	tikv_sha1=c2351ea4582d43dcc0d8af3fbf04dca43bd064fe
 	pd_sha1=c1ee9cf28f6dfd2afce205d75974dc0e964075f2
@@ -126,7 +126,7 @@ function download_binaries() {
 	tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
 	tikv_download_url="${file_server_url}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
 	pd_download_url="${file_server_url}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-	tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
+	tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/release-8.1/${tiflash_sha1}/centos7/tiflash.tar.gz"
 	minio_download_url="${file_server_url}/download/minio.tar.gz"
 	go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 	etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
