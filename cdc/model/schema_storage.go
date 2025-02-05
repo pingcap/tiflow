@@ -500,7 +500,5 @@ func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
 
 // GetColumnDefaultValue returns the default definition of a column.
 func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
-	defaultValue := col.GetDefaultValue()
-	defaultDatum := datumTypes.NewDatum(defaultValue)
-	return defaultDatum.GetValue()
+	return col.GetDefaultValue()
 }
