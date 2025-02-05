@@ -48,10 +48,14 @@ branch=$1
 file_server_url="http://fileserver.pingcap.net"
 
 # Get sha1 based on branch name.
-tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
-pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
+# tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
+# tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
+# pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
 tidb_tools_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb-tools/master/sha1")
+
+tidb_sha1=80db67052c0b1d89ab5ea94d6efa576a2191432d
+tikv_sha1=c2351ea4582d43dcc0d8af3fbf04dca43bd064fe
+pd_sha1=c1ee9cf28f6dfd2afce205d75974dc0e964075f2
 
 # All download links.
 tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
