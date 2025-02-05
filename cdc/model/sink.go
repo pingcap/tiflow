@@ -480,7 +480,7 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Collation: colInfo.GetCollate(),
 		Flag:      *tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
-		Default:   GetColumnDefaultValue(colInfo),
+		Default:   colInfo.GetDefaultValue(),
 	}
 }
 
@@ -1360,7 +1360,7 @@ func (x ColumnDataX) GetFlag() ColumnFlagType {
 
 // GetDefaultValue return default value.
 func (x ColumnDataX) GetDefaultValue() interface{} {
-	return GetColumnDefaultValue(x.info)
+	return x.info.GetDefaultValue()
 }
 
 // GetColumnInfo returns column info.
