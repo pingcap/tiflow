@@ -912,7 +912,7 @@ func TestSanitizeName(t *testing.T) {
 		common.SanitizeName("1ColumnNameStartWithNumber"),
 	)
 	require.Equal(t, "A_B", common.SanitizeName("A.B"))
-	require.Equal(t, "columnNameWith______", common.SanitizeName("columnNameWith中文"))
+	require.Equal(t, "columnNameWith__", common.SanitizeName("columnNameWith中文"))
 }
 
 func TestGetAvroNamespace(t *testing.T) {
