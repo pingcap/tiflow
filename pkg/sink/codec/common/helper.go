@@ -224,10 +224,7 @@ func SanitizeName(name string) string {
 			}
 			changed = true
 		} else if !isValidNonFirstCharacter(c) {
-			b := []byte(string(c))
-			for k := 0; k < len(b); k++ {
-				sb.WriteString(replacementChar)
-			}
+			sb.WriteString(replacementChar)
 			changed = true
 		} else {
 			sb.WriteRune(c)
@@ -252,10 +249,7 @@ func SanitizeTopicName(name string) string {
 	var sb strings.Builder
 	for _, c := range name {
 		if !isValidNonFirstCharacterForTopicName(c) {
-			b := []byte(string(c))
-			for k := 0; k < len(b); k++ {
-				sb.WriteString(replacementChar)
-			}
+			sb.WriteString(replacementChar)
 			changed = true
 		} else {
 			sb.WriteRune(c)
