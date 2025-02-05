@@ -65,7 +65,7 @@ func TestGetValue(t *testing.T) {
 	}
 	data := model.Column2ColumnDataXForTest(column)
 	v := getValue(data)
-	require.Equal(t, v, int64(1))
+	require.Equal(t, v, 1)
 	data.Value = 2
 	v = getValue(data)
 	require.Equal(t, v, 2)
