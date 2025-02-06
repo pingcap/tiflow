@@ -243,13 +243,6 @@ func getBitFromUint64(n int, v uint64) []byte {
 	return buf[:numBytes]
 }
 
-func getValue(col model.ColumnDataX) any {
-	if col.Value == nil {
-		return col.GetDefaultValue()
-	}
-	return col.Value
-}
-
 func getDBTableName(e *model.DDLEvent) (string, string) {
 	if e.TableInfo == nil {
 		return "", ""

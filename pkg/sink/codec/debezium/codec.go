@@ -505,7 +505,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	col model.ColumnDataX,
 	ft *types.FieldType,
 ) error {
-	value := getValue(col)
+	value := col.Value
 	if value == nil {
 		writer.WriteNullField(col.GetName())
 		return nil
