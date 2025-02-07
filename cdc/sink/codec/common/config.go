@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -47,6 +48,7 @@ type Config struct {
 	AvroBigintUnsignedHandlingMode string
 
 	// for sinking to cloud storage
+	IsStorageScheme      bool
 	Delimiter            string
 	Quote                string
 	NullString           string
@@ -162,6 +164,7 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 	}
 
+	c.IsStorageScheme = sink.IsStorageScheme(sinkURI.Scheme)
 	c.DeleteOnlyHandleKeyColumns = !config.EnableOldValue
 	return nil
 }
