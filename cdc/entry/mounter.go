@@ -374,7 +374,6 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -383,7 +382,7 @@ func datum2Column(
 			Charset:   colInfo.GetCharset(),
 			Collation: colInfo.GetCollate(),
 			Value:     colValue,
-			Default:   defaultValue,
+			Default:   colInfo.GetDefaultValue(),
 			Flag:      tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,

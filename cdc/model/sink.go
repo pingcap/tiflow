@@ -532,6 +532,7 @@ type Column struct {
 	Collation string         `json:"collation" msg:"collation"`
 	Flag      ColumnFlagType `json:"flag" msg:"-"`
 	Value     interface{}    `json:"value" msg:"-"`
+	Default   interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-" msg:"-"`
