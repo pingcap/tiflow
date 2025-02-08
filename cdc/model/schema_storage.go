@@ -16,21 +16,11 @@ package model
 import (
 	"fmt"
 
-<<<<<<< HEAD
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
-=======
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/meta/model"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tidb/pkg/table/tables"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
-	"go.uber.org/zap"
->>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
 )
 
 const (
@@ -329,71 +319,3 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 func (ti *TableInfo) Clone() *TableInfo {
 	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.Version, ti.TableInfo.Clone())
 }
-<<<<<<< HEAD
-=======
-
-// GetIndex return the corresponding index by the given name.
-func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
-	for _, index := range ti.Indices {
-		if index != nil && index.Name.O == name {
-			return index
-		}
-	}
-	return nil
-}
-
-// IndexByName returns the index columns and offsets of the corresponding index by name
-func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
-	index := ti.GetIndex(name)
-	if index == nil {
-		return nil, nil, false
-	}
-	names := make([]string, 0, len(index.Columns))
-	offset := make([]int, 0, len(index.Columns))
-	for _, col := range index.Columns {
-		names = append(names, col.Name.O)
-		offset = append(offset, col.Offset)
-	}
-	return names, offset, true
-}
-
-// OffsetsByNames returns the column offsets of the corresponding columns by names
-// If any column does not exist, return false
-func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
-	// todo: optimize it
-	columnOffsets := make(map[string]int, len(ti.Columns))
-	for _, col := range ti.Columns {
-		if col != nil {
-			columnOffsets[col.Name.O] = col.Offset
-		}
-	}
-
-	result := make([]int, 0, len(names))
-	for _, col := range names {
-		offset, ok := columnOffsets[col]
-		if !ok {
-			return nil, false
-		}
-		result = append(result, offset)
-	}
-
-	return result, true
-}
-
-// GetPrimaryKeyColumnNames returns the primary key column names
-func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
-	var result []string
-	if ti.PKIsHandle {
-		result = append(result, ti.GetPkColInfo().Name.O)
-		return result
-	}
-
-	indexInfo := ti.GetPrimaryKey()
-	if indexInfo != nil {
-		for _, col := range indexInfo.Columns {
-			result = append(result, col.Name.O)
-		}
-	}
-	return result
-}
->>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
