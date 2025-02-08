@@ -389,7 +389,6 @@ func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
 	}
 	return result
 }
-<<<<<<< HEAD
 
 // GetSchemaName returns the schema name of the table
 func (ti *TableInfo) GetSchemaName() string {
@@ -446,15 +445,3 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 	}
 	return colID
 }
-
-// GetColumnDefaultValue returns the default definition of a column.
-func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
-	defaultValue := col.GetDefaultValue()
-	if defaultValue == nil {
-		defaultValue = col.GetOriginDefaultValue()
-	}
-	defaultDatum := datumTypes.NewDatum(defaultValue)
-	return defaultDatum.GetValue()
-}
-=======
->>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
