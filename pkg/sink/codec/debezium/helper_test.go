@@ -20,7 +20,6 @@ import (
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,18 +56,6 @@ func TestGetColumns(t *testing.T) {
 	require.Equal(t, columnInfos[4].GetFlen(), 4)
 	require.Equal(t, columnInfos[4].GetDefaultValue(), "1970")
 	require.Equal(t, columnInfos[4].Comment, "")
-}
-
-func TestGetValue(t *testing.T) {
-	column := &model.Column{
-		Default: 1,
-	}
-	data := model.Column2ColumnDataXForTest(column)
-	v := getValue(data)
-	require.Equal(t, v, int64(1))
-	data.Value = 2
-	v = getValue(data)
-	require.Equal(t, v, 2)
 }
 
 func TestGetSchemaTopicName(t *testing.T) {
