@@ -499,6 +499,12 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	ft *types.FieldType,
 ) error {
 	value := col.Value
+<<<<<<< HEAD
+=======
+	if value == nil {
+		value = col.GetDefaultValue()
+	}
+>>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
 	if value == nil {
 		value = col.Default
 	}
