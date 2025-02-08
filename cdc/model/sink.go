@@ -552,7 +552,7 @@ type Column struct {
 	Default   interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `msg:"-"`
+	ApproximateBytes int `json:"-" msg:"-"`
 }
 
 // RedoColumn stores Column change
