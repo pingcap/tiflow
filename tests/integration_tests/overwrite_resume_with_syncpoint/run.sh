@@ -2,7 +2,7 @@
 # the script test when we enable syncpoint, and pause the changefeed, 
 # then resume with a forward checkpoint, to ensure the changefeed can be sync correctly.
 
-set -eu
+set -eux
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -10,7 +10,23 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function run() 
+function check_ts_forward() {
+	changefeedid=$1
+	rts1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1 | jq '.resolved_ts')
+	checkpoint1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1 | jq '.checkpoint_tso')
+	sleep 1
+	rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1 | jq '.resolved_ts')
+	checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1 | jq '.checkpoint_tso')
+	if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
+		if [[ "$rts1" -ne "$rts2" ]] || [[ "$checkpoint1" -ne "$checkpoint2" ]]; then
+			echo "changefeed is working normally rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
+			return
+		fi
+	fi
+	exit 1
+}
+
+function run() {
 	# No need to test kafka and storage sink.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
@@ -31,8 +47,13 @@ function run()
 
     run_cdc_cli changefeed pause --changefeed-id="test4"
 
+    sleep 20
+
+    checkpoint1=$(cdc cli changefeed query --changefeed-id="test4" 2>&1 | jq '.checkpoint_tso')
+    checkpoint1=$((checkpoint1 + 1))
+
     # resume a forward checkpointTs
-    run_cdc_cli changefeed resume --changefeed-id="test4" --no-confirm --overwrite-checkpoint-ts=999999999999999999 
+    run_cdc_cli changefeed resume --changefeed-id="test4" --no-confirm --overwrite-checkpoint-ts=$checkpoint1 
 
     check_ts_forward "test4"
 
