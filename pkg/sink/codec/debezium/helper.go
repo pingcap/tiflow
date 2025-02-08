@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
