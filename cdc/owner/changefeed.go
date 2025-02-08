@@ -753,6 +753,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
+	c.resolvedTs = 0
 
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
