@@ -10,7 +10,7 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function run() {
+function run() 
 	# No need to test kafka and storage sink.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
@@ -18,7 +18,7 @@ function run() {
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
+	start_tidb_cluster --workdir $WORK_DIR 
 
 	cd $WORK_DIR
 
