@@ -794,6 +794,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized.Store(false)
 	c.isReleased = true
+	c.resolvedTs = 0
 
 	// when closing a changefeed, we must clean the warningCh.
 	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
