@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
-	datumTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -390,6 +389,7 @@ func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
 	}
 	return result
 }
+<<<<<<< HEAD
 
 // GetSchemaName returns the schema name of the table
 func (ti *TableInfo) GetSchemaName() string {
@@ -456,3 +456,5 @@ func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
 	defaultDatum := datumTypes.NewDatum(defaultValue)
 	return defaultDatum.GetValue()
 }
+=======
+>>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))

@@ -416,6 +416,57 @@ func (r *RowChangedEvent) IsUpdate() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) != 0
 }
 
+<<<<<<< HEAD
+=======
+func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
+	colID := col.ColumnID
+	offset, ok := tableInfo.columnsOffset[colID]
+	if !ok {
+		log.Panic("invalid column id",
+			zap.Int64("columnID", colID),
+			zap.Any("tableInfo", tableInfo))
+	}
+	colInfo := tableInfo.Columns[offset]
+	return &Column{
+		Name:      colInfo.Name.O,
+		Type:      colInfo.GetType(),
+		Charset:   colInfo.GetCharset(),
+		Collation: colInfo.GetCollate(),
+		Flag:      *tableInfo.ColumnsFlag[colID],
+		Value:     col.Value,
+	}
+}
+
+func columnDatas2Columns(cols []*ColumnData, tableInfo *TableInfo) []*Column {
+	if cols == nil {
+		return nil
+	}
+	columns := make([]*Column, len(cols))
+	nilColumnNum := 0
+	for i, colData := range cols {
+		if colData == nil {
+			nilColumnNum++
+			continue
+		}
+		columns[i] = columnData2Column(colData, tableInfo)
+	}
+	log.Debug("meet nil column data",
+		zap.Any("nilColumnNum", nilColumnNum),
+		zap.Any("tableInfo", tableInfo))
+	return columns
+}
+
+// GetColumns returns the columns of the event
+func (r *RowChangedEvent) GetColumns() []*Column {
+	return columnDatas2Columns(r.Columns, r.TableInfo)
+}
+
+// GetPreColumns returns the pre columns of the event
+func (r *RowChangedEvent) GetPreColumns() []*Column {
+	return columnDatas2Columns(r.PreColumns, r.TableInfo)
+}
+
+>>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
 // PrimaryKeyColumnNames return all primary key's name
 func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 	var result []string
@@ -526,6 +577,7 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
+<<<<<<< HEAD
 	Name      string         `json:"name" msg:"name"`
 	Type      byte           `json:"type" msg:"type"`
 	Charset   string         `json:"charset" msg:"charset"`
@@ -533,6 +585,26 @@ type Column struct {
 	Flag      ColumnFlagType `json:"flag" msg:"-"`
 	Value     interface{}    `json:"value" msg:"-"`
 	Default   interface{}    `json:"default" msg:"-"`
+=======
+	Name      string         `msg:"name"`
+	Type      byte           `msg:"type"`
+	Charset   string         `msg:"charset"`
+	Collation string         `msg:"collation"`
+	Flag      ColumnFlagType `msg:"-"`
+	Value     interface{}    `msg:"-"`
+
+	// ApproximateBytes is approximate bytes consumed by the column.
+	ApproximateBytes int `msg:"-"`
+}
+
+// ColumnData represents a column value in row changed event
+type ColumnData struct {
+	// ColumnID may be just a mock id, because we don't store it in redo log.
+	// So after restore from redo log, we need to give every a column a mock id.
+	// The only guarantee is that the column id is unique in a RowChangedEvent
+	ColumnID int64       `json:"column_id" msg:"column_id"`
+	Value    interface{} `json:"value" msg:"-"`
+>>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-" msg:"-"`
@@ -957,3 +1029,96 @@ type TopicPartitionKey struct {
 	PartitionKey   string
 	TotalPartition int32
 }
+<<<<<<< HEAD
+=======
+
+// ColumnDataX is like ColumnData, but contains more informations.
+//
+//msgp:ignore RowChangedEvent
+type ColumnDataX struct {
+	*ColumnData
+	flag *ColumnFlagType
+	info *model.ColumnInfo
+}
+
+// GetColumnDataX encapsures ColumnData to ColumnDataX.
+func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
+	x := ColumnDataX{ColumnData: col}
+	if x.ColumnData != nil {
+		x.flag = tb.ColumnsFlag[col.ColumnID]
+		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
+	}
+	return x
+}
+
+// GetName returns name.
+func (x ColumnDataX) GetName() string {
+	return x.info.Name.O
+}
+
+// GetType returns type.
+func (x ColumnDataX) GetType() byte {
+	return x.info.GetType()
+}
+
+// GetCharset returns charset.
+func (x ColumnDataX) GetCharset() string {
+	return x.info.GetCharset()
+}
+
+// GetCollation returns collation.
+func (x ColumnDataX) GetCollation() string {
+	return x.info.GetCollate()
+}
+
+// GetFlag returns flag.
+func (x ColumnDataX) GetFlag() ColumnFlagType {
+	return *x.flag
+}
+
+// GetDefaultValue return default value.
+func (x ColumnDataX) GetDefaultValue() interface{} {
+	return x.info.GetDefaultValue()
+}
+
+// GetColumnInfo returns column info.
+func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
+	return x.info
+}
+
+// Columns2ColumnDataForTest is for tests.
+func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
+	info := &TableInfo{
+		TableInfo: &model.TableInfo{
+			Columns: make([]*model.ColumnInfo, len(columns)),
+		},
+		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
+		columnsOffset: make(map[int64]int),
+	}
+	colDatas := make([]*ColumnData, 0, len(columns))
+
+	for i, column := range columns {
+		var columnID int64 = int64(i)
+		info.columnsOffset[columnID] = i
+
+		info.Columns[i] = &model.ColumnInfo{}
+		info.Columns[i].Name.O = column.Name
+		info.Columns[i].SetType(column.Type)
+		info.Columns[i].SetCharset(column.Charset)
+		info.Columns[i].SetCollate(column.Collation)
+
+		info.ColumnsFlag[columnID] = new(ColumnFlagType)
+		*info.ColumnsFlag[columnID] = column.Flag
+
+		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
+	}
+
+	return colDatas, info
+}
+
+// Column2ColumnDataXForTest is for tests.
+func Column2ColumnDataXForTest(column *Column) ColumnDataX {
+	datas, info := Columns2ColumnDataForTest([]*Column{column})
+	return GetColumnDataX(datas[0], info)
+}
+>>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
