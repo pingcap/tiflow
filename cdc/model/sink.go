@@ -480,7 +480,6 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Collation: colInfo.GetCollate(),
 		Flag:      *tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
-		Default:   GetColumnDefaultValue(colInfo),
 	}
 }
 
@@ -652,7 +651,6 @@ type Column struct {
 	Collation string         `msg:"collation"`
 	Flag      ColumnFlagType `msg:"-"`
 	Value     interface{}    `msg:"-"`
-	Default   interface{}    `msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `msg:"-"`
@@ -1360,7 +1358,7 @@ func (x ColumnDataX) GetFlag() ColumnFlagType {
 
 // GetDefaultValue return default value.
 func (x ColumnDataX) GetDefaultValue() interface{} {
-	return GetColumnDefaultValue(x.info)
+	return x.info.GetDefaultValue()
 }
 
 // GetColumnInfo returns column info.
@@ -1388,7 +1386,6 @@ func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 		info.Columns[i].SetType(column.Type)
 		info.Columns[i].SetCharset(column.Charset)
 		info.Columns[i].SetCollate(column.Collation)
-		info.Columns[i].DefaultValue = column.Default
 
 		info.ColumnsFlag[columnID] = new(ColumnFlagType)
 		*info.ColumnsFlag[columnID] = column.Flag
