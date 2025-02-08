@@ -32,6 +32,16 @@ import (
 
 const defaultMaxBatchSize = 256
 
+// PullerSplitUpdateMode is the mode to split update events in puller.
+type PullerSplitUpdateMode int32
+
+// PullerSplitUpdateMode constants.
+const (
+	PullerSplitUpdateModeNone    PullerSplitUpdateMode = 0
+	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
+)
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	// changefeedID is the changefeed ID.
@@ -47,10 +57,10 @@ type SourceManager struct {
 	pullers sync.Map
 	// Used to report the error to the processor.
 	errChan chan error
+	// Used to specify the behavior of splitting update events in puller.
+	splitUpdateMode PullerSplitUpdateMode
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
-
-	safeModeAtStart bool
 }
 
 // New creates a new source manager.
@@ -60,8 +70,8 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
-	safeModeAtStart bool,
 ) *SourceManager {
 	return &SourceManager{
 		changefeedID:    changefeedID,
@@ -69,8 +79,8 @@ func New(
 		mg:              mg,
 		engine:          engine,
 		errChan:         errChan,
+		splitUpdateMode: splitUpdateMode,
 		bdrMode:         bdrMode,
-		safeModeAtStart: safeModeAtStart,
 	}
 }
 
@@ -83,7 +93,21 @@ func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, 
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(tableID)
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+		if raw == nil || !raw.IsUpdate() {
+			return false
+		}
+		switch m.splitUpdateMode {
+		case PullerSplitUpdateModeNone:
+			return false
+		case PullerSplitUpdateModeAlways:
+			return true
+		case PullerSplitUpdateModeAtStart:
+			return isOldUpdateKVEntry(raw, getReplicaTs)
+		default:
+			log.Panic("Unknown split update mode", zap.Int32("mode", int32(m.splitUpdateMode)))
+		}
+		log.Panic("Shouldn't reach here")
+		return false
 	}
 	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(ctx, m.up, m.engine, m.errChan)
@@ -141,10 +165,17 @@ func (m *SourceManager) Close() error {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
+
+	var wg sync.WaitGroup
 	m.pullers.Range(func(key, value interface{}) bool {
-		value.(*pullerwrapper.Wrapper).Close()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value.(*pullerwrapper.Wrapper).Close()
+		}()
 		return true
 	})
+	wg.Wait()
 	log.Info("All pullers have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
