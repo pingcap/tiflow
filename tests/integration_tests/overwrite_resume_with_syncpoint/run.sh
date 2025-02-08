@@ -47,10 +47,11 @@ function run() {
 
     run_cdc_cli changefeed pause --changefeed-id="test4"
 
-    sleep 20
+    sleep 15
 
     checkpoint1=$(cdc cli changefeed query --changefeed-id="test4" 2>&1 | jq '.checkpoint_tso')
-    checkpoint1=$((checkpoint1 + 1))
+    # add a large number to avoid the problem of losing precision when jq processing large integers
+    checkpoint1=$((checkpoint1 + 1000000)) 
 
     # resume a forward checkpointTs
     run_cdc_cli changefeed resume --changefeed-id="test4" --no-confirm --overwrite-checkpoint-ts=$checkpoint1 
