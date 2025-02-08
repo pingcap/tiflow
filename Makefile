@@ -138,7 +138,7 @@ dev: check test
 
 test: unit_test dm_unit_test engine_unit_test
 
-build: cdc dm engine
+build: cdc dm engine sync-diff-inspector
 
 check-makefiles: ## Check the makefiles format. Please run this target after the changes are committed.
 check-makefiles: format-makefiles
