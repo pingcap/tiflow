@@ -246,8 +246,8 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 			log.Info("schedulerv3: find a new capture",
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
-				zap.String("captureAddr", info.AdvertiseAddr),
-				zap.String("capture", id))
+				zap.String("capture", id),
+				zap.String("captureAddr", info.AdvertiseAddr))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
 				MsgType:   schedulepb.MsgHeartbeat,
