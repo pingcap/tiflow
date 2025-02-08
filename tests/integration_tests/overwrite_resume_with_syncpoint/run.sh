@@ -1,5 +1,5 @@
 #!/bin/bash
-# the script test when we enable syncpoint, and pause the changefeed, 
+# the script test when we enable syncpoint, and pause the changefeed,
 # then resume with a forward checkpoint, to ensure the changefeed can be sync correctly.
 
 set -eux
@@ -34,33 +34,32 @@ function run() {
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR 
+	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
 
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY 
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-    SINK_URI="mysql://root@127.0.0.1:3306/"
-    run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml --changefeed-id="test4"
+	SINK_URI="mysql://root@127.0.0.1:3306/"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml --changefeed-id="test4"
 
 	check_ts_forward "test4"
 
-    run_cdc_cli changefeed pause --changefeed-id="test4"
+	run_cdc_cli changefeed pause --changefeed-id="test4"
 
-    sleep 15
+	sleep 15
 
-    checkpoint1=$(cdc cli changefeed query --changefeed-id="test4" 2>&1 | jq '.checkpoint_tso')
-    # add a large number to avoid the problem of losing precision when jq processing large integers
-    checkpoint1=$((checkpoint1 + 1000000)) 
+	checkpoint1=$(cdc cli changefeed query --changefeed-id="test4" 2>&1 | jq '.checkpoint_tso')
+	# add a large number to avoid the problem of losing precision when jq processing large integers
+	checkpoint1=$((checkpoint1 + 1000000))
 
-    # resume a forward checkpointTs
-    run_cdc_cli changefeed resume --changefeed-id="test4" --no-confirm --overwrite-checkpoint-ts=$checkpoint1 
+	# resume a forward checkpointTs
+	run_cdc_cli changefeed resume --changefeed-id="test4" --no-confirm --overwrite-checkpoint-ts=$checkpoint1
 
-    check_ts_forward "test4"
+	check_ts_forward "test4"
 
 	cleanup_process $CDC_BINARY
 }
-
 
 trap stop_tidb_cluster EXIT
 run $*
