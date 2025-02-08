@@ -479,6 +479,7 @@ func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 		Collation: colInfo.GetCollate(),
 		Flag:      tableInfo.ColumnsFlag[colID],
 		Value:     col.Value,
+		Default:   colInfo.GetDefaultValue(),
 	}
 }
 
@@ -623,6 +624,7 @@ type Column struct {
 	Collation string         `msg:"collation"`
 	Flag      ColumnFlagType `msg:"-"`
 	Value     interface{}    `msg:"-"`
+	Default   interface{}    `msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `msg:"-"`
@@ -1290,96 +1292,3 @@ type TopicPartitionKey struct {
 	PartitionKey   string
 	TotalPartition int32
 }
-<<<<<<< HEAD
-=======
-
-// ColumnDataX is like ColumnData, but contains more informations.
-//
-//msgp:ignore RowChangedEvent
-type ColumnDataX struct {
-	*ColumnData
-	flag *ColumnFlagType
-	info *model.ColumnInfo
-}
-
-// GetColumnDataX encapsures ColumnData to ColumnDataX.
-func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
-	x := ColumnDataX{ColumnData: col}
-	if x.ColumnData != nil {
-		x.flag = tb.ColumnsFlag[col.ColumnID]
-		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
-	}
-	return x
-}
-
-// GetName returns name.
-func (x ColumnDataX) GetName() string {
-	return x.info.Name.O
-}
-
-// GetType returns type.
-func (x ColumnDataX) GetType() byte {
-	return x.info.GetType()
-}
-
-// GetCharset returns charset.
-func (x ColumnDataX) GetCharset() string {
-	return x.info.GetCharset()
-}
-
-// GetCollation returns collation.
-func (x ColumnDataX) GetCollation() string {
-	return x.info.GetCollate()
-}
-
-// GetFlag returns flag.
-func (x ColumnDataX) GetFlag() ColumnFlagType {
-	return *x.flag
-}
-
-// GetDefaultValue return default value.
-func (x ColumnDataX) GetDefaultValue() interface{} {
-	return x.info.GetDefaultValue()
-}
-
-// GetColumnInfo returns column info.
-func (x ColumnDataX) GetColumnInfo() *model.ColumnInfo {
-	return x.info
-}
-
-// Columns2ColumnDataForTest is for tests.
-func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
-	info := &TableInfo{
-		TableInfo: &model.TableInfo{
-			Columns: make([]*model.ColumnInfo, len(columns)),
-		},
-		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
-		columnsOffset: make(map[int64]int),
-	}
-	colDatas := make([]*ColumnData, 0, len(columns))
-
-	for i, column := range columns {
-		var columnID int64 = int64(i)
-		info.columnsOffset[columnID] = i
-
-		info.Columns[i] = &model.ColumnInfo{}
-		info.Columns[i].Name.O = column.Name
-		info.Columns[i].SetType(column.Type)
-		info.Columns[i].SetCharset(column.Charset)
-		info.Columns[i].SetCollate(column.Collation)
-
-		info.ColumnsFlag[columnID] = new(ColumnFlagType)
-		*info.ColumnsFlag[columnID] = column.Flag
-
-		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
-	}
-
-	return colDatas, info
-}
-
-// Column2ColumnDataXForTest is for tests.
-func Column2ColumnDataXForTest(column *Column) ColumnDataX {
-	datas, info := Columns2ColumnDataForTest([]*Column{column})
-	return GetColumnDataX(datas[0], info)
-}
->>>>>>> 600286c56d (sink(ticdc): fix incorrect `default` field (#12038))
