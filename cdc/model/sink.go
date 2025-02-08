@@ -555,18 +555,6 @@ type Column struct {
 	ApproximateBytes int `msg:"-"`
 }
 
-// ColumnData represents a column value in row changed event
-type ColumnData struct {
-	// ColumnID may be just a mock id, because we don't store it in redo log.
-	// So after restore from redo log, we need to give every a column a mock id.
-	// The only guarantee is that the column id is unique in a RowChangedEvent
-	ColumnID int64       `json:"column_id" msg:"column_id"`
-	Value    interface{} `json:"value" msg:"-"`
-
-	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `json:"-" msg:"-"`
-}
-
 // RedoColumn stores Column change
 type RedoColumn struct {
 	Column *Column `msg:"column"`
