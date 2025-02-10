@@ -225,44 +225,19 @@ func (m *ddlManager) tick(
 				return nil, nil, err
 			}
 
-<<<<<<< HEAD
-=======
-		// Note: do not change the key words in the log, it is used to search the
-		// FinishTS of the DDL job. Some integration tests and users depend on it.
-		log.Info("handle a ddl job",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Int64("tableID", job.TableID),
-			zap.Int64("jobID", job.ID),
-			zap.String("query", job.Query),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-		)
-		events, err := m.schema.BuildDDLEvents(ctx, job)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		for _, event := range events {
-			snap := m.schema.GetLastSnapshot()
-			if event.Type == timodel.ActionCreateTable ||
-				event.Type == timodel.ActionCreateTables {
-				if snap.IsIneligibleTableID(event.TableInfo.ID) {
-					log.Info("table is ineligible, skip the ddl",
-						zap.String("namespace", m.changfeedID.Namespace),
-						zap.String("changefeed", m.changfeedID.ID),
-						zap.String("query", job.Query),
-						zap.Any("table", event.TableInfo))
-					continue
-				}
-			}
-			tableName := event.TableInfo.TableName
-			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
-		}
-
-		// Send DDL events to redo log.
-		if m.redoDDLManager.Enabled() {
->>>>>>> 84391225e9 (puller: fix a bug that may cause error when replicate truncate table ddl (#11772))
 			for _, event := range events {
+				snap := m.schema.GetLastSnapshot()
+				if event.Type == timodel.ActionCreateTable ||
+					event.Type == timodel.ActionCreateTables {
+					if snap.IsIneligibleTableID(event.TableInfo.ID) {
+						log.Info("table is ineligible, skip the ddl",
+							zap.String("namespace", m.changfeedID.Namespace),
+							zap.String("changefeed", m.changfeedID.ID),
+							zap.String("query", job.Query),
+							zap.Any("table", event.TableInfo))
+						continue
+					}
+				}
 				tableName := event.TableInfo.TableName
 				m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 			}

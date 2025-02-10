@@ -802,15 +802,10 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
-<<<<<<< HEAD
 func TestCcheckIneligibleTableDDL(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
-=======
-func TestCheckIneligibleTableDDL(t *testing.T) {
-	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
->>>>>>> 84391225e9 (puller: fix a bug that may cause error when replicate truncate table ddl (#11772))
 	defer helper.Close()
 
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
