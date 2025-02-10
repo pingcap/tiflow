@@ -404,6 +404,8 @@ type SyncerConfig struct {
 	Compact      bool `yaml:"compact" toml:"compact" json:"compact"`
 	MultipleRows bool `yaml:"multiple-rows" toml:"multiple-rows" json:"multiple-rows"`
 
+	AutoIDCacheSize uint64 `yaml:"auto-id-cache-size" toml:"auto-id-cache-size" json:"auto-id-cache-size"`
+
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
 
@@ -1175,6 +1177,7 @@ type SyncerConfigForDowngrade struct {
 	SafeModeDuration string `yaml:"safe-mode-duration,omitempty"`
 	Compact          bool   `yaml:"compact,omitempty"`
 	MultipleRows     bool   `yaml:"multipleRows,omitempty"`
+	AutoIDCacheSize  uint64 `yaml:"auto-id-cache-size,omitempty"`
 }
 
 // NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
@@ -1195,6 +1198,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,
+			AutoIDCacheSize:         syncerConfig.AutoIDCacheSize,
 		}
 		syncerConfigsForDowngrade[configName] = newSyncerConfig
 	}
