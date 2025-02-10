@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
-	datumTypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -445,14 +444,4 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 		log.Panic("invalid column name", zap.String("column", name))
 	}
 	return colID
-}
-
-// GetColumnDefaultValue returns the default definition of a column.
-func GetColumnDefaultValue(col *model.ColumnInfo) interface{} {
-	defaultValue := col.GetDefaultValue()
-	if defaultValue == nil {
-		defaultValue = col.GetOriginDefaultValue()
-	}
-	defaultDatum := datumTypes.NewDatum(defaultValue)
-	return defaultDatum.GetValue()
 }
