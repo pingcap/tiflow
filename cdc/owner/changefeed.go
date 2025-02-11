@@ -466,7 +466,7 @@ LOOP2:
 	}
 
 	checkpointTs := c.state.Status.CheckpointTs
-	//Invariant: ResolvedTs must >= checkpointTs!
+	// Invariant: ResolvedTs must >= checkpointTs!
 	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
 		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
