@@ -5,7 +5,7 @@
 # argument 3 is the match count
 
 set -eu
-OUT_DIR=/tmp/tidb_tools_test
+OUT_DIR=/tmp/sync_diff_inspector_test
 
 count=$(grep -F "$1" "$2" | wc -l)
 
