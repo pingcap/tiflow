@@ -223,7 +223,6 @@ func columnFromV1(c *codecv1.Column) *model.Column {
 		Charset:          c.Charset,
 		Flag:             c.Flag,
 		Value:            c.Value,
-		Default:          c.Default,
 		ApproximateBytes: c.ApproximateBytes,
 	}
 }

@@ -1629,13 +1629,13 @@ func TestNewDMRowChange(t *testing.T) {
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		cols := []*model.Column{
 			{
-				Name: "id", Type: 3, Charset: "binary", Flag: 65, Value: 1, Default: nil,
+				Name: "id", Type: 3, Charset: "binary", Flag: 65, Value: 1,
 			},
 			{
-				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Value: 1, Default: nil,
+				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Value: 1,
 			},
 			{
-				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Value: 2, Default: nil,
+				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Value: 2,
 			},
 		}
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)

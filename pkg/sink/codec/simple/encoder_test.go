@@ -1487,7 +1487,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 
 			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
-				obtainedDefaultValues[col.Name.O] = model.GetColumnDefaultValue(col)
+				obtainedDefaultValues[col.Name.O] = col.GetDefaultValue()
 				switch col.GetType() {
 				case mysql.TypeFloat, mysql.TypeDouble:
 					require.Equal(t, 0, col.GetDecimal())
@@ -1495,7 +1495,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				}
 			}
 			for _, col := range ddlEvent.TableInfo.Columns {
-				expected := model.GetColumnDefaultValue(col)
+				expected := col.GetDefaultValue()
 				obtained := obtainedDefaultValues[col.Name.O]
 				require.Equal(t, expected, obtained)
 			}

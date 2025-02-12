@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
@@ -41,13 +40,6 @@ func getBitFromUint64(n int, v uint64) []byte {
 		numBytes += 1
 	}
 	return buf[:numBytes]
-}
-
-func getValue(col model.ColumnDataX) any {
-	if col.Value == nil {
-		return col.GetDefaultValue()
-	}
-	return col.Value
 }
 
 func getSchemaTopicName(namespace string, schema string, table string) string {

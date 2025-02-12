@@ -16,21 +16,8 @@ package debezium
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
-
-func TestGetValue(t *testing.T) {
-	column := &model.Column{
-		Default: 1,
-	}
-	data := model.Column2ColumnDataXForTest(column)
-	v := getValue(data)
-	require.Equal(t, v, int64(1))
-	data.Value = 2
-	v = getValue(data)
-	require.Equal(t, v, 2)
-}
 
 func TestGetSchemaTopicName(t *testing.T) {
 	namespace := "default"
