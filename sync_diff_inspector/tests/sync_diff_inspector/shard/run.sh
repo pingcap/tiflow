@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-OUT_DIR=/tmp/tidb_tools_test/sync_diff_inspector/output
+OUT_DIR=/tmp/sync_diff_inspector_test/sync_diff_inspector/output
 rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 
