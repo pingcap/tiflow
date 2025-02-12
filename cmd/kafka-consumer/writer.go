@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/debezium"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -59,6 +60,8 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
+	case config.ProtocolDebezium:
+		decoder = debezium.NewDecoder(option.codecConfig, upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", option.protocol))
 	}
@@ -353,6 +356,16 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 					w.appendRow2Group(row, progress, offset)
 				}
 			}
+			if dec, ok := progress.decoder.(*debezium.Decoder); ok {
+				cachedEvents := dec.GetCachedEvents()
+				for _, row := range cachedEvents {
+					w.checkPartition(row, partition, message.TopicPartition.Offset)
+					log.Info("simple protocol cached event resolved, append to the group",
+						zap.Int64("tableID", row.GetTableID()), zap.Uint64("commitTs", row.CommitTs),
+						zap.Int32("partition", partition), zap.Any("offset", offset))
+					w.appendRow2Group(row, progress, offset)
+				}
+			}
 
 			// the Query maybe empty if using simple protocol, it's comes from `bootstrap` event, no need to handle it.
 			if ddl.Query == "" {
@@ -373,7 +386,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			}
 			// when using simple protocol, the row may be nil, since it's table info not received yet,
 			// it's cached in the decoder, so just continue here.
-			if w.option.protocol == config.ProtocolSimple && row == nil {
+			if (w.option.protocol == config.ProtocolSimple || w.option.protocol == config.ProtocolDebezium) && row == nil {
 				continue
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
