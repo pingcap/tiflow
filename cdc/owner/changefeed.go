@@ -524,8 +524,10 @@ LOOP2:
 		}
 	}
 
-	if c.resolvedTs == 0 {
+	// Invariant: ResolvedTs must >= checkpointTs!
+	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
+		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
