@@ -384,7 +384,6 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -393,7 +392,7 @@ func datum2Column(
 			Charset:   colInfo.GetCharset(),
 			Collation: colInfo.GetCollate(),
 			Value:     colValue,
-			Default:   defaultValue,
+			Default:   colInfo.GetDefaultValue(),
 			Flag:      tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
@@ -773,16 +772,6 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo, tz *time.Location) (types.Da
 	}
 	v, size, warn, err := formatColVal(d, col)
 	return d, v, size, warn, err
-}
-
-// GetDDLDefaultDefinition returns the default definition of a column.
-func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
-	defaultValue := col.GetDefaultValue()
-	if defaultValue == nil {
-		defaultValue = col.GetOriginDefaultValue()
-	}
-	defaultDatum := types.NewDatum(defaultValue)
-	return defaultDatum.GetValue()
 }
 
 // DecodeTableID decodes the raw key to a table ID

@@ -23,7 +23,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
@@ -73,7 +72,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	if mysql.HasNotNullFlag(col.GetFlag()) {
 		t.Nullable = "false"
 	}
-	t.Default = entry.GetDDLDefaultDefinition(col)
+	t.Default = col.GetDefaultValue()
 
 	switch col.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
