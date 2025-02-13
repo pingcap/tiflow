@@ -360,7 +360,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				cachedEvents := dec.GetCachedEvents()
 				for _, row := range cachedEvents {
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
-					log.Info("simple protocol cached event resolved, append to the group",
+					log.Info("debezium protocol cached event resolved, append to the group",
 						zap.Int64("tableID", row.GetTableID()), zap.Uint64("commitTs", row.CommitTs),
 						zap.Int32("partition", partition), zap.Any("offset", offset))
 					w.appendRow2Group(row, progress, offset)

@@ -19,13 +19,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+
 	"go.uber.org/zap"
 )
 
@@ -37,8 +42,8 @@ type Decoder struct {
 	memo             common.TableInfoProvider
 	// cachedMessages is used to store the messages which does not have received corresponding table info yet.
 	cachedMessages *list.List
-	// CachedRowChangedEvents are events just decoded from the cachedMessages
-	CachedRowChangedEvents []*model.RowChangedEvent
+	// cachedRowChangedEvents are events just decoded from the cachedMessages
+	cachedRowChangedEvents []*model.RowChangedEvent
 
 	keyPayload   map[string]interface{}
 	keySchema    map[string]interface{}
@@ -116,30 +121,25 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, errors.New("value should not be empty")
 	}
 	defer d.reset()
-	schemaName := d.getSchemaName()
+	// schemaName := d.getSchemaName()
 	tableName := d.getTableName()
-	result := new(model.DDLEvent)
+	result := &model.DDLEvent{
+		TableInfo: model.WrapTableInfo(100, "", 100, &timodel.TableInfo{}),
+	}
 	result.Query = d.valuePayload["ddl"].(string)
 	result.CommitTs = d.getCommitTs()
+	// tableName is empty when droping table
 	if tableName != "" {
-		tableChanges := d.valuePayload["tableChanges"].([]map[string]interface{})
-		tableInfo, ok := tableChanges[0]["table"].(map[string]interface{})
-		if !ok {
-			// there is no table info when droping table
-			return result, nil
-		}
-		pkNames := make(map[string]struct{}, 0)
-		columns := assembleColumnInfo(tableInfo)
-		result.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNames)
+		result.TableInfo = d.getTableInfo()
 		d.memo.Write(result.TableInfo)
 	}
 	for ele := d.cachedMessages.Front(); ele != nil; {
-		d.resolveMsg(ele)
+		d.unmarshalMsg(ele.Value)
 		event, err := d.NextRowChangedEvent()
 		if err != nil {
 			return nil, err
 		}
-		d.CachedRowChangedEvents = append(d.CachedRowChangedEvents, event)
+		d.cachedRowChangedEvents = append(d.cachedRowChangedEvents, event)
 
 		next := ele.Next()
 		d.cachedMessages.Remove(ele)
@@ -156,26 +156,26 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	defer d.reset()
 	schemaName := d.getSchemaName()
 	tableName := d.getTableName()
-	commitTs := d.getCommitTs()
-	tableInfo := d.memo.Read(schemaName, tableName, commitTs)
+	tableInfo := d.memo.Read(schemaName, tableName, 0)
 	if tableInfo == nil {
 		log.Debug("table info not found for the event, "+
 			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
 			zap.String("schema", schemaName),
-			zap.String("table", tableName),
-			zap.Uint64("version", commitTs))
-		d.cachedMessages.PushBack(d.cacheMsg())
+			zap.String("table", tableName))
+		d.cachedMessages.PushBack(d.marshalMsg())
 		return nil, nil
 	}
+	commitTs := d.getCommitTs()
 	event := &model.RowChangedEvent{
 		CommitTs:  commitTs,
 		TableInfo: tableInfo,
 	}
 	// set handleKey flag
-	for name, _ := range d.keyPayload {
+	for name := range d.keyPayload {
 		tableId := tableInfo.ForceGetColumnIDByName(name)
 		colInfo := tableInfo.GetColumnByID(tableId)
-		colInfo.SetFlag(uint(model.HandleKeyFlag))
+		colInfo.AddFlag(uint(model.HandleKeyFlag))
+		tableInfo.ColumnsFlag[tableId].SetIsHandleKey()
 	}
 	if before, ok := d.valuePayload["before"].(map[string]interface{}); ok {
 		event.PreColumns = assembleColumnData(before, tableInfo)
@@ -184,14 +184,13 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		event.Columns = assembleColumnData(after, tableInfo)
 	}
 	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName())
-
 	return event, nil
 }
 
 func (d *Decoder) getCommitTs() uint64 {
 	source := d.valuePayload["source"].(map[string]interface{})
-	commitTs := source["commit_ts"].(uint64)
-	return commitTs
+	commitTs := source["commit_ts"].(float64)
+	return uint64(commitTs)
 }
 
 func (d *Decoder) getSchemaName() string {
@@ -206,12 +205,12 @@ func (d *Decoder) getTableName() string {
 	return tableName
 }
 
-func (d *Decoder) cacheMsg() any {
+func (d *Decoder) marshalMsg() any {
 	return []map[string]interface{}{d.keyPayload, d.keySchema, d.valuePayload, d.valueSchema}
 }
 
-func (d *Decoder) resolveMsg(ele interface{}) {
-	msg := ele.([]map[string]interface{})
+func (d *Decoder) unmarshalMsg(value any) {
+	msg := value.([]map[string]interface{})
 	d.keyPayload = msg[0]
 	d.keySchema = msg[1]
 	d.valuePayload = msg[2]
@@ -227,36 +226,83 @@ func (d *Decoder) reset() {
 
 // GetCachedEvents returns the cached events
 func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
-	result := d.CachedRowChangedEvents
-	d.CachedRowChangedEvents = nil
+	result := d.cachedRowChangedEvents
+	d.cachedRowChangedEvents = nil
 	return result
 }
 
-func assembleColumnInfo(data map[string]interface{}) []*model.Column {
-	columns := data["columns"].([]map[string]interface{})
-	result := make([]*model.Column, 0, len(columns))
-	for _, column := range columns {
-		colName := column["name"].(string)
-		typeName := column["typeName"].(string)
-		optional := column["optional"].(bool)
-		generated := column["generated"].(bool)
-		result = append(result, &model.Column{
-			Name: colName,
-			Type: getMySQLType(typeName),
-			Flag: getFlag(typeName, optional, generated),
-		})
+func (d *Decoder) getTableInfo() *model.TableInfo {
+	tidbTableInfo := &timodel.TableInfo{}
+	tableChanges := d.valuePayload["tableChanges"].([]interface{})
+	tableChange := tableChanges[0].(map[string]interface{})
+	if tableInfo, ok := tableChange["table"].(map[string]interface{}); ok {
+		columns := tableInfo["columns"].([]interface{})
+		columnIDAllocator := model.NewIncrementalColumnIDAllocator()
+		for _, column := range columns {
+			column := column.(map[string]interface{})
+			colName := column["name"].(string)
+			position := column["position"].(float64)
+			typeName := column["typeName"].(string)
+			optional := column["optional"].(bool)
+			generated := column["generated"].(bool)
+
+			fieldType := types.FieldType{}
+			fieldType.SetFlag(getFlag(typeName, optional, generated))
+			fieldType.SetType(getMySQLType(typeName))
+			if scale, ok := column["scale"].(float64); ok {
+				fieldType.SetDecimal(int(scale))
+			}
+			tidbTableInfo.Columns = append(tidbTableInfo.Columns, &timodel.ColumnInfo{
+				State:     timodel.StatePublic,
+				Name:      pmodel.NewCIStr(colName),
+				FieldType: fieldType,
+				Offset:    int(position) - 1,
+				ID:        columnIDAllocator.GetColumnID(colName),
+			})
+		}
 	}
-	return result
+	database := d.getSchemaName()
+	tidbTableInfo.Name = pmodel.NewCIStr(d.getTableName())
+	return model.WrapTableInfo(100, database, 100, tidbTableInfo)
 }
 
 func assembleColumnData(data map[string]interface{}, tableInfo *model.TableInfo) []*model.ColumnData {
 	result := make([]*model.ColumnData, 0, len(data))
 	for key, value := range data {
-		result = append(result, &model.ColumnData{
-			ColumnID: tableInfo.ForceGetColumnIDByName(key),
-			Value:    value,
-		})
+		columnID := tableInfo.ForceGetColumnIDByName(key)
+		colInfo := tableInfo.GetColumnByID(columnID)
+		result = append(result, decodeColumn(value, colInfo))
 	}
+	return result
+}
+
+func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnData {
+	result := &model.ColumnData{
+		ColumnID: colInfo.ID,
+		Value:    value,
+	}
+	if value == nil {
+		return result
+	}
+	ft := colInfo.FieldType
+	switch ft.GetType() {
+	case mysql.TypeDate, mysql.TypeNewDate:
+		v := value.(float64)
+		t := time.Unix(int64(v*60*60*24), 0)
+		value = t.String()
+	case mysql.TypeDatetime:
+		v := value.(float64)
+		var t time.Time
+		if ft.GetDecimal() <= 3 {
+			t = time.UnixMilli(int64(v))
+		} else {
+			t = time.UnixMicro(int64(v))
+		}
+		value = t.String()
+	default:
+	}
+
+	result.Value = value
 	return result
 }
 
@@ -267,7 +313,7 @@ func getMySQLType(typeName string) byte {
 	return types.StrToType(typeName)
 }
 
-func getFlag(typeName string, optional, generated bool) model.ColumnFlagType {
+func getFlag(typeName string, optional, generated bool) uint {
 	var flag model.ColumnFlagType
 	if strings.Contains(typeName, "UNSIGNED") {
 		flag.SetIsUnsigned()
@@ -278,7 +324,7 @@ func getFlag(typeName string, optional, generated bool) model.ColumnFlagType {
 	if generated {
 		flag.SetIsGeneratedColumn()
 	}
-	return flag
+	return uint(flag)
 }
 
 func decodeRawBytes(data []byte) (map[string]interface{}, map[string]interface{}, error) {
