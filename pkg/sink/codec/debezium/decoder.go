@@ -16,8 +16,11 @@ package debezium
 import (
 	"container/list"
 	"database/sql"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -25,11 +28,13 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/parser/types"
+	ptype "github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 
 	"go.uber.org/zap"
 )
@@ -241,16 +246,43 @@ func (d *Decoder) getTableInfo() *model.TableInfo {
 		for _, column := range columns {
 			column := column.(map[string]interface{})
 			colName := column["name"].(string)
+			jdbcType := column["jdbcType"].(float64)
 			position := column["position"].(float64)
 			typeName := column["typeName"].(string)
 			optional := column["optional"].(bool)
 			generated := column["generated"].(bool)
 
-			fieldType := types.FieldType{}
-			fieldType.SetFlag(getFlag(typeName, optional, generated))
+			fieldType := ptype.FieldType{}
+			if strings.Contains(typeName, "UNSIGNED") {
+				fieldType.AddFlag(mysql.UnsignedFlag)
+			}
+			if !optional {
+				fieldType.AddFlag(mysql.NotNullFlag)
+			}
+			if generated {
+				fieldType.AddFlag(mysql.GeneratedColumnFlag)
+			}
+			switch internal.JavaSQLType(jdbcType) {
+			case internal.JavaSQLTypeBLOB, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeBINARY:
+				fieldType.AddFlag(mysql.BinaryFlag)
+			}
 			fieldType.SetType(getMySQLType(typeName))
+			if length, ok := column["length"].(float64); ok {
+				switch fieldType.GetType() {
+				case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
+					fieldType.SetDecimal(int(length))
+				case mysql.TypeYear, mysql.TypeNewDecimal,
+					mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong,
+					mysql.TypeLonglong, mysql.TypeFloat, mysql.TypeDouble,
+					mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTiDBVectorFloat32:
+					fieldType.SetFlen(int(length))
+				}
+			}
 			if scale, ok := column["scale"].(float64); ok {
-				fieldType.SetDecimal(int(scale))
+				switch fieldType.GetType() {
+				case mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeDouble:
+					fieldType.SetDecimal(int(scale))
+				}
 			}
 			tidbTableInfo.Columns = append(tidbTableInfo.Columns, &timodel.ColumnInfo{
 				State:     timodel.StatePublic,
@@ -286,10 +318,21 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	}
 	ft := colInfo.FieldType
 	switch ft.GetType() {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		s := value.(string)
+		if mysql.HasBinaryFlag(ft.GetFlag()) {
+			v, err := base64.StdEncoding.DecodeString(s)
+			if err != nil {
+				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+				return nil
+			}
+			value = v
+		}
 	case mysql.TypeDate, mysql.TypeNewDate:
 		v := value.(float64)
 		t := time.Unix(int64(v*60*60*24), 0)
-		value = t.String()
+		value = t.UTC().String()
 	case mysql.TypeDatetime:
 		v := value.(float64)
 		var t time.Time
@@ -298,10 +341,59 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		} else {
 			t = time.UnixMicro(int64(v))
 		}
-		value = t.String()
+		value = t.UTC().String()
+	case mysql.TypeDuration:
+		v := value.(float64)
+		d, err := types.NumberToDuration(int64(v/1e6), ft.GetDecimal())
+		if err != nil {
+			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			return nil
+		}
+		value = d.String()
+	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
+		v := value.(float64)
+		if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			// pay attention to loss of precision
+			if v > 0 && uint64(v) > math.MaxInt64 {
+				value = math.MaxInt64
+			} else {
+				value = uint64(v)
+			}
+		} else {
+			if v > math.MaxInt64 {
+				value = math.MaxInt64
+			} else if v < math.MinInt64 {
+				value = math.MinInt64
+			} else {
+				value = v
+			}
+		}
+	case mysql.TypeBit:
+		n := ft.GetFlen()
+		if n != 0 {
+			s := value.(string)
+			v, err := base64.StdEncoding.DecodeString(s)
+			if err != nil {
+				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+				return nil
+			}
+			var buf [8]byte
+			numBytes := n / 8
+			if n%8 != 0 {
+				numBytes += 1
+			}
+			copy(buf[:numBytes], v)
+			value = binary.LittleEndian.Uint64(buf[:])
+		} else {
+			s := value.(bool)
+			if s {
+				value = uint64(1)
+			} else {
+				value = uint64(0)
+			}
+		}
 	default:
 	}
-
 	result.Value = value
 	return result
 }
@@ -310,21 +402,7 @@ func getMySQLType(typeName string) byte {
 	typeName = strings.Replace(typeName, " UNSIGNED ZEROFILL", "", 1)
 	typeName = strings.Replace(typeName, " UNSIGNED", "", 1)
 	typeName = strings.ToLower(typeName)
-	return types.StrToType(typeName)
-}
-
-func getFlag(typeName string, optional, generated bool) uint {
-	var flag model.ColumnFlagType
-	if strings.Contains(typeName, "UNSIGNED") {
-		flag.SetIsUnsigned()
-	}
-	if optional {
-		flag.SetIsNullable()
-	}
-	if generated {
-		flag.SetIsGeneratedColumn()
-	}
-	return uint(flag)
+	return ptype.StrToType(typeName)
 }
 
 func decodeRawBytes(data []byte) (map[string]interface{}, map[string]interface{}, error) {
