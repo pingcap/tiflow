@@ -436,6 +436,7 @@ type memoryTableInfoProvider struct {
 	memo map[tableSchemaKey]*model.TableInfo
 }
 
+// NewMemoryTableInfoProvider creates a new memoryTableInfoProvider
 func NewMemoryTableInfoProvider() *memoryTableInfoProvider {
 	return &memoryTableInfoProvider{
 		memo: make(map[tableSchemaKey]*model.TableInfo),

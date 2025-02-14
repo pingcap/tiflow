@@ -38,6 +38,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Decoder implement the RowEventDecoder interface
 type Decoder struct {
 	config *common.Config
 
@@ -55,7 +56,7 @@ type Decoder struct {
 	valueSchema  map[string]interface{}
 }
 
-// NewDecoder return an avro decoder
+// NewDecoder return an debezium decoder
 func NewDecoder(
 	config *common.Config,
 	db *sql.DB,
@@ -69,6 +70,7 @@ func NewDecoder(
 	}
 }
 
+// AddKeyValue add the received key and values to the Decoder
 func (d *Decoder) AddKeyValue(key, value []byte) error {
 	if d.valuePayload != nil || d.valueSchema != nil {
 		return errors.New("key or value is not nil")
@@ -88,6 +90,7 @@ func (d *Decoder) AddKeyValue(key, value []byte) error {
 	return nil
 }
 
+// HasNext returns whether there is any event need to be consumed
 func (d *Decoder) HasNext() (model.MessageType, bool, error) {
 	if d.valuePayload == nil && d.valueSchema == nil {
 		return model.MessageTypeUnknown, false, nil
@@ -175,10 +178,10 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	// set handleKey flag
 	for name := range d.keyPayload {
-		tableId := tableInfo.ForceGetColumnIDByName(name)
-		colInfo := tableInfo.GetColumnByID(tableId)
+		tableID := tableInfo.ForceGetColumnIDByName(name)
+		colInfo := tableInfo.GetColumnByID(tableID)
 		colInfo.AddFlag(uint(model.HandleKeyFlag))
-		tableInfo.ColumnsFlag[tableId].SetIsHandleKey()
+		tableInfo.ColumnsFlag[tableID].SetIsHandleKey()
 	}
 	if before, ok := d.valuePayload["before"].(map[string]interface{}); ok {
 		event.PreColumns = assembleColumnData(before, tableInfo)
