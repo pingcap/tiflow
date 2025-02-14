@@ -125,7 +125,6 @@ func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, errors.New("value should not be empty")
 	}
 	defer d.reset()
-	// schemaName := d.getSchemaName()
 	tableName := d.getTableName()
 	result := &model.DDLEvent{
 		TableInfo: model.WrapTableInfo(100, "", 100, &timodel.TableInfo{}),
@@ -343,11 +342,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		value = t.UTC().String()
 	case mysql.TypeDuration:
 		v := value.(float64)
-		d, err := types.NumberToDuration(int64(v/1e6), ft.GetDecimal())
-		if err != nil {
-			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
-			return nil
-		}
+		d := types.NewDuration(0, 0, 0, int(v), ft.GetDecimal())
 		value = d.String()
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		v := value.(float64)
