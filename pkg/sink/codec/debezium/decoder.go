@@ -314,16 +314,10 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		ColumnID: colInfo.ID,
 		Value:    value,
 	}
-	ft := colInfo.FieldType
 	if value == nil {
-		switch ft.GetType() {
-		case mysql.TypeDate, mysql.TypeNewDate:
-			result.Value = "0000-00-00"
-		case mysql.TypeDatetime:
-			result.Value = "0000-00-00 00:00:00"
-		}
 		return result
 	}
+	ft := colInfo.FieldType
 	// Notice: value may be the default value of the column
 	switch ft.GetType() {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
