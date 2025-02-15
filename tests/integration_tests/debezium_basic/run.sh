@@ -26,9 +26,7 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=debezium&enable-tidb-extension=true"
-	fi
+	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=debezium&enable-tidb-extension=true"
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 	sleep 5 # wait for changefeed to start
