@@ -144,13 +144,13 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, cfg.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, pdClient, cfg.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		log.Error("same in create", zap.Error(err))
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support creating a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))
@@ -538,12 +538,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		}
 		defer pdClient.Close()
 	}
-	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, newCfInfo.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, pdClient, newCfInfo.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support updating a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))
@@ -849,12 +849,12 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}()
 
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, cfInfo.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, pdClient, cfInfo.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support resuming a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))

@@ -25,11 +25,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// CheckUpstreamDownstreamNotSame checks whether the upstream and downstream are not the same cluster.
-func CheckUpstreamDownstreamNotSame(upPD pd.Client, downSinkURI string, ctx context.Context) (bool, error) {
+// UpstreamDownstreamNotSame checks whether the upstream and downstream are not the same cluster.
+func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI string) (bool, error) {
 	upID := upPD.GetClusterID(ctx)
 
-	downID, isTiDB, err := getClusterIDBySinkURI(downSinkURI, ctx)
+	downID, isTiDB, err := getClusterIDBySinkURI(ctx, downSinkURI)
 	log.Debug("CheckNotSameUpstreamDownstream",
 		zap.Uint64("upID", upID), zap.Uint64("downID", downID), zap.Bool("isTiDB", isTiDB))
 	if err != nil {
@@ -45,7 +45,7 @@ func CheckUpstreamDownstreamNotSame(upPD pd.Client, downSinkURI string, ctx cont
 	return upID != downID, nil
 }
 
-func getClusterIDBySinkURI(sinkURI string, ctx context.Context) (uint64, bool, error) {
+func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, error) {
 	// Create a MySQL connection by using the sink URI.
 	url, err := url.Parse(sinkURI)
 	if err != nil {

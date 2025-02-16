@@ -298,13 +298,13 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 	}
 
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, changefeedConfig.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, changefeedConfig.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		log.Error("same in create", zap.Error(err))
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support creating a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))
@@ -414,13 +414,13 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, cfInfo.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, cfInfo.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		log.Error("same in create", zap.Error(err))
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support resuming a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))
@@ -512,13 +512,13 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, newInfo.SinkURI, ctx)
+	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, newInfo.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
 		log.Error("same in create", zap.Error(err))
 		return
 	}
-	if notSame == false {
+	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support updating a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))

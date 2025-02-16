@@ -891,6 +891,11 @@ error = '''
 external storage api
 '''
 
+["CDC:ErrSameUpstreamDownstream"]
+error = '''
+upstream and downstream are the same, %s
+'''
+
 ["CDC:ErrSchedulerRequestFailed"]
 error = '''
 scheduler request failed, %s
