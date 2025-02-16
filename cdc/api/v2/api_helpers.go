@@ -318,6 +318,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		configUpdated = true
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
 	}
+	// If the sinkURI is empty, we keep the old sinkURI.
 	if cfg.SinkURI != "" {
 		sinkURIUpdated = true
 		newInfo.SinkURI = cfg.SinkURI

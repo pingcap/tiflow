@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/check"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -96,6 +97,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 			return
 		}
 	}
+
 	provider := h.capture.StatusProvider()
 	owner, err := h.capture.GetOwner()
 	if err != nil {
@@ -139,6 +141,21 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CertPath:      cfg.CertPath,
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
+	}
+
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, cfg.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support creating a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		log.Error("same in create", zap.Error(err))
+		return
 	}
 
 	var etcdCli *clientv3.Client
@@ -499,6 +516,40 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
+	// Check whether the upstream and downstream are the different cluster.
+	// Generate a pd client first.
+	var pdClient pd.Client
+	// if PDAddrs is empty, use the default pdClient
+	if len(updateCfConfig.PDAddrs) == 0 {
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		pdClient = up.PDClient
+	} else {
+		credential := updateCfConfig.PDConfig.toCredential()
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, updateCfConfig.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
+			return
+		}
+		defer pdClient.Close()
+	}
+	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, newCfInfo.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support updating a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		return
+	}
+
 	log.Info("New ChangeFeed and Upstream Info",
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
@@ -728,7 +779,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 
-	_, err = h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -760,11 +811,12 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		defer cancel()
 		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
 			return
 		}
 		defer pdClient.Close()
 	}
+
 	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
 	newCheckpointTs := status.CheckpointTs
 	if cfg.OverwriteCheckpointTs != 0 {
@@ -795,6 +847,19 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 			return
 		}
 	}()
+
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.CheckUpstreamDownstreamNotSame(pdClient, cfInfo.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support resuming a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		return
+	}
 
 	job := model.AdminJob{
 		CfID:                  changefeedID,

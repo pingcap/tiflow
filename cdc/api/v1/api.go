@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/check"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -295,6 +296,22 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, changefeedConfig.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support creating a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
@@ -380,6 +397,37 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 
+	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, cfInfo.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support resuming a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+
 	job := model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminResume,
@@ -450,6 +498,31 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
 		_ = c.Error(err)
+		return
+	}
+
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.CheckUpstreamDownstreamNotSame(up.PDClient, newInfo.SinkURI, ctx)
+	if err != nil {
+		_ = c.Error(err)
+		log.Error("same in create", zap.Error(err))
+		return
+	}
+	if notSame == false {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support updating a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		log.Error("same in create", zap.Error(err))
 		return
 	}
 
