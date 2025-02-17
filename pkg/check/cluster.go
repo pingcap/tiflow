@@ -26,11 +26,18 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	dbConnImpl  pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
+	checkIsTiDB                             = pmysql.CheckIsTiDB
+	// Export for testing only.
+	GetClusterIDBySinkURIFn = getClusterIDBySinkURI
+)
+
 // UpstreamDownstreamNotSame checks whether the upstream and downstream are not the same cluster.
 func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI string) (bool, error) {
 	upID := upPD.GetClusterID(ctx)
 
-	downID, isTiDB, err := getClusterIDBySinkURI(ctx, downSinkURI)
+	downID, isTiDB, err := GetClusterIDBySinkURIFn(ctx, downSinkURI)
 	log.Debug("CheckNotSameUpstreamDownstream",
 		zap.Uint64("upID", upID), zap.Uint64("downID", downID), zap.Bool("isTiDB", isTiDB))
 	if err != nil {
@@ -57,18 +64,18 @@ func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, e
 	if strings.ToLower(url.Scheme) != "mysql" {
 		return 0, false, nil
 	}
-	dsnStr, err := pmysql.GenerateDSN(ctx, url, pmysql.NewConfig(), pmysql.CreateMySQLDBConn)
+	dsnStr, err := pmysql.GenerateDSN(ctx, url, pmysql.NewConfig(), dbConnImpl.CreateTemporaryConnection)
 	if err != nil {
 		return 0, true, cerror.Trace(err)
 	}
-	db, err := pmysql.CreateMySQLDBConn(ctx, dsnStr)
+	db, err := dbConnImpl.CreateStandardConnection(ctx, dsnStr)
 	if err != nil {
 		return 0, true, cerror.Trace(err)
 	}
 	defer db.Close()
 
 	// Check whether the downstream is TiDB.
-	isTiDB := pmysql.CheckIsTiDB(ctx, db)
+	isTiDB := checkIsTiDB(ctx, db)
 	if !isTiDB {
 		return 0, false, nil
 	}
