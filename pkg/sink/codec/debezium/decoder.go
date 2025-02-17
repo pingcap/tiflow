@@ -349,6 +349,9 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		d := types.NewDuration(0, 0, 0, int(v), ft.GetDecimal())
 		value = d.String()
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
+		// it can only safely represent integers between -2^53 + 1 and 2^53 – 1.
+		// "Safe" in this context refers to the ability to represent integers exactly and to compare them correctly.
+		// ref: https://www.rfc-editor.org/rfc/rfc7159#section-6
 		v := value.(float64)
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			// pay attention to loss of precision
