@@ -959,6 +959,10 @@ var (
 		"internal check failed, %s",
 		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
 	)
+	ErrSameUpstreamDownstream = errors.Normalize(
+		"upstream and downstream are the same, %s",
+		errors.RFCCodeText("CDC:ErrSameUpstreamDownstream"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
 		"handle ddl failed, query: %s, startTs: %d. "+

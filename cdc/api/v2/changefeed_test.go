@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	"github.com/pingcap/tiflow/pkg/check"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -76,6 +77,13 @@ func TestCreateChangefeed(t *testing.T) {
 	provider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
 	cp.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	})
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -335,6 +343,8 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&mockPDClient{}, nil).AnyTimes()
 	mockOwner := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockCapture := mock_capture.NewMockCapture(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(mockCapture, helpers)
@@ -345,6 +355,13 @@ func TestUpdateChangefeed(t *testing.T) {
 	mockCapture.EXPECT().IsReady().Return(true).AnyTimes()
 	mockCapture.EXPECT().IsOwner().Return(true).AnyTimes()
 	mockCapture.EXPECT().GetOwner().Return(mockOwner, nil).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	})
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -751,6 +768,13 @@ func TestResumeChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminResume, adminJob.Type)
 			close(done)
 		}).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	})
 
 	// case 1: invalid changefeed id
 	w := httptest.NewRecorder()
