@@ -29,7 +29,8 @@ import (
 var (
 	dbConnImpl  pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
 	checkIsTiDB                             = pmysql.CheckIsTiDB
-	// Export for testing only.
+	// GetClusterIDBySinkURIFn is a function to get the cluster ID by the sink URI.
+	// Exported for testing.
 	GetClusterIDBySinkURIFn = getClusterIDBySinkURI
 )
 
