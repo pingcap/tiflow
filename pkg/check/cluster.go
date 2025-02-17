@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -45,11 +46,16 @@ func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI 
 	return upID != downID, nil
 }
 
+// getClusterIDBySinkURI gets the cluster ID by the sink URI.
+// Returns the cluster ID, whether it is a TiDB cluster, and an error.
 func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, error) {
 	// Create a MySQL connection by using the sink URI.
 	url, err := url.Parse(sinkURI)
 	if err != nil {
 		return 0, true, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	if strings.ToLower(url.Scheme) != "mysql" {
+		return 0, false, nil
 	}
 	dsnStr, err := pmysql.GenerateDSN(ctx, url, pmysql.NewConfig(), pmysql.CreateMySQLDBConn)
 	if err != nil {
