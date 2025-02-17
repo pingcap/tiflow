@@ -3,8 +3,8 @@
 set -ex
 
 cd "$(dirname "$0")"
-OUT_DIR=/tmp/tidb_tools_test/sync_diff_inspector/output
-FIX_DIR=/tmp/tidb_tools_test/sync_diff_inspector/fixsql
+OUT_DIR=/tmp/sync_diff_inspector_test/sync_diff_inspector/output
+FIX_DIR=/tmp/sync_diff_inspector_test/sync_diff_inspector/fixsql
 rm -rf $OUT_DIR
 rm -rf $FIX_DIR
 mkdir -p $OUT_DIR
