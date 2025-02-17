@@ -343,6 +343,8 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&mockPDClient{}, nil).AnyTimes()
 	mockOwner := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockCapture := mock_capture.NewMockCapture(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(mockCapture, helpers)

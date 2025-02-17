@@ -488,6 +488,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
+	var pdClient pd.Client
 	var storage tidbkv.Storage
 	// if PDAddrs is not empty, use it to create a new kvstore
 	// Note: upManager is nil in some unit test cases
@@ -498,6 +499,11 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		if err != nil {
 			_ = c.Error(errors.Trace(err))
 		}
+		pdClient, err = h.helpers.getPDClient(ctx, pdAddrs, credentials)
+		if err != nil {
+			_ = c.Error(errors.Trace(err))
+			return
+		}
 	} else { // get the upstream of the changefeed to get the kvstore
 		up, ok := upManager.Get(oldCfInfo.UpstreamID)
 		if !ok {
@@ -505,6 +511,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 			return
 		}
 		storage = up.KVStorage
+		pdClient = up.PDClient
 	}
 
 	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
@@ -514,28 +521,6 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	// Check whether the upstream and downstream are the different cluster.
-	// Generate a pd client first.
-	var pdClient pd.Client
-	// if PDAddrs is empty, use the default pdClient
-	if len(updateCfConfig.PDAddrs) == 0 {
-		up, err := getCaptureDefaultUpstream(h.capture)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-		pdClient = up.PDClient
-	} else {
-		credential := updateCfConfig.PDConfig.toCredential()
-		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		pdClient, err = h.helpers.getPDClient(timeoutCtx, updateCfConfig.PDAddrs, credential)
-		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
-			return
-		}
-		defer pdClient.Close()
-	}
 	notSame, err := check.UpstreamDownstreamNotSame(ctx, pdClient, newCfInfo.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
