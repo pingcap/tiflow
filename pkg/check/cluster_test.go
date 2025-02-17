@@ -143,8 +143,8 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 // TestUpstreamDownstreamNotSame
 func TestUpstreamDownstreamNotSame(t *testing.T) {
 	// Backup and restore global variable
-	oldGetClusterID := GetClusterIDBySinkURIFn
-	defer func() { GetClusterIDBySinkURIFn = oldGetClusterID }()
+	oldGetClusterID := GetGetClusterIDBySinkURIFn()
+	defer func() { SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
 
 	testCases := []struct {
 		name         string
@@ -187,7 +187,7 @@ func TestUpstreamDownstreamNotSame(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			GetClusterIDBySinkURIFn = tc.mockDownFunc
+			SetGetClusterIDBySinkURIFnForTest(tc.mockDownFunc)
 			mockPD := &mockPDClient{clusterID: tc.upClusterID}
 
 			result, err := UpstreamDownstreamNotSame(context.Background(), mockPD, "any://uri")

@@ -27,18 +27,16 @@ import (
 )
 
 var (
-	dbConnImpl  pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
-	checkIsTiDB                             = pmysql.CheckIsTiDB
-	// GetClusterIDBySinkURIFn is a function to get the cluster ID by the sink URI.
-	// Exported for testing.
-	GetClusterIDBySinkURIFn = getClusterIDBySinkURI
+	dbConnImpl              pmysql.IDBConnectionFactory = &pmysql.DBConnectionFactory{}
+	checkIsTiDB                                         = pmysql.CheckIsTiDB
+	getClusterIDBySinkURIFn                             = getClusterIDBySinkURI
 )
 
 // UpstreamDownstreamNotSame checks whether the upstream and downstream are not the same cluster.
 func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI string) (bool, error) {
 	upID := upPD.GetClusterID(ctx)
 
-	downID, isTiDB, err := GetClusterIDBySinkURIFn(ctx, downSinkURI)
+	downID, isTiDB, err := getClusterIDBySinkURIFn(ctx, downSinkURI)
 	log.Debug("CheckNotSameUpstreamDownstream",
 		zap.Uint64("upID", upID), zap.Uint64("downID", downID), zap.Bool("isTiDB", isTiDB))
 	if err != nil {
@@ -94,4 +92,15 @@ func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, e
 		return 0, true, cerror.Trace(err)
 	}
 	return clusterID, true, nil
+}
+
+// GetGetClusterIDBySinkURIFn returns the getClusterIDBySinkURIFn function.
+// It is used for testing.
+func GetGetClusterIDBySinkURIFn() func(context.Context, string) (uint64, bool, error) {
+	return getClusterIDBySinkURIFn
+}
+
+// SetGetClusterIDBySinkURIFnForTest sets the getClusterIDBySinkURIFn function for testing.
+func SetGetClusterIDBySinkURIFnForTest(fn func(context.Context, string) (uint64, bool, error)) {
+	getClusterIDBySinkURIFn = fn
 }

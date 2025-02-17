@@ -392,11 +392,11 @@ func TestResumeChangefeed(t *testing.T) {
 	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(pdClient), nil).AnyTimes()
 
 	// Mock UpstreamDownstreamNotSame check
-	oldGetClusterID := check.GetClusterIDBySinkURIFn
-	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
-	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
 		return 0, false, nil
-	}
+	})
 
 	// test resume changefeed succeeded
 	mo.EXPECT().

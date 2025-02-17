@@ -79,11 +79,11 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 
 	// Mock UpstreamDownstreamNotSame check
-	oldGetClusterID := check.GetClusterIDBySinkURIFn
-	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
-	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
 		return 0, false, nil
-	}
+	})
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -357,11 +357,11 @@ func TestUpdateChangefeed(t *testing.T) {
 	mockCapture.EXPECT().GetOwner().Return(mockOwner, nil).AnyTimes()
 
 	// Mock UpstreamDownstreamNotSame check
-	oldGetClusterID := check.GetClusterIDBySinkURIFn
-	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
-	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
 		return 0, false, nil
-	}
+	})
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -770,11 +770,11 @@ func TestResumeChangefeed(t *testing.T) {
 		}).AnyTimes()
 
 	// Mock UpstreamDownstreamNotSame check
-	oldGetClusterID := check.GetClusterIDBySinkURIFn
-	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
-	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
 		return 0, false, nil
-	}
+	})
 
 	// case 1: invalid changefeed id
 	w := httptest.NewRecorder()
