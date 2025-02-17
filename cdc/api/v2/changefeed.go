@@ -147,14 +147,12 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	notSame, err := check.UpstreamDownstreamNotSame(ctx, pdClient, cfg.SinkURI)
 	if err != nil {
 		_ = c.Error(err)
-		log.Error("same in create", zap.Error(err))
 		return
 	}
 	if !notSame {
 		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
 			"TiCDC does not support creating a changefeed with the same TiDB cluster " +
 				"as both the source and the target for the changefeed."))
-		log.Error("same in create", zap.Error(err))
 		return
 	}
 

@@ -69,13 +69,11 @@ func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, e
 
 	// Get the cluster ID from the downstream TiDB.
 	row := db.QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM mysql.tidb WHERE VARIABLE_NAME = 'cluster_id'")
-	if err != nil {
-		return 0, true, cerror.Trace(err)
-	}
 	var clusterIDStr string
 	err = row.Scan(&clusterIDStr)
 	if err != nil {
-		return 0, true, cerror.Trace(err)
+		// If the cluster ID is not set, it is a legacy TiDB cluster, these should be compatible with it.
+		return 0, false, nil
 	}
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 64)
 	if err != nil {
