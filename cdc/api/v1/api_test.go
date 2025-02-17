@@ -391,7 +391,7 @@ func TestResumeChangefeed(t *testing.T) {
 	pdClient := &gc.MockPDClient{}
 	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(pdClient), nil).AnyTimes()
 
-	// Backup and restore global variable
+	// Mock UpstreamDownstreamNotSame check
 	oldGetClusterID := check.GetClusterIDBySinkURIFn
 	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
 	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {

@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	"github.com/pingcap/tiflow/pkg/check"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -76,6 +77,13 @@ func TestCreateChangefeed(t *testing.T) {
 	provider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
 	cp.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetClusterIDBySinkURIFn
+	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
+	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	}
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -345,6 +353,13 @@ func TestUpdateChangefeed(t *testing.T) {
 	mockCapture.EXPECT().IsReady().Return(true).AnyTimes()
 	mockCapture.EXPECT().IsOwner().Return(true).AnyTimes()
 	mockCapture.EXPECT().GetOwner().Return(mockOwner, nil).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetClusterIDBySinkURIFn
+	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
+	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	}
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -751,6 +766,13 @@ func TestResumeChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminResume, adminJob.Type)
 			close(done)
 		}).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetClusterIDBySinkURIFn
+	defer func() { check.GetClusterIDBySinkURIFn = oldGetClusterID }()
+	check.GetClusterIDBySinkURIFn = func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	}
 
 	// case 1: invalid changefeed id
 	w := httptest.NewRecorder()
