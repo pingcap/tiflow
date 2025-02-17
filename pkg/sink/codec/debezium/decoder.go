@@ -14,6 +14,7 @@
 package debezium
 
 import (
+	"bytes"
 	"container/list"
 	"database/sql"
 	"encoding/base64"
@@ -195,7 +196,10 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 func (d *Decoder) getCommitTs() uint64 {
 	source := d.valuePayload["source"].(map[string]interface{})
-	commitTs := source["commit_ts"].(float64)
+	commitTs, err := source["commit_ts"].(json.Number).Int64()
+	if err != nil {
+		log.Error("decode value failed", zap.Error(err), zap.Any("value", source))
+	}
 	return uint64(commitTs)
 }
 
@@ -247,8 +251,16 @@ func (d *Decoder) getTableInfo() *model.TableInfo {
 		for _, column := range columns {
 			column := column.(map[string]interface{})
 			colName := column["name"].(string)
-			jdbcType := column["jdbcType"].(float64)
-			position := column["position"].(float64)
+			jdbcType, err := column["jdbcType"].(json.Number).Int64()
+			if err != nil {
+				log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
+				return nil
+			}
+			position, err := column["position"].(json.Number).Int64()
+			if err != nil {
+				log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
+				return nil
+			}
 			typeName := column["typeName"].(string)
 			optional := column["optional"].(bool)
 			generated := column["generated"].(bool)
@@ -268,7 +280,12 @@ func (d *Decoder) getTableInfo() *model.TableInfo {
 				fieldType.AddFlag(mysql.BinaryFlag)
 			}
 			fieldType.SetType(getMySQLType(typeName))
-			if length, ok := column["length"].(float64); ok {
+			if l, ok := column["length"].(json.Number); ok {
+				length, err := l.Int64()
+				if err != nil {
+					log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
+					return nil
+				}
 				switch fieldType.GetType() {
 				case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
 					fieldType.SetDecimal(int(length))
@@ -279,7 +296,12 @@ func (d *Decoder) getTableInfo() *model.TableInfo {
 					fieldType.SetFlen(int(length))
 				}
 			}
-			if scale, ok := column["scale"].(float64); ok {
+			if s, ok := column["scale"].(json.Number); ok {
+				scale, err := s.Int64()
+				if err != nil {
+					log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
+					return nil
+				}
 				switch fieldType.GetType() {
 				case mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeDouble:
 					fieldType.SetDecimal(int(scale))
@@ -332,11 +354,19 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			value = v
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		v := value.(float64)
+		v, err := value.(json.Number).Float64()
+		if err != nil {
+			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			return nil
+		}
 		t := time.Unix(int64(v*60*60*24), 0)
 		value = t.UTC().String()
 	case mysql.TypeDatetime:
-		v := value.(float64)
+		v, err := value.(json.Number).Float64()
+		if err != nil {
+			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			return nil
+		}
 		var t time.Time
 		if ft.GetDecimal() <= 3 {
 			t = time.UnixMilli(int64(v))
@@ -345,14 +375,19 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		}
 		value = t.UTC().String()
 	case mysql.TypeDuration:
-		v := value.(float64)
+		v, err := value.(json.Number).Float64()
+		if err != nil {
+			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			return nil
+		}
 		d := types.NewDuration(0, 0, 0, int(v), ft.GetDecimal())
 		value = d.String()
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
-		// it can only safely represent integers between -2^53 + 1 and 2^53 – 1.
-		// "Safe" in this context refers to the ability to represent integers exactly and to compare them correctly.
-		// ref: https://www.rfc-editor.org/rfc/rfc7159#section-6
-		v := value.(float64)
+		v, err := value.(json.Number).Int64()
+		if err != nil {
+			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			return nil
+		}
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			// pay attention to loss of precision
 			if v > 0 && uint64(v) > math.MaxInt64 {
@@ -408,7 +443,9 @@ func getMySQLType(typeName string) byte {
 
 func decodeRawBytes(data []byte) (map[string]interface{}, map[string]interface{}, error) {
 	var v map[string]interface{}
-	if err := json.Unmarshal(data, &v); err != nil {
+	d := json.NewDecoder(bytes.NewBuffer(data))
+	d.UseNumber()
+	if err := d.Decode(&v); err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 	payload, ok := v["payload"].(map[string]interface{})
