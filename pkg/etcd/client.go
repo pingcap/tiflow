@@ -359,6 +359,7 @@ func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints 
 		TLS:                  tlsConfig,
 		LogConfig:            &logConfig,
 		DialTimeout:          defaultEtcdClientTimeout,
+		AutoSyncInterval:     30 * time.Second,
 		DialKeepAliveTime:    defaultDialKeepAliveTime,
 		DialKeepAliveTimeout: defaultDialKeepAliveTimeout,
 		DialOptions: []grpc.DialOption{
