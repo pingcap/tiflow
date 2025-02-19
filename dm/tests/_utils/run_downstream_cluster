@@ -53,6 +53,12 @@ EOF
 
 start_tikv() {
 	echo "Starting TiKV..."
+
+	cat >"$WORK_DIR/tikv.toml" <<EOF
+[storage]
+engine = "partitioned-raft-kv"
+EOF
+
 	mkdir -p "$WORK_DIR/tikv"
 	bin/tikv-server --version
 	bin/tikv-server \
@@ -61,6 +67,7 @@ start_tikv() {
 		--status-addr "$TIKV_STATUS_ADDR" \
 		--log-file "$WORK_DIR/tikv.log" \
 		--log-level info \
+		--config "$WORK_DIR/tikv.toml" \
 		-s "$WORK_DIR/tikv" &
 	sleep 5
 	i=0
