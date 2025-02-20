@@ -2,7 +2,7 @@
 
 set -eu
 
-OUT_DIR=/tmp/tidb_tools_test
+OUT_DIR=/tmp/sync_diff_inspector_test
 
 # assign default value to mysql config
 if [[ -z ${MYSQL_HOST+x} ]]; then
