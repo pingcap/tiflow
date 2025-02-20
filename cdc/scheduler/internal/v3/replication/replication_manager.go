@@ -38,7 +38,7 @@ const (
 	defaultSlowTableHeapSize  = 4
 	logSlowTablesLagThreshold = 30 * time.Second
 	logSlowTablesInterval     = 1 * time.Minute
-	logMissingTableInterval   = 30 * time.Second
+	logMissingTableInterval   = 1 * time.Second
 )
 
 // Callback is invoked when something is done.

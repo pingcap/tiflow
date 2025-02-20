@@ -321,6 +321,9 @@ func (c *coordinator) poll(
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
 		watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
+		if watermark.CheckpointTs == checkpointCannotProceed {
+			log.Warn("checkpoint not advanced", zap.Any("checkpoint", checkpointTs))
+		}
 		// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 		// when redo is enabled
 		msgs = c.captureM.Tick(c.replicationM.ReplicationSets(),
@@ -366,6 +369,9 @@ func (c *coordinator) poll(
 
 	// Checkpoint calculation
 	watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
+	if watermark.CheckpointTs == checkpointCannotProceed {
+		log.Warn("checkpoint not advanced", zap.Any("checkpoint", checkpointTs))
+	}
 
 	// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 	// when redo is enabled
