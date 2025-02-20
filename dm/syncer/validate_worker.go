@@ -476,7 +476,7 @@ type validateCompareContext struct {
 	columns     []*model.ColumnInfo
 }
 
-// a simplified version of https://github.com/pingcap/tidb-tools/blob/d9fdfa2f9040aab3fab7cd11774a82226f467fe7/sync_diff_inspector/utils/utils.go#L487-L606
+// a simplified version of CompareData in sync_diff_inspector/utils/utils.go
 func (c *validateCompareContext) compareData(key string, sourceData, targetData []*sql.NullString) (bool, error) {
 	for i, column := range c.columns {
 		data1, data2 := sourceData[i], targetData[i]
