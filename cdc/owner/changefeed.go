@@ -234,26 +234,26 @@ func newChangefeed4Test(
 	cfStatus *model.ChangeFeedStatus,
 	cfstateManager FeedStateManager, up *upstream.Upstream,
 	newDDLPuller func(
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-		schemaStorage entry.SchemaStorage,
-		filter pfilter.Filter,
-	) puller.DDLPuller,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+	schemaStorage entry.SchemaStorage,
+	filter pfilter.Filter,
+) puller.DDLPuller,
 	newSink func(
-		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
-		reportError func(err error), reportWarning func(err error),
-	) DDLSink,
+	changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+	reportError func(err error), reportWarning func(err error),
+) DDLSink,
 	newScheduler func(ctx context.Context, id model.ChangeFeedID,
-		up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
-		globalVars *vars.GlobalVars,
-	) (scheduler.Scheduler, error),
+	up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
+	globalVars *vars.GlobalVars,
+) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context,
-		changefeedID model.ChangeFeedID,
-		sinkURIStr string, replCfg *config.ReplicaConfig,
-		opts ...observer.NewObserverOption,
-	) (observer.Observer, error),
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURIStr string, replCfg *config.ReplicaConfig,
+	opts ...observer.NewObserverOption,
+) (observer.Observer, error),
 	globalVars *vars.GlobalVars,
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
@@ -813,7 +813,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	}
 
 	if c.scheduler != nil {
-		c.scheduler.Close(ctx)
+		c.scheduler.Close()
 		c.scheduler = nil
 	}
 	if c.downstreamObserver != nil {
