@@ -16,7 +16,7 @@ echo "================test bucket checkpoint================="
 echo "---------1. chunk is in the last of the bucket---------"
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/check-one-bucket=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
-main/wait-for-checkpoint=return()"
+github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
@@ -58,7 +58,7 @@ mkdir -p $OUT_DIR
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/check-one-bucket=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/ignore-last-n-chunk-in-bucket=return(1);\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
-main/wait-for-checkpoint=return()"
+github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
@@ -103,7 +103,7 @@ rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/ignore-last-n-chunk-in-bucket=return(1);\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
-main/wait-for-checkpoint=return()"
+github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
@@ -142,7 +142,7 @@ echo "================test checkpoint continous================="
 # so data-check will be skipped
 mysql -uroot -h 127.0.0.1 -P 4000 -e "create table IF NOT EXISTS diff_test.ttt(a int, aa int, primary key(a), key(aa));"
 mysql -uroot -h ${MYSQL_HOST} -P ${MYSQL_PORT} -e "create table IF NOT EXISTS diff_test.ttt(a int, b int, primary key(a), key(b));"
-export GO_FAILPOINTS="main/wait-for-checkpoint=return()"
+export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output || true
 grep 'save checkpoint' $OUT_DIR/sync_diff.log | awk 'END {print}' >$OUT_DIR/checkpoint_info
 check_not_contains 'has-upper\":true' $OUT_DIR/checkpoint_info
