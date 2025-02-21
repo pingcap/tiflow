@@ -158,7 +158,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if after, ok := d.valuePayload["after"].(map[string]interface{}); ok {
 		event.Columns = assembleColumnData(after, tableInfo)
 	}
-	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(d.getSchemaName(), d.getTableName())
+	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(tableInfo.GetSchemaName(), tableInfo.GetTableName())
 	return event, nil
 }
 
