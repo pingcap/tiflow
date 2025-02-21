@@ -67,6 +67,10 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 	ft *types.FieldType,
 ) {
 	writer.WriteObjectElement(func() {
+		if c.config.EnableTiDBExtension {
+			// The followings are TiDB extended fields
+			writer.WriteStringField("tidb_type", getTiDBType(ft))
+		}
 		switch col.GetType() {
 		case mysql.TypeBit:
 			n := ft.GetFlen()
@@ -439,10 +443,6 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				zap.Any("fieldType", col.GetType()),
 				zap.Any("column", col.GetName()),
 			)
-		}
-		if c.config.EnableTiDBExtension {
-			// The followings are TiDB extended fields
-			writer.WriteStringField("tidb_type", getTiDBType(ft))
 		}
 	})
 }

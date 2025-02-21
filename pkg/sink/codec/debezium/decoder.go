@@ -293,7 +293,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
 			return nil
 		}
-		d := types.NewDuration(0, 0, 0, int(v), 0)
+		d := types.NewDuration(0, 0, 0, int(v), types.MaxFsp)
 		value = d.String()
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		v, err := value.(json.Number).Int64()
@@ -303,12 +303,6 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		}
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			value = uint64(v)
-
-			// if v > 0 && uint64(v) > math.MaxInt64 {
-			// 	value = math.MaxInt64
-			// } else {
-			// 	value = uint64(v)
-			// }
 		} else {
 			if v > math.MaxInt64 {
 				value = math.MaxInt64
