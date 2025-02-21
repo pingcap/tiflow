@@ -42,7 +42,7 @@ type Decoder struct {
 
 	value []byte
 	msg   *message
-	memo  common.TableInfoProvider
+	memo  TableInfoProvider
 
 	// cachedMessages is used to store the messages which does not have received corresponding table info yet.
 	cachedMessages *list.List
@@ -77,7 +77,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decode
 		storage:      externalStorage,
 		upstreamTiDB: db,
 
-		memo:           common.NewMemoryTableInfoProvider(),
+		memo:           newMemoryTableInfoProvider(),
 		cachedMessages: list.New(),
 	}, errors.Trace(err)
 }
@@ -290,4 +290,66 @@ func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
 	result := d.CachedRowChangedEvents
 	d.CachedRowChangedEvents = nil
 	return result
+}
+
+// TableInfoProvider is used to store and read table info
+// It works like a schema cache when consuming simple protocol messages
+// It will store multiple versions of table info for a table
+// The table info which has the exact (schema, table, version) will be returned when reading
+type TableInfoProvider interface {
+	Write(info *model.TableInfo)
+	Read(schema, table string, version uint64) *model.TableInfo
+}
+
+type memoryTableInfoProvider struct {
+	memo map[tableSchemaKey]*model.TableInfo
+}
+
+func newMemoryTableInfoProvider() *memoryTableInfoProvider {
+	return &memoryTableInfoProvider{
+		memo: make(map[tableSchemaKey]*model.TableInfo),
+	}
+}
+
+func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
+	if info == nil || info.TableName.Schema == "" || info.TableName.Table == "" {
+		return
+	}
+	key := tableSchemaKey{
+		schema:  info.TableName.Schema,
+		table:   info.TableName.Table,
+		version: info.UpdateTS,
+	}
+
+	_, ok := m.memo[key]
+	if ok {
+		log.Debug("table info not stored, since it already exists",
+			zap.String("schema", info.TableName.Schema),
+			zap.String("table", info.TableName.Table),
+			zap.Uint64("version", info.UpdateTS))
+		return
+	}
+
+	m.memo[key] = info
+	log.Info("table info stored",
+		zap.String("schema", info.TableName.Schema),
+		zap.String("table", info.TableName.Table),
+		zap.Uint64("version", info.UpdateTS))
+}
+
+// Read returns the table info with the exact (schema, table, version)
+// Note: It's a blocking call, it will wait until the table info is stored
+func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *model.TableInfo {
+	key := tableSchemaKey{
+		schema:  schema,
+		table:   table,
+		version: version,
+	}
+	return m.memo[key]
+}
+
+type tableSchemaKey struct {
+	schema  string
+	table   string
+	version uint64
 }

@@ -15,7 +15,6 @@ package debezium
 
 import (
 	"bytes"
-	"container/list"
 	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
@@ -29,13 +28,12 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	ptype "github.com/pingcap/tidb/pkg/parser/types"
+	ptypes "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"go.uber.org/zap"
 )
 
@@ -45,11 +43,6 @@ type Decoder struct {
 
 	upstreamTiDB     *sql.DB
 	tableIDAllocator *common.FakeTableIDAllocator
-	memo             common.TableInfoProvider
-	// cachedMessages is used to store the messages which does not have received corresponding table info yet.
-	cachedMessages *list.List
-	// cachedRowChangedEvents are events just decoded from the cachedMessages
-	cachedRowChangedEvents []*model.RowChangedEvent
 
 	keyPayload   map[string]interface{}
 	keySchema    map[string]interface{}
@@ -66,8 +59,6 @@ func NewDecoder(
 		config:           config,
 		upstreamTiDB:     db,
 		tableIDAllocator: common.NewFakeTableIDAllocator(),
-		memo:             common.NewMemoryTableInfoProvider(),
-		cachedMessages:   list.New(),
 	}
 }
 
@@ -116,73 +107,50 @@ func (d *Decoder) HasNext() (model.MessageType, bool, error) {
 // NextResolvedEvent returns the next resolved event if exists
 func (d *Decoder) NextResolvedEvent() (uint64, error) {
 	if len(d.valuePayload) == 0 {
-		return 0, errors.New("value should not be empty")
+		return 0, errors.ErrDebeziumEmptyValueMessage
 	}
 	commitTs := d.getCommitTs()
-	d.reset()
+	d.clear()
 	return commitTs, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *Decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if len(d.valuePayload) == 0 {
-		return nil, errors.New("value should not be empty")
+		return nil, errors.ErrDebeziumEmptyValueMessage
 	}
-	defer d.reset()
+	defer d.clear()
+	event := new(model.DDLEvent)
+	event.TableInfo = new(model.TableInfo)
 	tableName := d.getTableName()
-	result := &model.DDLEvent{
-		TableInfo: model.WrapTableInfo(100, "", 100, &timodel.TableInfo{}),
-	}
-	result.Query = d.valuePayload["ddl"].(string)
-	result.CommitTs = d.getCommitTs()
-	// tableName is empty when droping table
 	if tableName != "" {
-		result.TableInfo = d.getTableInfo()
-		d.memo.Write(result.TableInfo)
-	}
-	for ele := d.cachedMessages.Front(); ele != nil; {
-		d.unmarshalMsg(ele.Value)
-		event, err := d.NextRowChangedEvent()
-		if err != nil {
-			return nil, err
+		event.TableInfo.TableName = model.TableName{
+			Schema: d.getSchemaName(),
+			Table:  tableName,
 		}
-		d.cachedRowChangedEvents = append(d.cachedRowChangedEvents, event)
-
-		next := ele.Next()
-		d.cachedMessages.Remove(ele)
-		ele = next
 	}
-	return result, nil
+	event.Query = d.valuePayload["ddl"].(string)
+	event.CommitTs = d.getCommitTs()
+	return event, nil
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if len(d.valuePayload) == 0 {
-		return nil, errors.New("value should not be empty")
+		return nil, errors.ErrDebeziumEmptyValueMessage
 	}
-	defer d.reset()
-	schemaName := d.getSchemaName()
-	tableName := d.getTableName()
-	tableInfo := d.memo.Read(schemaName, tableName, 0)
-	if tableInfo == nil {
-		log.Debug("table info not found for the event, "+
-			"the consumer should cache this event temporarily, and update the tableInfo after it's received",
-			zap.String("schema", schemaName),
-			zap.String("table", tableName))
-		d.cachedMessages.PushBack(d.marshalMsg())
-		return nil, nil
+	if d.config.DebeziumDisableSchema {
+		return nil, errors.ErrDebeziumInvalidMessage.GenWithStackByArgs("DebeziumDisableSchema is true")
 	}
+	if !d.config.EnableTiDBExtension {
+		return nil, errors.ErrDebeziumInvalidMessage.GenWithStackByArgs("EnableTiDBExtension is false")
+	}
+	defer d.clear()
+	tableInfo := d.getTableInfo()
 	commitTs := d.getCommitTs()
 	event := &model.RowChangedEvent{
 		CommitTs:  commitTs,
 		TableInfo: tableInfo,
-	}
-	// set handleKey flag
-	for name := range d.keyPayload {
-		tableID := tableInfo.ForceGetColumnIDByName(name)
-		colInfo := tableInfo.GetColumnByID(tableID)
-		colInfo.AddFlag(uint(model.HandleKeyFlag))
-		tableInfo.ColumnsFlag[tableID].SetIsHandleKey()
 	}
 	if before, ok := d.valuePayload["before"].(map[string]interface{}); ok {
 		event.PreColumns = assembleColumnData(before, tableInfo)
@@ -190,7 +158,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if after, ok := d.valuePayload["after"].(map[string]interface{}); ok {
 		event.Columns = assembleColumnData(after, tableInfo)
 	}
-	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName())
+	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(d.getSchemaName(), d.getTableName())
 	return event, nil
 }
 
@@ -215,110 +183,55 @@ func (d *Decoder) getTableName() string {
 	return tableName
 }
 
-func (d *Decoder) marshalMsg() any {
-	return []map[string]interface{}{d.keyPayload, d.keySchema, d.valuePayload, d.valueSchema}
-}
-
-func (d *Decoder) unmarshalMsg(value any) {
-	msg := value.([]map[string]interface{})
-	d.keyPayload = msg[0]
-	d.keySchema = msg[1]
-	d.valuePayload = msg[2]
-	d.valueSchema = msg[3]
-}
-
-func (d *Decoder) reset() {
+func (d *Decoder) clear() {
 	d.keyPayload = nil
 	d.keySchema = nil
 	d.valuePayload = nil
 	d.valueSchema = nil
 }
 
-// GetCachedEvents returns the cached events
-func (d *Decoder) GetCachedEvents() []*model.RowChangedEvent {
-	result := d.cachedRowChangedEvents
-	d.cachedRowChangedEvents = nil
-	return result
-}
-
 func (d *Decoder) getTableInfo() *model.TableInfo {
-	tidbTableInfo := &timodel.TableInfo{}
-	tableChanges := d.valuePayload["tableChanges"].([]interface{})
-	tableChange := tableChanges[0].(map[string]interface{})
-	if tableInfo, ok := tableChange["table"].(map[string]interface{}); ok {
-		columns := tableInfo["columns"].([]interface{})
-		columnIDAllocator := model.NewIncrementalColumnIDAllocator()
-		for _, column := range columns {
-			column := column.(map[string]interface{})
-			colName := column["name"].(string)
-			jdbcType, err := column["jdbcType"].(json.Number).Int64()
-			if err != nil {
-				log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
-				return nil
-			}
-			position, err := column["position"].(json.Number).Int64()
-			if err != nil {
-				log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
-				return nil
-			}
-			typeName := column["typeName"].(string)
-			optional := column["optional"].(bool)
-			generated := column["generated"].(bool)
-
-			fieldType := ptype.FieldType{}
-			if strings.Contains(typeName, "UNSIGNED") {
-				fieldType.AddFlag(mysql.UnsignedFlag)
-			}
-			if !optional {
-				fieldType.AddFlag(mysql.NotNullFlag)
-			}
-			if generated {
-				fieldType.AddFlag(mysql.GeneratedColumnFlag)
-			}
-			switch internal.JavaSQLType(jdbcType) {
-			case internal.JavaSQLTypeBLOB, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeBINARY:
-				fieldType.AddFlag(mysql.BinaryFlag)
-			}
-			fieldType.SetType(getMySQLType(typeName))
-			if l, ok := column["length"].(json.Number); ok {
-				length, err := l.Int64()
-				if err != nil {
-					log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
-					return nil
-				}
-				switch fieldType.GetType() {
-				case mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDatetime:
-					fieldType.SetDecimal(int(length))
-				case mysql.TypeYear, mysql.TypeNewDecimal,
-					mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong,
-					mysql.TypeLonglong, mysql.TypeFloat, mysql.TypeDouble,
-					mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTiDBVectorFloat32:
-					fieldType.SetFlen(int(length))
-				}
-			}
-			if s, ok := column["scale"].(json.Number); ok {
-				scale, err := s.Int64()
-				if err != nil {
-					log.Error("decode value failed", zap.Error(err), zap.Any("value", column))
-					return nil
-				}
-				switch fieldType.GetType() {
-				case mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeDouble:
-					fieldType.SetDecimal(int(scale))
-				}
-			}
-			tidbTableInfo.Columns = append(tidbTableInfo.Columns, &timodel.ColumnInfo{
-				State:     timodel.StatePublic,
-				Name:      pmodel.NewCIStr(colName),
-				FieldType: fieldType,
-				Offset:    int(position) - 1,
-				ID:        columnIDAllocator.GetColumnID(colName),
-			})
-		}
-	}
-	database := d.getSchemaName()
+	tidbTableInfo := new(timodel.TableInfo)
 	tidbTableInfo.Name = pmodel.NewCIStr(d.getTableName())
-	return model.WrapTableInfo(100, database, 100, tidbTableInfo)
+	columnIDAllocator := model.NewIncrementalColumnIDAllocator()
+	fields := d.valueSchema["fields"].([]interface{})
+	after := fields[1].(map[string]interface{})
+	columnsField := after["fields"].([]interface{})
+	indexColumns := make([]*timodel.IndexColumn, 0, len(d.keyPayload))
+	for idx, column := range columnsField {
+		col := column.(map[string]interface{})
+		colName := col["field"].(string)
+		tidbType := col["tidb_type"].(string)
+		optional := col["optional"].(bool)
+		fieldType := parseTiDBType(tidbType, optional)
+		if fieldType.GetType() == mysql.TypeDatetime {
+			name := col["name"].(string)
+			if name == "io.debezium.time.MicroTimestamp" {
+				fieldType.SetDecimal(6)
+			}
+		}
+		if _, ok := d.keyPayload[colName]; ok {
+			indexColumns = append(indexColumns, &timodel.IndexColumn{
+				Name:   pmodel.NewCIStr(colName),
+				Offset: idx,
+			})
+			fieldType.AddFlag(mysql.PriKeyFlag)
+		}
+		tidbTableInfo.Columns = append(tidbTableInfo.Columns, &timodel.ColumnInfo{
+			State:     timodel.StatePublic,
+			Name:      pmodel.NewCIStr(colName),
+			FieldType: *fieldType,
+			ID:        columnIDAllocator.GetColumnID(colName),
+		})
+	}
+	tidbTableInfo.Indices = append(tidbTableInfo.Indices, &timodel.IndexInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("primary"),
+		Columns: indexColumns,
+		Unique:  true,
+		Primary: true,
+	})
+	return model.WrapTableInfo(100, d.getSchemaName(), 100, tidbTableInfo)
 }
 
 func assembleColumnData(data map[string]interface{}, tableInfo *model.TableInfo) []*model.ColumnData {
@@ -344,8 +257,8 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	switch ft.GetType() {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		s := value.(string)
 		if mysql.HasBinaryFlag(ft.GetFlag()) {
+			s := value.(string)
 			v, err := base64.StdEncoding.DecodeString(s)
 			if err != nil {
 				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
@@ -354,33 +267,33 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			value = v
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		v, err := value.(json.Number).Float64()
+		v, err := value.(json.Number).Int64()
 		if err != nil {
 			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
 			return nil
 		}
-		t := time.Unix(int64(v*60*60*24), 0)
+		t := time.Unix(v*60*60*24, 0)
 		value = t.UTC().String()
 	case mysql.TypeDatetime:
-		v, err := value.(json.Number).Float64()
+		v, err := value.(json.Number).Int64()
 		if err != nil {
 			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
 			return nil
 		}
 		var t time.Time
 		if ft.GetDecimal() <= 3 {
-			t = time.UnixMilli(int64(v))
+			t = time.UnixMilli(v)
 		} else {
-			t = time.UnixMicro(int64(v))
+			t = time.UnixMicro(v)
 		}
 		value = t.UTC().String()
 	case mysql.TypeDuration:
-		v, err := value.(json.Number).Float64()
+		v, err := value.(json.Number).Int64()
 		if err != nil {
 			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
 			return nil
 		}
-		d := types.NewDuration(0, 0, 0, int(v), ft.GetDecimal())
+		d := types.NewDuration(0, 0, 0, int(v), 0)
 		value = d.String()
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		v, err := value.(json.Number).Int64()
@@ -389,12 +302,13 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			return nil
 		}
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
-			// pay attention to loss of precision
-			if v > 0 && uint64(v) > math.MaxInt64 {
-				value = math.MaxInt64
-			} else {
-				value = uint64(v)
-			}
+			value = uint64(v)
+
+			// if v > 0 && uint64(v) > math.MaxInt64 {
+			// 	value = math.MaxInt64
+			// } else {
+			// 	value = uint64(v)
+			// }
 		} else {
 			if v > math.MaxInt64 {
 				value = math.MaxInt64
@@ -405,24 +319,18 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			}
 		}
 	case mysql.TypeBit:
-		n := ft.GetFlen()
-		if n != 0 {
-			s := value.(string)
-			v, err := base64.StdEncoding.DecodeString(s)
+		switch v := value.(type) {
+		case string:
+			b, err := base64.StdEncoding.DecodeString(v)
 			if err != nil {
 				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
 				return nil
 			}
 			var buf [8]byte
-			numBytes := n / 8
-			if n%8 != 0 {
-				numBytes += 1
-			}
-			copy(buf[:numBytes], v)
+			copy(buf[:len(b)], b)
 			value = binary.LittleEndian.Uint64(buf[:])
-		} else {
-			s := value.(bool)
-			if s {
+		case bool:
+			if v {
 				value = uint64(1)
 			} else {
 				value = uint64(0)
@@ -434,11 +342,21 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	return result
 }
 
-func getMySQLType(typeName string) byte {
-	typeName = strings.Replace(typeName, " UNSIGNED ZEROFILL", "", 1)
-	typeName = strings.Replace(typeName, " UNSIGNED", "", 1)
-	typeName = strings.ToLower(typeName)
-	return ptype.StrToType(typeName)
+func parseTiDBType(tidbType string, optional bool) *ptypes.FieldType {
+	ft := new(ptypes.FieldType)
+	if optional {
+		ft.AddFlag(mysql.NotNullFlag)
+	}
+	if strings.Contains(tidbType, " unsigned") {
+		ft.AddFlag(mysql.UnsignedFlag)
+		tidbType = strings.Replace(tidbType, " unsigned", "", 1)
+	}
+	if strings.Contains(tidbType, "blob") || strings.Contains(tidbType, "binary") {
+		ft.AddFlag(mysql.BinaryFlag)
+	}
+	tp := ptypes.StrToType(tidbType)
+	ft.SetType(tp)
+	return ft
 }
 
 func decodeRawBytes(data []byte) (map[string]interface{}, map[string]interface{}, error) {

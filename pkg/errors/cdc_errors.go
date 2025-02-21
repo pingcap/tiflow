@@ -444,8 +444,12 @@ var (
 		errors.RFCCodeText("CDC:ErrDebeziumEncodeFailed"),
 	)
 	ErrDebeziumInvalidMessage = errors.Normalize(
-		"avro invalid message format, %s",
-		errors.RFCCodeText("CDC:ErrAvroInvalidMessage"),
+		"debezium invalid message format, %s",
+		errors.RFCCodeText("CDC:ErrDebeziumInvalidMessage"),
+	)
+	ErrDebeziumEmptyValueMessage = errors.Normalize(
+		"debezium value should not be empty",
+		errors.RFCCodeText("CDC:ErrDebeziumEmptyValueMessage"),
 	)
 	ErrStorageSinkInvalidConfig = errors.Normalize(
 		"storage sink config invalid",
