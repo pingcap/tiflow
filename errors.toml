@@ -236,9 +236,19 @@ error = '''
 unflatten datume data
 '''
 
+["CDC:ErrDebeziumEmptyValueMessage"]
+error = '''
+debezium value should not be empty
+'''
+
 ["CDC:ErrDebeziumEncodeFailed"]
 error = '''
 debezium encode failed
+'''
+
+["CDC:ErrDebeziumInvalidMessage"]
+error = '''
+debezium invalid message format, %s
 '''
 
 ["CDC:ErrDecodeFailed"]

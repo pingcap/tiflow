@@ -227,6 +227,18 @@ func getExpressionAndName(ft types.FieldType) (string, string) {
 	return cs + suf, prefix + suf
 }
 
+func getTiDBType(ft *types.FieldType) string {
+	tidbType := types.TypeToStr(ft.GetType(), ft.GetCharset())
+	switch ft.GetType() {
+	case mysql.TypeYear, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal:
+		return tidbType
+	}
+	if mysql.HasUnsignedFlag(ft.GetFlag()) {
+		tidbType = tidbType + " unsigned"
+	}
+	return tidbType
+}
+
 func getBitFromUint64(n int, v uint64) []byte {
 	var buf [8]byte
 	binary.LittleEndian.PutUint64(buf[:], v)
