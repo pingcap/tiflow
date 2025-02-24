@@ -1039,7 +1039,8 @@ func (c *dbzCodec) EncodeValue(
 						}
 						for _, col := range validCols {
 							colx := model.GetColumnDataX(col, e.TableInfo)
-							c.writeDebeziumFieldSchema(fieldsWriter, colx, &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType)
+							ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
+							c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
 						}
 						if e.TableInfo.HasVirtualColumns() {
 							for _, colInfo := range e.TableInfo.Columns {
@@ -1048,7 +1049,8 @@ func (c *dbzCodec) EncodeValue(
 								}
 								data := &model.ColumnData{ColumnID: colInfo.ID}
 								colx := model.GetColumnDataX(data, e.TableInfo)
-								c.writeDebeziumFieldSchema(fieldsWriter, colx, &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType)
+								ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
+								c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
 							}
 						}
 						util.ReturnJSONWriter(fieldsWriter)

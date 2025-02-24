@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -241,6 +242,9 @@ func assembleColumnData(data map[string]interface{}, tableInfo *model.TableInfo)
 		colInfo := tableInfo.GetColumnByID(columnID)
 		result = append(result, decodeColumn(value, colInfo))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ColumnID > result[j].ColumnID
+	})
 	return result
 }
 
