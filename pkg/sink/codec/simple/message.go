@@ -145,7 +145,7 @@ func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 		tp.Decimal = col.GetDecimal()
 	}
 
-	defaultValue := model.GetColumnDefaultValue(col)
+	defaultValue := col.GetDefaultValue()
 	if defaultValue != nil && col.GetType() == mysql.TypeBit {
 		defaultValue = common.MustBinaryLiteralToInt([]byte(defaultValue.(string)))
 	}
@@ -554,7 +554,7 @@ func (a *jsonMarshaller) newDMLMessage(
 		Version:            defaultVersion,
 		Schema:             event.TableInfo.GetSchemaName(),
 		Table:              event.TableInfo.GetTableName(),
-		TableID:            event.TableInfo.ID,
+		TableID:            event.GetTableID(),
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),
 		SchemaVersion:      event.TableInfo.UpdateTS,

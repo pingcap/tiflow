@@ -109,7 +109,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"nullable": !mysql.HasNotNullFlag(col.GetFlag()),
 			"default":  nil,
 		}
-		defaultValue := model.GetColumnDefaultValue(col)
+		defaultValue := col.GetDefaultValue()
 		if defaultValue != nil {
 			// according to TiDB source code, the default value is converted to string if not nil.
 			column["default"] = map[string]interface{}{
@@ -252,7 +252,7 @@ func (a *avroMarshaller) newDMLMessageMap(
 	dmlMessagePayload["version"] = defaultVersion
 	dmlMessagePayload["database"] = event.TableInfo.GetSchemaName()
 	dmlMessagePayload["table"] = event.TableInfo.GetTableName()
-	dmlMessagePayload["tableID"] = event.TableInfo.ID
+	dmlMessagePayload["tableID"] = event.GetTableID()
 	dmlMessagePayload["commitTs"] = int64(event.CommitTs)
 	dmlMessagePayload["buildTs"] = time.Now().UnixMilli()
 	dmlMessagePayload["schemaVersion"] = int64(event.TableInfo.UpdateTS)

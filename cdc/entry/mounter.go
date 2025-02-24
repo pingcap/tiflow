@@ -38,7 +38,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -63,19 +62,6 @@ type rowKVEntry struct {
 	// or row data that does not contain any Datum.
 	RowExist    bool
 	PreRowExist bool
-}
-
-// DDLTableInfo contains the tableInfo about tidb_ddl_job and tidb_ddl_history
-// and the column id of `job_meta` in these two tables.
-type DDLTableInfo struct {
-	// ddlJobsTable use to parse all ddl jobs except `create table`
-	DDLJobTable *model.TableInfo
-	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	JobMetaColumnIDinJobTable int64
-	// ddlHistoryTable only use to parse `create table` ddl job
-	DDLHistoryTable *model.TableInfo
-	// It holds the column id of `job_meta` in table `tidb_ddl_history`.
-	JobMetaColumnIDinHistoryTable int64
 }
 
 // Mounter is used to parse SQL events from KV events
@@ -196,14 +182,20 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		if bytes.HasPrefix(key, recordPrefix) {
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
+			recordID, err := tablecodec.DecodeRowKey(raw.Key)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			baseInfo.RecordID = recordID
+
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			if rowKV == nil {
 				return nil, nil
 			}
-			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, checksumKey, raw.ApproximateDataSize())
+			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, recordID, checksumKey, raw.ApproximateDataSize())
 			if err != nil {
 				return nil, err
 			}
@@ -231,28 +223,21 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 
 func (m *mounter) unmarshalRowKVEntry(
 	tableInfo *model.TableInfo,
-	rawKey []byte,
 	rawValue []byte,
 	rawOldValue []byte,
 	base baseKVEntry,
 ) (*rowKVEntry, error) {
-	recordID, err := tablecodec.DecodeRowKey(rawKey)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	base.RecordID = recordID
-
 	var (
 		row, preRow           map[int64]types.Datum
 		rowExist, preRowExist bool
 	)
 
-	row, rowExist, err = m.decodeRow(rawValue, recordID, tableInfo, false)
+	row, rowExist, err := m.decodeRow(rawValue, base.RecordID, tableInfo, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	preRow, preRowExist, err = m.decodeRow(rawOldValue, recordID, tableInfo, true)
+	preRow, preRowExist, err = m.decodeRow(rawOldValue, base.RecordID, tableInfo, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -307,89 +292,39 @@ func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
 	return bytes.HasPrefix(rawKV.Key, metaPrefix)
 }
 
-// ParseDDLJob parses the job from the raw KV entry.
-func ParseDDLJob(rawKV *model.RawKVEntry, ddlTableInfo *DDLTableInfo) (*timodel.Job, error) {
+// ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
+func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
 	var v []byte
-	var datum types.Datum
-
-	// for test case only
 	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+		// old queue base job.
 		v = rawKV.Value
-		job, err := parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
-		if err != nil || job == nil {
-			job, err = parseJob(v, rawKV.StartTs, rawKV.CRTs, true)
-		}
-		return job, err
-	}
-
-	recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	tableID := tablecodec.DecodeTableID(rawKV.Key)
-
-	// parse it with tidb_ddl_job
-	if tableID == spanz.JobTableID {
-		row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLJobTable, time.UTC)
+	} else {
+		// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
+		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		datum = row[ddlTableInfo.JobMetaColumnIDinJobTable]
-		v = datum.GetBytes()
-
-		return parseJob(v, rawKV.StartTs, rawKV.CRTs, false)
-	} else if tableID == spanz.JobHistoryID {
-		// parse it with tidb_ddl_history
-		row, err := decodeRow(rawKV.Value, recordID, ddlTableInfo.DDLHistoryTable, time.UTC)
+		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		datum = row[ddlTableInfo.JobMetaColumnIDinHistoryTable]
+		datum := row[id]
 		v = datum.GetBytes()
-
-		return parseJob(v, rawKV.StartTs, rawKV.CRTs, true)
 	}
 
-	return nil, fmt.Errorf("Unvalid tableID %v in rawKV.Key", tableID)
+	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
 }
 
 // parseJob unmarshal the job from "v".
-// fromHistoryTable is used to distinguish the job is from tidb_dd_job or tidb_ddl_history
-// We need to be compatible with the two modes, enable_fast_create_table=on and enable_fast_create_table=off
-// When enable_fast_create_table=on, `create table` will only be inserted into tidb_ddl_history after being executed successfully.
-// When enable_fast_create_table=off, `create table` just like other ddls will be firstly inserted to tidb_ddl_job,
-// and being inserted into tidb_ddl_history after being executed successfully.
-// In both two modes, other ddls are all firstly inserted into tidb_ddl_job, and then inserted into tidb_ddl_history after being executed successfully.
-//
-// To be compatible with these two modes, we will get `create table` ddl from tidb_ddl_history, and all ddls from tidb_ddl_job.
-// When enable_fast_create_table=off, for each `create table` ddl we will get twice(once from tidb_ddl_history, once from tidb_ddl_job)
-// Because in `handleJob` we will skip the repeated ddls, thus it's ok for us to get `create table` twice.
-// Besides, the `create table` from tidb_ddl_job always have a earlier commitTs than from tidb_ddl_history.
-// Therefore, we always use the commitTs of ddl from `tidb_ddl_job` as StartTs, which ensures we can get all the dmls.
-func parseJob(v []byte, startTs, CRTs uint64, fromHistoryTable bool) (*timodel.Job, error) {
+func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	var job timodel.Job
 	err := json.Unmarshal(v, &job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	if fromHistoryTable {
-		// we only want to get `create table` and `create tables` ddl from tidb_ddl_history, so we just throw out others ddls.
-		// We only want the job with `JobStateSynced`, which is means the ddl job is done successfully.
-		// Besides, to satisfy the subsequent processing,
-		// We need to set the job to be Done to make it will replay in schemaStorage
-		if (job.Type != timodel.ActionCreateTable && job.Type != timodel.ActionCreateTables) || job.State != timodel.JobStateSynced {
-			return nil, nil
-		}
-		job.State = timodel.JobStateDone
-	} else {
-		// we need to get all ddl job which is done from tidb_ddl_job
-		if !job.IsDone() {
-			return nil, nil
-		}
+	if !job.IsDone() {
+		return nil, nil
 	}
-
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
 	job.StartTS = startTs
@@ -490,33 +425,34 @@ func (m *mounter) verifyColumnChecksum(
 
 	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
 	if err != nil {
-		log.Error("failed to calculate the checksum", zap.Uint32("first", first), zap.Error(err))
+		log.Error("failed to calculate the checksum",
+			zap.Uint32("first", first), zap.Any("columnInfos", columnInfos),
+			zap.Any("rawColumns", rawColumns), zap.Error(err))
 		return 0, false, err
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		log.Debug("checksum matched", zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
 	if ok && checksum == extra {
-		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
-			zap.Uint32("checksum", checksum), zap.Uint32("extra", extra))
 		return checksum, true, nil
 	}
 
 	if !skipFail {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra),
+			zap.Any("columnInfos", columnInfos), zap.Any("rawColumns", rawColumns), zap.Any("tz", m.tz))
 		return checksum, false, nil
 	}
 
 	if time.Since(m.lastSkipOldValueTime) > time.Minute {
 		log.Warn("checksum mismatch on the old value, "+
 			"this may caused by Add Column / Drop Column executed, skip verification",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra))
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra),
+			zap.Any("columnInfos", columnInfos), zap.Any("rawColumns", rawColumns), zap.Any("tz", m.tz))
 		m.lastSkipOldValueTime = time.Now()
 	}
 	return checksum, true, nil
@@ -602,7 +538,7 @@ func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
 
 func verifyRawBytesChecksum(
 	tableInfo *model.TableInfo, columns []*model.ColumnData, decoder *rowcodec.DatumMapDecoder,
-	key kv.Key, tz *time.Location,
+	handle kv.Handle, key kv.Key, tz *time.Location,
 ) (uint32, bool, error) {
 	expected, ok := decoder.GetChecksum()
 	if !ok {
@@ -621,12 +557,14 @@ func verifyRawBytesChecksum(
 		columnInfo := tableInfo.ForceGetColumnInfo(columnID)
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
+			log.Error("build datum for raw checksum calculation failed",
+				zap.Any("col", col), zap.Any("columnInfo", columnInfo), zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		datums = append(datums, &datum)
 		columnIDs = append(columnIDs, columnID)
 	}
-	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, key, nil)
+	obtained, err := decoder.CalculateRawChecksum(tz, columnIDs, datums, key, handle, nil)
 	if err != nil {
 		return 0, false, errors.Trace(err)
 	}
@@ -635,7 +573,10 @@ func verifyRawBytesChecksum(
 	}
 
 	log.Error("raw bytes checksum mismatch",
-		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained))
+		zap.Int("version", decoder.ChecksumVersion()),
+		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained),
+		zap.Any("tableInfo", tableInfo), zap.Any("columns", columns),
+		zap.Any("handle", handle.String()), zap.Any("tz", tz))
 
 	return expected, false, nil
 }
@@ -645,7 +586,7 @@ func verifyRawBytesChecksum(
 func (m *mounter) verifyChecksum(
 	tableInfo *model.TableInfo, columnInfos []*timodel.ColumnInfo,
 	columns []*model.ColumnData, rawColumns []types.Datum,
-	key kv.Key, isPreRow bool,
+	handle kv.Handle, key kv.Key, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
 		return 0, true, nil
@@ -665,9 +606,12 @@ func (m *mounter) verifyChecksum(
 		// Update / Delete event correctly, after Add Column / Drop column DDL,
 		// since the table schema does not contain complete column information.
 		return m.verifyColumnChecksum(columnInfos, rawColumns, decoder, isPreRow)
-	case 1:
-		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, key, m.tz)
+	case 1, 2:
+		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, handle, key, m.tz)
 		if err != nil {
+			log.Error("calculate raw checksum failed",
+				zap.Int("version", version), zap.Any("tz", m.tz), zap.Any("handle", handle.String()),
+				zap.Any("key", key), zap.Any("columns", columns), zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		if !matched {
@@ -675,7 +619,9 @@ func (m *mounter) verifyChecksum(
 		}
 		columnChecksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
 		if err != nil {
-			log.Error("failed to calculate column-level checksum, after raw checksum verification passed", zap.Error(err))
+			log.Error("failed to calculate column-level checksum, after raw checksum verification passed",
+				zap.Any("columnsInfo", columnInfos), zap.Any("rawColumns", rawColumns),
+				zap.Any("tz", m.tz), zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		return columnChecksum, true, nil
@@ -685,7 +631,7 @@ func (m *mounter) verifyChecksum(
 }
 
 func (m *mounter) mountRowKVEntry(
-	tableInfo *model.TableInfo, row *rowKVEntry, key kv.Key, dataSize int64,
+	tableInfo *model.TableInfo, row *rowKVEntry, handle kv.Handle, key kv.Key, dataSize int64,
 ) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
 		rawRow      model.RowChangedDatums
@@ -719,19 +665,15 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, key, true)
+		preChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, preCols, preRawCols, handle, key, true)
 		if err != nil {
-			log.Error("calculate the previous columns checksum failed",
-				zap.Any("tableInfo", tableInfo),
-				zap.Any("rawCols", preRawCols))
 			return nil, rawRow, errors.Trace(err)
 		}
 
 		if !matched {
 			log.Error("previous columns checksum mismatch",
-				zap.Uint32("checksum", preChecksum),
-				zap.Any("tableInfo", tableInfo),
-				zap.Any("rawCols", preRawCols))
+				zap.Uint32("checksum", preChecksum), zap.Any("tableInfo", tableInfo),
+				zap.Any("preCols", preCols), zap.Any("rawCols", preRawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID)
@@ -751,18 +693,14 @@ func (m *mounter) mountRowKVEntry(
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, key, false)
+		currentChecksum, matched, err = m.verifyChecksum(tableInfo, columnInfos, cols, rawCols, handle, key, false)
 		if err != nil {
-			log.Error("calculate the current columns checksum failed",
-				zap.Any("tableInfo", tableInfo),
-				zap.Any("rawCols", rawCols))
 			return nil, rawRow, errors.Trace(err)
 		}
 		if !matched {
 			log.Error("current columns checksum mismatch",
-				zap.Uint32("checksum", currentChecksum),
-				zap.Any("tableInfo", tableInfo),
-				zap.Any("rawCols", rawCols))
+				zap.Uint32("checksum", currentChecksum), zap.Any("tableInfo", tableInfo),
+				zap.Any("cols", cols), zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID)

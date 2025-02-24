@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -100,9 +101,44 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 	require.NoError(t, err)
 
 	require.ErrorIs(t, lw.Close(), context.Canceled)
+	// duplicate close should return the same error
+	require.ErrorIs(t, lw.Close(), context.Canceled)
 
-	err = lw.WriteEvents(ctx, events...)
-	require.NoError(t, err)
-	err = lw.FlushLog(ctx)
-	require.NoError(t, err)
+	functions := map[string]func(error){
+		"WriteEvents": func(expected error) {
+			if expected == nil {
+				err := lw.WriteEvents(ctx, events...)
+				require.NoError(t, err)
+			} else {
+				require.Eventually(
+					t, func() bool {
+						err := lw.WriteEvents(ctx, events...)
+						return errors.Is(errors.Cause(err), expected)
+					}, time.Second*2, time.Microsecond*10,
+				)
+			}
+		},
+		"FlushLog": func(expected error) {
+			if expected == nil {
+				err := lw.FlushLog(ctx)
+				require.NoError(t, err)
+			} else {
+				require.Eventually(
+					t, func() bool {
+						err := lw.WriteEvents(ctx, events...)
+						return errors.Is(errors.Cause(err), expected)
+					}, time.Second*2, time.Microsecond*10,
+				)
+			}
+		},
+	}
+	firstCall := true
+	for _, f := range functions {
+		if firstCall {
+			firstCall = false
+			f(context.Canceled)
+		} else {
+			f(nil)
+		}
+	}
 }
