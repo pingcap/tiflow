@@ -104,6 +104,7 @@ var (
 	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricGetStoreErr                 = eventFeedErrorCounter.WithLabelValues("GetStoreErr")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
 )
@@ -660,8 +661,17 @@ func (s *eventFeedSession) requestRegionToStore(
 					time.Sleep(delay)
 				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
+				var regionErr error
+				var scheduleReload bool
+				if cerror.Is(err, cerror.ErrGetAllStoresFailed) {
+					regionErr = &getStoreErr{}
+					scheduleReload = true
+				} else {
+					regionErr = &connectToStoreErr{}
+					scheduleReload = regionScheduleReload
+				}
+				s.client.regionCache.OnSendFail(bo, rpcCtx, scheduleReload, err)
+				errInfo := newRegionErrorInfo(sri, regionErr)
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
@@ -1492,3 +1502,7 @@ func (e *connectToStoreErr) Error() string { return "connect to store error" }
 type sendRequestToStoreErr struct{}
 
 func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
+
+type getStoreErr struct{}
+
+func (e *getStoreErr) Error() string { return "get store error" }

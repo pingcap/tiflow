@@ -464,6 +464,9 @@ func (s *SharedClient) divideAndScheduleRegions(
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -624,6 +627,13 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		metricFeedRPCCtxUnavailable.Inc()
 		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 		return nil
+	case *getStoreErr:
+		metricGetStoreErr.Inc()
+		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		// cannot get the store the region belongs to, so we need to reload the region.
+		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, true, err)
+		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
+		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -658,6 +668,10 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
+		if state == nil {
+			log.Warn("found nil state in resolve lock", zap.Uint64("regionID", regionID))
+			return
+		}
 		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}

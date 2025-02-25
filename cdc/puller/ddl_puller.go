@@ -80,7 +80,6 @@ type ddlJobPullerImpl struct {
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
-	schemaVersion int64
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
@@ -96,6 +95,16 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 		return p.runMultiplexing(ctx)
 	}
 	return p.run(ctx)
+}
+
+// WaitForReady implements util.Runnable.
+func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (p *ddlJobPullerImpl) Close() {
+	if p.multiplexing {
+		p.multiplexingPuller.Close()
+	}
 }
 
 func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
@@ -185,12 +194,6 @@ func (p *ddlJobPullerImpl) runMultiplexing(ctx context.Context) error {
 	})
 	return eg.Wait()
 }
-
-// WaitForReady implements util.Runnable.
-func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
-
-// Close implements util.Runnable.
-func (p *ddlJobPullerImpl) Close() {}
 
 // Output the DDL job entry, it contains the DDL job and the error.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
@@ -398,7 +401,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	}()
 
 	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
-		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
+		job.BinlogInfo.SchemaVersion == 0 /* means the ddl is ignored in upstream */ {
 		log.Info("ddl job finishedTs less than puller resolvedTs,"+
 			"discard the ddl job",
 			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
@@ -486,7 +489,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	}
 
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
-	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
 	return p.checkIneligibleTableDDL(snap, job)
 }
@@ -502,27 +504,50 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		return false, nil
 	}
 
-	ineligible := p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(job.TableID)
-	if !ineligible {
+	snapAfter := p.schemaStorage.GetLastSnapshot()
+
+	if job.Type == timodel.ActionCreateTable {
+		// For create table, oldTableID is the new table ID.
+		isEligibleAfter := !snapAfter.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID)
+		if isEligibleAfter {
+			return false, nil
+		}
+	}
+
+	// For create tables, we always apply the DDL here.
+	if job.Type == timodel.ActionCreateTables {
 		return false, nil
 	}
 
-	// If the table is not in the snapshot before the DDL,
+	oldTableID := job.TableID
+	newTableID := job.BinlogInfo.TableInfo.ID
+
+	// If the table is eligible after the DDL, we should apply the DDL.
+	// No matter its status before the DDL.
+	isEligibleAfter := !p.schemaStorage.GetLastSnapshot().IsIneligibleTableID(newTableID)
+	if isEligibleAfter {
+		return false, nil
+	}
+
+	// Steps here means this table is ineligible after the DDL.
+	// We need to check if its status before the DDL.
+
+	// 1. If the table is not in the snapshot before the DDL,
 	// we should ignore the DDL.
-	_, exist := snapBefore.PhysicalTableByID(job.TableID)
+	_, exist := snapBefore.PhysicalTableByID(oldTableID)
 	if !exist {
 		return true, nil
 	}
 
-	// If the table after the DDL is ineligible, we should check if it is not ineligible before the DDL.
-	// If so, we should return an error to inform the user that it is a
-	// dangerous operation and should be handled manually.
-	isBeforeineligible := snapBefore.IsIneligibleTableID(job.TableID)
-	if isBeforeineligible {
-		log.Warn("ignore the DDL event of ineligible table",
+	// 2. If the table is ineligible before the DDL, we should ignore the DDL.
+	isIneligibleBefore := snapBefore.IsIneligibleTableID(oldTableID)
+	if isIneligibleBefore {
+		log.Warn("Ignore the DDL event of ineligible table",
 			zap.String("changefeed", p.changefeedID.ID), zap.Any("ddl", job))
 		return true, nil
 	}
+
+	// 3. If the table is eligible before the DDL, we should return an error.
 	return false, cerror.New(fmt.Sprintf("An eligible table become ineligible after DDL: [%s] "+
 		"it is a dangerous operation and may cause data loss. If you want to replicate this ddl safely, "+
 		"pelase pause the changefeed and update the `force-replicate=true` "+
@@ -773,6 +798,12 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
 
+	defer func() {
+		log.Info("DDL puller stopped",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+	}()
+
 	return g.Wait()
 }
 
@@ -790,10 +821,13 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 
 // Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
-	log.Info("close the ddl puller",
+	h.cancel()
+	if h.ddlJobPuller != nil {
+		h.ddlJobPuller.Close()
+	}
+	log.Info("DDL puller closed",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
-	h.cancel()
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {
