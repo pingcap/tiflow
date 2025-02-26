@@ -524,8 +524,10 @@ LOOP2:
 		}
 	}
 
-	if c.resolvedTs == 0 {
+	// Invariant: ResolvedTs must >= checkpointTs!
+	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
+		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -794,6 +796,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized.Store(false)
 	c.isReleased = true
+	c.resolvedTs = 0
 
 	// when closing a changefeed, we must clean the warningCh.
 	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
