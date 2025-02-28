@@ -197,7 +197,6 @@ func GetTableInfo(
 // GetTableInfoBySQL gets the table info from SQL.
 // Here we didn't use dbutiltest.GetTableInfoBySQL because it use buildTableInfoWithCheck internally,
 // and the check itself may cause errors in some integration tests.
-// See https://github.com/pingcap/tidb-tools/blob/37c2dad9218826a114e3389ac1209367715383ea/pkg/dbutil/table.go#L156-L162
 func GetTableInfoBySQL(createTableSQL string, parser2 *parser.Parser) (table *model.TableInfo, err error) {
 	stmt, err := parser2.ParseOneStmt(createTableSQL, "", "")
 	if err != nil {

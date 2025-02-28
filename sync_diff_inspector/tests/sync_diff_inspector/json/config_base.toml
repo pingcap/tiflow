@@ -36,7 +36,7 @@ check-struct-only = false
     # 2 log: sync-diff.log
     # 3 summary: summary.txt
     # 4 checkpoint: a dir
-    output-dir = "/tmp/tidb_tools_test/sync_diff_inspector/output"
+    output-dir = "/tmp/sync_diff_inspector_test/sync_diff_inspector/output"
 
     source-instances = ["mysql1"]
 
