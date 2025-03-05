@@ -4,7 +4,7 @@
 # argument 2 is the filename
 
 set -eu
-OUT_DIR=/tmp/tidb_tools_test
+OUT_DIR=/tmp/sync_diff_inspector_test
 
 if ! grep -q "$1" "$2"; then
 	echo "TEST FAILED: '$2' DOES NOT CONTAIN '$1'"
