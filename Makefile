@@ -385,6 +385,23 @@ clean:
 	rm -rf tools/bin
 	rm -rf tools/include
 
+<<<<<<< HEAD
+=======
+sync-diff-inspector:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector
+
+sync-diff-inspector-integration_test: failpoint-enable sync-diff-inspector failpoint-disable
+	@which bin/tidb-server
+	@which bin/tikv-server
+	@which bin/pd-server
+	@which bin/sync_diff_inspector
+	@which bin/dumpling
+	@which bin/loader
+	@which bin/importer
+	cd sync_diff_inspector && ln -sf ../bin .
+	cd sync_diff_inspector && ./tests/run.sh
+
+>>>>>>> 4d70424268 (build: add new task for integration tests of sync_diff_inspector (#12060))
 dm: dm-master dm-worker dmctl dm-syncer
 
 dm-master:
