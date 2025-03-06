@@ -115,7 +115,7 @@ func GetPDClientForGC(ctx context.Context, db *sql.DB) (pd.Client, error) {
 			if same, err := checkSameCluster(ctx, db, pdAddrs); err != nil {
 				log.Info("[automatically GC] check whether fetched pd addr and TiDB belong to one cluster failed", zap.Strings("pd address", pdAddrs), zap.Error(err))
 			} else if same {
-				pdClient, err := pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
+				pdClient, err := pd.NewClientWithContext(ctx, "tiflow", pdAddrs, pd.SecurityOption{})
 				if err != nil {
 					log.Info("[automatically GC] create pd client to control GC failed", zap.Strings("pd address", pdAddrs), zap.Error(err))
 					return nil, err

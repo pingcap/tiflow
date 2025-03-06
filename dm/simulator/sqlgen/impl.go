@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // import this to make the parser work
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -69,8 +68,8 @@ func outputString(node ast.Node) (string, error) {
 func (g *sqlGeneratorImpl) GenTruncateTable() (string, error) {
 	truncateTree := &ast.TruncateTableStmt{
 		Table: &ast.TableName{
-			Schema: pmodel.NewCIStr(g.tableConfig.DatabaseName),
-			Name:   pmodel.NewCIStr(g.tableConfig.TableName),
+			Schema: ast.NewCIStr(g.tableConfig.DatabaseName),
+			Name:   ast.NewCIStr(g.tableConfig.TableName),
 		},
 	}
 	return outputString(truncateTree)
@@ -90,7 +89,7 @@ func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]interface{}) (as
 			compareExpr = &ast.IsNullExpr{
 				Expr: &ast.ColumnNameExpr{
 					Name: &ast.ColumnName{
-						Name: pmodel.NewCIStr(ukColName),
+						Name: ast.NewCIStr(ukColName),
 					},
 				},
 			}
@@ -99,7 +98,7 @@ func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]interface{}) (as
 				Op: opcode.EQ,
 				L: &ast.ColumnNameExpr{
 					Name: &ast.ColumnName{
-						Name: pmodel.NewCIStr(ukColName),
+						Name: ast.NewCIStr(ukColName),
 					},
 				},
 				R: ast.NewValueExpr(val, "", ""),
@@ -144,7 +143,7 @@ func (g *sqlGeneratorImpl) GenUpdateRow(theUK *mcp.UniqueKey) (string, error) {
 		}
 		assignments = append(assignments, &ast.Assignment{
 			Column: &ast.ColumnName{
-				Name: pmodel.NewCIStr(colInfo.ColumnName),
+				Name: ast.NewCIStr(colInfo.ColumnName),
 			},
 			Expr: ast.NewValueExpr(util.GenerateDataItem(colInfo.DataType), "", ""),
 		})
@@ -158,8 +157,8 @@ func (g *sqlGeneratorImpl) GenUpdateRow(theUK *mcp.UniqueKey) (string, error) {
 		TableRefs: &ast.TableRefsClause{
 			TableRefs: &ast.Join{
 				Left: &ast.TableName{
-					Schema: pmodel.NewCIStr(g.tableConfig.DatabaseName),
-					Name:   pmodel.NewCIStr(g.tableConfig.TableName),
+					Schema: ast.NewCIStr(g.tableConfig.DatabaseName),
+					Name:   ast.NewCIStr(g.tableConfig.TableName),
 				},
 			},
 		},
@@ -178,7 +177,7 @@ func (g *sqlGeneratorImpl) GenInsertRow() (string, *mcp.UniqueKey, error) {
 	values := []ast.ExprNode{}
 	for _, col := range g.columnMap {
 		columnNames = append(columnNames, &ast.ColumnName{
-			Name: pmodel.NewCIStr(col.ColumnName),
+			Name: ast.NewCIStr(col.ColumnName),
 		})
 		newValue := util.GenerateDataItem(col.DataType)
 		values = append(values, ast.NewValueExpr(newValue, "", ""))
@@ -191,8 +190,8 @@ func (g *sqlGeneratorImpl) GenInsertRow() (string, *mcp.UniqueKey, error) {
 		Table: &ast.TableRefsClause{
 			TableRefs: &ast.Join{
 				Left: &ast.TableName{
-					Schema: pmodel.NewCIStr(g.tableConfig.DatabaseName),
-					Name:   pmodel.NewCIStr(g.tableConfig.TableName),
+					Schema: ast.NewCIStr(g.tableConfig.DatabaseName),
+					Name:   ast.NewCIStr(g.tableConfig.TableName),
 				},
 			},
 		},
@@ -220,8 +219,8 @@ func (g *sqlGeneratorImpl) GenDeleteRow(theUK *mcp.UniqueKey) (string, error) {
 		TableRefs: &ast.TableRefsClause{
 			TableRefs: &ast.Join{
 				Left: &ast.TableName{
-					Schema: pmodel.NewCIStr(g.tableConfig.DatabaseName),
-					Name:   pmodel.NewCIStr(g.tableConfig.TableName),
+					Schema: ast.NewCIStr(g.tableConfig.DatabaseName),
+					Name:   ast.NewCIStr(g.tableConfig.TableName),
 				},
 			},
 		},
@@ -241,7 +240,7 @@ func (g *sqlGeneratorImpl) GenLoadUniqueKeySQL() (string, []*config.ColumnDefini
 		selectFields = append(selectFields, &ast.SelectField{
 			Expr: &ast.ColumnNameExpr{
 				Name: &ast.ColumnName{
-					Name: pmodel.NewCIStr(ukColName),
+					Name: ast.NewCIStr(ukColName),
 				},
 			},
 		})
@@ -257,8 +256,8 @@ func (g *sqlGeneratorImpl) GenLoadUniqueKeySQL() (string, []*config.ColumnDefini
 		From: &ast.TableRefsClause{
 			TableRefs: &ast.Join{
 				Left: &ast.TableName{
-					Schema: pmodel.NewCIStr(g.tableConfig.DatabaseName),
-					Name:   pmodel.NewCIStr(g.tableConfig.TableName),
+					Schema: ast.NewCIStr(g.tableConfig.DatabaseName),
+					Name:   ast.NewCIStr(g.tableConfig.TableName),
 				},
 			},
 		},
