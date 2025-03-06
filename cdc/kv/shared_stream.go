@@ -318,6 +318,7 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		if region.isStopped() {
 			if s.multiplexing != nil {
 				req := &cdcpb.ChangeDataRequest{
+					Header:    &cdcpb.Header{ClusterId: c.clusterID, TicdcVersion: version.ReleaseSemver()},
 					RequestId: uint64(subscriptionID),
 					Request: &cdcpb.ChangeDataRequest_Deregister_{
 						Deregister: &cdcpb.ChangeDataRequest_Deregister{},
