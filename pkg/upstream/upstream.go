@@ -137,7 +137,7 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 	// default upstream always use the pdClient pass from cdc server
 	if !up.isDefaultUpstream {
 		up.PDClient, err = pd.NewClientWithContext(
-			ctx, "tiflow", up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+			ctx, "", up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
 			// the default `timeout` is 3s, maybe too small if the pd is busy,
 			// set to 10s to avoid frequent timeout.
 			pdopt.WithCustomTimeoutOption(10*time.Second),

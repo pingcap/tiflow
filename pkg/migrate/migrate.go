@@ -135,7 +135,7 @@ func createPDClient(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 	return pd.NewClientWithContext(
-		ctx, "tiflow", pdEndpoints, conf.PDSecurityOption(),
+		ctx, "", pdEndpoints, conf.PDSecurityOption(),
 		pdopt.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),

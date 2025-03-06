@@ -458,7 +458,7 @@ func (APIV2HelpersImpl) getPDClient(
 	}
 
 	pdClient, err := pd.NewClientWithContext(
-		ctx, "tiflow", pdAddrs, credential.PDSecurityOption(),
+		ctx, "", pdAddrs, credential.PDSecurityOption(),
 		pdopt.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),

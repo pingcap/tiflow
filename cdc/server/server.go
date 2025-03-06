@@ -135,7 +135,7 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 	log.Info("create pd client", zap.Strings("endpoints", s.pdEndpoints))
 	s.pdClient, err = pd.NewClientWithContext(
-		ctx, "tiflow", s.pdEndpoints, conf.Security.PDSecurityOption(),
+		ctx, "", s.pdEndpoints, conf.Security.PDSecurityOption(),
 		// the default `timeout` is 3s, maybe too small if the pd is busy,
 		// set to 10s to avoid frequent timeout.
 		pdopt.WithCustomTimeoutOption(10*time.Second),
