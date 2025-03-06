@@ -382,7 +382,7 @@ const (
 	createTableSQL    = `
 create table if not exists test.%s
 (
-    id1 int unique key not null,
+    id1 int primary key,
     id2 int unique key not null,
     v1  int default null
 )
