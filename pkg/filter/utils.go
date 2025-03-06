@@ -33,6 +33,9 @@ func isSysSchema(db string) bool {
 		return true
 	case LightningTaskInfoSchema:
 		return true
+	// TODO: skip workload schema, ref https://github.com/pingcap/tiflow/issues/12084 .
+	case "workload_schema":
+		return true
 	default:
 		return tifilter.IsSystemSchema(db)
 	}
