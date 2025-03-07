@@ -549,7 +549,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	jobs = append(jobs, job)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.NoError(t, err)
-	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+	storage, err := NewSchemaStorage(model.DefaultChangeFeedID("dummy"), nil, 0, false, f, util.RoleTester)
 	require.NoError(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -877,7 +877,7 @@ func TestSchemaStorage(t *testing.T) {
 		jobs, err := getAllHistoryDDLJob(store, f)
 		require.NoError(t, err)
 
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+		schemaStorage, err := NewSchemaStorage(model.DefaultChangeFeedID("dummy"), nil, 0, false, f, util.RoleTester)
 		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)

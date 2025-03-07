@@ -85,9 +85,12 @@ type schemaStorage struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	storage tidbkv.Storage, startTs uint64,
-	forceReplicate bool, id model.ChangeFeedID,
-	role util.Role, filter filter.Filter,
+	id model.ChangeFeedID,
+	storage tidbkv.Storage,
+	startTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+	role util.Role,
 ) (SchemaStorage, error) {
 	snap, err := schema.NewSnapshotFromMeta(id, storage, startTs, forceReplicate, filter)
 	if err != nil {
