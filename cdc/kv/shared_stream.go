@@ -155,13 +155,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}
 
-	log.Info("event feed going to create grpc stream",
-		zap.String("namespace", c.changefeed.Namespace),
-		zap.String("changefeed", c.changefeed.ID),
-		zap.Uint64("streamID", s.streamID),
-		zap.Uint64("storeID", rs.storeID),
-		zap.String("addr", rs.storeAddr))
-
 	defer func() {
 		log.Info("event feed grpc stream exits",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -186,12 +179,19 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-			zap.Uint64("streamID", s.streamID),
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", s.streamID),
 			zap.Error(err))
 		return isCanceled()
 	}
+
+	log.Info("event feed establish grpc stream",
+		zap.String("namespace", c.changefeed.Namespace),
+		zap.String("changefeed", c.changefeed.ID),
+		zap.Uint64("storeID", rs.storeID),
+		zap.String("addr", rs.storeAddr),
+		zap.Uint64("streamID", s.streamID))
 
 	if cc.Multiplexing() {
 		s.multiplexing = cc
@@ -200,9 +200,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-			zap.Uint64("streamID", s.streamID),
 			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr))
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", s.streamID))
 		cc.Release()
 
 		s.tableExclusives = make(chan tableExclusive, 8)
@@ -249,13 +249,13 @@ func (s *requestedStream) receive(
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
+			if err = s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+			if err = s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
 				return err
 			}
 		}
