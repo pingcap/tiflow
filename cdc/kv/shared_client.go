@@ -102,11 +102,12 @@ func (e *eventError) Error() string {
 
 type rpcCtxUnavailableErr struct {
 	verID tikv.RegionVerID
+	err   error
 }
 
 func (e *rpcCtxUnavailableErr) Error() string {
-	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
-		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
+	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v, err:%+v",
+		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer(), e.err)
 }
 
 type getStoreErr struct{}
@@ -445,16 +446,6 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
-
-			s.logRegionDetails("event feed will request a region",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("streamID", stream.streamID),
-				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
-				zap.Uint64("regionID", region.verID.GetID()),
-				zap.String("span", region.span.String()),
-				zap.Uint64("storeID", store.storeID),
-				zap.String("addr", store.storeAddr))
 		}
 	}
 }
@@ -462,21 +453,13 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region regionInfo) (regionInfo, bool) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, region.verID, kvclientv2.ReplicaReadLeader, 0)
+	locateTime := time.Since(region.lockedRangeState.Created).Milliseconds()
+	s.metrics.regionLocateDuration.Observe(float64(locateTime))
 	if rpcCtx != nil {
 		region.rpcCtx = rpcCtx
-		locateTime := time.Since(region.lockedRangeState.Created).Milliseconds()
-		s.metrics.regionLocateDuration.Observe(float64(locateTime))
 		return region, true
 	}
-	if err != nil {
-		log.Debug("event feed get RPC context fail",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
-			zap.Uint64("regionID", region.verID.GetID()),
-			zap.Error(err))
-	}
-	s.onRegionFail(newRegionErrorInfo(region, &rpcCtxUnavailableErr{verID: region.verID}))
+	s.onRegionFail(newRegionErrorInfo(region, &rpcCtxUnavailableErr{verID: region.verID, err: err}))
 	return region, false
 }
 
@@ -495,7 +478,7 @@ func (s *SharedClient) getStore(
 		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
 	}
-
+	
 	return rs
 }
 
@@ -553,12 +536,6 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			}
 			backoffBeforeLoad = false
 		}
-		log.Debug("event feed is going to load regions",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", subscribedTable.subscriptionID),
-			zap.Any("span", nextSpan))
-
 		backoff := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(backoff, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
@@ -788,7 +765,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRangeState, targetTs uint64) {
-		if state.ResolvedTs.Load() > targetTs || !state.Initialzied.Load() {
+		if state.ResolvedTs.Load() > targetTs || !state.Initialized.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -899,7 +876,7 @@ func (s *SharedClient) newSubscribedTable(
 
 	rt.tryResolveLock = func(regionID uint64, state *regionlock.LockedRangeState) {
 		targetTs := rt.staleLocksTargetTs.Load()
-		if state.ResolvedTs.Load() < targetTs && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() < targetTs && state.Initialized.Load() {
 			s.resolveLockTaskCh.In() <- resolveLockTask{
 				regionID: regionID,
 				targetTs: targetTs,

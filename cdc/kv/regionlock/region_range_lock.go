@@ -64,7 +64,7 @@ type LockRangeResult struct {
 // LockedRangeState is used to access the real-time state changes of a locked range.
 type LockedRangeState struct {
 	ResolvedTs  atomic.Uint64
-	Initialzied atomic.Bool
+	Initialized atomic.Bool
 	Created     time.Time
 }
 
@@ -322,13 +322,13 @@ func (l *RangeLock) IterAll(
 		if resolvedTs > r.FastestRegion.ResolvedTs {
 			r.FastestRegion.RegionID = item.regionID
 			r.FastestRegion.ResolvedTs = resolvedTs
-			r.FastestRegion.Initialized = item.lockedRangeState.Initialzied.Load()
+			r.FastestRegion.Initialized = item.lockedRangeState.Initialized.Load()
 			r.FastestRegion.Created = item.lockedRangeState.Created
 		}
 		if resolvedTs < r.SlowestRegion.ResolvedTs {
 			r.SlowestRegion.RegionID = item.regionID
 			r.SlowestRegion.ResolvedTs = resolvedTs
-			r.SlowestRegion.Initialized = item.lockedRangeState.Initialzied.Load()
+			r.SlowestRegion.Initialized = item.lockedRangeState.Initialized.Load()
 			r.SlowestRegion.Created = item.lockedRangeState.Created
 		}
 		lastEnd = item.endKey
