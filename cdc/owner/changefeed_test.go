@@ -66,8 +66,6 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	return m.resolvedTs, nil
 }
 
-func (m *mockDDLPuller) Close() {}
-
 func (m *mockDDLPuller) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return nil

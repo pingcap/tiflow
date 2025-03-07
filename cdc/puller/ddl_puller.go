@@ -616,8 +616,6 @@ type DDLPuller interface {
 	PopFrontDDL() (uint64, *timodel.Job)
 	// ResolvedTs returns the resolved ts of the DDLPuller
 	ResolvedTs() uint64
-	// Close closes the DDLPuller
-	Close()
 }
 
 type ddlPullerImpl struct {
@@ -627,7 +625,6 @@ type ddlPullerImpl struct {
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
-	cancel         context.CancelFunc
 
 	changefeedID model.ChangeFeedID
 }
@@ -651,7 +648,6 @@ func NewDDLPuller(
 	return &ddlPullerImpl{
 		ddlJobPuller: puller,
 		resolvedTS:   startTs,
-		cancel:       func() {},
 		changefeedID: changefeed,
 	}
 }
@@ -687,7 +683,6 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	ctx, cancel := context.WithCancel(ctx)
-	h.cancel = cancel
 
 	g.Go(func() error { return h.ddlJobPuller.Run(ctx) })
 
@@ -727,6 +722,12 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
 
+	defer func() {
+		log.Info("close the ddl puller",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+		cancel()
+	}()
 	return g.Wait()
 }
 
@@ -740,14 +741,6 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	job := h.pendingDDLJobs[0]
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
 	return job.BinlogInfo.FinishedTS, job
-}
-
-// Close the ddl puller, release all resources.
-func (h *ddlPullerImpl) Close() {
-	log.Info("close the ddl puller",
-		zap.String("namespace", h.changefeedID.Namespace),
-		zap.String("changefeed", h.changefeedID.ID))
-	h.cancel()
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {

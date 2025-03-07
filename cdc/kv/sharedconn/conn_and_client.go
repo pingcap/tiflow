@@ -79,7 +79,6 @@ type connArray struct {
 func NewConnAndClientPool(
 	credential *security.Credential,
 	grpcMetrics *grpc_prometheus.ClientMetrics,
-	maxStreamsPerConn ...int,
 ) *ConnAndClientPool {
 	return newConnAndClientPool(credential, grpcMetrics, 1000)
 }
