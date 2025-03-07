@@ -64,9 +64,9 @@ type DDLJobPuller interface {
 	Output() <-chan *model.DDLJobEntry
 }
 
-// Note: All unexported methods of `ddlJobPullerImpl` should
+// Note: All unexported methods of `ddlJobPuller` should
 // be called in the same one goroutine.
-type ddlJobPullerImpl struct {
+type ddlJobPuller struct {
 	changefeedID model.ChangeFeedID
 	mp           *MultiplexingPuller
 	// memorysorter is used to sort the DDL events.
@@ -105,7 +105,7 @@ func NewDDLJobPuller(
 		ddlSpans[i].TableID = int64(-1) - int64(i)
 	}
 
-	ddlJobPuller := &ddlJobPullerImpl{
+	ddlJobPuller := &ddlJobPuller{
 		changefeedID:  changefeed,
 		schemaStorage: schemaStorage,
 		kvStorage:     kvStorage,
@@ -129,7 +129,7 @@ func NewDDLJobPuller(
 }
 
 // Run implements util.Runnable.
-func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
+func (p *ddlJobPuller) Run(ctx context.Context, _ ...chan<- error) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// Only nil in unit test.
@@ -161,18 +161,18 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 }
 
 // WaitForReady implements util.Runnable.
-func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+func (p *ddlJobPuller) WaitForReady(_ context.Context) {}
 
 // Close implements util.Runnable.
-func (p *ddlJobPullerImpl) Close() {}
+func (p *ddlJobPuller) Close() {}
 
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
-func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
+func (p *ddlJobPuller) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
 }
 
 // Input receives the raw kv entry and put it into the input channel.
-func (p *ddlJobPullerImpl) Input(
+func (p *ddlJobPuller) Input(
 	ctx context.Context,
 	rawDDL *model.RawKVEntry,
 	_ []tablepb.Span,
@@ -182,20 +182,24 @@ func (p *ddlJobPullerImpl) Input(
 	return nil
 }
 
+func (p *ddlJobPuller) advanceResolvedTs(ts uint64) {
+	// Only nil in unit test case.
+	if p.schemaStorage != nil {
+		p.schemaStorage.AdvanceResolvedTs(ts)
+	}
+	if ts > p.getResolvedTs() {
+		p.setResolvedTs(ts)
+	}
+}
+
 // handleRawKVEntry converts the raw kv entry to DDL job and sends it to the output channel.
-func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
+func (p *ddlJobPuller) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
 	if ddlRawKV == nil {
 		return nil
 	}
 
 	if ddlRawKV.OpType == model.OpTypeResolved {
-		// Only nil in unit test case.
-		if p.schemaStorage != nil {
-			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
-		}
-		if ddlRawKV.CRTs > p.getResolvedTs() {
-			p.setResolvedTs(ddlRawKV.CRTs)
-		}
+		p.advanceResolvedTs(ddlRawKV.CRTs)
 	}
 
 	job, err := p.unmarshalDDL(ctx, ddlRawKV)
@@ -230,7 +234,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	return nil
 }
 
-func (p *ddlJobPullerImpl) unmarshalDDL(ctx context.Context, rawKV *model.RawKVEntry) (*timodel.Job, error) {
+func (p *ddlJobPuller) unmarshalDDL(ctx context.Context, rawKV *model.RawKVEntry) (*timodel.Job, error) {
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
@@ -243,15 +247,15 @@ func (p *ddlJobPullerImpl) unmarshalDDL(ctx context.Context, rawKV *model.RawKVE
 	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
 }
 
-func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
+func (p *ddlJobPuller) getResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
 }
 
-func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
+func (p *ddlJobPuller) setResolvedTs(ts uint64) {
 	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
-func (p *ddlJobPullerImpl) initJobTableMeta(ctx context.Context) error {
+func (p *ddlJobPuller) initJobTableMeta(ctx context.Context) error {
 	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return errors.Trace(err)
@@ -290,7 +294,7 @@ func (p *ddlJobPullerImpl) initJobTableMeta(ctx context.Context) error {
 // handleJob determines whether to filter out the DDL job.
 // If the DDL job is not filtered out, it will be applied to the schemaStorage
 // and the job will be sent to the output channel.
-func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
+func (p *ddlJobPuller) handleJob(job *timodel.Job) (skip bool, err error) {
 	// Only nil in test.
 	if p.schemaStorage == nil {
 		return false, nil
@@ -474,7 +478,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 //     a. If the table is not exist before the DDL, we should ignore the DDL.
 //     b. If the table is ineligible before the DDL, we should ignore the DDL.
 //     c. If the table is eligible before the DDL, we should return an error.
-func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, job *timodel.Job) (skip bool, err error) {
+func (p *ddlJobPuller) checkIneligibleTableDDL(snapBefore *schema.Snapshot, job *timodel.Job) (skip bool, err error) {
 	if filter.IsSchemaDDL(job.Type) {
 		return false, nil
 	}
@@ -533,7 +537,7 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 // handleRenameTables gets all the tables that are renamed
 // in the DDL job out and filter them one by one,
 // if all the tables are filtered, skip it.
-func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
+func (p *ddlJobPuller) handleRenameTables(job *timodel.Job) (skip bool, err error) {
 	var args *timodel.RenameTablesArgs
 	args, err = timodel.GetRenameTablesArgs(job)
 	if err != nil {
@@ -725,7 +729,8 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	defer func() {
 		log.Info("close the ddl puller",
 			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID))
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
 		cancel()
 	}()
 	return g.Wait()

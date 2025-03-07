@@ -63,20 +63,20 @@ func tsToRawKVEntry(_ *testing.T, ts model.Ts) *model.RawKVEntry {
 	}
 }
 
-func inputDDL(t *testing.T, puller *ddlJobPullerImpl, job *timodel.Job) {
+func inputDDL(t *testing.T, puller *ddlJobPuller, job *timodel.Job) {
 	rawJob := jonToRawKVEntry(t, job)
 	puller.Input(context.Background(), rawJob, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
-func inputTs(t *testing.T, puller *ddlJobPullerImpl, ts model.Ts) {
+func inputTs(t *testing.T, puller *ddlJobPuller, ts model.Ts) {
 	rawTs := tsToRawKVEntry(t, ts)
 	puller.Input(context.Background(), rawTs, []tablepb.Span{}, func(_ *model.RawKVEntry) bool { return false })
 }
 
 func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
-			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
+		if p.(*ddlJobPuller).getResolvedTs() < targetTs {
+			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPuller).getResolvedTs(), targetTs)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
@@ -87,7 +87,7 @@ func newMockDDLJobPuller(
 	t *testing.T,
 	needSchemaStorage bool,
 ) (DDLJobPuller, *entry.SchemaTestHelper) {
-	res := &ddlJobPullerImpl{
+	res := &ddlJobPuller{
 		outputCh: make(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
@@ -113,7 +113,7 @@ func TestHandleRenameTable(t *testing.T) {
 	defer helper.Close()
 
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPuller)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
@@ -337,7 +337,7 @@ func TestHandleJob(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPuller)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{
@@ -543,7 +543,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Nil(t, err)
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
-	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPuller)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
@@ -668,7 +668,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
-	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := p.(*ddlPullerImpl).ddlJobPuller.(*ddlJobPuller)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
@@ -715,7 +715,7 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	defer helper.Close()
 
 	startTs := uint64(10)
-	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPuller)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
