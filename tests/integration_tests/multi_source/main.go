@@ -210,11 +210,11 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var i int
 	var insertSuccess int
 	var deleteSuccess int
-	insertSQL := fmt.Sprintf("insert into test.`%s`(id1, id2) values(?,?)", table)
+	insertSQL := fmt.Sprintf("insert into test.`%s`(id, id1, id2) values(?,?,?)", table)
 	deleteSQL := fmt.Sprintf("delete from test.`%s` where id1 = ? or id2 = ?", table)
 	k := 100000000
 	for i = 0; i < k; i++ {
-		_, err = db.Exec(insertSQL, i+id*k, i+id*k+1)
+		_, err = db.Exec(insertSQL, i+id*k, i+id*k, i+id*k+1)
 		if err == nil {
 			insertSuccess++
 			if insertSuccess%100 == 0 {
@@ -382,7 +382,8 @@ const (
 	createTableSQL    = `
 create table if not exists test.%s
 (
-    id1 int primary key,
+	id int primary key,
+    id1 int unique key not null,
     id2 int unique key not null,
     v1  int default null
 )
