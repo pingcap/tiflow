@@ -651,9 +651,7 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema, err = entry.NewSchemaStorage(
-		c.upstream.KVStorage, ddlStartTs,
-		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
+	c.schema, err = entry.NewSchemaStorage(c.id, c.upstream.KVStorage, ddlStartTs, cfInfo.Config.ForceReplicate, filter, util.RoleOwner)
 	if err != nil {
 		return errors.Trace(err)
 	}

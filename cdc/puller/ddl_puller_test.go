@@ -100,13 +100,7 @@ func newMockDDLJobPuller(
 		kvStorage := helper.Storage()
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
-		schemaStorage, err := entry.NewSchemaStorage(
-			kvStorage,
-			0,
-			false,
-			model.DefaultChangeFeedID("test"),
-			util.RoleTester,
-			f)
+		schemaStorage, err := entry.NewSchemaStorage(model.DefaultChangeFeedID("test"), kvStorage, 0, false, f, util.RoleTester)
 		require.Nil(t, err)
 		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
@@ -545,13 +539,7 @@ func TestDDLPuller(t *testing.T) {
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(changefeedInfo.Config, "")
 	require.Nil(t, err)
-	schemaStorage, err := entry.NewSchemaStorage(nil,
-		startTs,
-		changefeedInfo.Config.ForceReplicate,
-		model.DefaultChangeFeedID(changefeedInfo.ID),
-		util.RoleTester,
-		f,
-	)
+	schemaStorage, err := entry.NewSchemaStorage(model.DefaultChangeFeedID(changefeedInfo.ID), nil, startTs, changefeedInfo.Config.ForceReplicate, f, util.RoleTester)
 	require.Nil(t, err)
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, false)
@@ -675,13 +663,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schemaStorage, err := entry.NewSchemaStorage(nil,
-		startTs,
-		changefeedInfo.Config.ForceReplicate,
-		model.DefaultChangeFeedID(changefeedInfo.ID),
-		util.RoleTester,
-		f,
-	)
+	schemaStorage, err := entry.NewSchemaStorage(model.DefaultChangeFeedID(changefeedInfo.ID), nil, startTs, changefeedInfo.Config.ForceReplicate, f, util.RoleTester)
 	require.Nil(t, err)
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
 
