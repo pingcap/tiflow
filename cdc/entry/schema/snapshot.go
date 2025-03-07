@@ -24,8 +24,9 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timeta "github.com/pingcap/tidb/pkg/meta"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -112,20 +113,19 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
-	meta timeta.Reader,
+	storage tidbkv.Storage,
 	currentTs uint64,
 	forceReplicate bool,
 	filter filter.Filter,
 ) (*Snapshot, error) {
-	// meta is nil only in unit tests
-	if meta == nil {
-		snap := NewEmptySnapshot(forceReplicate)
-		snap.inner.currentTs = currentTs
-		return snap, nil
-	}
-
 	start := time.Now()
 	snap := NewEmptySnapshot(forceReplicate)
+	snap.inner.currentTs = currentTs
+
+	if storage == nil {
+		return snap, nil
+	}
+	meta := kv.GetSnapshotMeta(storage, currentTs)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
@@ -208,8 +208,6 @@ func NewSnapshotFromMeta(
 			}
 		}
 	}
-
-	snap.inner.currentTs = currentTs
 	log.Info("schema snapshot created",
 		zap.Stringer("changefeed", id),
 		zap.Int("tables", tableCount),

@@ -25,7 +25,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -90,22 +89,9 @@ func NewSchemaStorage(
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
-	var (
-		snap *schema.Snapshot
-		err  error
-	)
-	// storage may be nil in some unit test cases.
-	if storage == nil {
-		snap = schema.NewEmptySnapshot(forceReplicate)
-	} else {
-		meta := kv.GetSnapshotMeta(storage, startTs)
-		snap, err = schema.NewSnapshotFromMeta(id, meta, startTs, forceReplicate, filter)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	snap, err := schema.NewSnapshotFromMeta(id, storage, startTs, forceReplicate, filter)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
