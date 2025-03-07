@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -79,10 +79,10 @@ func TestCreate(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{
 			TableInfo: &timodel.TableInfo{
 				ID:   49,
-				Name: pmodel.CIStr{O: "t1"},
+				Name: ast.CIStr{O: "t1"},
 				Columns: []*timodel.ColumnInfo{
-					{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
-					{ID: 2, Name: pmodel.CIStr{O: "a"}, FieldType: types.FieldType{}, State: timodel.StatePublic},
+					{ID: 1, Name: ast.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+					{ID: 2, Name: ast.CIStr{O: "a"}, FieldType: types.FieldType{}, State: timodel.StatePublic},
 				},
 			},
 			FinishedTS: 420536581196873729,
@@ -96,9 +96,9 @@ func TestCreate(t *testing.T) {
 		},
 		TableInfo: &timodel.TableInfo{
 			ID:   49,
-			Name: pmodel.CIStr{O: "t1"},
+			Name: ast.CIStr{O: "t1"},
 			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+				{ID: 1, Name: ast.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
 			},
 		},
 	}

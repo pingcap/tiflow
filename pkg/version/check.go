@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	"go.uber.org/zap"
 )
 
@@ -206,7 +207,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	var stores []*metapb.Store
 	var err error
 	if storeID == 0 {
-		stores, err = client.GetAllStores(ctx, pd.WithExcludeTombstone())
+		stores, err = client.GetAllStores(ctx, pdopt.WithExcludeTombstone())
 	} else {
 		stores = make([]*metapb.Store, 1)
 		stores[0], err = client.GetStore(ctx, storeID)

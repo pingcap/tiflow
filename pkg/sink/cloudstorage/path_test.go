@@ -24,7 +24,7 @@ import (
 
 	"github.com/google/uuid"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -300,7 +300,7 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	ft := types.NewFieldType(mysql.TypeLong)
 	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
 	col := &timodel.ColumnInfo{
-		Name:         pmodel.NewCIStr("Id"),
+		Name:         ast.NewCIStr("Id"),
 		FieldType:    *ft,
 		DefaultValue: 10,
 	}
