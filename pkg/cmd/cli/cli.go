@@ -56,6 +56,7 @@ func NewCmdCli() *cobra.Command {
 	cmds.AddCommand(newCmdChangefeed(f))
 	cmds.AddCommand(newCmdProcessor(f))
 	cmds.AddCommand(newCmdTso(f))
+	cmds.AddCommand(newCmdSafePoint(f))
 	cmds.AddCommand(newCmdUnsafe(f))
 	cmds.AddCommand(newConfigureCredentials())
 
