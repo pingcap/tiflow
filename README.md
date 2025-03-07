@@ -17,6 +17,8 @@
 
 For more details, see [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
 
+For TiCDC engineering and architecture roadmap, plese see [TiCDC RoadMap](./docs/cdc-eng-roadmap.md)
+
 ## License
 
 **TiFlow** is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
