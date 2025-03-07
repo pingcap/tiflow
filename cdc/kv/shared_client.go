@@ -482,7 +482,7 @@ func (s *SharedClient) getStore(
 	return rs
 }
 
-func (s *SharedClient) createRegionRequest(region regionInfo) *cdcpb.ChangeDataRequest {
+func (s *SharedClient) newRegionRequest(region regionInfo) *cdcpb.ChangeDataRequest {
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
 		RegionId:     region.verID.GetID(),
