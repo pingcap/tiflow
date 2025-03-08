@@ -389,6 +389,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// bootstrap not finished yet, cannot send any event.
+	if !c.ddlManager.isBootstrapped() {
+		return nil
+	}
 
 	err = c.handleBarrier(ctx, barrier)
 	if err != nil {
@@ -520,8 +524,10 @@ LOOP2:
 		}
 	}
 
-	if c.resolvedTs == 0 {
+	// Invariant: ResolvedTs must >= checkpointTs!
+	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
+		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -687,7 +693,9 @@ LOOP2:
 		c.redoMetaMgr,
 		downstreamType,
 		util.GetOrZero(info.Config.BDRMode),
-		info.Config.Sink.ShouldSendAllBootstrapAtStart())
+		info.Config.Sink.ShouldSendAllBootstrapAtStart(),
+		ctx.Throw,
+	)
 
 	// create scheduler
 	cfg := *c.cfg
@@ -788,6 +796,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized.Store(false)
 	c.isReleased = true
+	c.resolvedTs = 0
 
 	// when closing a changefeed, we must clean the warningCh.
 	// otherwise, the old warning errors will be handled when the reused changefeed instance is ticked again
@@ -950,8 +959,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 // barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.BarrierWithMinTs) error {
 	barrierTp, barrierTs := c.barriers.Min()
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
-
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
@@ -992,6 +999,8 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.B
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// MinTableBarrierTs is always the next barrier that blocking the global resolvedTs.
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrier.MinTableBarrierTs)))
 	return nil
 }
 

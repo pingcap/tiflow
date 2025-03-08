@@ -277,6 +277,16 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	return g.Wait()
 }
 
+// Close closes the puller.
+func (p *MultiplexingPuller) Close() {
+	if p.client != nil {
+		p.client.Close()
+	}
+	log.Info("MultiplexingPuller is closed",
+		zap.String("namespace", p.changefeed.Namespace),
+		zap.String("changefeed", p.changefeed.ID))
+}
+
 func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan kv.MultiplexingEvent) error {
 	for {
 		var e kv.MultiplexingEvent

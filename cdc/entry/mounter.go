@@ -374,7 +374,6 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -383,7 +382,7 @@ func datum2Column(
 			Charset:   colInfo.GetCharset(),
 			Collation: colInfo.GetCollate(),
 			Value:     colValue,
-			Default:   defaultValue,
+			Default:   colInfo.GetDefaultValue(),
 			Flag:      tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
@@ -438,6 +437,13 @@ func (m *mounter) verifyChecksum(
 	}
 	if decoder == nil {
 		return 0, false, errors.New("cannot found the decoder to get the checksum")
+	}
+
+	version := decoder.ChecksumVersion()
+	if version != 0 {
+		log.Debug("checksum is not v1, this happens since upstream TiDB is in a higher version, ignore it",
+			zap.Int("version", version))
+		return 0, true, nil
 	}
 
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,

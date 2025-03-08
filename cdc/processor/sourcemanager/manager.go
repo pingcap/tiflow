@@ -57,6 +57,16 @@ type multiplexingPuller struct {
 	puller *pullerwrapper.MultiplexingWrapper
 }
 
+// PullerSplitUpdateMode is the mode to split update events in puller.
+type PullerSplitUpdateMode int32
+
+// PullerSplitUpdateMode constants.
+const (
+	PullerSplitUpdateModeNone    PullerSplitUpdateMode = 0
+	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
+)
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	ready chan struct{}
@@ -76,9 +86,10 @@ type SourceManager struct {
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
 	multiplexing       bool
-	safeModeAtStart    bool
 	tablePullers       tablePullers
 	multiplexingPuller multiplexingPuller
+
+	splitUpdateMode PullerSplitUpdateMode
 }
 
 // New creates a new source manager.
@@ -87,11 +98,11 @@ func New(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
-	safeModeAtStart bool,
 ) *SourceManager {
 	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, safeModeAtStart, pullerwrapper.NewPullerWrapper)
+	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -102,7 +113,7 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, false, pullerwrapper.NewPullerWrapperForTest)
+	return newSourceManager(changefeedID, up, mg, engine, PullerSplitUpdateModeNone, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
 }
 
 func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
@@ -114,9 +125,9 @@ func newSourceManager(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 	multiplexing bool,
-	safeModeAtStart bool,
 	pullerWrapperCreator pullerWrapperCreator,
 ) *SourceManager {
 	mgr := &SourceManager{
@@ -125,9 +136,9 @@ func newSourceManager(
 		up:              up,
 		mg:              mg,
 		engine:          engine,
+		splitUpdateMode: splitUpdateMode,
 		bdrMode:         bdrMode,
 		multiplexing:    multiplexing,
-		safeModeAtStart: safeModeAtStart,
 	}
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
@@ -142,7 +153,21 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	m.engine.AddTable(span, startTs)
 
 	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
-		return m.safeModeAtStart && isOldUpdateKVEntry(raw, getReplicaTs)
+		if raw == nil || !raw.IsUpdate() {
+			return false
+		}
+		switch m.splitUpdateMode {
+		case PullerSplitUpdateModeNone:
+			return false
+		case PullerSplitUpdateModeAlways:
+			return true
+		case PullerSplitUpdateModeAtStart:
+			return isOldUpdateKVEntry(raw, getReplicaTs)
+		default:
+			log.Panic("Unknown split update mode", zap.Int32("mode", int32(m.splitUpdateMode)))
+		}
+		log.Panic("Shouldn't reach here")
+		return false
 	}
 
 	if m.multiplexing {
@@ -255,11 +280,15 @@ func (m *SourceManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
-	m.tablePullers.Range(func(span tablepb.Span, value interface{}) bool {
-		value.(pullerwrapper.Wrapper).Close()
-		return true
-	})
-	log.Info("All pullers have been closed",
+	if m.multiplexing {
+		m.multiplexingPuller.puller.Close()
+	} else {
+		m.tablePullers.Range(func(span tablepb.Span, value interface{}) bool {
+			value.(pullerwrapper.Wrapper).Close()
+			return true
+		})
+	}
+	log.Info("SourceManager puller have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))

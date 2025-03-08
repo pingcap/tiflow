@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/engine"
@@ -196,6 +197,9 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 // CheckStoreVersion checks whether the given TiKV is compatible with this CDC.
 // If storeID is 0, it checks all TiKV.
 func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) error {
+	failpoint.Inject("GetStoreFailed", func() {
+		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
+	})
 	var stores []*metapb.Store
 	var err error
 	if storeID == 0 {

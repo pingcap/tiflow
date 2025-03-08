@@ -190,7 +190,7 @@ func IsBlackholeStorage(scheme string) bool {
 
 // InitExternalStorage init an external storage.
 var InitExternalStorage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
-	s, err := util.GetExternalStorageWithTimeout(ctx, uri.String(), DefaultTimeout)
+	s, err := util.GetExternalStorageWithDefaultTimeout(ctx, uri.String())
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrStorageInitialize, err,
 			fmt.Sprintf("can't init external storage for %s", uri.String()))
