@@ -519,19 +519,19 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 	}
 
-	// fizz: test only, always set to true
-	res.Scheduler = &config.ChangefeedSchedulerConfig{
-		EnableTableAcrossNodes: true,
-		RegionThreshold:        0,
-		WriteKeyThreshold:      0,
-	}
-
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
 			RegionThreshold:        c.Scheduler.RegionThreshold,
 			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
 		}
+	}
+
+	// fizz: test only, always set to true
+	res.Scheduler = &config.ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        0,
+		WriteKeyThreshold:      0,
 	}
 
 	if c.Integrity != nil {
