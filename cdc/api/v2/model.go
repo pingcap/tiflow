@@ -518,6 +518,14 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
+
+	// fizz: test only, always set to true
+	res.Scheduler = &config.ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        0,
+		WriteKeyThreshold:      0,
+	}
+
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
@@ -525,6 +533,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
 		}
 	}
+
 	if c.Integrity != nil {
 		res.Integrity = &integrity.Config{
 			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
