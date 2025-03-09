@@ -249,15 +249,15 @@ func (s *requestedStream) receive(
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
-				return err
-			}
+			// if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
+			// 	return err
+			// }
 		}
 		if cevent.ResolvedTs != nil {
-			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
-				return err
-			}
+			// c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
+			// if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+			// 	return err
+			// }
 		}
 	}
 }
