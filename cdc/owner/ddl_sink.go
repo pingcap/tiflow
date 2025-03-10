@@ -58,7 +58,7 @@ type DDLSink interface {
 	// It will return after the bootstrap event is sent.
 	emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error
 	// close the ddlsink, cancel running goroutine.
-	close(ctx context.Context) error
+	close() error
 }
 
 type ddlSinkImpl struct {
@@ -406,7 +406,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (e
 	}
 }
 
-func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
+func (s *ddlSinkImpl) close() (err error) {
 	s.cancel()
 	s.wg.Wait()
 

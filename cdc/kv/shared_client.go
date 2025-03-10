@@ -478,7 +478,7 @@ func (s *SharedClient) getStore(
 		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
 	}
-	
+
 	return rs
 }
 

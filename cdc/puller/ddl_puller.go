@@ -84,6 +84,8 @@ type ddlJobPuller struct {
 	outputCh chan *model.DDLJobEntry
 }
 
+func (p *ddlJobPuller) Close() {}
+
 // NewDDLJobPuller creates a new NewDDLJobPuller,
 // which fetches ddl events starting from checkpointTs.
 func NewDDLJobPuller(
