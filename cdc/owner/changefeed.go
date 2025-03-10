@@ -651,9 +651,7 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema, err = entry.NewSchemaStorage(
-		c.upstream.KVStorage, ddlStartTs,
-		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
+	c.schema, err = entry.NewSchemaStorage(c.id, c.upstream.KVStorage, ddlStartTs, cfInfo.Config.ForceReplicate, filter, util.RoleOwner)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -791,20 +789,12 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 
 	if c.cancel != nil {
 		c.cancel()
-	}
-	c.cancel = func() {}
-
-	if c.ddlPuller != nil {
-		c.ddlPuller.Close()
+		c.cancel = func() {}
 	}
 	c.wg.Wait()
 
 	if c.ddlSink != nil {
-		canceledCtx, cancel := context.WithCancel(context.Background())
-		cancel()
-		// TODO(dongmen): remove ctx from func ddlSink.close(), it is useless.
-		// We don't need to wait ddlSink Close, pass a canceled context is ok
-		if err := c.ddlSink.close(canceledCtx); err != nil {
+		if err := c.ddlSink.close(); err != nil {
 			log.Warn("owner close ddlSink failed",
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
@@ -813,7 +803,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	}
 
 	if c.scheduler != nil {
-		c.scheduler.Close(ctx)
+		c.scheduler.Close()
 		c.scheduler = nil
 	}
 	if c.downstreamObserver != nil {

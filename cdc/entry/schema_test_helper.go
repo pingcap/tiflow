@@ -82,9 +82,7 @@ func NewSchemaTestHelperWithReplicaConfig(
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-testkit")
 
-	schemaStorage, err := NewSchemaStorage(
-		store, ver.Ver, replicaConfig.ForceReplicate,
-		changefeedID, util.RoleTester, filter)
+	schemaStorage, err := NewSchemaStorage(changefeedID, store, ver.Ver, replicaConfig.ForceReplicate, filter, util.RoleTester)
 	require.NoError(t, err)
 
 	mounter := NewMounter(schemaStorage, changefeedID, time.Local,

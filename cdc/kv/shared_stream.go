@@ -44,8 +44,6 @@ type requestedStream struct {
 		m map[SubscriptionID]map[uint64]*regionFeedState
 	}
 
-	logRegionDetails func(msg string, fields ...zap.Field)
-
 	// multiplexing is for sharing one GRPC stream in many tables.
 	multiplexing *sharedconn.ConnAndClient
 
@@ -60,7 +58,6 @@ type tableExclusive struct {
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
 	stream := newRequestedStream(streamIDGen.Add(1))
-	stream.logRegionDetails = c.logRegionDetails
 	stream.requests = chann.NewAutoDrainChann[regionInfo]()
 
 	waitForPreFetching := func() error {
@@ -155,13 +152,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		}
 	}
 
-	log.Info("event feed going to create grpc stream",
-		zap.String("namespace", c.changefeed.Namespace),
-		zap.String("changefeed", c.changefeed.ID),
-		zap.Uint64("streamID", s.streamID),
-		zap.Uint64("storeID", rs.storeID),
-		zap.String("addr", rs.storeAddr))
-
 	defer func() {
 		log.Info("event feed grpc stream exits",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -186,12 +176,19 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-			zap.Uint64("streamID", s.streamID),
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", s.streamID),
 			zap.Error(err))
 		return isCanceled()
 	}
+
+	log.Info("event feed establish grpc stream",
+		zap.String("namespace", c.changefeed.Namespace),
+		zap.String("changefeed", c.changefeed.ID),
+		zap.Uint64("storeID", rs.storeID),
+		zap.String("addr", rs.storeAddr),
+		zap.Uint64("streamID", s.streamID))
 
 	if cc.Multiplexing() {
 		s.multiplexing = cc
@@ -200,9 +197,9 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-			zap.Uint64("streamID", s.streamID),
 			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr))
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", s.streamID))
 		cc.Release()
 
 		s.tableExclusives = make(chan tableExclusive, 8)
@@ -235,27 +232,19 @@ func (s *requestedStream) receive(
 	for {
 		cevent, err := client.Recv()
 		if err != nil {
-			s.logRegionDetails("event feed receive from grpc stream failed",
-				zap.String("namespace", c.changefeed.Namespace),
-				zap.String("changefeed", c.changefeed.ID),
-				zap.Uint64("streamID", s.streamID),
-				zap.Uint64("storeID", rs.storeID),
-				zap.String("addr", rs.storeAddr),
-				zap.String("code", grpcstatus.Code(err).String()),
-				zap.Error(err))
 			if sharedconn.StatusIsEOF(grpcstatus.Convert(err)) {
 				return nil
 			}
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
+			if err = s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
+			if err = s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
 				return err
 			}
 		}
@@ -374,14 +363,16 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
 				return err
 			}
-			if err = cc.Client().Send(c.createRegionRequest(region)); err != nil {
+			request := c.newRegionRequest(region)
+			if err = cc.Client().Send(request); err != nil {
 				log.Warn("event feed send request to grpc stream failed",
 					zap.String("namespace", c.changefeed.Namespace),
 					zap.String("changefeed", c.changefeed.ID),
+					zap.Int64("tableID", region.span.TableID),
+					zap.Uint64("regionID", request.RegionId),
+					zap.Uint64("checkpointTs", request.CheckpointTs),
 					zap.Uint64("streamID", s.streamID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.Uint64("regionID", region.verID.GetID()),
-					zap.Int64("tableID", region.span.TableID),
 					zap.Uint64("storeID", rs.storeID),
 					zap.String("addr", rs.storeAddr),
 					zap.Error(err))
@@ -471,31 +462,11 @@ func (s *requestedStream) sendRegionChangeEvents(
 ) error {
 	for _, event := range events {
 		regionID := event.RegionId
-		var subscriptionID SubscriptionID
+		subscriptionID := tableSubID
 		if tableSubID == invalidSubscriptionID {
 			subscriptionID = SubscriptionID(event.RequestId)
-		} else {
-			subscriptionID = tableSubID
 		}
-
 		state := s.getState(subscriptionID, regionID)
-		switch x := event.Event.(type) {
-		case *cdcpb.Event_Error:
-			fields := []zap.Field{
-				zap.String("namespace", c.changefeed.Namespace),
-				zap.String("changefeed", c.changefeed.ID),
-				zap.Uint64("streamID", s.streamID),
-				zap.Any("subscriptionID", subscriptionID),
-				zap.Uint64("regionID", event.RegionId),
-				zap.Bool("stateIsNil", state == nil),
-				zap.Any("error", x.Error),
-			}
-			if state != nil {
-				fields = append(fields, zap.Int64("tableID", state.region.span.TableID))
-			}
-			s.logRegionDetails("event feed receives a region error", fields...)
-		}
-
 		if state != nil {
 			sfEvent := newEventItem(event, state, s)
 			slot := hashRegionID(regionID, len(c.workers))
@@ -511,11 +482,9 @@ func (s *requestedStream) sendResolvedTs(
 	ctx context.Context, c *SharedClient, resolvedTs *cdcpb.ResolvedTs,
 	tableSubID SubscriptionID,
 ) error {
-	var subscriptionID SubscriptionID
+	subscriptionID := tableSubID
 	if tableSubID == invalidSubscriptionID {
 		subscriptionID = SubscriptionID(resolvedTs.RequestId)
-	} else {
-		subscriptionID = tableSubID
 	}
 	sfEvents := make([]statefulEvent, len(c.workers))
 	for _, regionID := range resolvedTs.Regions {
