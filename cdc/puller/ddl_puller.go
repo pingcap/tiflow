@@ -163,9 +163,6 @@ func (p *ddlJobPuller) Run(ctx context.Context, _ ...chan<- error) error {
 // WaitForReady implements util.Runnable.
 func (p *ddlJobPuller) WaitForReady(_ context.Context) {}
 
-// Close implements util.Runnable.
-func (p *ddlJobPuller) Close() {}
-
 // Output implements DDLJobPuller, it returns the output channel of DDL job.
 func (p *ddlJobPuller) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
@@ -721,18 +718,17 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 		}
 	})
 
+	defer func() {
+		log.Info("DDL puller stopped",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+		cancel()
+	}()
+
 	log.Info("DDL puller started",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
-
-	defer func() {
-		log.Info("close the ddl puller",
-			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID),
-			zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
-		cancel()
-	}()
 	return g.Wait()
 }
 

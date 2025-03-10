@@ -189,9 +189,6 @@ function test_dump_and_load_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: dump & load TASK"
 	prepare_database
 
-	task_name_dump="test-dump"
-	task_name_load="test-load"
-
 	# create source successfully
 	openapi_source_check "create_source1_success"
 	# get source list success
@@ -208,37 +205,49 @@ function test_dump_and_load_task() {
 	# create task success: not valid task create request
 	openapi_task_check "create_task_failed"
 
-	# create dump task success
-	openapi_task_check "create_dump_task_success"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_dump" \
-		"\"stage\": \"Stopped\"" 1
-
 	init_dump_data
 
-	# start dump task success
-	openapi_task_check "start_task_success" $task_name_dump ""
-
-	# wait dump task finish
+	dump_task_name="test-dump-1"
+	# create dump task from mysql without table filter success and valid stage is "Stopped"
+	openapi_task_check "create_dump_task_without_table_filter_success" $dump_task_name
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_dump" 100 \
+		"query-status $dump_task_name" \
+		"\"stage\": \"Stopped\"" 1
+	# start dump task success and wait dump task finish and delete dump task
+	openapi_task_check "start_task_success" $dump_task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $dump_task_name" 100 \
 		"\"stage\": \"Finished\"" 1
-	openapi_task_check "check_dump_task_finished_status_success" $task_name_dump 2 2 4 4 228
 
+	dump_task_name="test-dump-2"
+	# create dump task success and valid stage is "Stopped"
+	openapi_task_check "create_dump_task_success" $dump_task_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $dump_task_name" \
+		"\"stage\": \"Stopped\"" 1
+
+	# start dump task success and wait dump task finish
+	openapi_task_check "start_task_success" $dump_task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $dump_task_name" 100 \
+		"\"stage\": \"Finished\"" 1
+	openapi_task_check "check_dump_task_finished_status_success" $dump_task_name 2 2 4 4 228
+
+	load_task_name="test-load"
 	# create load task success
 	openapi_task_check "create_load_task_success"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_load" \
+		"query-status $load_task_name" \
 		"\"stage\": \"Stopped\"" 1
 
 	# use the data from the same dir of dump task
 
 	# start load task success
-	openapi_task_check "start_task_success" $task_name_load ""
+	openapi_task_check "start_task_success" $load_task_name ""
 
 	# wait load task finish
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_name_load" 100 \
+		"query-status $load_task_name" 100 \
 		"\"stage\": \"Finished\"" 1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard_one_source.toml

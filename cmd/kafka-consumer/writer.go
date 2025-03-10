@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -32,10 +31,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/debezium"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -61,6 +60,8 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
+	case config.ProtocolDebezium:
+		decoder = debezium.NewDecoder(option.codecConfig, upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", option.protocol))
 	}
@@ -117,10 +118,9 @@ func (p *partitionProgress) loadWatermark() uint64 {
 type writer struct {
 	option *option
 
-	ddlList              []*model.DDLEvent
-	ddlWithMaxCommitTs   *model.DDLEvent
-	ddlSink              ddlsink.Sink
-	fakeTableIDGenerator *fakeTableIDGenerator
+	ddlList            []*model.DDLEvent
+	ddlWithMaxCommitTs *model.DDLEvent
+	ddlSink            ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -131,10 +131,7 @@ type writer struct {
 
 func newWriter(ctx context.Context, o *option) *writer {
 	w := &writer{
-		option: o,
-		fakeTableIDGenerator: &fakeTableIDGenerator{
-			tableIDs: make(map[string]int64),
-		},
+		option:     o,
 		progresses: make([]*partitionProgress, o.partitionNum),
 	}
 	var (
@@ -353,9 +350,8 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				cachedEvents := dec.GetCachedEvents()
 				for _, row := range cachedEvents {
 					w.checkPartition(row, partition, message.TopicPartition.Offset)
-					tableID := row.GetTableID()
 					log.Info("simple protocol cached event resolved, append to the group",
-						zap.Int64("tableID", tableID), zap.Uint64("commitTs", row.CommitTs),
+						zap.Int64("tableID", row.GetTableID()), zap.Uint64("commitTs", row.CommitTs),
 						zap.Int32("partition", partition), zap.Any("offset", offset))
 					w.appendRow2Group(row, progress, offset)
 				}
@@ -384,15 +380,6 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 				continue
 			}
 			w.checkPartition(row, partition, message.TopicPartition.Offset)
-
-			tableID := row.GetTableID()
-			switch w.option.protocol {
-			case config.ProtocolSimple, config.ProtocolCanalJSON:
-			default:
-				tableID = w.fakeTableIDGenerator.
-					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), tableID)
-				row.PhysicalTableID = tableID
-			}
 			w.appendRow2Group(row, progress, offset)
 		case model.MessageTypeResolved:
 			newWatermark, err := progress.decoder.NextResolvedEvent()
@@ -513,21 +500,6 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns),
 		zap.String("protocol", w.option.protocol.String()))
 	group.Append(row, offset)
-}
-
-type fakeTableIDGenerator struct {
-	tableIDs       map[string]int64
-	currentTableID int64
-}
-
-func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, tableID int64) int64 {
-	key := fmt.Sprintf("`%s`.`%s`.`%d`", quotes.EscapeName(schema), quotes.EscapeName(table), tableID)
-	if tableID, ok := g.tableIDs[key]; ok {
-		return tableID
-	}
-	g.currentTableID++
-	g.tableIDs[key] = g.currentTableID
-	return g.currentTableID
 }
 
 func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress, watermark uint64) {

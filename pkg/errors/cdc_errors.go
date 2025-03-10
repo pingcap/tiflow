@@ -443,6 +443,14 @@ var (
 		"debezium encode failed",
 		errors.RFCCodeText("CDC:ErrDebeziumEncodeFailed"),
 	)
+	ErrDebeziumInvalidMessage = errors.Normalize(
+		"debezium invalid message format, %s",
+		errors.RFCCodeText("CDC:ErrDebeziumInvalidMessage"),
+	)
+	ErrDebeziumEmptyValueMessage = errors.Normalize(
+		"debezium value should not be empty",
+		errors.RFCCodeText("CDC:ErrDebeziumEmptyValueMessage"),
+	)
 	ErrStorageSinkInvalidConfig = errors.Normalize(
 		"storage sink config invalid",
 		errors.RFCCodeText("CDC:ErrStorageSinkInvalidConfig"),
@@ -958,6 +966,10 @@ var (
 	ErrInternalCheckFailed = errors.Normalize(
 		"internal check failed, %s",
 		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
+	ErrSameUpstreamDownstream = errors.Normalize(
+		"upstream and downstream are the same, %s",
+		errors.RFCCodeText("CDC:ErrSameUpstreamDownstream"),
 	)
 
 	ErrHandleDDLFailed = errors.Normalize(

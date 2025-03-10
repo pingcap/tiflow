@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 )
 
@@ -386,4 +387,38 @@ func UnsafeBytesToString(b []byte) string {
 // UnsafeStringToBytes create byte slice from string without copying
 func UnsafeStringToBytes(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&s))
+}
+
+// FakeTableIDAllocator is a fake table id allocator
+type FakeTableIDAllocator struct {
+	tableIDs       map[string]int64
+	currentTableID int64
+}
+
+// NewFakeTableIDAllocator creates a new FakeTableIDAllocator
+func NewFakeTableIDAllocator() *FakeTableIDAllocator {
+	return &FakeTableIDAllocator{
+		tableIDs: make(map[string]int64),
+	}
+}
+
+func (g *FakeTableIDAllocator) allocateByKey(key string) int64 {
+	if tableID, ok := g.tableIDs[key]; ok {
+		return tableID
+	}
+	g.currentTableID++
+	g.tableIDs[key] = g.currentTableID
+	return g.currentTableID
+}
+
+// AllocateTableID allocates a table id
+func (g *FakeTableIDAllocator) AllocateTableID(schema, table string) int64 {
+	key := fmt.Sprintf("`%s`.`%s`", quotes.EscapeName(schema), quotes.EscapeName(table))
+	return g.allocateByKey(key)
+}
+
+// AllocatePartitionID allocates a partition id
+func (g *FakeTableIDAllocator) AllocatePartitionID(schema, table, name string) int64 {
+	key := fmt.Sprintf("`%s`.`%s`.`%s`", quotes.EscapeName(schema), quotes.EscapeName(table), quotes.EscapeName(name))
+	return g.allocateByKey(key)
 }

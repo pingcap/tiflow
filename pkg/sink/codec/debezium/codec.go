@@ -66,32 +66,34 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 	col model.ColumnDataX,
 	ft *types.FieldType,
 ) {
-	switch col.GetType() {
-	case mysql.TypeBit:
-		n := ft.GetFlen()
-		var v uint64
-		var err error
-		if col.GetDefaultValue() != nil {
-			val, ok := col.GetDefaultValue().(string)
-			if !ok {
-				return
-			}
-			v, err = strconv.ParseUint(parseBit(val, n), 2, 64)
-			if err != nil {
-				return
-			}
+	writer.WriteObjectElement(func() {
+		if c.config.EnableTiDBExtension {
+			// The followings are TiDB extended fields
+			writer.WriteStringField("tidb_type", getTiDBType(ft))
 		}
-		if n == 1 {
-			writer.WriteObjectElement(func() {
+		switch col.GetType() {
+		case mysql.TypeBit:
+			n := ft.GetFlen()
+			var v uint64
+			var err error
+			if col.GetDefaultValue() != nil {
+				val, ok := col.GetDefaultValue().(string)
+				if !ok {
+					return
+				}
+				v, err = strconv.ParseUint(parseBit(val, n), 2, 64)
+				if err != nil {
+					return
+				}
+			}
+			if n == 1 {
 				writer.WriteStringField("type", "boolean")
 				writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 				writer.WriteStringField("field", col.GetName())
 				if col.GetDefaultValue() != nil {
 					writer.WriteBoolField("default", v != 0) // bool
 				}
-			})
-		} else {
-			writer.WriteObjectElement(func() {
+			} else {
 				writer.WriteStringField("type", "bytes")
 				writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 				writer.WriteStringField("name", "io.debezium.data.Bits")
@@ -103,22 +105,16 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				if col.GetDefaultValue() != nil {
 					c.writeBinaryField(writer, "default", getBitFromUint64(n, v)) // binary
 				}
-			})
-		}
-
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		writer.WriteObjectElement(func() {
+			}
+		case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+			mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
 			if col.GetDefaultValue() != nil {
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
-		})
-
-	case mysql.TypeEnum:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeEnum:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.data.Enum")
@@ -135,10 +131,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if col.GetDefaultValue() != nil {
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
-		})
-
-	case mysql.TypeSet:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeSet:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.data.EnumSet")
@@ -150,10 +143,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if col.GetDefaultValue() != nil {
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
-		})
-
-	case mysql.TypeDate, mysql.TypeNewDate:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeDate, mysql.TypeNewDate:
 			writer.WriteStringField("type", "int32")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.time.Date")
@@ -183,10 +173,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteInt64Field("default", t.UTC().Unix()/60/60/24)
 			}
-		})
-
-	case mysql.TypeDatetime:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeDatetime:
 			writer.WriteStringField("type", "int64")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			if ft.GetDecimal() <= 3 {
@@ -231,10 +218,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					writer.WriteInt64Field("default", gt.UnixMicro())
 				}
 			}
-		})
-
-	case mysql.TypeTimestamp:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeTimestamp:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.time.ZonedTimestamp")
@@ -246,6 +230,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					return
 				}
 				if v == "CURRENT_TIMESTAMP" {
+					if mysql.HasNotNullFlag(ft.GetFlag()) {
+						writer.WriteStringField("default", "1970-01-01T00:00:00Z")
+					}
 					return
 				}
 				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
@@ -273,10 +260,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				str += "Z"
 				writer.WriteStringField("default", str)
 			}
-		})
-
-	case mysql.TypeDuration:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeDuration:
 			writer.WriteStringField("type", "int64")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.time.MicroTime")
@@ -293,10 +277,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteInt64Field("default", d.Microseconds())
 			}
-		})
-
-	case mysql.TypeJSON:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeJSON:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.data.Json")
@@ -305,10 +286,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if col.GetDefaultValue() != nil {
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
-		})
-
-	case mysql.TypeTiny: // TINYINT
-		writer.WriteObjectElement(func() {
+		case mysql.TypeTiny: // TINYINT
 			writer.WriteStringField("type", "int16")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
@@ -323,10 +301,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeShort: // SMALLINT
-		writer.WriteObjectElement(func() {
+		case mysql.TypeShort: // SMALLINT
 			if mysql.HasUnsignedFlag(ft.GetFlag()) {
 				writer.WriteStringField("type", "int32")
 			} else {
@@ -345,10 +320,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeInt24: // MEDIUMINT
-		writer.WriteObjectElement(func() {
+		case mysql.TypeInt24: // MEDIUMINT
 			writer.WriteStringField("type", "int32")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
@@ -363,10 +335,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeLong: // INT
-		writer.WriteObjectElement(func() {
+		case mysql.TypeLong: // INT
 			if col.GetFlag().IsUnsigned() {
 				writer.WriteStringField("type", "int64")
 			} else {
@@ -385,10 +354,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeLonglong: // BIGINT
-		writer.WriteObjectElement(func() {
+		case mysql.TypeLonglong: // BIGINT
 			writer.WriteStringField("type", "int64")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
@@ -403,10 +369,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeFloat:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeFloat:
 			if ft.GetDecimal() != -1 {
 				writer.WriteStringField("type", "double")
 			} else {
@@ -425,12 +388,9 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeDouble, mysql.TypeNewDecimal:
-		// https://dev.mysql.com/doc/refman/8.4/en/numeric-types.html
-		// MySQL also treats REAL as a synonym for DOUBLE PRECISION (a nonstandard variation), unless the REAL_AS_FLOAT SQL mode is enabled.
-		writer.WriteObjectElement(func() {
+		case mysql.TypeDouble, mysql.TypeNewDecimal:
+			// https://dev.mysql.com/doc/refman/8.4/en/numeric-types.html
+			// MySQL also treats REAL as a synonym for DOUBLE PRECISION (a nonstandard variation), unless the REAL_AS_FLOAT SQL mode is enabled.
 			writer.WriteStringField("type", "double")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("field", col.GetName())
@@ -445,10 +405,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeYear:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeYear:
 			writer.WriteStringField("type", "int32")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.time.Year")
@@ -472,10 +429,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 				}
 				writer.WriteFloat64Field("default", floatV)
 			}
-		})
-
-	case mysql.TypeTiDBVectorFloat32:
-		writer.WriteObjectElement(func() {
+		case mysql.TypeTiDBVectorFloat32:
 			writer.WriteStringField("type", "string")
 			writer.WriteBoolField("optional", !mysql.HasNotNullFlag(ft.GetFlag()))
 			writer.WriteStringField("name", "io.debezium.data.TiDBVectorFloat32")
@@ -483,15 +437,14 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 			if col.GetDefaultValue() != nil {
 				writer.WriteAnyField("default", col.GetDefaultValue())
 			}
-		})
-
-	default:
-		log.Warn(
-			"meet unsupported field type",
-			zap.Any("fieldType", col.GetType()),
-			zap.Any("column", col.GetName()),
-		)
-	}
+		default:
+			log.Warn(
+				"meet unsupported field type",
+				zap.Any("fieldType", col.GetType()),
+				zap.Any("column", col.GetName()),
+			)
+		}
+	})
 }
 
 // See https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types
@@ -502,7 +455,10 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	col model.ColumnDataX,
 	ft *types.FieldType,
 ) error {
-	value := getValue(col)
+	value := col.Value
+	if value == nil {
+		value = col.GetDefaultValue()
+	}
 	if value == nil {
 		writer.WriteNullField(col.GetName())
 		return nil
@@ -703,7 +659,11 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				col.GetName())
 		}
 		if v == "CURRENT_TIMESTAMP" {
-			writer.WriteNullField(col.GetName())
+			if mysql.HasNotNullFlag(ft.GetFlag()) {
+				writer.WriteStringField(col.GetName(), "1970-01-01T00:00:00Z")
+			} else {
+				writer.WriteNullField(col.GetName())
+			}
 			return nil
 		}
 		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
@@ -1077,10 +1037,10 @@ func (c *dbzCodec) EncodeValue(
 						} else if e.IsUpdate() {
 							validCols = e.Columns
 						}
-						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
-						for i, col := range validCols {
+						for _, col := range validCols {
 							colx := model.GetColumnDataX(col, e.TableInfo)
-							c.writeDebeziumFieldSchema(fieldsWriter, colx, colInfos[i].Ft)
+							ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
+							c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
 						}
 						if e.TableInfo.HasVirtualColumns() {
 							for _, colInfo := range e.TableInfo.Columns {
@@ -1089,7 +1049,8 @@ func (c *dbzCodec) EncodeValue(
 								}
 								data := &model.ColumnData{ColumnID: colInfo.ID}
 								colx := model.GetColumnDataX(data, e.TableInfo)
-								c.writeDebeziumFieldSchema(fieldsWriter, colx, &colInfo.FieldType)
+								ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
+								c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
 							}
 						}
 						util.ReturnJSONWriter(fieldsWriter)
@@ -1386,7 +1347,9 @@ func (c *dbzCodec) EncodeDDLEvent(
 									jWriter.WriteIntField("position", pos+1)
 									jWriter.WriteBoolField("optional", !mysql.HasNotNullFlag(flag))
 
-									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag)
+									updateNowWithTimestamp := mysql.HasOnUpdateNowFlag(flag) && jdbcType == internal.JavaSQLTypeTIMESTAMP_WITH_TIMEZONE
+									autoIncrementFlag := mysql.HasAutoIncrementFlag(flag) || updateNowWithTimestamp
+
 									jWriter.WriteBoolField("autoIncremented", autoIncrementFlag)
 									jWriter.WriteBoolField("generated", autoIncrementFlag)
 								})

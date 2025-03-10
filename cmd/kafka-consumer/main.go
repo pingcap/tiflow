@@ -87,7 +87,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err = http.ListenAndServe("127.0.0.1:6060", nil); err != nil {
+			if err = http.ListenAndServe(":6060", nil); err != nil {
 				log.Panic("cannot start the pprof", zap.Error(err))
 			}
 		}()

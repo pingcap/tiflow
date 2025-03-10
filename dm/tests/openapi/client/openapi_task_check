@@ -445,9 +445,9 @@ def create_shard_task_success():
     print("create_shard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
-def create_dump_task_success():
+def create_dump_task_success(task_name):
     task = {
-        "name": "test-dump",
+        "name": task_name,
         "task_mode": "dump",
         "meta_schema": "dm-meta",
         "enhance_online_schema_change": True,
@@ -483,6 +483,38 @@ def create_dump_task_success():
     }
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
     print("create_dump_task_success resp=", resp.json())
+    assert resp.status_code == 201
+
+
+def create_dump_task_without_table_filter_success(task_name):
+    task = {
+        "name": task_name,
+        "task_mode": "dump",
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "table_migrate_rule": [],
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "source_config": {
+            "full_migrate_conf": {
+                "export_threads": 4,
+                "import_threads": 16,
+                "data_dir": "./exported_data_1",
+                "consistency": "auto",
+            },
+            "incr_migrate_conf": {"repl_threads": 16, "repl_batch": 100},
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+            ],
+        }
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_dump_task_without_table_filter_success resp=", resp.json())
     assert resp.status_code == 201
 
 def create_load_task_success():
@@ -1039,6 +1071,7 @@ if __name__ == "__main__":
         "create_noshard_task_success": create_noshard_task_success,
         "create_shard_task_success": create_shard_task_success,
         "create_dump_task_success": create_dump_task_success,
+        "create_dump_task_without_table_filter_success": create_dump_task_without_table_filter_success,
         "create_load_task_success": create_load_task_success,
         "create_incremental_task_with_gtid_success": create_incremental_task_with_gtid_success,
         "delete_task_failed": delete_task_failed,

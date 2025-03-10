@@ -14,6 +14,7 @@
 package canal
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -39,7 +40,6 @@ type canalJSONMessageInterface interface {
 	getCommitTs() uint64
 	getPhysicalTableID() int64
 	getTableID() int64
-	isPartition() bool
 	getQuery() string
 	getOld() map[string]interface{}
 	getData() map[string]interface{}
@@ -95,10 +95,6 @@ func (c *JSONMessage) getPhysicalTableID() int64 {
 	return 0
 }
 
-func (c *JSONMessage) isPartition() bool {
-	return false
-}
-
 func (c *JSONMessage) getQuery() string {
 	return c.Query
 }
@@ -151,8 +147,6 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 
 type tidbExtension struct {
 	CommitTs           uint64 `json:"commitTs,omitempty"`
-	TableID            int64  `json:"tableId,omitempty"`
-	PhysicalTableID    int64  `json:"partitionId,omitempty"`
 	WatermarkTs        uint64 `json:"watermarkTs,omitempty"`
 	OnlyHandleKey      bool   `json:"onlyHandleKey,omitempty"`
 	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
@@ -171,35 +165,30 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
-func (c *canalJSONMessageWithTiDBExtension) getTableID() int64 {
-	return c.Extensions.TableID
-}
-
-func (c *canalJSONMessageWithTiDBExtension) getPhysicalTableID() int64 {
-	if c.Extensions.PhysicalTableID != 0 {
-		return c.Extensions.PhysicalTableID
-	}
-	return c.Extensions.TableID
-}
-
-func (c *canalJSONMessageWithTiDBExtension) isPartition() bool {
-	return c.Extensions.PhysicalTableID != 0
-}
-
 func (b *batchDecoder) queryTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
+	schema := *msg.getSchema()
+	table := *msg.getTable()
 	cacheKey := tableKey{
-		schema: *msg.getSchema(),
-		table:  *msg.getTable(),
+		schema: schema,
+		table:  table,
 	}
 	tableInfo, ok := b.tableInfoCache[cacheKey]
 	if !ok {
-		tableInfo = newTableInfo(msg)
+		partitionInfo := b.partitionInfoCache[cacheKey]
+		tableInfo = newTableInfo(msg, partitionInfo)
+		tableInfo.ID = b.tableIDAllocator.AllocateTableID(schema, table)
+		if tableInfo.Partition != nil {
+			for idx, partition := range tableInfo.Partition.Definitions {
+				partitionID := b.tableIDAllocator.AllocatePartitionID(schema, table, partition.Name.O)
+				tableInfo.Partition.Definitions[idx].ID = partitionID
+			}
+		}
 		b.tableInfoCache[cacheKey] = tableInfo
 	}
 	return tableInfo
 }
 
-func newTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
+func newTableInfo(msg canalJSONMessageInterface, partitionInfo *timodel.PartitionInfo) *model.TableInfo {
 	schema := *msg.getSchema()
 	table := *msg.getTable()
 	tidbTableInfo := &timodel.TableInfo{}
@@ -210,7 +199,73 @@ func newTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
 	mysqlType := msg.getMySQLType()
 	setColumnInfos(tidbTableInfo, rawColumns, mysqlType, pkNames)
 	setIndexes(tidbTableInfo, pkNames)
+	tidbTableInfo.Partition = partitionInfo
 	return model.WrapTableInfo(100, schema, 1000, tidbTableInfo)
+}
+
+func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physicalTableID int64) error {
+	if physicalTableID != 0 {
+		event.PhysicalTableID = physicalTableID
+		return nil
+	}
+	if event.TableInfo.Partition == nil {
+		event.PhysicalTableID = event.TableInfo.ID
+		return nil
+	}
+	switch event.TableInfo.Partition.Type {
+	case pmodel.PartitionTypeRange:
+		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
+		columns := event.Columns
+		if columns == nil {
+			columns = event.PreColumns
+		}
+		var columnValue string
+		for _, col := range columns {
+			if col.ColumnID == targetColumnID {
+				columnValue = model.ColumnValueString(col.Value)
+				break
+			}
+		}
+		for _, partition := range event.TableInfo.Partition.Definitions {
+			lessThan := partition.LessThan[0]
+			if lessThan == "MAXVALUE" {
+				event.PhysicalTableID = partition.ID
+				return nil
+			}
+			if len(columnValue) < len(lessThan) {
+				event.PhysicalTableID = partition.ID
+				return nil
+			}
+			if strings.Compare(columnValue, lessThan) == -1 {
+				event.PhysicalTableID = partition.ID
+				return nil
+			}
+		}
+		return fmt.Errorf("cannot found partition for column value %s", columnValue)
+	// todo: support following rule if meet the corresponding workload
+	case pmodel.PartitionTypeHash:
+		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
+		columns := event.Columns
+		if columns == nil {
+			columns = event.PreColumns
+		}
+		var columnValue int64
+		for _, col := range columns {
+			if col.ColumnID == targetColumnID {
+				columnValue = col.Value.(int64)
+				break
+			}
+		}
+		result := columnValue % int64(len(event.TableInfo.Partition.Definitions))
+		partitionID := event.TableInfo.GetPartitionInfo().Definitions[result].ID
+		event.PhysicalTableID = partitionID
+		return nil
+	case pmodel.PartitionTypeKey:
+	case pmodel.PartitionTypeList:
+	case pmodel.PartitionTypeNone:
+	default:
+	}
+	return fmt.Errorf("manually set partition id for partition type %s not supported yet", event.TableInfo.Partition.Type)
 }
 
 func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, error) {
@@ -218,13 +273,16 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	result := new(model.RowChangedEvent)
 	result.TableInfo = b.queryTableInfo(msg)
 	result.CommitTs = msg.getCommitTs()
-	result.PhysicalTableID = msg.getPhysicalTableID()
-	mysqlType := msg.getMySQLType()
 
+	mysqlType := msg.getMySQLType()
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
 		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType, result.TableInfo)
+		if err != nil {
+			return nil, err
+		}
+		err = b.setPhysicalTableID(result, msg.getPhysicalTableID())
 		if err != nil {
 			return nil, err
 		}
@@ -236,8 +294,6 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 	if err != nil {
 		return nil, err
 	}
-	result.TableInfo.TableName.IsPartition = msg.isPartition()
-	result.TableInfo.TableName.TableID = msg.getTableID()
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
@@ -264,7 +320,10 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", result.Columns))
 		}
 	}
-
+	err = b.setPhysicalTableID(result, msg.getPhysicalTableID())
+	if err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

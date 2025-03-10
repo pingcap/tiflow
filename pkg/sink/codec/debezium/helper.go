@@ -43,9 +43,6 @@ func (v *visiter) Leave(n ast.Node) (node ast.Node, ok bool) {
 	switch col := n.(type) {
 	case *ast.ColumnDef:
 		c := v.columnsMap[col.Name.Name]
-		if col.Options != nil {
-			parseOptions(col.Options, c)
-		}
 		if col.Tp != nil {
 			parseType(c, col)
 		}
@@ -67,16 +64,13 @@ func extractValue(expr ast.ExprNode) any {
 func parseType(c *timodel.ColumnInfo, col *ast.ColumnDef) {
 	ft := col.Tp
 	switch ft.GetType() {
-	case mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeTimestamp:
-		c.SetDecimal(ft.GetDecimal())
-		if c.OriginDefaultValue != nil {
-			c.SetDefaultValue(c.OriginDefaultValue)
+	case mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeTimestamp, mysql.TypeYear:
+		if ft.GetType() == mysql.TypeYear {
+			c.SetFlen(ft.GetFlen())
+		} else {
+			c.SetDecimal(ft.GetDecimal())
 		}
-	case mysql.TypeYear:
-		c.SetFlen(ft.GetFlen())
-		if c.OriginDefaultValue != nil {
-			c.SetDefaultValue(c.OriginDefaultValue)
-		}
+		parseOptions(col.Options, c)
 	default:
 	}
 }
@@ -89,7 +83,7 @@ func parseOptions(options []*ast.ColumnOption, c *timodel.ColumnInfo) {
 			if defaultValue == nil {
 				continue
 			}
-			if err := c.SetOriginDefaultValue(defaultValue); err != nil {
+			if err := c.SetDefaultValue(defaultValue); err != nil {
 				log.Error("failed to set default value")
 			}
 		}
@@ -233,6 +227,18 @@ func getExpressionAndName(ft types.FieldType) (string, string) {
 	return cs + suf, prefix + suf
 }
 
+func getTiDBType(ft *types.FieldType) string {
+	tidbType := types.TypeToStr(ft.GetType(), ft.GetCharset())
+	switch ft.GetType() {
+	case mysql.TypeYear, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal:
+		return tidbType
+	}
+	if mysql.HasUnsignedFlag(ft.GetFlag()) {
+		tidbType = tidbType + " unsigned"
+	}
+	return tidbType
+}
+
 func getBitFromUint64(n int, v uint64) []byte {
 	var buf [8]byte
 	binary.LittleEndian.PutUint64(buf[:], v)
@@ -241,13 +247,6 @@ func getBitFromUint64(n int, v uint64) []byte {
 		numBytes += 1
 	}
 	return buf[:numBytes]
-}
-
-func getValue(col model.ColumnDataX) any {
-	if col.Value == nil {
-		return col.GetDefaultValue()
-	}
-	return col.Value
 }
 
 func getDBTableName(e *model.DDLEvent) (string, string) {

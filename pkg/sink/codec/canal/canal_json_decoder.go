@@ -26,7 +26,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -91,7 +95,10 @@ type batchDecoder struct {
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
 
-	tableInfoCache map[tableKey]*model.TableInfo
+	tableInfoCache     map[tableKey]*model.TableInfo
+	partitionInfoCache map[tableKey]*timodel.PartitionInfo
+
+	tableIDAllocator *common.FakeTableIDAllocator
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -115,22 +122,15 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	var msg canalJSONMessageInterface = &JSONMessage{}
-	if codecConfig.EnableTiDBExtension {
-		msg = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: &JSONMessage{},
-			Extensions:  &tidbExtension{},
-		}
-	}
-
 	return &batchDecoder{
-		config:         codecConfig,
-		msg:            msg,
-		decoder:        newBufferedJSONDecoder(),
-		storage:        externalStorage,
-		upstreamTiDB:   db,
-		bytesDecoder:   charmap.ISO8859_1.NewDecoder(),
-		tableInfoCache: make(map[tableKey]*model.TableInfo),
+		config:             codecConfig,
+		decoder:            newBufferedJSONDecoder(),
+		storage:            externalStorage,
+		upstreamTiDB:       db,
+		bytesDecoder:       charmap.ISO8859_1.NewDecoder(),
+		tableInfoCache:     make(map[tableKey]*model.TableInfo),
+		partitionInfoCache: make(map[tableKey]*timodel.PartitionInfo),
+		tableIDAllocator:   common.NewFakeTableIDAllocator(),
 	}, nil
 }
 
@@ -156,11 +156,20 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := b.decoder.Decode(b.msg); err != nil {
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	if b.config.EnableTiDBExtension {
+		msg = &canalJSONMessageWithTiDBExtension{
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
+		}
+	}
+
+	if err := b.decoder.Decode(msg); err != nil {
 		log.Error("canal-json decoder decode failed",
 			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
+	b.msg = msg
 	return b.msg.messageType(), true, nil
 }
 
@@ -370,14 +379,31 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	result := canalJSONMessage2DDLEvent(b.msg)
 	schema := *b.msg.getSchema()
 	table := *b.msg.getTable()
+	cacheKey := tableKey{
+		schema: schema,
+		table:  table,
+	}
 	// if receive a table level DDL, just remove the table info to trigger create a new one.
 	if schema != "" && table != "" {
-		cacheKey := tableKey{
-			schema: schema,
-			table:  table,
-		}
 		delete(b.tableInfoCache, cacheKey)
+		delete(b.partitionInfoCache, cacheKey)
 	}
+
+	stmt, err := parser.New().ParseOneStmt(result.Query, "", "")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if v, ok := stmt.(*ast.CreateTableStmt); ok {
+		tableInfo, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), v)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		partitions := tableInfo.GetPartitionInfo()
+		if partitions != nil {
+			b.partitionInfoCache[cacheKey] = partitions
+		}
+	}
+
 	return result, nil
 }
 

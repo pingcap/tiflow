@@ -41,7 +41,6 @@ import (
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
@@ -85,19 +84,17 @@ type ConsumerOption struct {
 
 func newConsumerOption() *ConsumerOption {
 	return &ConsumerOption{
-		protocol: config.ProtocolDefault,
+		protocol: config.ProtocolCanalJSON,
+		// the default value of partitionNum is 1
+		partitionNum: 1,
 	}
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
 func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
-	// the default value of partitionNum is 1
-	o.partitionNum = 1
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-
 	o.address = strings.Split(upstreamURI.Host, ",")
 
 	replicaConfig := config.GetDefaultReplicaConfig()
@@ -115,11 +112,11 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 		if err != nil {
 			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 		}
-		if !sutil.IsPulsarSupportedProtocols(protocol) {
-			log.Panic("unsupported protocol, pulsar sink currently only support these protocols: [canal-json, canal, maxwell]",
-				zap.String("protocol", s))
-		}
 		o.protocol = protocol
+	}
+	if !sutil.IsPulsarSupportedProtocols(o.protocol) {
+		log.Panic("unsupported protocol, pulsar sink currently only support these protocols: [canal-json]",
+			zap.String("protocol", s))
 	}
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
@@ -127,11 +124,6 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 		enableTiDBExtension, err := strconv.ParseBool(s)
 		if err != nil {
 			log.Panic("invalid enable-tidb-extension of upstream-uri")
-		}
-		if enableTiDBExtension {
-			if o.protocol != config.ProtocolCanalJSON && o.protocol != config.ProtocolAvro {
-				log.Panic("enable-tidb-extension only work with canal-json / avro")
-			}
 		}
 		o.enableTiDBExtension = enableTiDBExtension
 	}
@@ -177,14 +169,11 @@ func main() {
 	}
 }
 
-func run(cmd *cobra.Command, args []string) {
+func run(_ *cobra.Command, _ []string) {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
-	},
-		logutil.WithInitGRPCLogger(),
-		logutil.WithInitSaramaLogger(),
-	)
+	})
 	if err != nil {
 		log.Error("init logger failed", zap.Error(err))
 		return
@@ -216,7 +205,7 @@ func run(cmd *cobra.Command, args []string) {
 	defer pulsarConsumer.Close()
 	msgChan := pulsarConsumer.Chan()
 
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -229,7 +218,7 @@ func run(cmd *cobra.Command, args []string) {
 				log.Debug(fmt.Sprintf("Received message msgId: %#v -- content: '%s'\n",
 					consumerMsg.ID(),
 					string(consumerMsg.Payload())))
-				err := consumer.HandleMsg(consumerMsg.Message)
+				err = consumer.HandleMsg(consumerMsg.Message)
 				if err != nil {
 					log.Panic("Error consuming message", zap.Error(err))
 				}
@@ -244,7 +233,7 @@ func run(cmd *cobra.Command, args []string) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := consumer.Run(ctx); err != nil {
+		if err = consumer.Run(ctx); err != nil {
 			if err != context.Canceled {
 				log.Panic("Error running consumer", zap.Error(err))
 			}
@@ -328,6 +317,8 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 
 // partitionSinks maintained for each partition, it may sync data for multiple tables.
 type partitionSinks struct {
+	decoder codec.RowEventDecoder
+
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
@@ -336,12 +327,11 @@ type partitionSinks struct {
 
 // Consumer represents a local pulsar consumer
 type Consumer struct {
-	eventGroups          map[int64]*eventsGroup
-	ddlList              []*model.DDLEvent
-	ddlListMu            sync.Mutex
-	lastReceivedDDL      *model.DDLEvent
-	ddlSink              ddlsink.Sink
-	fakeTableIDGenerator *fakeTableIDGenerator
+	eventGroups     map[int64]*eventsGroup
+	ddlList         []*model.DDLEvent
+	ddlListMu       sync.Mutex
+	lastReceivedDDL *model.DDLEvent
+	ddlSink         ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -372,23 +362,21 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	config.GetGlobalServerConfig().TZ = o.timezone
 	c.tz = tz
 
-	c.fakeTableIDGenerator = &fakeTableIDGenerator{
-		tableIDs: make(map[string]int64),
-	}
-
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
+	decoder, err := canal.NewBatchDecoder(ctx, c.codecConfig, nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	c.sinks = make([]*partitionSinks, o.partitionNum)
+	for i := 0; i < o.partitionNum; i++ {
+		c.sinks[i] = &partitionSinks{
+			decoder: decoder,
+		}
 	}
 
-	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
-	for i := 0; i < o.partitionNum; i++ {
-		c.sinks[i] = &partitionSinks{}
-	}
-
 	changefeedID := model.DefaultChangeFeedID("pulsar-consumer")
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan, nil)
 	if err != nil {
@@ -450,29 +438,8 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 	c.sinksMu.Lock()
 	sink := c.sinks[0]
 	c.sinksMu.Unlock()
-	if sink == nil {
-		panic("sink should initialized")
-	}
 
-	ctx := context.Background()
-	var (
-		decoder codec.RowEventDecoder
-		err     error
-	)
-
-	switch c.codecConfig.Protocol {
-	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, nil)
-		if err != nil {
-			return err
-		}
-	default:
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	decoder := sink.decoder
 	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
 		return errors.Trace(err)
@@ -503,7 +470,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
-			log.Info("DDL event received", zap.Any("DDL", ddl))
 			c.appendDDL(ddl)
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -524,21 +490,19 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				continue
 			}
-			var partitionID int64
-			if row.TableInfo.IsPartitionTable() {
-				partitionID = row.GetTableID()
-			}
-			// use schema, table and tableID to identify a table
-			tableID := c.fakeTableIDGenerator.
-				generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
-			row.TableInfo.TableName.TableID = tableID
-
+			tableID := row.GetTableID()
 			group, ok := c.eventGroups[tableID]
 			if !ok {
 				group = newEventsGroup()
 				c.eventGroups[tableID] = group
 			}
 			group.Append(row)
+			log.Info("DML event received",
+				zap.Int64("tableID", row.GetTableID()),
+				zap.String("schema", row.TableInfo.GetSchemaName()),
+				zap.String("table", row.TableInfo.GetTableName()),
+				zap.Uint64("commitTs", row.CommitTs),
+				zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
@@ -584,6 +548,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				}
 			}
 			atomic.StoreUint64(&sink.resolvedTs, ts)
+			log.Info("resolved ts updated", zap.Uint64("resolvedTs", ts))
 		}
 
 	}
@@ -600,7 +565,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Panic("DDL CommitTs < lastReceivedDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("lastReceivedDDLCommitTs", c.lastReceivedDDL.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	}
 
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
@@ -608,12 +573,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.lastReceivedDDL {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	c.lastReceivedDDL = ddl
 }
 
@@ -649,16 +614,16 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 }
 
 // getMinResolvedTs returns the minimum resolvedTs of all the partitionSinks
-func (c *Consumer) getMinResolvedTs() (result uint64, err error) {
-	result = uint64(math.MaxUint64)
-	err = c.forEachSink(func(sink *partitionSinks) error {
+func (c *Consumer) getMinResolvedTs() uint64 {
+	result := uint64(math.MaxUint64)
+	_ = c.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
 		if a < result {
 			result = a
 		}
 		return nil
 	})
-	return result, err
+	return result
 }
 
 // Run the Consumer
@@ -670,11 +635,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			// 1. Get the minimum resolvedTs of all the partitionSinks
-			minResolvedTs, err := c.getMinResolvedTs()
-			if err != nil {
-				return errors.Trace(err)
-			}
+			minResolvedTs := c.getMinResolvedTs()
 
 			// 2. check if there is a DDL event that can be executed
 			//   if there is, execute it and update the minResolvedTs
@@ -751,25 +712,4 @@ func flushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs
 			return nil
 		}
 	}
-}
-
-type fakeTableIDGenerator struct {
-	tableIDs       map[string]int64
-	currentTableID int64
-	mu             sync.Mutex
-}
-
-func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	key := quotes.QuoteSchema(schema, table)
-	if partition != 0 {
-		key = fmt.Sprintf("%s.`%d`", key, partition)
-	}
-	if tableID, ok := g.tableIDs[key]; ok {
-		return tableID
-	}
-	g.currentTableID++
-	g.tableIDs[key] = g.currentTableID
-	return g.currentTableID
 }

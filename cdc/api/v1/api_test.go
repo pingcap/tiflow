@@ -31,8 +31,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/check"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -383,6 +386,17 @@ func TestResumeChangefeed(t *testing.T) {
 	router := newRouterWithoutStatusProvider(cp)
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil)
+	statusProvider.EXPECT().GetChangeFeedInfo(gomock.Any(), gomock.Any()).
+		Return(&model.ChangeFeedInfo{SinkURI: "mock"}, nil).AnyTimes()
+	pdClient := &gc.MockPDClient{}
+	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(pdClient), nil).AnyTimes()
+
+	// Mock UpstreamDownstreamNotSame check
+	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
+	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
+	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
+		return 0, false, nil
+	})
 
 	// test resume changefeed succeeded
 	mo.EXPECT().

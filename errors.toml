@@ -236,9 +236,19 @@ error = '''
 unflatten datume data
 '''
 
+["CDC:ErrDebeziumEmptyValueMessage"]
+error = '''
+debezium value should not be empty
+'''
+
 ["CDC:ErrDebeziumEncodeFailed"]
 error = '''
 debezium encode failed
+'''
+
+["CDC:ErrDebeziumInvalidMessage"]
+error = '''
+debezium invalid message format, %s
 '''
 
 ["CDC:ErrDecodeFailed"]
@@ -889,6 +899,11 @@ failed to seek to the beginning of request body
 ["CDC:ErrS3StorageAPI"]
 error = '''
 external storage api
+'''
+
+["CDC:ErrSameUpstreamDownstream"]
+error = '''
+upstream and downstream are the same, %s
 '''
 
 ["CDC:ErrSchedulerRequestFailed"]

@@ -113,9 +113,8 @@ func (d *canalJSONTxnEventDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 func (d *canalJSONTxnEventDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, error) {
 	msg := d.msg
 	result := new(model.RowChangedEvent)
-	result.TableInfo = newTableInfo(msg)
+	result.TableInfo = newTableInfo(msg, nil)
 	result.CommitTs = msg.getCommitTs()
-	result.PhysicalTableID = msg.getPhysicalTableID()
 
 	mysqlType := msg.getMySQLType()
 	var err error
