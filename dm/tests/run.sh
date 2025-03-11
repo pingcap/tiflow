@@ -130,3 +130,4 @@ else
 		run $script
 	done
 fi
+# add test trigger
