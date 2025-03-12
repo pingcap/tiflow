@@ -287,7 +287,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	jobs, err := getAllHistoryDDLJob(store, f)
 	require.Nil(t, err)
 
-	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
+	scheamStorage, err := NewSchemaStorage(dummyChangeFeedID, nil, 0, false, f, util.RoleTester)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
@@ -1253,8 +1253,7 @@ func TestDecodeRow(t *testing.T) {
 	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
+	schemaStorage, err := NewSchemaStorage(changefeed, helper.Storage(), ver.Ver, false, filter, util.RoleTester)
 	require.NoError(t, err)
 
 	// apply ddl to schemaStorage
@@ -1334,8 +1333,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, cfID, util.RoleTester, f)
+	schemaStorage, err := NewSchemaStorage(cfID, helper.Storage(), ver.Ver, false, f, util.RoleTester)
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {

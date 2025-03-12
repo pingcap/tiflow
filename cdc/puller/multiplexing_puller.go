@@ -95,11 +95,10 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 		log.Info("puller is initialized",
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
-			zap.String("tableName", p.tableName),
-			zap.Any("tableID", p.spans),
-			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Duration("duration", time.Since(p.start)),
-		)
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Int64("tableID", p.spans[0].TableID),
+			zap.String("tableName", p.tableName))
 	}
 	if resolvedTs > p.resolvedTs.Load() {
 		p.resolvedTs.Store(resolvedTs)
