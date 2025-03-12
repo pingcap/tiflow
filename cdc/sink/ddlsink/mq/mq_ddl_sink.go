@@ -162,10 +162,13 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("Emit checkpointTs to default topic",
-			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
-		return errors.Trace(err)
+		if err != nil {
+			log.Warn("Write checkpointTs to default topic failed", zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
+			return errors.Trace(err)
+		}
+		log.Info("Write checkpointTs to default topic", zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
+		return nil
 	}
 	var tableNames []model.TableName
 	for _, table := range tables {
@@ -179,8 +182,10 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		}
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
+			log.Warn("Write checkpointTs to topic failed", zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 			return errors.Trace(err)
 		}
+		log.Info("Write checkpointTs to topic", zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 	}
 	return nil
 }
