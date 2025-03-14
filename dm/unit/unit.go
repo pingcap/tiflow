@@ -111,7 +111,7 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 }
 
 // IsResumableError checks the error message and returns whether we need to
-// resume the task unit and retry.
+// resume the task unit and retry .
 func IsResumableError(err *pb.ProcessError) bool {
 	if err == nil {
 		return true
