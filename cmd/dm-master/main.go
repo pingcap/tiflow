@@ -34,7 +34,7 @@ import (
 )
 
 func main() {
-	// 1. parse config
+	// 1. parse config.
 	cfg := master.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
