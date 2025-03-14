@@ -31,6 +31,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
 	require.True(t, filter.ShouldIgnoreTable("performance_schema", ""))
+	require.True(t, filter.ShouldIgnoreTable("workload_schema", "hist_snapshots"))
 	require.False(t, filter.ShouldIgnoreTable("metric_schema", "query_duration"))
 	require.False(t, filter.ShouldIgnoreTable("sns", "user"))
 	require.True(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
