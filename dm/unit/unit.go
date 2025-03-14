@@ -40,6 +40,7 @@ type Unit interface {
 	// every unit does base initialization in `Init`, and this must pass before start running the subtask
 	// other setups can be done in the beginning of `Process`, but this should be treated carefully to make it
 	// compatible with Pause / Resume.
+	//
 	// if initialing successfully, the outer caller should call `Close` when the unit (or the task) finished, stopped or canceled (because other units Init fail).
 	// if initialing fail, Init itself should release resources it acquired before (rolling itself back).
 	Init(ctx context.Context) error
