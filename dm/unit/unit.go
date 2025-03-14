@@ -6,7 +6,6 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
-//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
@@ -112,7 +111,7 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 }
 
 // IsResumableError checks the error message and returns whether we need to
-// resume the task unit and retry.
+// resume the task unit and retry .
 func IsResumableError(err *pb.ProcessError) bool {
 	if err == nil {
 		return true
