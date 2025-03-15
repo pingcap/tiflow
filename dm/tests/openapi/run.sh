@@ -1136,7 +1136,7 @@ function test_tls() {
 	# miss pd all certificate
 	openapi_task_check "create_noshard_task_with_security_failed" $task_name \
 		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
-		"" "" ""
+		"" "" "123"
 
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
