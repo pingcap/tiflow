@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -118,7 +119,29 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context,
 			Partition: int32(i),
 		}
 	}
-	return p.producer.SendMessages(msgs)
+	err := p.producer.SendMessages(msgs)
+
+	item := ctx.Value("checkpoint")
+	if item == nil {
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	}
+
+	checkpoint := item.(uint64)
+	fields := make([]zap.Field, 0, len(msgs))
+	fields = append(fields, zap.String("topic", topic))
+	fields = append(fields, zap.Uint64("checkpoint", checkpoint))
+	for i := 0; i < len(msgs); i++ {
+		a := fmt.Sprintf("partition-%d-offset", i)
+		// offset may be 0, since cannot receive the offset from the error
+		fields = append(fields, zap.Int64(a, msgs[i].Offset))
+	}
+
+	if err != nil {
+		log.Warn("Write message to topic failed", fields...)
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	}
+	log.Info("Write message to topic", fields...)
+	return nil
 }
 
 func (p *saramaSyncProducer) Close() {
