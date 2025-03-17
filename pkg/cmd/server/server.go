@@ -255,6 +255,22 @@ func (o *options) getCredential() *security.Credential {
 	}
 }
 
+// Run a TiCDC server.
+// Exported for the new architecture of TiCDC only.
+func Run(o *options, cmd *cobra.Command) error {
+	err := o.complete(cmd)
+	if err != nil {
+		return err
+	}
+	err = o.validate()
+	if err != nil {
+		return err
+	}
+	err = o.run(cmd)
+	cobra.CheckErr(err)
+	return nil
+}
+
 // NewCmdServer creates the `server` command.
 func NewCmdServer() *cobra.Command {
 	o := newOptions()
@@ -264,17 +280,7 @@ func NewCmdServer() *cobra.Command {
 		Short: "Start a TiCDC capture server",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(cmd)
-			if err != nil {
-				return err
-			}
-			err = o.validate()
-			if err != nil {
-				return err
-			}
-			err = o.run(cmd)
-			cobra.CheckErr(err)
-			return nil
+			return Run(o, cmd)
 		},
 	}
 
