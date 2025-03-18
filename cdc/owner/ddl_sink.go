@@ -174,6 +174,7 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 			zap.Bool("retryable", isRetryable),
 			zap.Error(err))
 
+		s.sink.Close()
 		s.sink = nil
 		if isRetryable {
 			s.reportWarning(err)
@@ -200,7 +201,7 @@ func (s *ddlSinkImpl) observedRetrySinkAction(ctx context.Context, name string, 
 	defer ticker.Stop()
 	for {
 		select {
-		case err := <-errCh:
+		case err = <-errCh:
 			return err
 		case <-ticker.C:
 			log.Info("owner ddl sink performs an action too long",

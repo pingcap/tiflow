@@ -93,7 +93,7 @@ type saramaSyncProducer struct {
 }
 
 func (p *saramaSyncProducer) SendMessage(
-	ctx context.Context,
+	_ context.Context,
 	topic string, partitionNum int32,
 	key []byte, value []byte,
 ) error {
@@ -103,7 +103,7 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(value),
 		Partition: partitionNum,
 	})
-	return err
+	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
 func (p *saramaSyncProducer) SendMessages(ctx context.Context,
