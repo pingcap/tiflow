@@ -28,7 +28,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timeta "github.com/pingcap/tidb/pkg/meta"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -47,7 +47,7 @@ import (
 )
 
 func TestSchema(t *testing.T) {
-	dbName := pmodel.NewCIStr("Test")
+	dbName := ast.NewCIStr("Test")
 	// db and ignoreDB info
 	dbInfo := &timodel.DBInfo{
 		ID:    1,
@@ -115,10 +115,10 @@ func TestSchema(t *testing.T) {
 
 func TestTable(t *testing.T) {
 	var jobs []*timodel.Job
-	dbName := pmodel.NewCIStr("Test")
-	tbName := pmodel.NewCIStr("T")
-	colName := pmodel.NewCIStr("A")
-	idxName := pmodel.NewCIStr("idx")
+	dbName := ast.NewCIStr("Test")
+	tbName := ast.NewCIStr("T")
+	colName := ast.NewCIStr("A")
+	idxName := ast.NewCIStr("idx")
 	// column info
 	colInfo := &timodel.ColumnInfo{
 		ID:        1,
@@ -295,10 +295,10 @@ func TestTable(t *testing.T) {
 
 func TestHandleDDL(t *testing.T) {
 	snap := schema.NewEmptySnapshot(false)
-	dbName := pmodel.NewCIStr("Test")
-	colName := pmodel.NewCIStr("A")
-	tbName := pmodel.NewCIStr("T")
-	newTbName := pmodel.NewCIStr("RT")
+	dbName := ast.NewCIStr("Test")
+	colName := ast.NewCIStr("A")
+	tbName := ast.NewCIStr("T")
+	newTbName := ast.NewCIStr("RT")
 
 	// db info
 	dbInfo := &timodel.DBInfo{
@@ -400,7 +400,7 @@ func TestHandleRenameTables(t *testing.T) {
 	for i = 1; i < 3; i++ {
 		dbInfo := &timodel.DBInfo{
 			ID:    i,
-			Name:  pmodel.NewCIStr(fmt.Sprintf("db_%d", i)),
+			Name:  ast.NewCIStr(fmt.Sprintf("db_%d", i)),
 			State: timodel.StatePublic,
 		}
 		job := &timodel.Job{
@@ -417,7 +417,7 @@ func TestHandleRenameTables(t *testing.T) {
 	for i = 1; i < 3; i++ {
 		tblInfo := &timodel.TableInfo{
 			ID:    10 + i,
-			Name:  pmodel.NewCIStr(fmt.Sprintf("table_%d", i)),
+			Name:  ast.NewCIStr(fmt.Sprintf("table_%d", i)),
 			State: timodel.StatePublic,
 		}
 		job := &timodel.Job{
@@ -437,9 +437,9 @@ func TestHandleRenameTables(t *testing.T) {
 	oldSchemaIDs := []int64{1, 2}
 	newSchemaIDs := []int64{2, 1}
 	oldTableIDs := []int64{11, 12}
-	newTableNames := []pmodel.CIStr{pmodel.NewCIStr("x"), pmodel.NewCIStr("y")}
-	oldTableNames := []pmodel.CIStr{pmodel.NewCIStr("oldx"), pmodel.NewCIStr("oldy")}
-	oldSchemaNames := []pmodel.CIStr{pmodel.NewCIStr("db_1"), pmodel.NewCIStr("db_2")}
+	newTableNames := []ast.CIStr{ast.NewCIStr("x"), ast.NewCIStr("y")}
+	oldTableNames := []ast.CIStr{ast.NewCIStr("oldx"), ast.NewCIStr("oldy")}
+	oldSchemaNames := []ast.CIStr{ast.NewCIStr("db_1"), ast.NewCIStr("db_2")}
 	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
@@ -454,13 +454,13 @@ func TestHandleRenameTables(t *testing.T) {
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
 			ID:    13,
-			Name:  pmodel.NewCIStr("x"),
+			Name:  ast.NewCIStr("x"),
 			State: timodel.StatePublic,
 		})
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
 			ID:    14,
-			Name:  pmodel.NewCIStr("y"),
+			Name:  ast.NewCIStr("y"),
 			State: timodel.StatePublic,
 		})
 	testDoDDLAndCheck(t, snap, job, false)
@@ -489,8 +489,8 @@ func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, is
 
 func TestMultiVersionStorage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	dbName := pmodel.NewCIStr("Test")
-	tbName := pmodel.NewCIStr("T1")
+	dbName := ast.NewCIStr("Test")
+	tbName := ast.NewCIStr("T1")
 	// db and ignoreDB info
 	dbInfo := &timodel.DBInfo{
 		ID:    11,
@@ -529,7 +529,7 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	jobs = append(jobs, job)
 
-	tbName = pmodel.NewCIStr("T2")
+	tbName = ast.NewCIStr("T2")
 	// table info
 	tblInfo = &timodel.TableInfo{
 		ID:    13,
