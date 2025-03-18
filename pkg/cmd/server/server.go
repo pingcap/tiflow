@@ -37,8 +37,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// options defines flags for the `server` command.
-type options struct {
+// Options defines flags for the `server` command.
+// Exported for the new architecture of TiCDC only.
+type Options struct {
 	serverConfig         *config.ServerConfig
 	serverPdAddr         string
 	serverConfigFilePath string
@@ -51,15 +52,15 @@ type options struct {
 }
 
 // newOptions creates new options for the `server` command.
-func newOptions() *options {
-	return &options{
+func newOptions() *Options {
+	return &Options{
 		serverConfig: config.GetDefaultServerConfig(),
 	}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *options) addFlags(cmd *cobra.Command) {
+func (o *Options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.serverConfig.ClusterID, "cluster-id", "default", "Set cdc cluster id")
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
@@ -93,7 +94,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 }
 
 // run runs the server cmd.
-func (o *options) run(cmd *cobra.Command) error {
+func (o *Options) run(cmd *cobra.Command) error {
 	cancel := util.InitCmd(cmd, &logutil.Config{
 		File:                 o.serverConfig.LogFile,
 		Level:                o.serverConfig.LogLevel,
@@ -145,7 +146,7 @@ func (o *options) run(cmd *cobra.Command) error {
 }
 
 // complete adapts from the command line args and config file to the data required.
-func (o *options) complete(cmd *cobra.Command) error {
+func (o *Options) complete(cmd *cobra.Command) error {
 	o.serverConfig.Security = o.getCredential()
 
 	cfg := config.GetDefaultServerConfig()
@@ -226,7 +227,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 }
 
 // validate checks that the provided attach options are specified.
-func (o *options) validate() error {
+func (o *Options) validate() error {
 	if len(o.serverPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
@@ -241,7 +242,7 @@ func (o *options) validate() error {
 }
 
 // getCredential returns security credential.
-func (o *options) getCredential() *security.Credential {
+func (o *Options) getCredential() *security.Credential {
 	var certAllowedCN []string
 	if len(o.allowedCertCN) != 0 {
 		certAllowedCN = strings.Split(o.allowedCertCN, ",")
@@ -257,7 +258,7 @@ func (o *options) getCredential() *security.Credential {
 
 // Run a TiCDC server.
 // Exported for the new architecture of TiCDC only.
-func Run(o *options, cmd *cobra.Command) error {
+func Run(o *Options, cmd *cobra.Command) error {
 	err := o.complete(cmd)
 	if err != nil {
 		return err
