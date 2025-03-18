@@ -102,8 +102,8 @@ func TestDefaultCfg(t *testing.T) {
 
 	defaultCfg := config.GetDefaultServerConfig()
 	require.Nil(t, defaultCfg.ValidateAndAdjust())
-	require.Equal(t, defaultCfg, o.serverConfig)
-	require.Equal(t, "http://127.0.0.1:2379", o.serverPdAddr)
+	require.Equal(t, defaultCfg, o.ServerConfig)
+	require.Equal(t, "http://127.0.0.1:2379", o.ServerPdAddr)
 }
 
 func TestParseCfg(t *testing.T) {
@@ -210,7 +210,7 @@ func TestParseCfg(t *testing.T) {
 			},
 		},
 		ClusterID: "default",
-	}, o.serverConfig)
+	}, o.ServerConfig)
 }
 
 func TestDecodeCfg(t *testing.T) {
@@ -357,7 +357,7 @@ check-balance-interval = "10s"
 			},
 		},
 		ClusterID: "default",
-	}, o.serverConfig)
+	}, o.ServerConfig)
 }
 
 func TestDecodeCfgWithFlags(t *testing.T) {
@@ -496,7 +496,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 		},
 		ClusterID: "default",
-	}, o.serverConfig)
+	}, o.ServerConfig)
 }
 
 func TestDecodeUnknownDebugCfg(t *testing.T) {
@@ -559,5 +559,5 @@ unknown3 = 3
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 		},
-	}, o.serverConfig.Debug)
+	}, o.ServerConfig.Debug)
 }
