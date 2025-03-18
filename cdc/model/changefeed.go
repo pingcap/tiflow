@@ -58,8 +58,8 @@ func DefaultChangeFeedID(id string) ChangeFeedID {
 	}
 }
 
-// ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
-func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
+// GenerateChangeFeedID returns `ChangefeedID` with given namespace and id
+func GenerateChangeFeedID(namespace, id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: namespace,
 		ID:        id,

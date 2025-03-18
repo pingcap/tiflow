@@ -17,10 +17,12 @@ import (
 	"context"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -33,11 +35,16 @@ var (
 )
 
 // UpstreamDownstreamNotSame checks whether the upstream and downstream are not the same cluster.
-func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI string) (bool, error) {
+func UpstreamDownstreamNotSame(ctx context.Context,
+	upPD pd.Client,
+	downSinkURI string,
+	changefeedID model.ChangeFeedID,
+	replicaConfig *config.ReplicaConfig,
+) (bool, error) {
 	upID := upPD.GetClusterID(ctx)
 
-	downID, isTiDB, err := getClusterIDBySinkURIFn(ctx, downSinkURI)
-	log.Debug("CheckNotSameUpstreamDownstream",
+	downID, isTiDB, err := getClusterIDBySinkURIFn(ctx, downSinkURI, changefeedID, replicaConfig)
+	log.Info("CheckNotSameUpstreamDownstream",
 		zap.Uint64("upID", upID), zap.Uint64("downID", downID), zap.Bool("isTiDB", isTiDB))
 	if err != nil {
 		log.Error("failed to get cluster ID from sink URI",
@@ -54,16 +61,27 @@ func UpstreamDownstreamNotSame(ctx context.Context, upPD pd.Client, downSinkURI 
 
 // getClusterIDBySinkURI gets the cluster ID by the sink URI.
 // Returns the cluster ID, whether it is a TiDB cluster, and an error.
-func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, error) {
+func getClusterIDBySinkURI(
+	ctx context.Context,
+	sinkURI string,
+	changefeedID model.ChangeFeedID,
+	replicaConfig *config.ReplicaConfig,
+) (uint64, bool, error) {
 	// Create a MySQL connection by using the sink URI.
 	url, err := url.Parse(sinkURI)
 	if err != nil {
 		return 0, true, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	if strings.ToLower(url.Scheme) != "mysql" {
+	if !sink.IsMySQLCompatibleScheme(sink.GetScheme(url)) {
 		return 0, false, nil
 	}
-	dsnStr, err := pmysql.GenerateDSN(ctx, url, pmysql.NewConfig(), dbConnImpl.CreateTemporaryConnection)
+
+	cfg := pmysql.NewConfig()
+	err = cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, url, replicaConfig)
+	if err != nil {
+		return 0, true, cerror.Trace(err)
+	}
+	dsnStr, err := pmysql.GenerateDSN(ctx, url, cfg, dbConnImpl.CreateTemporaryConnection)
 	if err != nil {
 		return 0, true, cerror.Trace(err)
 	}
@@ -85,6 +103,8 @@ func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, e
 	err = row.Scan(&clusterIDStr)
 	if err != nil {
 		// If the cluster ID is not set, it is a legacy TiDB cluster, these should be compatible with it.
+		// So we return 0 and false.
+		log.Info("the downstream is TiDB, but the cluster ID is not set, it is a legacy TiDB cluster")
 		return 0, false, nil
 	}
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 64)
@@ -96,11 +116,14 @@ func getClusterIDBySinkURI(ctx context.Context, sinkURI string) (uint64, bool, e
 
 // GetGetClusterIDBySinkURIFn returns the getClusterIDBySinkURIFn function.
 // It is used for testing.
-func GetGetClusterIDBySinkURIFn() func(context.Context, string) (uint64, bool, error) {
+func GetGetClusterIDBySinkURIFn() func(
+	context.Context, string, model.ChangeFeedID, *config.ReplicaConfig) (uint64, bool, error) {
 	return getClusterIDBySinkURIFn
 }
 
 // SetGetClusterIDBySinkURIFnForTest sets the getClusterIDBySinkURIFn function for testing.
-func SetGetClusterIDBySinkURIFnForTest(fn func(context.Context, string) (uint64, bool, error)) {
+func SetGetClusterIDBySinkURIFnForTest(
+	fn func(context.Context, string, model.ChangeFeedID, *config.ReplicaConfig) (uint64, bool, error),
+) {
 	getClusterIDBySinkURIFn = fn
 }

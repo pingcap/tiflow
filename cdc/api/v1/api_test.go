@@ -32,6 +32,7 @@ import (
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/check"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -150,18 +151,18 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllChangeFeedCheckpointTs", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
-			model.ChangeFeedID4Test("ab", "123"):  {CheckpointTs: 1},
-			model.ChangeFeedID4Test("ab", "13"):   {CheckpointTs: 2},
-			model.ChangeFeedID4Test("abc", "123"): {CheckpointTs: 1},
-			model.ChangeFeedID4Test("def", "456"): {CheckpointTs: 2},
+			model.GenerateChangeFeedID("ab", "123"):  {CheckpointTs: 1},
+			model.GenerateChangeFeedID("ab", "13"):   {CheckpointTs: 2},
+			model.GenerateChangeFeedID("abc", "123"): {CheckpointTs: 1},
+			model.GenerateChangeFeedID("def", "456"): {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			model.ChangeFeedID4Test("ab", "123"):  {State: model.StateNormal},
-			model.ChangeFeedID4Test("ab", "13"):   {State: model.StateStopped},
-			model.ChangeFeedID4Test("abc", "123"): {State: model.StateNormal},
-			model.ChangeFeedID4Test("def", "456"): {State: model.StateStopped},
+			model.GenerateChangeFeedID("ab", "123"):  {State: model.StateNormal},
+			model.GenerateChangeFeedID("ab", "13"):   {State: model.StateStopped},
+			model.GenerateChangeFeedID("abc", "123"): {State: model.StateNormal},
+			model.GenerateChangeFeedID("def", "456"): {State: model.StateStopped},
 		}, nil)
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
@@ -194,17 +195,17 @@ func TestListChangefeed(t *testing.T) {
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	provider.EXPECT().GetAllChangeFeedCheckpointTs(gomock.Any()).Return(
 		map[model.ChangeFeedID]uint64{
-			model.ChangeFeedID4Test("ab", "123"):  1,
-			model.ChangeFeedID4Test("ab", "13"):   2,
-			model.ChangeFeedID4Test("abc", "123"): 1,
-			model.ChangeFeedID4Test("def", "456"): 2,
+			model.GenerateChangeFeedID("ab", "123"):  1,
+			model.GenerateChangeFeedID("ab", "13"):   2,
+			model.GenerateChangeFeedID("abc", "123"): 1,
+			model.GenerateChangeFeedID("def", "456"): 2,
 		}, nil).AnyTimes()
 	provider.EXPECT().GetAllChangeFeedInfo(gomock.Any()).Return(
 		map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			model.ChangeFeedID4Test("ab", "123"):  {State: model.StateNormal},
-			model.ChangeFeedID4Test("ab", "13"):   {State: model.StateStopped},
-			model.ChangeFeedID4Test("abc", "123"): {State: model.StateNormal},
-			model.ChangeFeedID4Test("def", "456"): {State: model.StateStopped},
+			model.GenerateChangeFeedID("ab", "123"):  {State: model.StateNormal},
+			model.GenerateChangeFeedID("ab", "13"):   {State: model.StateStopped},
+			model.GenerateChangeFeedID("abc", "123"): {State: model.StateNormal},
+			model.GenerateChangeFeedID("def", "456"): {State: model.StateStopped},
 		}, nil).AnyTimes()
 	router := newRouterWithoutStatusProvider(cp)
 
@@ -394,9 +395,10 @@ func TestResumeChangefeed(t *testing.T) {
 	// Mock UpstreamDownstreamNotSame check
 	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
 	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
-	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
-		return 0, false, nil
-	})
+	check.SetGetClusterIDBySinkURIFnForTest(
+		func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
+			return 0, false, nil
+		})
 
 	// test resume changefeed succeeded
 	mo.EXPECT().

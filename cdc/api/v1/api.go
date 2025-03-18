@@ -298,7 +298,8 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 	}
 
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, changefeedConfig.SinkURI)
+	notSame, err := check.UpstreamDownstreamNotSame(
+		ctx, up.PDClient, info.SinkURI, model.GenerateChangeFeedID(info.Namespace, info.ID), info.Config)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -412,7 +413,8 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, cfInfo.SinkURI)
+	notSame, err := check.UpstreamDownstreamNotSame(
+		ctx, up.PDClient, cfInfo.SinkURI, model.GenerateChangeFeedID(cfInfo.Namespace, cfInfo.ID), cfInfo.Config)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -508,7 +510,8 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 	// Check whether the upstream and downstream are the different cluster.
-	notSame, err := check.UpstreamDownstreamNotSame(ctx, up.PDClient, newInfo.SinkURI)
+	notSame, err := check.UpstreamDownstreamNotSame(
+		ctx, up.PDClient, newInfo.SinkURI, model.GenerateChangeFeedID(newInfo.Namespace, newInfo.ID), newInfo.Config)
 	if err != nil {
 		_ = c.Error(err)
 		return
