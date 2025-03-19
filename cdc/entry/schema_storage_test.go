@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -66,7 +65,7 @@ func TestSchema(t *testing.T) {
 	// reconstruct the local schema
 	snap := schema.NewEmptySnapshot(false)
 	err := snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist := snap.SchemaByID(job.SchemaID)
 	require.True(t, exist)
 
@@ -80,7 +79,7 @@ func TestSchema(t *testing.T) {
 		Query:      "drop database test",
 	}
 	err = snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(job.SchemaID)
 	require.False(t, exist)
 
@@ -94,7 +93,7 @@ func TestSchema(t *testing.T) {
 	}
 
 	err = snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = snap.HandleDDL(job)
 	require.True(t, errors.IsAlreadyExists(err))
 
@@ -108,7 +107,7 @@ func TestSchema(t *testing.T) {
 		Query:      "drop database test",
 	}
 	err = snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = snap.HandleDDL(job)
 	require.True(t, errors.IsNotFound(err))
 }
@@ -209,7 +208,7 @@ func TestTable(t *testing.T) {
 	snap := schema.NewEmptySnapshot(false)
 	for _, job := range jobs {
 		err := snap.HandleDDL(job)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	// check the historical db that constructed above whether in the schema list of local schema
@@ -240,12 +239,12 @@ func TestTable(t *testing.T) {
 		Query:      "truncate table " + tbName.O,
 	}
 	preTableInfo, err := snap.PreTableInfo(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T", TableID: 2})
 	require.Equal(t, preTableInfo.ID, int64(2))
 
 	err = snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	_, ok = snap.PhysicalTableByID(tblInfo1.ID)
 	require.True(t, ok)
@@ -267,12 +266,12 @@ func TestTable(t *testing.T) {
 		Query:      "drop table " + tbName.O,
 	}
 	preTableInfo, err = snap.PreTableInfo(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T", TableID: 9})
 	require.Equal(t, preTableInfo.ID, int64(9))
 
 	err = snap.HandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	_, ok = snap.PhysicalTableByID(tblInfo.ID)
 	require.False(t, ok)
@@ -290,7 +289,7 @@ func TestTable(t *testing.T) {
 		Query:      "drop table " + dbName.O,
 	}
 	err = snap.DoHandleDDL(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 func TestHandleDDL(t *testing.T) {
@@ -412,7 +411,7 @@ func TestHandleRenameTables(t *testing.T) {
 			Query:      fmt.Sprintf("create database %s", dbInfo.Name.O),
 		}
 		err := snap.HandleDDL(job)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	for i = 1; i < 3; i++ {
 		tblInfo := &timodel.TableInfo{
@@ -430,7 +429,7 @@ func TestHandleRenameTables(t *testing.T) {
 			Query:      "create table " + tblInfo.Name.O,
 		}
 		err := snap.HandleDDL(job)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	// rename table db1.table_1 to db2.x, db2.table_2 to db1.y
@@ -442,7 +441,7 @@ func TestHandleRenameTables(t *testing.T) {
 	oldSchemaNames := []pmodel.CIStr{pmodel.NewCIStr("db_1"), pmodel.NewCIStr("db_2")}
 	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
 	rawArgs, err := json.Marshal(args)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	job := &timodel.Job{
 		Version: timodel.JobVersion1,
 		Type:    timodel.ActionRenameTables,
@@ -549,12 +548,12 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	jobs = append(jobs, job)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-	require.Nil(t, err)
-	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	storage, err := NewSchemaStorage(model.DefaultChangeFeedID("dummy"), nil, 0, false, f, util.RoleTester)
+	require.NoError(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	// `dropTable` job
@@ -568,7 +567,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	err = storage.HandleDDLJob(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// `dropSchema` job
 	job = &timodel.Job{
@@ -580,11 +579,11 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	err = storage.HandleDDLJob(job)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Equal(t, storage.(*schemaStorage).resolvedTs, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist := snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -593,7 +592,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 115)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -602,7 +601,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 125)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -611,7 +610,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.True(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 135)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -620,7 +619,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.True(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 140)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.False(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -632,7 +631,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.Equal(t, uint64(0), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -643,7 +642,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	_, err = storage.GetSnapshot(ctx, 100)
 	require.NotNil(t, err)
 	snap, err = storage.GetSnapshot(ctx, 115)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -657,7 +656,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	storage.AdvanceResolvedTs(185)
 
 	snap, err = storage.GetSnapshot(ctx, 180)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	_, exist = snap.SchemaByID(11)
 	require.False(t, exist)
 	_, exist = snap.PhysicalTableByID(12)
@@ -674,13 +673,13 @@ func TestMultiVersionStorage(t *testing.T) {
 
 func TestCreateSnapFromMeta(t *testing.T) {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer store.Close() //nolint:errcheck
 
 	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
@@ -691,12 +690,11 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	meta := kv.GetSnapshotMeta(store, ver.Ver)
+	require.NoError(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ver.Ver, false, f)
+	require.NoError(t, err)
 	_, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
 	tableID, ok := snap.TableIDByName("test2", "simple_test5")
@@ -709,18 +707,18 @@ func TestCreateSnapFromMeta(t *testing.T) {
 
 func TestExplicitTables(t *testing.T) {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer store.Close() //nolint:errcheck
 
 	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
 	ver1, err := store.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tk.MustExec("create database test2")
 	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
 	tk.MustExec("create table test.simple_test2 (id bigint unique key)")
@@ -728,17 +726,15 @@ func TestExplicitTables(t *testing.T) {
 	tk.MustExec("create table test2.simple_test4 (a varchar(20) unique key)")
 	tk.MustExec("create table test2.simple_test5 (a varchar(20))")
 	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	meta1 := kv.GetSnapshotMeta(store, ver1.Ver)
+	require.NoError(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-	require.Nil(t, err)
-	snap1, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta1, ver1.Ver, true /* forceReplicate */, f)
-	require.Nil(t, err)
-	meta2 := kv.GetSnapshotMeta(store, ver2.Ver)
-	snap2, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta2, ver2.Ver, false /* forceReplicate */, f)
-	require.Nil(t, err)
-	snap3, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta2, ver2.Ver, true /* forceReplicate */, f)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	snap1, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ver1.Ver, true /* forceReplicate */, f)
+	require.NoError(t, err)
+	snap2, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ver2.Ver, false /* forceReplicate */, f)
+	require.NoError(t, err)
+	snap3, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ver2.Ver, true /* forceReplicate */, f)
+	require.NoError(t, err)
 
 	// we don't need to count system tables since TiCDC
 	// don't replicate them and TiDB change them frequently,
@@ -858,7 +854,7 @@ func TestSchemaStorage(t *testing.T) {
 
 	testOneGroup := func(tc []string) {
 		store, err := mockstore.NewMockStore()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		defer store.Close() //nolint:errcheck
 		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 			conf.AlterPrimaryKey = true
@@ -866,7 +862,7 @@ func TestSchemaStorage(t *testing.T) {
 		session.SetSchemaLease(time.Second)
 		session.DisableStats4Test()
 		domain, err := session.BootstrapSession(store)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		defer domain.Close()
 		domain.SetStatsUpdating(true)
 		tk := testkit.NewTestKit(t, store)
@@ -876,12 +872,12 @@ func TestSchemaStorage(t *testing.T) {
 		}
 
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		jobs, err := getAllHistoryDDLJob(store, f)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+		schemaStorage, err := NewSchemaStorage(model.DefaultChangeFeedID("dummy"), nil, 0, false, f, util.RoleTester)
 		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -890,11 +886,10 @@ func TestSchemaStorage(t *testing.T) {
 
 		for _, job := range jobs {
 			ts := job.BinlogInfo.FinishedTS
-			meta := kv.GetSnapshotMeta(store, ts)
-			snapFromMeta, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ts, false, f)
-			require.Nil(t, err)
+			snapFromMeta, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ts, false, f)
+			require.NoError(t, err)
 			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
-			require.Nil(t, err)
+			require.NoError(t, err)
 
 			s1 := snapFromMeta.DumpToString()
 			s2 := snapFromSchemaStore.DumpToString()
@@ -953,13 +948,13 @@ func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Jo
 // 3. If the table has no primary key and no not null unique key, it has no handleKey.
 func TestHandleKey(t *testing.T) {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer store.Close() //nolint:errcheck
 
 	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
@@ -969,12 +964,11 @@ func TestHandleKey(t *testing.T) {
 		"name char NOT NULL, UNIQUE KEY(age, name))")
 	tk.MustExec("create table test.simple_test3 (id bigint, age int)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	meta := kv.GetSnapshotMeta(store, ver.Ver)
+	require.NoError(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), store, ver.Ver, false, f)
+	require.NoError(t, err)
 	tb1, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
 	require.Equal(t, int64(-1), tb1.HandleIndexID) // pk is handleKey

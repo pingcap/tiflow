@@ -248,7 +248,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	return count, nil
 }
 
-func (c *coordinator) Close(ctx context.Context) {
+func (c *coordinator) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

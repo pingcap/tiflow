@@ -782,8 +782,7 @@ func (p *processor) initDDLHandler() error {
 	} else {
 		ddlStartTs = checkpointTs - 1
 	}
-	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter)
+	schemaStorage, err := entry.NewSchemaStorage(p.changefeedID, p.upstream.KVStorage, ddlStartTs, forceReplicate, p.filter, util.RoleProcessor)
 	if err != nil {
 		return errors.Trace(err)
 	}
