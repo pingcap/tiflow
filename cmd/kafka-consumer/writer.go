@@ -460,7 +460,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		progress.eventGroups[tableID] = group
 	}
 	if row.CommitTs < watermark {
-		log.Warn("RowChanged Event fallback row, since les than the partition watermark, ignore it",
+		log.Warn("RowChanged Event fallback row, since less than the partition watermark, ignore it",
 			zap.Int64("tableID", tableID), zap.Int32("partition", partition),
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
