@@ -57,7 +57,7 @@ func newProcessor4Test(
 	client etcd.OwnerCaptureInfoClient,
 	globalVars *vars.GlobalVars,
 ) *processor {
-	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
+	changefeedID := model.GenerateChangeFeedID("processor-test", "processor-test")
 	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
 	p := NewProcessor(
 		info,

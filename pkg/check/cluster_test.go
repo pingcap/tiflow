@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
@@ -49,6 +51,8 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 	testCases := []struct {
 		name          string
 		sinkURI       string
+		changefeedID  model.ChangeFeedID
+		replicaConfig *config.ReplicaConfig
 		mockDBSetup   func(sqlmock.Sqlmock)
 		mockTiDBCheck bool
 		wantClusterID uint64
@@ -125,8 +129,9 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 				dbConnImpl = dbFactory
 				tc.mockDBSetup(mock)
 			}
+			id := model.ChangeFeedID{Namespace: "test", ID: "changefeed"}
 
-			clusterID, isTiDB, err := getClusterIDBySinkURI(context.Background(), tc.sinkURI)
+			clusterID, isTiDB, err := getClusterIDBySinkURI(context.Background(), tc.sinkURI, id, config.GetDefaultReplicaConfig())
 
 			if tc.wantErr != nil {
 				require.Error(t, err)
@@ -149,14 +154,14 @@ func TestUpstreamDownstreamNotSame(t *testing.T) {
 	testCases := []struct {
 		name         string
 		upClusterID  uint64
-		mockDownFunc func(context.Context, string) (uint64, bool, error)
+		mockDownFunc func(context.Context, string, model.ChangeFeedID, *config.ReplicaConfig) (uint64, bool, error)
 		wantResult   bool
 		wantErr      error
 	}{
 		{
 			name:        "same cluster",
 			upClusterID: 123,
-			mockDownFunc: func(_ context.Context, _ string) (uint64, bool, error) {
+			mockDownFunc: func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
 				return 123, true, nil
 			},
 			wantResult: false,
@@ -164,21 +169,21 @@ func TestUpstreamDownstreamNotSame(t *testing.T) {
 		{
 			name:        "different cluster",
 			upClusterID: 123,
-			mockDownFunc: func(_ context.Context, _ string) (uint64, bool, error) {
+			mockDownFunc: func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
 				return 456, true, nil
 			},
 			wantResult: true,
 		},
 		{
 			name: "not tidb",
-			mockDownFunc: func(_ context.Context, _ string) (uint64, bool, error) {
+			mockDownFunc: func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
 				return 0, false, nil
 			},
 			wantResult: true,
 		},
 		{
 			name: "error case",
-			mockDownFunc: func(_ context.Context, _ string) (uint64, bool, error) {
+			mockDownFunc: func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
 				return 0, false, errors.New("mock error")
 			},
 			wantErr: errors.New("mock error"),
@@ -189,8 +194,10 @@ func TestUpstreamDownstreamNotSame(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			SetGetClusterIDBySinkURIFnForTest(tc.mockDownFunc)
 			mockPD := &mockPDClient{clusterID: tc.upClusterID}
+			id := model.ChangeFeedID{Namespace: "test", ID: "changefeed"}
+			cfg := config.GetDefaultReplicaConfig()
 
-			result, err := UpstreamDownstreamNotSame(context.Background(), mockPD, "any://uri")
+			result, err := UpstreamDownstreamNotSame(context.Background(), mockPD, "any://uri", id, cfg)
 
 			if tc.wantErr != nil {
 				require.ErrorContains(t, err, tc.wantErr.Error())

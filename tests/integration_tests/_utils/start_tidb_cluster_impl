@@ -12,6 +12,7 @@ pd_config=
 tikv_config=
 multiple_upstream_pd=
 random_file_name=
+down_db_tls_dir=
 
 # Random generate the sockets config.
 # Make sure we dont use the same sock.
@@ -46,6 +47,10 @@ while [[ ${1} ]]; do
 		;;
 	--multiple-upstream-pd)
 		multiple_upstream_pd=${2}
+		shift
+		;;
+	--down-db-tls-dir)
+		down_db_tls_dir=${2}
 		shift
 		;;
 	*)
@@ -164,6 +169,7 @@ while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/health 2>/de
 	sleep 1
 done
 
+# tikv server config file
 # Tries to limit the max number of open files under the system limit
 if [[ "$tikv_config" != "" ]]; then
 	cat $tikv_config >$OUT_DIR/tikv-config.toml
@@ -181,16 +187,6 @@ max-open-files = 4096
 sync-log = false
 [cdc]
 hibernate-regions-compatible = true
-EOF
-fi
-
-# tidb server config file
-if [[ "$tidb_config" != "" ]]; then
-	cat $tidb_config >$OUT_DIR/tidb-config.toml
-else
-	cat - >"$OUT_DIR/tidb-config.toml" <<EOF
-split-table = true
-new_collations_enabled_on_first_bootstrap = true
 EOF
 fi
 
@@ -223,6 +219,16 @@ tikv-server \
 
 sleep 2
 
+# tidb server config file
+if [[ "$tidb_config" != "" ]]; then
+	cat $tidb_config >$OUT_DIR/tidb-config.toml
+else
+	cat - >"$OUT_DIR/tidb-config.toml" <<EOF
+split-table = true
+new_collations_enabled_on_first_bootstrap = true
+EOF
+fi
+
 echo "Starting Upstream TiDB..."
 tidb-server -V
 randomGenSocketsConf
@@ -242,6 +248,16 @@ tidb-server \
 	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
 	--status=${UP_TIDB_OTHER_STATUS} \
 	--log-file "$OUT_DIR/tidb_other.log" &
+
+# add tls config to downstream tidb if tls dir is set
+if [[ "$down_db_tls_dir" != "" ]]; then
+	cat - >>"$OUT_DIR/tidb-config.toml" <<EOF
+[security]
+ssl-ca = "$down_db_tls_dir/ca.pem"
+ssl-cert = "$down_db_tls_dir/server.pem"
+ssl-key = "$down_db_tls_dir/server-key.pem"
+EOF
+fi
 
 echo "Starting Downstream TiDB..."
 tidb-server -V

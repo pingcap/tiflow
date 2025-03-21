@@ -92,7 +92,7 @@ func newMockDDLJobPuller(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
 	}
-	res.sorter = memorysorter.NewEntrySorter(model.ChangeFeedID4Test("puller", "test"))
+	res.sorter = memorysorter.NewEntrySorter(model.GenerateChangeFeedID("puller", "test"))
 
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {
