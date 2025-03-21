@@ -69,9 +69,7 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		err := k.syncProducer.SendMessages(ctx, topic,
-			totalPartitionsNum, message.Key, message.Value)
-		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+		return k.syncProducer.SendMessages(ctx, topic, totalPartitionsNum, message.Key, message.Value)
 	}
 }
 

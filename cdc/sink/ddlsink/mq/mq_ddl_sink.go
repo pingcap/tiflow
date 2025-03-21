@@ -153,6 +153,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	if msg == nil {
 		return nil
 	}
+	ctx = context.WithValue(ctx, "checkpoint", ts)
 	// NOTICE: When there are no tables to replicate,
 	// we need to send checkpoint ts to the default topic.
 	// This will be compatible with the old behavior.
@@ -162,10 +163,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("Emit checkpointTs to default topic",
-			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
-		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
-		return errors.Trace(err)
+		return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 	}
 	var tableNames []model.TableName
 	for _, table := range tables {
@@ -179,7 +177,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		}
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 	}
 	return nil
