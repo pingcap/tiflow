@@ -1135,6 +1135,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 	switch e.Type {
 	case timodel.ActionCreateSchema,
 		timodel.ActionCreateTable,
+		timodel.ActionCreateTables,
 		timodel.ActionCreateView:
 		changeType = "CREATE"
 	case timodel.ActionAddColumn,
