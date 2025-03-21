@@ -104,7 +104,7 @@ func getClusterIDBySinkURI(
 	if err != nil {
 		// If the cluster ID is not set, it is a legacy TiDB cluster, these should be compatible with it.
 		// So we return 0 and false.
-		log.Info("the downstream is TiDB, but the cluster ID is not set, it is a legacy TiDB cluster")
+		log.Info("the downstream is TiDB, but the cluster ID is not set, it is a legacy TiDB cluster", zap.Error(err))
 		return 0, false, nil
 	}
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 64)
