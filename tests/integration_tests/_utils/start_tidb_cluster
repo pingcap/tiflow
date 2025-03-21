@@ -62,21 +62,30 @@ source $CUR/../_utils/test_prepare
 set +e
 i=1
 while [ $i -le $retry_times ]; do
-	echo "The ${i} times to try to start tidb cluster..."
+    echo "The ${i} times to try to start tidb cluster..."
 
-	if [[ "$tidb_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config} --down-db-tls-dir ${down_db_tls_dir}
-	elif [[ "$pd_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config} --down-db-tls-dir ${down_db_tls_dir}
-	elif [[ "$tikv_config" != "" ]]; then
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tikv-config ${tikv_config} --down-db-tls-dir ${down_db_tls_dir}
-	else
-		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --down-db-tls-dir ${down_db_tls_dir}
-	fi
+    # construct args
+    args="--workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}"
 
-	if [ $? -eq 0 ]; then
-		break
-	fi
-	let i++
-	echo "start tidb cluster failed"
+    if [[ -n "$tidb_config" ]]; then
+        args+=" --tidb-config ${tidb_config}"
+    elif [[ -n "$pd_config" ]]; then
+        args+=" --pd-config ${pd_config}"
+    elif [[ -n "$tikv_config" ]]; then
+        args+=" --tikv-config ${tikv_config}"
+    fi
+
+    if [[ -n "$down_db_tls_dir" ]]; then
+        args+=" --down-db-tls-dir ${down_db_tls_dir}"
+    fi
+
+    # execute start_tidb_cluster_impl
+    start_tidb_cluster_impl ${args}
+
+    if [ $? -eq 0 ]; then
+        break
+    fi
+
+    let i++
+    echo "start tidb cluster failed"
 done
