@@ -13,7 +13,15 @@ fi
 schema_table=$1
 host=$2
 port=$3
-check_time=${4:-60} # Default to 60 if not provided
+extra_mysql_opts=
+
+if [ $# -ge 4 ]; then
+	check_time=$4
+	shift 4
+	extra_mysql_opts=("$@")
+else
+	check_time=60
+fi
 
 # Validate check_time is a positive integer
 if ! [[ "$check_time" =~ ^[0-9]+$ ]]; then
@@ -21,27 +29,20 @@ if ! [[ "$check_time" =~ ^[0-9]+$ ]]; then
 	exit 1
 fi
 
-# Shift the first 4 parameters, remaining parameters are for mysql client
-shift 4
-other_args=("$@")
-
 i=0
 while [ $i -lt $check_time ]; do
-	# Add additional mysql arguments to the command
-	if ! mysql -h"$host" -P"$port" -uroot "${other_args[@]}" -e "SHOW CREATE TABLE $schema_table" >/dev/null 2>&1; then
-		ret=$?
-		# If error is due to table not existing, continue waiting
-		if [ $ret -ne 0 ]; then
-			((i++))
-			echo "table $schema_table not exists for $i-th check, retry later"
-			sleep 2
-			continue
-		fi
-	else
+	mysql -h"$host" -P"$port" -uroot $extra_mysql_opts -e "SHOW CREATE TABLE $schema_table" >/dev/null 2>&1
+	ret=$?
+	if [ "$ret" == 0 ]; then
 		echo "table $schema_table exists"
-		exit 0
+		break
 	fi
+	((i++))
+	echo "table $schema_table not exists for $i-th check, retry later"
+	sleep 2
 done
 
-echo "table $schema_table not exists after $check_time checks"
-exit 1
+if [ $i -ge $check_time ]; then
+	echo "table $schema_table not exists at last check"
+	exit 1
+fi
