@@ -25,7 +25,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -86,26 +85,16 @@ type schemaStorage struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	storage tidbkv.Storage, startTs uint64,
-	forceReplicate bool, id model.ChangeFeedID,
-	role util.Role, filter filter.Filter,
+	id model.ChangeFeedID,
+	storage tidbkv.Storage,
+	startTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+	role util.Role,
 ) (SchemaStorage, error) {
-	var (
-		snap *schema.Snapshot
-		err  error
-	)
-	// storage may be nil in some unit test cases.
-	if storage == nil {
-		snap = schema.NewEmptySnapshot(forceReplicate)
-	} else {
-		meta := kv.GetSnapshotMeta(storage, startTs)
-		snap, err = schema.NewSnapshotFromMeta(id, meta, startTs, forceReplicate, filter)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	snap, err := schema.NewSnapshotFromMeta(id, storage, startTs, forceReplicate, filter)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
@@ -203,12 +192,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.String("DDL", job.Query),
-				zap.String("state", job.State.String()),
+				zap.String("role", s.role.String()),
 				zap.Int64("jobID", job.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-				zap.String("role", s.role.String()))
+				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -219,11 +209,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
+			zap.String("role", s.role.String()),
+			zap.Int64("jobID", job.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("role", s.role.String()),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -232,11 +224,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	log.Info("schemaStorage: update snapshot by the DDL job",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
+		zap.String("role", s.role.String()),
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
+		zap.Int64("jobID", job.ID),
+		zap.Uint64("startTs", job.StartTS),
 		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-		zap.String("role", s.role.String()))
+		zap.String("query", job.Query))
 	return nil
 }
 

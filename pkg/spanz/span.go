@@ -141,7 +141,7 @@ func Intersect(lhs tablepb.Span, rhs tablepb.Span) (span tablepb.Span, err error
 		end = rhs.EndKey
 	}
 
-	return tablepb.Span{StartKey: start, EndKey: end}, nil
+	return tablepb.Span{TableID: lhs.TableID, StartKey: start, EndKey: end}, nil
 }
 
 // IsSubSpan returns true if the sub span is parents spans

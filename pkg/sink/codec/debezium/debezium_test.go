@@ -58,8 +58,8 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
-	schemaStorage, err := entry.NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
+	schemaStorage, err := entry.NewSchemaStorage(changefeed, helper.Storage(),
+		ver.Ver, false, filter, util.RoleTester)
 	require.NoError(t, err)
 
 	job := helper.DDL2Job(initialCreateTableDDL)

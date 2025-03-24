@@ -66,8 +66,6 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	return m.resolvedTs, nil
 }
 
-func (m *mockDDLPuller) Close() {}
-
 func (m *mockDDLPuller) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
@@ -148,7 +146,7 @@ func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo
 	return m.mu.checkpointTs, m.mu.currentTables
 }
 
-func (m *mockDDLSink) close(_ context.Context) error {
+func (m *mockDDLSink) close() error {
 	m.wg.Wait()
 	return nil
 }
@@ -195,7 +193,7 @@ func (m *mockScheduler) DrainCapture(_ model.CaptureID) (int, error) {
 }
 
 // Close closes the scheduler and releases resources.
-func (m *mockScheduler) Close(_ context.Context) {}
+func (m *mockScheduler) Close() {}
 
 func newMockDDLSink(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
 	return &mockDDLSink{

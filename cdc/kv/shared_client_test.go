@@ -118,7 +118,7 @@ func TestSubscribedTable(t *testing.T) {
 	// Lock a range, and then ResolveLock will trigger a task for it.
 	res := table.rangeLock.LockRange(context.Background(), []byte{'b'}, []byte{'c'}, 1, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	res.LockedRangeState.Initialzied.Store(true)
+	res.LockedRangeState.Initialized.Store(true)
 
 	s.ResolveLock(SubscriptionID(1), 200)
 	select {
