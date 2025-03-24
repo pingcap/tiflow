@@ -474,7 +474,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		return
 	}
 	switch w.option.protocol {
-	case config.ProtocolSimple, config.ProtocolOpen, config.ProtocolCanalJSON:
+	case config.ProtocolSimple, config.ProtocolOpen, config.ProtocolCanalJSON, config.ProtocolDebezium:
 		// simple protocol set the table id for all row message, it can be known which table the row message belongs to,
 		// also consider the table partition.
 		// open protocol set the partition table id if the table is partitioned.
