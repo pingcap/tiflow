@@ -26,8 +26,8 @@ function prepare() {
 	sleep 2
 	run_cdc_cli changefeed create \
 		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?ssl-ca=${TLS_DIR}/ca.pem&ssl-key=${TLS_DIR}/client-key.pem&ssl-cert=${TLS_DIR}/client.pem" \
-		--changefeed-id="down-db-require-secure-transport" \
-		sleep 2
+		--changefeed-id="down-db-require-secure-transport"
+	sleep 2
 }
 
 function run() {
