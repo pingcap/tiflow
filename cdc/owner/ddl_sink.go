@@ -174,13 +174,11 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 			zap.Bool("retryable", isRetryable),
 			zap.Error(err))
 
-		start := time.Now()
 		if s.sink != nil {
 			s.sink.Close()
 			s.sink = nil
 			log.Info("close the ddl sink, rebuild it when trying again",
-				zap.String("namespace", s.changefeedID.Namespace), zap.String("changefeed", s.changefeedID.ID),
-				zap.Duration("duration", time.Since(start)))
+				zap.String("namespace", s.changefeedID.Namespace), zap.String("changefeed", s.changefeedID.ID))
 		}
 
 		if isRetryable {
