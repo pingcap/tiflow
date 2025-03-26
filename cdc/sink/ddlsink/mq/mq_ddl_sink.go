@@ -65,8 +65,7 @@ type DDLSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.RowEventEncoderBuilder
+	encoder      codec.RowEventEncoder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -82,25 +81,24 @@ func newDDLSink(ctx context.Context,
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderBuilder codec.RowEventEncoderBuilder,
+	encoder codec.RowEventEncoder,
 	protocol config.Protocol,
 ) *DDLSink {
 	return &DDLSink{
-		id:             changefeedID,
-		protocol:       protocol,
-		eventRouter:    eventRouter,
-		topicManager:   topicManager,
-		encoderBuilder: encoderBuilder,
-		producer:       producer,
-		statistics:     metrics.NewStatistics(ctx, changefeedID, sink.RowSink),
-		admin:          adminClient,
+		id:           changefeedID,
+		protocol:     protocol,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
+		encoder:      encoder,
+		producer:     producer,
+		statistics:   metrics.NewStatistics(ctx, changefeedID, sink.RowSink),
+		admin:        adminClient,
 	}
 }
 
 // WriteDDLEvent encodes the DDL event and sends it to the MQ system.
 func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	encoder := k.encoderBuilder.Build()
-	msg, err := encoder.EncodeDDLEvent(ddl)
+	msg, err := k.encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -149,8 +147,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		err          error
 		partitionNum int32
 	)
-	encoder := k.encoderBuilder.Build()
-	msg, err := encoder.EncodeCheckpointEvent(ts)
+	msg, err := k.encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
