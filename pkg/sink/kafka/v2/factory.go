@@ -16,7 +16,6 @@ package v2
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"strings"
 	"time"
 
@@ -305,32 +304,7 @@ func (s *syncWriter) SendMessages(
 			Partition: i,
 		}
 	}
-
-	item := ctx.Value("checkpoint")
-	if item != nil {
-		log.Info("try send checkpoint", zap.String("topic", topic), zap.Uint64("checkpoint", item.(uint64)))
-	}
-
-	start := time.Now()
 	err := s.w.WriteMessages(ctx, msgs...)
-	if item == nil {
-		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-	}
-
-	if err == nil {
-		return nil
-	}
-
-	checkpoint := item.(uint64)
-	fields := make([]zap.Field, 0, len(msgs))
-	fields = append(fields, zap.String("topic", topic))
-	fields = append(fields, zap.Uint64("checkpoint", checkpoint))
-	for i := 0; i < len(msgs); i++ {
-		a := fmt.Sprintf("partition-%d-offset", i)
-		fields = append(fields, zap.Int64(a, msgs[i].Offset))
-	}
-	fields = append(fields, zap.Duration("elapsed", time.Since(start)))
-	log.Warn("send checkpoint failed", fields...)
 	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
@@ -340,7 +314,7 @@ func (s *syncWriter) SendMessages(
 func (s *syncWriter) Close() {
 	start := time.Now()
 	if err := s.w.Close(); err != nil {
-		log.Warn("Close kafka sync producer failed",
+		log.Warn("Close kafka sync producer meet error",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)),

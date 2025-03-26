@@ -145,6 +145,10 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+	var (
+		err          error
+		partitionNum int32
+	)
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
@@ -153,13 +157,12 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	if msg == nil {
 		return nil
 	}
-	ctx = context.WithValue(ctx, "checkpoint", ts)
 	// NOTICE: When there are no tables to replicate,
 	// we need to send checkpoint ts to the default topic.
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -171,9 +174,9 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
