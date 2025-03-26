@@ -100,7 +100,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
+	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder.Build(), protocol)
 
 	return s, nil
 }
