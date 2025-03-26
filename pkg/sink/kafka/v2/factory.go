@@ -278,12 +278,13 @@ func (s *syncWriter) SendMessage(
 	topic string, partitionNum int32,
 	key []byte, value []byte,
 ) error {
-	return s.w.WriteMessages(ctx, kafka.Message{
+	err := s.w.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
 		Partition: int(partitionNum),
 		Key:       key,
 		Value:     value,
 	})
+	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
 // SendMessages produces a given set of messages, and returns only when all

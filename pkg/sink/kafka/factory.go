@@ -104,7 +104,7 @@ func (p *saramaSyncProducer) SendMessage(
 	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
-func (p *saramaSyncProducer) SendMessages(ctx context.Context,
+func (p *saramaSyncProducer) SendMessages(_ context.Context,
 	topic string, partitionNum int32,
 	key []byte, value []byte,
 ) error {
@@ -125,13 +125,13 @@ func (p *saramaSyncProducer) Close() {
 	start := time.Now()
 	err := p.producer.Close()
 	if err != nil {
-		log.Error("Close Kafka DDL producer with error",
+		log.Error("close Kafka DDL producer with error",
 			zap.String("namespace", p.id.Namespace),
 			zap.String("changefeed", p.id.ID),
 			zap.Duration("duration", time.Since(start)),
 			zap.Error(err))
 	} else {
-		log.Info("Kafka DDL producer closed",
+		log.Info("close Kafka DDL producer finished",
 			zap.String("namespace", p.id.Namespace),
 			zap.String("changefeed", p.id.ID),
 			zap.Duration("duration", time.Since(start)))

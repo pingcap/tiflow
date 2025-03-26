@@ -87,9 +87,7 @@ func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	default:
-		err := k.syncProducer.SendMessage(ctx, topic,
-			partitionNum, message.Key, message.Value)
-		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+		return k.syncProducer.SendMessage(ctx, topic, partitionNum, message.Key, message.Value)
 	}
 }
 
