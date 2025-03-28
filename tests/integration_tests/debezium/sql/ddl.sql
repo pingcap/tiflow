@@ -149,12 +149,12 @@ RENAME TABLE t8 To rename_t8, t9 To rename_t9;
 /* TRUNCATE TABLE */
 TRUNCATE TABLE rename_t7;
 
-/* Debezium does not support */
+/* MySQL does not support */
 /* RECOVER TABLE */
-DROP TABLE t1;
-RECOVER TABLE t1;
+-- DROP TABLE t1;
+-- RECOVER TABLE t1;
 
-/* Debezium does not support */
+/* MySQL does not support */
 /* TTL */
 CREATE TABLE t10 (
     id int PRIMARY KEY,
@@ -164,7 +164,7 @@ ALTER TABLE t10 TTL = `created_at` + INTERVAL 1 MONTH;
 ALTER TABLE t10 TTL_ENABLE = 'OFF';
 ALTER TABLE t10 REMOVE TTL;
 
-/* Debezium does not support */
+/* MySQL does not support */
 /* VECTOR INDEX */
 CREATE TABLE t11 (
     id       INT PRIMARY KEY,
