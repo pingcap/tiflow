@@ -1159,10 +1159,10 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionRenameTable,
 		timodel.ActionRenameTables,
 		// timodel.ActionRecoverTable,
+		// timodel.ActionAlterTTLInfo,
+		// timodel.ActionAlterTTLRemove,
 		timodel.ActionAddPrimaryKey,
-		timodel.ActionDropPrimaryKey,
-		timodel.ActionAlterTTLInfo,
-		timodel.ActionAlterTTLRemove:
+		timodel.ActionDropPrimaryKey:
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,

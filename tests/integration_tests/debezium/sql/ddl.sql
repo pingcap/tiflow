@@ -1,8 +1,10 @@
+/* CREATE TABLE */
 CREATE TABLE t1 (
   PK INT PRIMARY KEY,
   COL INT
 );
 
+/* CREATE DATABASE */
 CREATE DATABASE foo;
 USE foo;
 
@@ -73,6 +75,7 @@ ALTER TABLE t2 REORGANIZE PARTITION p3 INTO (
 ALTER TABLE t2 REORGANIZE PARTITION p31,p32,p33,p2 INTO (PARTITION p21 VALUES LESS THAN (2008));
 ALTER TABLE t2 TRUNCATE PARTITION p0;
 ALTER TABLE t2 DROP PARTITION p0;
+ALTER TABLE t2 PARTITION BY HASH(id) PARTITIONS 10;
 
 /* ALTER INDEX visibility */
 CREATE TABLE t3 (
@@ -93,6 +96,10 @@ CREATE INDEX idx2 ON t4 ((col1 + col2), (col1 - col2), col1);
 DROP INDEX idx1 ON t4;
 ALTER TABLE t4 ADD INDEX ((col1 * 40) DESC);
 ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
+
+/* PRIMARY KEY */
+ALTER TABLE t4 ADD PRIMARY KEY pk(col2);
+ALTER TABLE t4 DROP PRIMARY KEY pk(col2);
 
 /*
   Adding a new column and setting it to the PRIMARY KEY is not supported.
@@ -142,9 +149,31 @@ RENAME TABLE t8 To rename_t8, t9 To rename_t9;
 /* TRUNCATE TABLE */
 TRUNCATE TABLE rename_t7;
 
-/* Debezium does not support recover table */
+/* Debezium does not support */
+/* RECOVER TABLE */
 DROP TABLE t1;
 RECOVER TABLE t1;
 
+/* Debezium does not support */
+/* TTL */
+CREATE TABLE t10 (
+    id int PRIMARY KEY,
+    created_at TIMESTAMP
+) /*T![ttl] TTL = `created_at` + INTERVAL 3 MONTH TTL_ENABLE = 'ON'*/;
+ALTER TABLE t10 TTL = `created_at` + INTERVAL 1 MONTH;
+ALTER TABLE t10 TTL_ENABLE = 'OFF';
+ALTER TABLE t10 REMOVE TTL;
+
+/* Debezium does not support */
+/* VECTOR INDEX */
+CREATE TABLE t11 (
+    id       INT PRIMARY KEY,
+    embedding     VECTOR(5)
+);
+CREATE VECTOR INDEX idx_embedding ON t11 ((VEC_COSINE_DISTANCE(embedding)));
+ALTER TABLE t11 ADD VECTOR INDEX idx_embedding ((VEC_L2_DISTANCE(embedding))) USING HNSW;
+
+/* DROP TABLE */
 DROP TABLE foo.bar;
+/* DROP DATABASE */
 DROP DATABASE IF EXISTS foo;
