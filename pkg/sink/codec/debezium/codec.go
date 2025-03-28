@@ -1157,6 +1157,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionAlterIndexVisibility,
 		timodel.ActionRenameIndex,
 		timodel.ActionRenameTable,
+		timodel.ActionRenameTables,
 		timodel.ActionRecoverTable,
 		timodel.ActionAddPrimaryKey,
 		timodel.ActionDropPrimaryKey,
@@ -1166,7 +1167,8 @@ func (c *dbzCodec) EncodeDDLEvent(
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,
 		timodel.ActionDropIndex,
-		timodel.ActionDropView:
+		timodel.ActionDropView,
+		timodel.ActionTruncateTable:
 		changeType = "DROP"
 	default:
 		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type, e.Query)
