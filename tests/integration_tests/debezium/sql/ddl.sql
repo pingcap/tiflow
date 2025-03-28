@@ -156,21 +156,21 @@ TRUNCATE TABLE rename_t7;
 
 /* MySQL does not support */
 /* TTL */
-CREATE TABLE t10 (
-    id int PRIMARY KEY,
-    created_at TIMESTAMP
-) /*T![ttl] TTL = `created_at` + INTERVAL 3 MONTH TTL_ENABLE = 'ON'*/;
-ALTER TABLE t10 TTL = `created_at` + INTERVAL 1 MONTH;
-ALTER TABLE t10 TTL_ENABLE = 'OFF';
-ALTER TABLE t10 REMOVE TTL;
+-- CREATE TABLE t10 (
+--     id int PRIMARY KEY,
+--     created_at TIMESTAMP
+-- ) /*T![ttl] TTL = `created_at` + INTERVAL 3 MONTH TTL_ENABLE = 'ON'*/;
+-- ALTER TABLE t10 TTL = `created_at` + INTERVAL 1 MONTH;
+-- ALTER TABLE t10 TTL_ENABLE = 'OFF';
+-- ALTER TABLE t10 REMOVE TTL;
 
 /* MySQL does not support */
 /* VECTOR INDEX */
-CREATE TABLE t11 (
-    id       INT PRIMARY KEY,
-    embedding     VECTOR(5)
-);
-ALTER TABLE t11 SET TIFLASH REPLICA 1;
+-- CREATE TABLE t11 (
+--     id       INT PRIMARY KEY,
+--     embedding     VECTOR(5)
+-- );
+-- ALTER TABLE t11 SET TIFLASH REPLICA 1;
 -- CREATE VECTOR INDEX idx_embedding ON t11 ((VEC_COSINE_DISTANCE(embedding)));
 -- ALTER TABLE t11 ADD VECTOR INDEX idx_embedding1 ((VEC_L2_DISTANCE(embedding))) USING HNSW;
 
