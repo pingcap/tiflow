@@ -142,11 +142,9 @@ RENAME TABLE t8 To rename_t8, t9 To rename_t9;
 /* TRUNCATE TABLE */
 TRUNCATE TABLE rename_t7;
 
-/* 
-  Debezium does not support recover table.
-  DROP TABLE t1;
-  RECOVER TABLE t1;
-*/
+/* Debezium does not support recover table */
+DROP TABLE t1;
+RECOVER TABLE t1;
 
 DROP TABLE foo.bar;
 DROP DATABASE IF EXISTS foo;

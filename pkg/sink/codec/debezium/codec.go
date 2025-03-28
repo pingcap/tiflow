@@ -1158,7 +1158,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionRenameIndex,
 		timodel.ActionRenameTable,
 		timodel.ActionRenameTables,
-		timodel.ActionRecoverTable,
+		// timodel.ActionRecoverTable,
 		timodel.ActionAddPrimaryKey,
 		timodel.ActionDropPrimaryKey,
 		timodel.ActionAlterTTLInfo,
@@ -1241,7 +1241,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 			jWriter.WriteStringField("ddl", e.Query)
 			jWriter.WriteArrayField("tableChanges", func() {
 				// return early if there is no table changes
-				if tableName == "" {
+				if tableName == "" || e.Type == timodel.ActionTruncateTable {
 					return
 				}
 				jWriter.WriteObjectElement(func() {
