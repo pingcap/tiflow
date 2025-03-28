@@ -98,8 +98,8 @@ ALTER TABLE t4 ADD INDEX ((col1 * 40) DESC);
 ALTER TABLE t4 RENAME INDEX idx2 TO new_idx2;
 
 /* PRIMARY KEY */
-ALTER TABLE t4 ADD PRIMARY KEY pk(col2);
-ALTER TABLE t4 DROP PRIMARY KEY pk(col2);
+ALTER TABLE t4 DROP PRIMARY KEY pk(col1);
+ALTER TABLE t4 ADD PRIMARY KEY pk(col1);
 
 /*
   Adding a new column and setting it to the PRIMARY KEY is not supported.
