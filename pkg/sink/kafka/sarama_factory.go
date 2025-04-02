@@ -90,19 +90,12 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, err
 	}
 	config.MetricRegistry = f.registry
-
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	p, err := sarama.NewSyncProducerFromClient(client)
+	p, err := sarama.NewSyncProducer(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &saramaSyncProducer{
 		id:       f.changefeedID,
-		client:   client,
 		producer: p,
 	}, nil
 }
