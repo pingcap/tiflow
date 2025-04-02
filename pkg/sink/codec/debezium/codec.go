@@ -1158,16 +1158,15 @@ func (c *dbzCodec) EncodeDDLEvent(
 		timodel.ActionAlterIndexVisibility,
 		timodel.ActionRenameIndex,
 		timodel.ActionRenameTable,
-		timodel.ActionRecoverTable,
+		timodel.ActionRenameTables,
 		timodel.ActionAddPrimaryKey,
-		timodel.ActionDropPrimaryKey,
-		timodel.ActionAlterTTLInfo,
-		timodel.ActionAlterTTLRemove:
+		timodel.ActionDropPrimaryKey:
 		changeType = "ALTER"
 	case timodel.ActionDropSchema,
 		timodel.ActionDropTable,
 		timodel.ActionDropIndex,
-		timodel.ActionDropView:
+		timodel.ActionDropView,
+		timodel.ActionTruncateTable:
 		changeType = "DROP"
 	default:
 		return cerror.ErrDDLUnsupportType.GenWithStackByArgs(e.Type, e.Query)
@@ -1240,7 +1239,7 @@ func (c *dbzCodec) EncodeDDLEvent(
 			jWriter.WriteStringField("ddl", e.Query)
 			jWriter.WriteArrayField("tableChanges", func() {
 				// return early if there is no table changes
-				if tableName == "" {
+				if tableName == "" || e.Type == timodel.ActionTruncateTable {
 					return
 				}
 				jWriter.WriteObjectElement(func() {
