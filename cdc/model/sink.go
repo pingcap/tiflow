@@ -466,13 +466,12 @@ func (r *RowChangedEvent) IsUpdate() bool {
 
 func columnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
 	colID := col.ColumnID
-	offset, ok := tableInfo.columnsOffset[colID]
-	if !ok {
+	colInfo, exist := tableInfo.GetColumnInfo(colID)
+	if !exist {
 		log.Panic("invalid column id",
 			zap.Int64("columnID", colID),
 			zap.Any("tableInfo", tableInfo))
 	}
-	colInfo := tableInfo.Columns[offset]
 	return &Column{
 		Name:      colInfo.Name.O,
 		Type:      colInfo.GetType(),
@@ -1326,7 +1325,7 @@ func GetColumnDataX(col *ColumnData, tb *TableInfo) ColumnDataX {
 	x := ColumnDataX{ColumnData: col}
 	if x.ColumnData != nil {
 		x.flag = tb.ColumnsFlag[col.ColumnID]
-		x.info = tb.Columns[tb.columnsOffset[col.ColumnID]]
+		x.info = tb.Columns[tb.columnsIndex[col.ColumnID]]
 	}
 	return x
 }
@@ -1374,12 +1373,15 @@ func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 		},
 		ColumnsFlag:   make(map[int64]*ColumnFlagType, len(columns)),
 		columnsOffset: make(map[int64]int),
+		columnsIndex:  make(map[int64]int),
+		nameToColID:   make(map[string]int64),
 	}
 	colDatas := make([]*ColumnData, 0, len(columns))
-
 	for i, column := range columns {
 		var columnID int64 = int64(i)
+		info.columnsIndex[columnID] = i
 		info.columnsOffset[columnID] = i
+		info.nameToColID[column.Name] = columnID
 
 		info.Columns[i] = &model.ColumnInfo{}
 		info.Columns[i].Name.O = column.Name
@@ -1392,7 +1394,6 @@ func Columns2ColumnDataForTest(columns []*Column) ([]*ColumnData, *TableInfo) {
 
 		colDatas = append(colDatas, &ColumnData{ColumnID: columnID, Value: column.Value})
 	}
-
 	return colDatas, info
 }
 
