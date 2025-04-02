@@ -100,7 +100,11 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	s := newDDLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
+=======
+	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder.Build(), protocol)
+>>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 
 	return s, nil
 }
