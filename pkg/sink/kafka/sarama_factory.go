@@ -109,6 +109,7 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, err
 	}
 	config.MetricRegistry = f.registry
+<<<<<<< HEAD
 
 	client, err := newSaramaClientImpl(f.option.BrokerEndpoints, config)
 	if err != nil {
@@ -120,6 +121,12 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, errors.Trace(err)
 	}
 
+=======
+	p, err := sarama.NewSyncProducer(f.option.BrokerEndpoints, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+>>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	return &saramaSyncProducer{
 		id:       f.changefeedID,
 		producer: p,

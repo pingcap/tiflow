@@ -16,7 +16,6 @@ package mq
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -100,7 +99,7 @@ func newDDLSink(
 func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	msg, err := k.encoder.EncodeDDLEvent(ddl)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 	if msg == nil {
 		log.Info("Skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
@@ -124,19 +123,17 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	// then the auto-created topic will not be created as configured by ticdc.
 	partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 	if partitionRule == PartitionAll {
-		err = k.statistics.RecordDDLExecution(func() error {
+		return k.statistics.RecordDDLExecution(func() error {
 			return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		})
-		return errors.Trace(err)
 	}
-	err = k.statistics.RecordDDLExecution(func() error {
+	return k.statistics.RecordDDLExecution(func() error {
 		return k.producer.SyncSendMessage(ctx, topic, 0, msg)
 	})
-	return errors.Trace(err)
 }
 
 // WriteCheckpointTs sends the checkpoint ts to the MQ system.
@@ -144,9 +141,16 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+<<<<<<< HEAD
+=======
+	var (
+		err          error
+		partitionNum int32
+	)
+>>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	msg, err := k.encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 	if msg == nil {
 		return nil
@@ -156,14 +160,13 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 		log.Debug("Emit checkpointTs to default topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
-		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
-		return errors.Trace(err)
+		return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 	}
 	var tableNames []model.TableName
 	for _, table := range tables {
@@ -171,13 +174,13 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 	}
 	return nil
