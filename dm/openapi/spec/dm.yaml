@@ -1779,6 +1779,11 @@ components:
           type: integer
           description: incremental synchronization of batch execution sql quantities
           default: 100
+        auto_id_cache_size:
+          type: integer
+          format: uint64
+          description: "AUTO_ID_CACHE size to use for incremental replication of new tables"
+          default: 0
     TaskSourceConf:
       type: object
       properties:
