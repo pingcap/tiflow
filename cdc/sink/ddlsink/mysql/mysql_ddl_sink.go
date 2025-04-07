@@ -18,9 +18,11 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/go-sql-driver/mysql"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -134,7 +136,34 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return m.asyncExecDDL(ctx, ddl)
 	}
 
+	ddlCreateTime := getDDLCreateTime(ctx, m.db)
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
+		if m.cfg.IsTiDB && ddlCreateTime != -1 && errors.Cause(err) == mysql.ErrInvalidConn {
+			// waiting ddl
+			ticker := time.NewTimer(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				status, err1 := getDDLStatusFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
+				if err1 != nil {
+					log.Warn("error when getting DDL status from TiDB", zap.Error(err1))
+				}
+				switch status {
+				case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
+					return nil
+				case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
+					return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
+				case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
+				default:
+					log.Warn("Unexpected DDL status", zap.String("DDL status", status))
+					return err
+				}
+				select {
+				case <-ctx.Done():
+					return err
+				case <-ticker.C:
+				}
+			}
+		}
 		return errors.Trace(err)
 	}
 	m.lastExecutedNormalDDLCache.Add(ddl.TableInfo.TableName, ddl.Type)
@@ -275,6 +304,27 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	return nil
 }
 
+// WriteCheckpointTs does nothing.
+func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
+	// Only for RowSink for now.
+	return nil
+}
+
+// Close closes the database connection.
+func (m *DDLSink) Close() {
+	if m.statistics != nil {
+		m.statistics.Close()
+	}
+	if m.db != nil {
+		if err := m.db.Close(); err != nil {
+			log.Warn("MySQL ddl sink close db wit error",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Error(err))
+		}
+	}
+}
+
 func needSwitchDB(ddl *model.DDLEvent) bool {
 	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
@@ -306,23 +356,116 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	return false
 }
 
-// WriteCheckpointTs does nothing.
-func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
-	// Only for RowSink for now.
-	return nil
+func getDDLCreateTime(ctx context.Context, db *sql.DB) int64 {
+	var ddlCreateTime int64 = -1 // default when scan failed
+	row, err := db.QueryContext(ctx, "SELECT UNIX_TIMESTAMP()")
+	if err != nil {
+		log.Warn("selecting unix timestamp failed", zap.Error(err))
+	} else {
+		for row.Next() {
+			err = row.Scan(&ddlCreateTime)
+			if err != nil {
+				log.Warn("getting ddlCreateTime failed", zap.Error(err))
+			}
+		}
+		//nolint:sqlclosecheck
+		_ = row.Close()
+		_ = row.Err()
+	}
+	return ddlCreateTime
 }
 
-// Close closes the database connection.
-func (m *DDLSink) Close() {
-	if m.statistics != nil {
-		m.statistics.Close()
-	}
-	if m.db != nil {
-		if err := m.db.Close(); err != nil {
-			log.Warn("MySQL ddl sink close db wit error",
-				zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID),
-				zap.Error(err))
+// getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
+func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
+	linesOfRows := 10
+	rowNum := linesOfRows
+	rowOffset := 0
+	queryMap := make(map[int]string)
+
+	for {
+		// every attempt try 10 history jobs
+		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
+		//nolint:rowserrcheck
+		jobsRows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			return "", err
+		}
+
+		var jobsResults [][]string
+		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "JOB_ID", "CREATE_TIME", "STATE")
+		if err != nil {
+			return "", err
+		}
+
+		for i := rowNum - linesOfRows; i < rowNum && i < len(jobsResults); i++ {
+			ddlCreateTimeStr := jobsResults[i][1]
+			var ddlCreateTimeParse time.Time
+			ddlCreateTimeParse, err = time.Parse("2006-01-02 15:04:05", ddlCreateTimeStr)
+			if err != nil {
+				return "", err
+			}
+			ddlCreateTime := ddlCreateTimeParse.Unix()
+
+			// ddlCreateTime and createTime are both based on timezone of downstream
+			if ddlCreateTime >= createTime {
+				var jobID int
+				jobID, err = strconv.Atoi(jobsResults[i][0])
+				if err != nil {
+					return "", err
+				}
+
+				for {
+					ddlQuery, ok := queryMap[jobID]
+					if !ok {
+						// jobID does not exist, expand queryMap for deeper search
+						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+						var rowsLimitNext *sql.Rows
+						//nolint:rowserrcheck
+						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
+						if err != nil {
+							return "", err
+						}
+
+						var resultsLimitNext [][]string
+						resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, "JOB_ID", "QUERY")
+						if err != nil {
+							return "", err
+						}
+						if len(resultsLimitNext) == 0 {
+							// JOB QUERIES has been used up
+							// requested DDL cannot be found
+							return "", nil
+						}
+
+						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
+						// we may get duplicate rows here, but it does not affect the checking
+						for k := range resultsLimitNext {
+							var jobIDForLimit int
+							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
+							if err != nil {
+								return "", err
+							}
+							queryMap[jobIDForLimit] = resultsLimitNext[k][1]
+						}
+						rowOffset += linesOfRows
+					} else {
+						if ddl == ddlQuery {
+							return jobsResults[i][2], nil
+						}
+						break
+					}
+				}
+			} else {
+				// ddlCreateTime is monotonous in jobsResults
+				// requested DDL cannot be found
+				return "", nil
+			}
+		}
+		if len(jobsResults) == rowNum {
+			rowNum += linesOfRows
+		} else {
+			// jobsResults has been checked thoroughly
+			return "", nil
 		}
 	}
 }
