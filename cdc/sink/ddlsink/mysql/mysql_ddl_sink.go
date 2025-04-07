@@ -139,13 +139,13 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	ddlCreateTime := getDDLCreateTime(ctx, m.db)
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
 		if m.cfg.IsTiDB && ddlCreateTime != -1 && errors.Cause(err) == mysql.ErrInvalidConn {
-			// waiting ddl
+			log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime), zap.Error(err))
 			ticker := time.NewTimer(30 * time.Second)
 			defer ticker.Stop()
 			for {
 				status, err1 := getDDLStatusFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 				if err1 != nil {
-					log.Warn("error when getting DDL status from TiDB", zap.Error(err1))
+					log.Warn("Error when getting DDL status from TiDB", zap.Error(err1))
 				}
 				switch status {
 				case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
