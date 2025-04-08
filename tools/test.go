@@ -19,6 +19,7 @@ func main() {
 	// 定义命令行参数
 	totalRows := flag.Int("rows", 200000000, "Total number of rows to write (default: 200M)")
 	rowsPerTrans := flag.Int("rows-per-trans", 200000, "Number of rows per transaction (default: 200K)")
+	duration := flag.Int("duration", 30, "Duration of the test in minutes (default: 30)")
 	flag.Parse()
 
 	// 计算事务数量
@@ -53,7 +54,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	s.AddTable(1)
+	tableID := model.TableID(1)
+	bTableID := []byte{byte(tableID)}
+	s.AddTable(tableID)
 	resolvedTs := make(chan model.Ts)
 	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
 
@@ -72,20 +75,19 @@ func main() {
 		}
 
 		for j := 0; j < rowsToWrite; j++ {
-			key := []byte(fmt.Sprintf("%d:%d", i, j))
 			event := model.NewPolymorphicEvent(&model.RawKVEntry{
 				OpType:  model.OpTypePut,
-				Key:     key,
+				Key:     bTableID,
 				StartTs: commitTs - 1,
 				CRTs:    commitTs,
 			})
 			events = append(events, event)
 		}
 
-		s.Add(1, events...)
-		s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
+		s.Add(tableID, events...)
+		s.Add(tableID, model.NewResolvedPolymorphicEvent(0, commitTs))
 
-		if (i+1)%100 == 0 {
+		if (i+1)%10 == 0 {
 			fmt.Printf("已完成 %d 个事务的写入\n", i+1)
 		}
 	}
@@ -102,7 +104,7 @@ func main() {
 		expectedCount = int64(*totalRows)
 	)
 
-	timer := time.NewTimer(30 * time.Minute)
+	timer := time.NewTimer(time.Duration(*duration) * time.Minute)
 	select {
 	case ts := <-resolvedTs:
 		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})

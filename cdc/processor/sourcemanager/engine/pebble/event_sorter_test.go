@@ -14,7 +14,6 @@
 package pebble
 
 import (
-	"fmt"
 	"path/filepath"
 	"sort"
 	"sync/atomic"
@@ -189,7 +188,8 @@ func TestEventFetchWithLargeData(t *testing.T) {
 	defer s.Close()
 
 	require.True(t, s.IsTableBased())
-	s.AddTable(1)
+	tableID := model.TableID(1)
+	s.AddTable(tableID)
 
 	resolvedTs := make(chan model.Ts)
 	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
@@ -212,8 +212,7 @@ func TestEventFetchWithLargeData(t *testing.T) {
 		commitTs := model.Ts(i + 1)
 
 		for j := 0; j < rowsPerTrans; j++ {
-			// 生成唯一的key，格式为 "txn_id:row_id"
-			key := []byte(fmt.Sprintf("%d:%d", i, j))
+			key := []byte{byte(tableID)}
 			event := model.NewPolymorphicEvent(&model.RawKVEntry{
 				OpType:  model.OpTypePut,
 				Key:     key,
@@ -223,8 +222,8 @@ func TestEventFetchWithLargeData(t *testing.T) {
 			events = append(events, event)
 		}
 
-		s.Add(1, events...)
-		s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
+		s.Add(tableID, events...)
+		s.Add(tableID, model.NewResolvedPolymorphicEvent(0, commitTs))
 
 		if (i+1)%100 == 0 {
 			t.Logf("已完成 %d 个事务的写入", i+1)
