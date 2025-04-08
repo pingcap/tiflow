@@ -18,6 +18,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
+// How to run this program:
+// go run test.go -rows 200000000 -txn-number 200000
+
 func main() {
 	// declare variables
 	var (
