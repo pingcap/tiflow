@@ -72,7 +72,7 @@ func main() {
 	// 生成并写入事件
 	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -107,9 +107,6 @@ func main() {
 		}
 		close(resolvedTs)
 	}()
-
-	writeDuration := time.Since(startTime)
-	fmt.Printf("数据写入完成，耗时: %v\n", writeDuration)
 
 	// 读取并验证数据
 	fmt.Println("开始读取数据...")
@@ -155,16 +152,16 @@ func main() {
 		}
 	}()
 
+	wg.Wait()
+
+	writeDuration := time.Since(startTime)
 	readDuration := time.Since(readStartTime)
-	fmt.Printf("数据读取完成，耗时: %v\n", readDuration)
 
 	// 验证数据完整性
 	if readCount != expectedCount {
 		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", expectedCount, readCount)
 		os.Exit(1)
 	}
-
-	wg.Wait()
 
 	fmt.Println("\n测试完成:")
 	fmt.Printf("- 写入数据: %d 条\n", totalRows)
