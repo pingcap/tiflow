@@ -161,12 +161,12 @@ func main() {
 
 	// 验证数据完整性
 	if readCount.Load() != actualWriteRows.Load() {
-		fmt.Errorf("数据数量不一致: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount.Load())
+		fmt.Printf("ERROR: 数据数量不一致: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount.Load())
 	}
 
 	fmt.Println("\n测试完成:")
 	fmt.Printf("- 写入数据: %d 条\n", actualWriteRows.Load())
-	fmt.Printf("- 读取数据: %d 条\n", readCount)
+	fmt.Printf("- 读取数据: %d 条\n", readCount.Load())
 	fmt.Printf("- 写入耗时: %v\n", writeDuration)
 	fmt.Printf("- 读取耗时: %v\n", readDuration)
 	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(actualWriteRows.Load())/writeDuration.Seconds())
