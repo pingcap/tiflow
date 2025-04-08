@@ -116,8 +116,7 @@ func main() {
 	readStartTime := time.Now()
 
 	var (
-		readCount     int64
-		expectedCount = int64(totalRows)
+		readCount int64
 	)
 
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
@@ -161,16 +160,16 @@ func main() {
 	readDuration := time.Since(readStartTime)
 
 	// 验证数据完整性
-	if readCount != expectedCount {
-		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", expectedCount, readCount)
+	if readCount != actualWriteRows.Load() {
+		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount)
 		os.Exit(1)
 	}
 
 	fmt.Println("\n测试完成:")
-	fmt.Printf("- 写入数据: %d 条\n", totalRows)
+	fmt.Printf("- 写入数据: %d 条\n", actualWriteRows.Load())
 	fmt.Printf("- 读取数据: %d 条\n", readCount)
 	fmt.Printf("- 写入耗时: %v\n", writeDuration)
 	fmt.Printf("- 读取耗时: %v\n", readDuration)
-	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(totalRows)/writeDuration.Seconds())
+	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(actualWriteRows.Load())/writeDuration.Seconds())
 	fmt.Printf("- 读取速度: %.2f 行/秒\n", float64(readCount)/readDuration.Seconds())
 }

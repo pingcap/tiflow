@@ -312,9 +312,7 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	var value []byte
 	for valid {
 		nextStart := time.Now()
-		// fix
-		// value, valid = s.iter.Value(), s.iter.Next()
-		value = s.iter.Value()
+		value, valid = s.iter.Value(), s.iter.Next()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
 		event = &model.PolymorphicEvent{}
@@ -322,10 +320,9 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			log.Error("failed to unmarshal event",
 				zap.Error(err),
 				zap.Any("value", value),
-				zap.Any("valid", len(value)))
+				zap.Any("valid", valid))
 			return
 		}
-		valid = s.iter.Next()
 
 		if s.headItem != nil {
 			break
