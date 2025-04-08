@@ -65,42 +65,45 @@ func main() {
 	}
 
 	s.AddTable(1)
-	resolvedTs := make(chan model.Ts)
+	resolvedTs := make(chan model.Ts, numTransactions*2)
 	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
 
 	// 生成并写入事件
 	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
 
-	for i := 0; i < numTransactions; i++ {
-		events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
-		commitTs := model.Ts(i + 1)
+	go func() {
+		for i := 0; i < numTransactions; i++ {
+			events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
+			commitTs := model.Ts(i + 1)
 
-		// 计算这个事务实际需要写入的行数
-		rowsToWrite := rowsPerTrans
-		if i == numTransactions-1 && totalRows%rowsPerTrans != 0 {
-			rowsToWrite = totalRows % rowsPerTrans
+			// 计算这个事务实际需要写入的行数
+			rowsToWrite := rowsPerTrans
+			if i == numTransactions-1 && totalRows%rowsPerTrans != 0 {
+				rowsToWrite = totalRows % rowsPerTrans
+			}
+			actualWriteRows.Add(int64(rowsToWrite))
+
+			for j := 0; j < rowsToWrite; j++ {
+				key := []byte(fmt.Sprintf("%d:%d", i, j))
+				event := model.NewPolymorphicEvent(&model.RawKVEntry{
+					OpType:  model.OpTypePut,
+					Key:     key,
+					StartTs: commitTs - 1,
+					CRTs:    commitTs,
+				})
+				events = append(events, event)
+			}
+
+			s.Add(1, events...)
+			s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
+
+			if (i+1)%100 == 0 {
+				fmt.Printf("已完成 %d 个事务的写入\n", i+1)
+			}
 		}
-		actualWriteRows.Add(int64(rowsToWrite))
-
-		for j := 0; j < rowsToWrite; j++ {
-			key := []byte(fmt.Sprintf("%d:%d", i, j))
-			event := model.NewPolymorphicEvent(&model.RawKVEntry{
-				OpType:  model.OpTypePut,
-				Key:     key,
-				StartTs: commitTs - 1,
-				CRTs:    commitTs,
-			})
-			events = append(events, event)
-		}
-
-		s.Add(1, events...)
-		s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
-
-		if (i+1)%100 == 0 {
-			fmt.Printf("已完成 %d 个事务的写入\n", i+1)
-		}
-	}
+		close(resolvedTs)
+	}()
 
 	writeDuration := time.Since(startTime)
 	fmt.Printf("数据写入完成，耗时: %v\n", writeDuration)
@@ -116,7 +119,12 @@ func main() {
 
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
 	select {
-	case ts := <-resolvedTs:
+	case ts, ok := <-resolvedTs:
+		if !ok {
+			log.Println("resolvedTs 已关闭")
+			break
+		}
+
 		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, _, err := iter.Next()
