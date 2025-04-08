@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"flag"
 	"log"
 	"math"
@@ -20,7 +21,7 @@ import (
 )
 
 // How to run this program:
-// go run test.go -rows 200000000 -txn-number 200000
+// go run test.go -rows=1000000000 -txn-number=100000 -min-ts-interval 200 -row-per-second 20000
 
 func main() {
 	// declare variables
@@ -95,8 +96,14 @@ func main() {
 
 	// generate and write events
 	log.Printf("start generating %d transactions, each with %d rows\n", numTransactions, rowsPerTrans)
+
 	startTime := time.Now()
-	value := []byte{1}
+	decodedValue, err := base64.StdEncoding.DecodeString("h6dvcF90eXBlAaNrZXnERHSAAAAAAAAAUF9yATEzMjEzNTE5/zY4MDkyNzM5/zEzAAAAAAAA+QExAAAAAAAAAPgEGbYmAAAAAAABMTEwAAAAAAD6pXZhbHVlxD6AAAUAAAABAgMEBhIAFQAWACEAKQAxMzIxMzUxOTY4MDkyNzM5MTMxMTAxEgKAAAAAAAAAAQMAAABEYie2GalvbGRfdmFsdWXEAKhzdGFydF90c88GWF9RNJgABqRjcnRzzwZYX1E0mAAHqXJlZ2lvbl9pZAo=")
+	if err != nil {
+		log.Fatalf("Failed to decode base64 string: %v", err)
+	}
+	value := decodedValue
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
