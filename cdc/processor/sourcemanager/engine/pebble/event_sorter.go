@@ -312,7 +312,9 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	var value []byte
 	for valid {
 		nextStart := time.Now()
-		value, valid = s.iter.Value(), s.iter.Next()
+		// fix
+		// value, valid = s.iter.Value(), s.iter.Next()
+		value = s.iter.Value()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 
 		event = &model.PolymorphicEvent{}
@@ -323,6 +325,8 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 				zap.Any("valid", len(value)))
 			return
 		}
+		valid = s.iter.Next()
+
 		if s.headItem != nil {
 			break
 		}
