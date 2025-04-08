@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -106,7 +107,8 @@ func main() {
 				fmt.Printf("已完成 %d 个事务的写入\n", i+1)
 			}
 		}
-		close(resolvedTs)
+		// 发送结束信号
+		resolvedTs <- math.MaxUint64
 	}()
 
 	// 读取并验证数据
@@ -124,8 +126,8 @@ func main() {
 		defer wg.Done()
 		for {
 			select {
-			case ts, ok := <-resolvedTs:
-				if !ok {
+			case ts := <-resolvedTs:
+				if ts == math.MaxUint64 {
 					log.Println("resolvedTs 已关闭, 退出读取")
 					return
 				}
