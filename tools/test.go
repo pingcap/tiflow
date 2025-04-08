@@ -18,16 +18,25 @@ import (
 
 func main() {
 	// 定义命令行参数
-	totalRows := flag.Int("rows", 200000000, "Total number of rows to write (default: 200M)")
-	txnNumber := flag.Int("txn-number", 200000, "Number of rows per transaction (default: 200K)")
-	duration := flag.Int("duration", 30, "Duration of the test in minutes (default: 30)")
+	var (
+		totalRows    int
+		rowsPerTrans int
+		duration     int
+	)
+
+	flag.IntVar(&totalRows, "rows", 200000000, "Total number of rows to write (default: 200M)")
+	flag.IntVar(&rowsPerTrans, "rows-per-trans", 200000, "Number of rows per transaction (default: 200K)")
+	flag.IntVar(&duration, "duration", 30, "Duration of the test in minutes (default: 30)")
 	flag.Parse()
 
 	var actualWriteRows atomic.Int64
 	// 计算事务数量
-	rowsPerTrans := *totalRows / *txnNumber
+	numTransactions := totalRows / rowsPerTrans
+	if totalRows%rowsPerTrans != 0 {
+		numTransactions++
+	}
 
-	log.Printf("totalRows: %d, rowsPerTrans: %d, txnNumber: %d", *totalRows, rowsPerTrans, *txnNumber)
+	log.Printf("totalRows: %d, rowsPerTrans: %d, txnNumber: %d", totalRows, rowsPerTrans, numTransactions)
 
 	// 创建临时目录
 	dbPath := filepath.Join(os.TempDir(), "pebble-test")
@@ -55,41 +64,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	tableID := model.TableID(1)
-	bTableID := []byte{byte(tableID)}
-	s.AddTable(tableID)
+	s.AddTable(1)
 	resolvedTs := make(chan model.Ts)
 	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
 
 	// 生成并写入事件
-	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", *txnNumber, rowsPerTrans)
+	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
 
-	for i := 0; i < *txnNumber; i++ {
+	for i := 0; i < numTransactions; i++ {
 		events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
 		commitTs := model.Ts(i + 1)
 
 		// 计算这个事务实际需要写入的行数
 		rowsToWrite := rowsPerTrans
-		if i == *txnNumber-1 && *totalRows%rowsPerTrans != 0 {
-			rowsToWrite = *totalRows % rowsPerTrans
+		if i == numTransactions-1 && totalRows%rowsPerTrans != 0 {
+			rowsToWrite = totalRows % rowsPerTrans
 		}
 		actualWriteRows.Add(int64(rowsToWrite))
 
 		for j := 0; j < rowsToWrite; j++ {
+			key := []byte(fmt.Sprintf("%d:%d", i, j))
 			event := model.NewPolymorphicEvent(&model.RawKVEntry{
 				OpType:  model.OpTypePut,
-				Key:     bTableID,
+				Key:     key,
 				StartTs: commitTs - 1,
 				CRTs:    commitTs,
 			})
 			events = append(events, event)
 		}
 
-		s.Add(tableID, events...)
-		s.Add(tableID, model.NewResolvedPolymorphicEvent(0, commitTs))
+		s.Add(1, events...)
+		s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
 
-		if (i+1)%10 == 0 {
+		if (i+1)%100 == 0 {
 			fmt.Printf("已完成 %d 个事务的写入\n", i+1)
 		}
 	}
@@ -102,10 +110,11 @@ func main() {
 	readStartTime := time.Now()
 
 	var (
-		readCount int64
+		readCount     int64
+		expectedCount = int64(totalRows)
 	)
 
-	timer := time.NewTimer(time.Duration(*duration) * time.Minute)
+	timer := time.NewTimer(time.Duration(duration) * time.Minute)
 	select {
 	case ts := <-resolvedTs:
 		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
@@ -133,16 +142,16 @@ func main() {
 	fmt.Printf("数据读取完成，耗时: %v\n", readDuration)
 
 	// 验证数据完整性
-	if readCount != actualWriteRows.Load() {
-		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount)
+	if readCount != expectedCount {
+		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", expectedCount, readCount)
 		os.Exit(1)
 	}
 
 	fmt.Println("\n测试完成:")
-	fmt.Printf("- 写入数据: %d 条\n", actualWriteRows.Load())
+	fmt.Printf("- 写入数据: %d 条\n", totalRows)
 	fmt.Printf("- 读取数据: %d 条\n", readCount)
 	fmt.Printf("- 写入耗时: %v\n", writeDuration)
 	fmt.Printf("- 读取耗时: %v\n", readDuration)
-	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(actualWriteRows.Load())/writeDuration.Seconds())
+	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(totalRows)/writeDuration.Seconds())
 	fmt.Printf("- 读取速度: %.2f 行/秒\n", float64(readCount)/readDuration.Seconds())
 }
