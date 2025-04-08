@@ -106,7 +106,7 @@ func main() {
 			// write resolved event
 			eventSorter.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
 
-			if (i+1)%100 == 0 {
+			if (i+1)%10000 == 0 {
 				log.Printf("write %d transactions\n", i+1)
 			}
 		}
@@ -172,6 +172,6 @@ func main() {
 	log.Printf("- read data: %d rows\n", readCount.Load())
 	log.Printf("- write duration: %v\n", writeDuration.Load())
 	log.Printf("- read duration: %v\n", readDuration.Load())
-	log.Printf("- write speed: %.2f rows/second\n", float64(actualWriteRows.Load())/float64(writeDuration.Load()))
-	log.Printf("- read speed: %.2f rows/second\n", float64(readCount.Load())/float64(readDuration.Load()))
+	log.Printf("- write speed: %.2f rows/second\n", float64(actualWriteRows.Load())/float64(writeDuration.Load()/1000))
+	log.Printf("- read speed: %.2f rows/second\n", float64(readCount.Load())/float64(readDuration.Load()/1000))
 }
