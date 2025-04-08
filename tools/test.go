@@ -87,7 +87,6 @@ func main() {
 			if i == numTransactions-1 && totalRows%rowsPerTrans != 0 {
 				rowsToWrite = totalRows % rowsPerTrans
 			}
-			actualWriteRows.Add(int64(rowsToWrite))
 
 			for j := 0; j < rowsToWrite; j++ {
 				event := model.NewPolymorphicEvent(&model.RawKVEntry{
@@ -101,6 +100,7 @@ func main() {
 			}
 
 			s.Add(1, events...)
+			actualWriteRows.Add(int64(len(events)))
 			s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
 
 			if (i+1)%100 == 0 {
@@ -116,7 +116,7 @@ func main() {
 	readStartTime := time.Now()
 
 	var (
-		readCount int64
+		readCount atomic.Int64
 	)
 
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
@@ -141,9 +141,9 @@ func main() {
 					if event == nil {
 						break
 					}
-					atomic.AddInt64(&readCount, 1)
+					readCount.Add(1)
 
-					if readCount%100000 == 0 {
+					if readCount.Load()%100000 == 0 {
 						fmt.Printf("已读取 %d 条数据\n", readCount)
 					}
 				}
@@ -160,9 +160,8 @@ func main() {
 	readDuration := time.Since(readStartTime)
 
 	// 验证数据完整性
-	if readCount != actualWriteRows.Load() {
-		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount)
-		os.Exit(1)
+	if readCount.Load() != actualWriteRows.Load() {
+		fmt.Errorf("数据数量不一致: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount.Load())
 	}
 
 	fmt.Println("\n测试完成:")
@@ -171,5 +170,5 @@ func main() {
 	fmt.Printf("- 写入耗时: %v\n", writeDuration)
 	fmt.Printf("- 读取耗时: %v\n", readDuration)
 	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(actualWriteRows.Load())/writeDuration.Seconds())
-	fmt.Printf("- 读取速度: %.2f 行/秒\n", float64(readCount)/readDuration.Seconds())
+	fmt.Printf("- 读取速度: %.2f 行/秒\n", float64(readCount.Load())/readDuration.Seconds())
 }

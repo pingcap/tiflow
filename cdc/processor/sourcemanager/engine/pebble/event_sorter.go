@@ -314,7 +314,6 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
-
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			log.Error("failed to unmarshal event",
