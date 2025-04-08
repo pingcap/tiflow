@@ -72,6 +72,7 @@ func main() {
 	// 生成并写入事件
 	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
+	value := []byte{1}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -88,10 +89,10 @@ func main() {
 			actualWriteRows.Add(int64(rowsToWrite))
 
 			for j := 0; j < rowsToWrite; j++ {
-				key := []byte(fmt.Sprintf("%d:%d", i, j))
 				event := model.NewPolymorphicEvent(&model.RawKVEntry{
 					OpType:  model.OpTypePut,
-					Key:     key,
+					Key:     []byte{1},
+					Value:   value,
 					StartTs: commitTs - 1,
 					CRTs:    commitTs,
 				})
