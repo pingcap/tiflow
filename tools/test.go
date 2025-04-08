@@ -54,7 +54,7 @@ func main() {
 	}
 	defer func() { _ = db.Close() }()
 
-	// 初始化 sorter
+	// create event sorter
 	cf := model.ChangeFeedID{Namespace: "default", ID: "test"}
 	eventSorter := cdcpebble.New(cf, []*pebble.DB{db})
 	defer eventSorter.Close()
@@ -162,7 +162,7 @@ func main() {
 
 	wg.Wait()
 
-	// 验证数据完整性
+	// compare the number of written and read rows
 	if readCount.Load() != actualWriteRows.Load() {
 		log.Printf("ERROR: data number mismatch: expected %d rows, actual read %d rows\n", actualWriteRows.Load(), readCount.Load())
 	}
