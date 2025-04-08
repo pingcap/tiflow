@@ -19,28 +19,26 @@ import (
 )
 
 func main() {
-	// 定义命令行参数
+	// declare variables
 	var (
-		totalRows    int
-		rowsPerTrans int
-		duration     int
+		totalRows int
+		txnNumber int
+		duration  int
 	)
 
 	flag.IntVar(&totalRows, "rows", 200000000, "Total number of rows to write (default: 200M)")
-	flag.IntVar(&rowsPerTrans, "rows-per-trans", 200000, "Number of rows per transaction (default: 200K)")
+	flag.IntVar(&txnNumber, "txn-number", 200000, "Number of rows per transaction (default: 200K)")
 	flag.IntVar(&duration, "duration", 30, "Duration of the test in minutes (default: 30)")
 	flag.Parse()
 
 	var actualWriteRows atomic.Int64
-	// 计算事务数量
-	numTransactions := totalRows / rowsPerTrans
-	if totalRows%rowsPerTrans != 0 {
-		numTransactions++
-	}
+
+	rowsPerTrans := totalRows / txnNumber
+	numTransactions := txnNumber
 
 	log.Printf("totalRows: %d, rowsPerTrans: %d, txnNumber: %d", totalRows, rowsPerTrans, numTransactions)
 
-	// 创建临时目录
+	// create temporary directory
 	dbPath := filepath.Join(os.TempDir(), "pebble-test")
 	if err := os.MkdirAll(dbPath, 0755); err != nil {
 		fmt.Printf("Failed to create temp directory: %v\n", err)
@@ -48,7 +46,7 @@ func main() {
 	}
 	defer os.RemoveAll(dbPath)
 
-	// 初始化数据库
+	// initialize database
 	db, err := cdcpebble.OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	if err != nil {
 		fmt.Printf("Failed to open database: %v\n", err)
@@ -58,37 +56,40 @@ func main() {
 
 	// 初始化 sorter
 	cf := model.ChangeFeedID{Namespace: "default", ID: "test"}
-	s := cdcpebble.New(cf, []*pebble.DB{db})
-	defer s.Close()
+	eventSorter := cdcpebble.New(cf, []*pebble.DB{db})
+	defer eventSorter.Close()
 
-	if !s.IsTableBased() {
+	if !eventSorter.IsTableBased() {
 		fmt.Println("Sorter is not table based")
 		os.Exit(1)
 	}
 
-	s.AddTable(1)
+	eventSorter.AddTable(1)
 	resolvedTs := make(chan model.Ts, numTransactions*2)
-	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
+	eventSorter.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
 
-	// 生成并写入事件
-	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
+	var (
+		writeDuration atomic.Int64
+		readDuration  atomic.Int64
+	)
+
+	// generate and write events
+	fmt.Printf("start generating %d transactions, each with %d rows\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
 	value := []byte{1}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			writeDuration.Store(time.Since(startTime).Milliseconds())
+		}()
+
 		for i := 0; i < numTransactions; i++ {
 			events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
 			commitTs := model.Ts(i + 1)
-
-			// 计算这个事务实际需要写入的行数
-			rowsToWrite := rowsPerTrans
-			if i == numTransactions-1 && totalRows%rowsPerTrans != 0 {
-				rowsToWrite = totalRows % rowsPerTrans
-			}
-
-			for j := 0; j < rowsToWrite; j++ {
+			// generate events
+			for j := 0; j < rowsPerTrans; j++ {
 				event := model.NewPolymorphicEvent(&model.RawKVEntry{
 					OpType:  model.OpTypePut,
 					Key:     []byte{1},
@@ -99,20 +100,22 @@ func main() {
 				events = append(events, event)
 			}
 
-			s.Add(1, events...)
+			// write events
+			eventSorter.Add(1, events...)
 			actualWriteRows.Add(int64(len(events)))
-			s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
+			// write resolved event
+			eventSorter.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
 
 			if (i+1)%100 == 0 {
-				fmt.Printf("已完成 %d 个事务的写入\n", i+1)
+				log.Printf("write %d transactions\n", i+1)
 			}
 		}
-		// 发送结束信号
+		log.Printf("Finish write %d transactions, total rows: %d \n", numTransactions, actualWriteRows.Load())
 		resolvedTs <- math.MaxUint64
 	}()
 
-	// 读取并验证数据
-	fmt.Println("开始读取数据...")
+	// read and verify data
+	log.Println("start reading data...")
 	readStartTime := time.Now()
 
 	var (
@@ -122,20 +125,23 @@ func main() {
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			readDuration.Store(time.Since(readStartTime).Milliseconds())
+		}()
 		for {
 			select {
 			case ts := <-resolvedTs:
 				if ts == math.MaxUint64 {
-					log.Println("resolvedTs 已关闭, 退出读取")
+					log.Println("Received the end signal from writer, exit reading")
 					return
 				}
 
-				iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+				iter := eventSorter.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 				for {
 					event, _, err := iter.Next()
 					if err != nil {
-						fmt.Printf("读取数据时发生错误: %v\n", err)
+						log.Printf("error when reading data: %v\n", err)
 						os.Exit(1)
 					}
 					if event == nil {
@@ -144,11 +150,11 @@ func main() {
 					readCount.Add(1)
 
 					if readCount.Load()%100000 == 0 {
-						fmt.Printf("已读取 %d 条数据\n", readCount)
+						log.Printf("read %d rows\n", readCount.Load())
 					}
 				}
 			case <-timer.C:
-				fmt.Println("读取数据超时")
+				log.Println("reading data timeout")
 				os.Exit(1)
 			}
 		}
@@ -156,19 +162,16 @@ func main() {
 
 	wg.Wait()
 
-	writeDuration := time.Since(startTime)
-	readDuration := time.Since(readStartTime)
-
 	// 验证数据完整性
 	if readCount.Load() != actualWriteRows.Load() {
-		fmt.Printf("ERROR: 数据数量不一致: 期望 %d 条，实际读取 %d 条\n", actualWriteRows.Load(), readCount.Load())
+		log.Printf("ERROR: data number mismatch: expected %d rows, actual read %d rows\n", actualWriteRows.Load(), readCount.Load())
 	}
 
-	fmt.Println("\n测试完成:")
-	fmt.Printf("- 写入数据: %d 条\n", actualWriteRows.Load())
-	fmt.Printf("- 读取数据: %d 条\n", readCount.Load())
-	fmt.Printf("- 写入耗时: %v\n", writeDuration)
-	fmt.Printf("- 读取耗时: %v\n", readDuration)
-	fmt.Printf("- 写入速度: %.2f 行/秒\n", float64(actualWriteRows.Load())/writeDuration.Seconds())
-	fmt.Printf("- 读取速度: %.2f 行/秒\n", float64(readCount.Load())/readDuration.Seconds())
+	log.Println("\nTest finished:")
+	log.Printf("- write data: %d rows\n", actualWriteRows.Load())
+	log.Printf("- read data: %d rows\n", readCount.Load())
+	log.Printf("- write duration: %v\n", writeDuration.Load())
+	log.Printf("- read duration: %v\n", readDuration.Load())
+	log.Printf("- write speed: %.2f rows/second\n", float64(actualWriteRows.Load())/float64(writeDuration.Load()))
+	log.Printf("- read speed: %.2f rows/second\n", float64(readCount.Load())/float64(readDuration.Load()))
 }

@@ -16,7 +16,6 @@ package pebble
 import (
 	"path/filepath"
 	"sort"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,105 +174,4 @@ func TestCleanData(t *testing.T) {
 	s.AddTable(1)
 	require.NoError(t, s.CleanByTable(2, engine.Position{}))
 	require.Nil(t, s.CleanByTable(1, engine.Position{}))
-}
-
-func TestEventFetchWithLargeData(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
-	require.Nil(t, err)
-	defer func() { _ = db.Close() }()
-
-	cf := model.ChangeFeedID{Namespace: "default", ID: "test"}
-	s := New(cf, []*pebble.DB{db})
-	defer s.Close()
-
-	require.True(t, s.IsTableBased())
-	tableID := model.TableID(1)
-	s.AddTable(tableID)
-
-	resolvedTs := make(chan model.Ts)
-	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
-
-	// 生成测试数据
-	const (
-		numTransactions = 1000   // 1000个事务
-		rowsPerTrans    = 200000 // 每个事务20万行
-	)
-
-	// 用于记录写入的事件总数
-	totalEvents := numTransactions * rowsPerTrans
-
-	// 生成并写入事件
-	t.Logf("开始生成 %d 个事务，每个事务 %d 行数据", numTransactions, rowsPerTrans)
-	startTime := time.Now()
-
-	for i := 0; i < numTransactions; i++ {
-		events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
-		commitTs := model.Ts(i + 1)
-
-		for j := 0; j < rowsPerTrans; j++ {
-			key := []byte{byte(tableID)}
-			event := model.NewPolymorphicEvent(&model.RawKVEntry{
-				OpType:  model.OpTypePut,
-				Key:     key,
-				StartTs: commitTs - 1,
-				CRTs:    commitTs,
-			})
-			events = append(events, event)
-		}
-
-		s.Add(tableID, events...)
-		s.Add(tableID, model.NewResolvedPolymorphicEvent(0, commitTs))
-
-		if (i+1)%100 == 0 {
-			t.Logf("已完成 %d 个事务的写入", i+1)
-		}
-	}
-
-	writeDuration := time.Since(startTime)
-	t.Logf("数据写入完成，耗时: %v", writeDuration)
-
-	// 读取并验证数据
-	t.Log("开始读取数据...")
-	readStartTime := time.Now()
-
-	var (
-		readCount     int64
-		expectedCount = int64(totalEvents)
-	)
-
-	timer := time.NewTimer(30 * time.Minute) // 设置较长的超时时间
-	select {
-	case ts := <-resolvedTs:
-		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
-		for {
-			event, _, err := iter.Next()
-			require.Nil(t, err)
-			if event == nil {
-				break
-			}
-			atomic.AddInt64(&readCount, 1)
-
-			// 每读取10万条数据打印一次进度
-			if readCount%100000 == 0 {
-				t.Logf("已读取 %d 条数据", readCount)
-			}
-		}
-	case <-timer.C:
-		t.Fatal("读取数据超时")
-	}
-
-	readDuration := time.Since(readStartTime)
-	t.Logf("数据读取完成，耗时: %v", readDuration)
-
-	// 验证数据完整性
-	require.Equal(t, expectedCount, readCount,
-		"读取的数据条数(%d)与写入的数据条数(%d)不匹配",
-		readCount, expectedCount)
-
-	t.Logf("测试完成:")
-	t.Logf("- 写入数据: %d 条", totalEvents)
-	t.Logf("- 读取数据: %d 条", readCount)
-	t.Logf("- 写入耗时: %v", writeDuration)
-	t.Logf("- 读取耗时: %v", readDuration)
 }
