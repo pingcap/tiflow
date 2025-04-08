@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -71,8 +72,10 @@ func main() {
 	// 生成并写入事件
 	fmt.Printf("开始生成 %d 个事务，每个事务 %d 行数据\n", numTransactions, rowsPerTrans)
 	startTime := time.Now()
-
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for i := 0; i < numTransactions; i++ {
 			events := make([]*model.PolymorphicEvent, 0, rowsPerTrans)
 			commitTs := model.Ts(i + 1)
@@ -118,33 +121,39 @@ func main() {
 	)
 
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
-	select {
-	case ts, ok := <-resolvedTs:
-		if !ok {
-			log.Println("resolvedTs 已关闭")
-			break
-		}
-
-		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		for {
-			event, _, err := iter.Next()
-			if err != nil {
-				fmt.Printf("读取数据时发生错误: %v\n", err)
+			select {
+			case ts, ok := <-resolvedTs:
+				if !ok {
+					log.Println("resolvedTs 已关闭, 退出读取")
+					return
+				}
+
+				iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+				for {
+					event, _, err := iter.Next()
+					if err != nil {
+						fmt.Printf("读取数据时发生错误: %v\n", err)
+						os.Exit(1)
+					}
+					if event == nil {
+						break
+					}
+					atomic.AddInt64(&readCount, 1)
+
+					if readCount%100000 == 0 {
+						fmt.Printf("已读取 %d 条数据\n", readCount)
+					}
+				}
+			case <-timer.C:
+				fmt.Println("读取数据超时")
 				os.Exit(1)
 			}
-			if event == nil {
-				break
-			}
-			atomic.AddInt64(&readCount, 1)
-
-			if readCount%100000 == 0 {
-				fmt.Printf("已读取 %d 条数据\n", readCount)
-			}
 		}
-	case <-timer.C:
-		fmt.Println("读取数据超时")
-		os.Exit(1)
-	}
+	}()
 
 	readDuration := time.Since(readStartTime)
 	fmt.Printf("数据读取完成，耗时: %v\n", readDuration)
@@ -154,6 +163,8 @@ func main() {
 		fmt.Printf("数据不完整: 期望 %d 条，实际读取 %d 条\n", expectedCount, readCount)
 		os.Exit(1)
 	}
+
+	wg.Wait()
 
 	fmt.Println("\n测试完成:")
 	fmt.Printf("- 写入数据: %d 条\n", totalRows)
