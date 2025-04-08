@@ -324,6 +324,11 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			return
 		}
 
+		// Add this check to catch the data loss issue.
+		if event.Row == nil {
+			log.Panic("event's Row is nil, it should never happen here", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
+		}
+
 		//valid = s.iter.Next()
 		if s.headItem != nil {
 			break
