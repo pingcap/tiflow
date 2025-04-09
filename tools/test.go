@@ -194,8 +194,6 @@ func main() {
 		}
 	}()
 
-	wg.Wait()
-
 	// run a goroutine to print the number of written and read rows per 5 seconds
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -209,6 +207,8 @@ func main() {
 			lastReadRows = actualReadRows.Load()
 		}
 	}()
+
+	wg.Wait()
 
 	// compare the number of written and read rows
 	if actualReadRows.Load() != actualWriteRows.Load() {
