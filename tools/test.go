@@ -176,7 +176,8 @@ func main() {
 					event, _, err := iter.Next()
 					if err != nil {
 						// Only log the error, don't exit the program.
-						log.Printf("error when reading data: %v\n", err)
+						// log.Printf("error when reading data: %v\n", err)
+						continue
 					}
 					if event == nil {
 						break
