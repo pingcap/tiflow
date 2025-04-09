@@ -53,7 +53,6 @@ func main() {
 	resolvedTsRate := 1000 / minTsInterval
 	resolvedTsRateLimit := rate.NewLimiter(rate.Limit(resolvedTsRate), 1)
 	writeRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
-	readRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
 
 	// create temporary directory
 	dbPath := filepath.Join(os.TempDir(), "pebble-test")
@@ -174,7 +173,6 @@ func main() {
 
 				readTxnNumber.Add(1)
 				count := 0
-				ctx := context.Background()
 				for {
 					event, _, err := iter.Next()
 					if err != nil {
@@ -192,9 +190,7 @@ func main() {
 					}
 				}
 
-				readRowPerSecondRateLimit.WaitN(ctx, count)
 				readTxnNumber.Add(1)
-
 			case <-timer.C:
 				log.Println("reading data timeout")
 				os.Exit(1)
