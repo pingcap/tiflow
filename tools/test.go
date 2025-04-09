@@ -151,10 +151,17 @@ func main() {
 	timer := time.NewTimer(time.Duration(duration) * time.Minute)
 	wg.Add(1)
 	go func() {
+		var (
+			lastWriteRows int64
+			lastReadRows  int64
+		)
+
 		defer func() {
 			wg.Done()
 			readDuration.Store(time.Since(readStartTime).Milliseconds())
 		}()
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case ts := <-resolvedTs:
@@ -187,24 +194,16 @@ func main() {
 
 				readRowPerSecondRateLimit.WaitN(ctx, count)
 				readTxnNumber.Add(1)
+
 			case <-timer.C:
 				log.Println("reading data timeout")
 				os.Exit(1)
-			}
-		}
-	}()
 
-	// run a goroutine to print the number of written and read rows per 5 seconds
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		lastWriteRows := actualWriteRows.Load()
-		lastReadRows := actualReadRows.Load()
-		for {
-			<-ticker.C
-			log.Printf("total written rows: %d, written rows per second: %d, total read rows: %d, read rows per second: %d\n", actualWriteRows.Load(), (actualWriteRows.Load()-lastWriteRows)/5, actualReadRows.Load(), (actualReadRows.Load()-lastReadRows)/5)
-			lastWriteRows = actualWriteRows.Load()
-			lastReadRows = actualReadRows.Load()
+			case <-ticker.C:
+				log.Printf("total written rows: %d, written rows per second: %d, total read rows: %d, read rows per second: %d\n", actualWriteRows.Load(), (actualWriteRows.Load()-lastWriteRows)/5, actualReadRows.Load(), (actualReadRows.Load()-lastReadRows)/5)
+				lastWriteRows = actualWriteRows.Load()
+				lastReadRows = actualReadRows.Load()
+			}
 		}
 	}()
 
