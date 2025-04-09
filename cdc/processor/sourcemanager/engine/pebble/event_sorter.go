@@ -327,7 +327,7 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	for valid {
 		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
-		log.Info("fizz next", zap.Any("value", value), zap.Any("valid", valid))
+		//log.Info("fizz next", zap.Any("value", value), zap.Any("valid", valid))
 		//value = s.iter.Value()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 		event = &model.PolymorphicEvent{}
