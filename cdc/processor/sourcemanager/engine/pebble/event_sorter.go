@@ -15,6 +15,7 @@ package pebble
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"hash/fnv"
 	"math"
@@ -109,11 +110,11 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		}(i, fetchTokens, ioTokens)
 	}
 
-	// decodedValue, err := base64.StdEncoding.DecodeString("h6dvcF90eXBlAaNrZXnERHSAAAAAAAAAUF9yATEzMjEzNTE5/zY4MDkyNzM5/zEzAAAAAAAA+QExAAAAAAAAAPgEGbYmAAAAAAABMTEwAAAAAAD6pXZhbHVlxD6AAAUAAAABAgMEBhIAFQAWACEAKQAxMzIxMzUxOTY4MDkyNzM5MTMxMTAxEgKAAAAAAAAAAQMAAABEYie2GalvbGRfdmFsdWXEAKhzdGFydF90c88GWF9RNJgABqRjcnRzzwZYX1E0mAAHqXJlZ2lvbl9pZAo=")
-	// if err != nil {
-	// 	log.Panic("Failed to decode base64 string", zap.Error(err))
-	// }
-	eventSorter.hackValue = []byte{128}
+	decodedValue, err := base64.StdEncoding.DecodeString("h6dvcF90eXBlAaNrZXnERHSAAAAAAAAAUF9yATEzMjEzNTE5/zY4MDkyNzM5/zEzAAAAAAAA+QExAAAAAAAAAPgEGbYmAAAAAAABMTEwAAAAAAD6pXZhbHVlxD6AAAUAAAABAgMEBhIAFQAWACEAKQAxMzIxMzUxOTY4MDkyNzM5MTMxMTAxEgKAAAAAAAAAAQMAAABEYie2GalvbGRfdmFsdWXEAKhzdGFydF90c88GWF9RNJgABqRjcnRzzwZYX1E0mAAHqXJlZ2lvbl9pZAo=")
+	if err != nil {
+		log.Panic("Failed to decode base64 string", zap.Error(err))
+	}
+	eventSorter.hackValue = decodedValue
 
 	return eventSorter
 }
@@ -338,9 +339,15 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			return
 		}
 
+		emptyValue := []byte{128}
+
+		if bytes.Equal(value, emptyValue) {
+			log.Panic("fizz value is equal to the empty value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
+		}
+
 		// Add this check to catch the data loss issue.
-		if bytes.Equal(value, s.hackValue) {
-			log.Panic("value is equal to the hack value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
+		if !bytes.Equal(value, s.hackValue) {
+			log.Error("fizz value is not equal to the hack value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
 		}
 
 		//valid = s.iter.Next()
