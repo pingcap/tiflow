@@ -52,8 +52,8 @@ func main() {
 
 	resolvedTsRate := 1000 / minTsInterval
 	resolvedTsRateLimit := rate.NewLimiter(rate.Limit(resolvedTsRate), 1)
-	writeRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
-	readRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
+	//writeRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
+	//readRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
 
 	// create temporary directory
 	dbPath := filepath.Join(os.TempDir(), "pebble-test")
@@ -127,7 +127,7 @@ func main() {
 				events = append(events, event)
 			}
 
-			writeRowPerSecondRateLimit.WaitN(ctx, len(events))
+			//writeRowPerSecondRateLimit.WaitN(ctx, len(events))
 			eventSorter.Add(1, events...)
 			actualWriteRows.Add(int64(len(events)))
 			writeTxnNumber.Add(1)
@@ -167,7 +167,7 @@ func main() {
 
 				readTxnNumber.Add(1)
 				count := 0
-				ctx := context.Background()
+				//ctx := context.Background()
 				for {
 					event, _, err := iter.Next()
 					if err != nil {
@@ -185,7 +185,7 @@ func main() {
 					}
 				}
 
-				readRowPerSecondRateLimit.WaitN(ctx, count)
+				//readRowPerSecondRateLimit.WaitN(ctx, count)
 				readTxnNumber.Add(1)
 			case <-timer.C:
 				log.Println("reading data timeout")
@@ -195,6 +195,20 @@ func main() {
 	}()
 
 	wg.Wait()
+
+	// run a goroutine to print the number of written and read rows per 5 seconds
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		lastWriteRows := actualWriteRows.Load()
+		lastReadRows := actualReadRows.Load()
+		for {
+			<-ticker.C
+			log.Printf("total written rows: %d, written rows per second: %d, total read rows: %d, read rows per second: %d\n", actualWriteRows.Load(), (actualWriteRows.Load()-lastWriteRows)/5, actualReadRows.Load(), (actualReadRows.Load()-lastReadRows)/5)
+			lastWriteRows = actualWriteRows.Load()
+			lastReadRows = actualReadRows.Load()
+		}
+	}()
 
 	// compare the number of written and read rows
 	if actualReadRows.Load() != actualWriteRows.Load() {
