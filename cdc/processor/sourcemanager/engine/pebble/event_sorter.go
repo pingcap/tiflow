@@ -59,7 +59,7 @@ type EventSorter struct {
 	onResolves []func(model.TableID, model.Ts)
 	tables     map[model.TableID]*tableState
 
-	hackValue []byte
+	hackRawKvValue []byte
 }
 
 // EventIter implements sorter.EventIterator.
@@ -69,7 +69,7 @@ type EventIter struct {
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
 
-	hackValue []byte
+	hackRawKvValue []byte
 
 	nextDuration prometheus.Observer
 }
@@ -114,7 +114,7 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	if err != nil {
 		log.Panic("Failed to decode base64 string", zap.Error(err))
 	}
-	eventSorter.hackValue = decodedValue
+	eventSorter.hackRawKvValue = decodedValue
 
 	return eventSorter
 }
@@ -232,7 +232,7 @@ func (s *EventSorter) FetchByTable(
 		Observe(time.Since(seekStart).Seconds())
 
 	eventIter.iter = iter
-	eventIter.hackValue = s.hackValue
+	eventIter.hackRawKvValue = s.hackRawKvValue
 
 	return eventIter
 }
@@ -346,8 +346,8 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 		}
 
 		// Add this check to catch the data loss issue.
-		if !bytes.Equal(value, s.hackValue) {
-			log.Error("fizz value is not equal to the hack value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
+		if !bytes.Equal(event.RawKV.Value, s.hackRawKvValue) {
+			log.Error("fizz event RawKv value is not equal to the hack value", zap.Any("rawKVValue", event.RawKV.Value), zap.Any("hackValue", s.hackRawKvValue), zap.Any("valid", valid), zap.Any("event", event))
 		}
 
 		//valid = s.iter.Next()
