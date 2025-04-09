@@ -149,6 +149,7 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 				}
 				switch status {
 				case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
+					log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime), zap.Error(err))
 					return nil
 				case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
 					return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
