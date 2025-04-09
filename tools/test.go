@@ -96,7 +96,6 @@ func main() {
 
 	// generate and write events
 	log.Printf("start generating %d transactions, each with %d rows\n", numTransactions, rowsPerTrans)
-
 	startTime := time.Now()
 	decodedValue, err := base64.StdEncoding.DecodeString("h6dvcF90eXBlAaNrZXnERHSAAAAAAAAAUF9yATEzMjEzNTE5/zY4MDkyNzM5/zEzAAAAAAAA+QExAAAAAAAAAPgEGbYmAAAAAAABMTEwAAAAAAD6pXZhbHVlxD6AAAUAAAABAgMEBhIAFQAWACEAKQAxMzIxMzUxOTY4MDkyNzM5MTMxMTAxEgKAAAAAAAAAAQMAAABEYie2GalvbGRfdmFsdWXEAKhzdGFydF90c88GWF9RNJgABqRjcnRzzwZYX1E0mAAHqXJlZ2lvbl9pZAo=")
 	if err != nil {

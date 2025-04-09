@@ -14,6 +14,8 @@
 package pebble
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"hash/fnv"
 	"math"
@@ -56,6 +58,8 @@ type EventSorter struct {
 	isClosed   bool
 	onResolves []func(model.TableID, model.Ts)
 	tables     map[model.TableID]*tableState
+
+	hackValue []byte
 }
 
 // EventIter implements sorter.EventIterator.
@@ -64,6 +68,8 @@ type EventIter struct {
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
+
+	hackValue []byte
 
 	nextDuration prometheus.Observer
 }
@@ -103,6 +109,12 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 			eventSorter.handleEvents(x, dbs[x], channs[x].Out(), fetchTokens, ioTokens)
 		}(i, fetchTokens, ioTokens)
 	}
+
+	decodedValue, err := base64.StdEncoding.DecodeString("h6dvcF90eXBlAaNrZXnERHSAAAAAAAAAUF9yATEzMjEzNTE5/zY4MDkyNzM5/zEzAAAAAAAA+QExAAAAAAAAAPgEGbYmAAAAAAABMTEwAAAAAAD6pXZhbHVlxD6AAAUAAAABAgMEBhIAFQAWACEAKQAxMzIxMzUxOTY4MDkyNzM5MTMxMTAxEgKAAAAAAAAAAQMAAABEYie2GalvbGRfdmFsdWXEAKhzdGFydF90c88GWF9RNJgABqRjcnRzzwZYX1E0mAAHqXJlZ2lvbl9pZAo=")
+	if err != nil {
+		log.Panic("Failed to decode base64 string", zap.Error(err))
+	}
+	eventSorter.hackValue = decodedValue
 
 	return eventSorter
 }
@@ -220,6 +232,8 @@ func (s *EventSorter) FetchByTable(
 		Observe(time.Since(seekStart).Seconds())
 
 	eventIter.iter = iter
+	eventIter.hackValue = s.hackValue
+
 	return eventIter
 }
 
@@ -326,8 +340,8 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 		}
 
 		// Add this check to catch the data loss issue.
-		if event.Row == nil {
-			log.Panic("event's Row is nil, it should never happen here", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
+		if !bytes.Equal(event.RawKV.Value, s.hackValue) {
+			log.Panic("event's RawKV is not equal to the hack value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
 		}
 
 		//valid = s.iter.Next()
