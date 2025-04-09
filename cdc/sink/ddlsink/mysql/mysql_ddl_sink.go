@@ -354,7 +354,7 @@ var checkRunningSQL = `
 SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
 FROM information_schema.ddl_jobs
 WHERE STATE = "running" OR STATE = "queueing"
-LIMIT %s;
+LIMIT %s
 `
 
 // getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
@@ -400,7 +400,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 					ddlQuery, ok := queryMap[jobID]
 					if !ok {
 						// jobID does not exist, expand queryMap for deeper search
-						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+						showJobsLimitNext := fmt.Sprintf("%s OFFSET %d", fmt.Sprintf(checkRunningSQL, 10), rowOffset)
 						var rowsLimitNext *sql.Rows
 						//nolint:rowserrcheck
 						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
