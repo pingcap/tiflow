@@ -326,9 +326,9 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	var value []byte
 	for valid {
 		nextStart := time.Now()
-		value, valid = s.iter.Value(), s.iter.Next()
+		//value, valid = s.iter.Value(), s.iter.Next()
 		//log.Info("fizz next", zap.Any("value", value), zap.Any("valid", valid))
-		//value = s.iter.Value()
+		value = s.iter.Value()
 		s.nextDuration.Observe(time.Since(nextStart).Seconds())
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
@@ -354,7 +354,7 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			log.Error("fizz event RawKv value is not equal to the hack value", zap.Any("rawKVValue", event.RawKV.Value), zap.Any("hackValue", s.hackRawKvValue), zap.Any("valid", valid), zap.Any("event", event))
 		}
 
-		//valid = s.iter.Next()
+		valid = s.iter.Next()
 		if s.headItem != nil {
 			break
 		}
