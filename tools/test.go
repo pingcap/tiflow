@@ -50,8 +50,8 @@ func main() {
 
 	log.Printf("totalRows: %d, rowsPerTrans: %d, txnNumber: %d, minTsInterval: %d, rowPerSecond: %d", totalRows, rowsPerTrans, numTransactions, minTsInterval, rowPerSecond)
 
-	resolvedTsRate := 1000 / minTsInterval
-	resolvedTsRateLimit := rate.NewLimiter(rate.Limit(resolvedTsRate), 1)
+	//resolvedTsRate := 1000 / minTsInterval
+	//resolvedTsRateLimit := rate.NewLimiter(rate.Limit(resolvedTsRate), 1)
 	writeRowPerSecondRateLimit := rate.NewLimiter(rate.Limit(rowPerSecond), rowPerSecond)
 
 	// create temporary directory
@@ -132,7 +132,7 @@ func main() {
 			writeTxnNumber.Add(1)
 
 			// write resolved event
-			resolvedTsRateLimit.WaitN(ctx, 1)
+			//resolvedTsRateLimit.WaitN(ctx, 1)
 			eventSorter.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, commitTs))
 
 			if (i+1)%10000 == 0 {
@@ -168,7 +168,6 @@ func main() {
 					log.Println("Received the end signal from writer, exit reading")
 					return
 				}
-
 				iter := eventSorter.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 
 				readTxnNumber.Add(1)
@@ -184,12 +183,7 @@ func main() {
 					}
 					count++
 					actualReadRows.Add(1)
-
-					if actualReadRows.Load()%100000 == 0 {
-						log.Printf("read %d rows\n", actualReadRows.Load())
-					}
 				}
-
 				readTxnNumber.Add(1)
 			case <-timer.C:
 				log.Println("reading data timeout")
