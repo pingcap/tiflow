@@ -136,35 +136,7 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return m.asyncExecDDL(ctx, ddl)
 	}
 
-	ddlCreateTime := getDDLCreateTime(ctx, m.db)
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
-		if m.cfg.IsTiDB && ddlCreateTime != -1 && errors.Cause(err) == mysql.ErrInvalidConn {
-			log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime), zap.Error(err))
-			ticker := time.NewTimer(30 * time.Second)
-			defer ticker.Stop()
-			for {
-				status, err1 := getDDLStatusFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
-				if err1 != nil {
-					log.Warn("Error when getting DDL status from TiDB", zap.Error(err1))
-				}
-				switch status {
-				case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
-					log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime), zap.Error(err))
-					return nil
-				case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
-					return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
-				case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
-				default:
-					log.Warn("Unexpected DDL status", zap.String("DDL status", status))
-					return err
-				}
-				select {
-				case <-ctx.Done():
-					return err
-				case <-ticker.C:
-				}
-			}
-		}
 		return errors.Trace(err)
 	}
 	m.lastExecutedNormalDDLCache.Add(ddl.TableInfo.TableName, ddl.Type)
@@ -173,6 +145,7 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
+		ddlCreateTime := getDDLCreateTime(ctx, m.db)
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
 			if errorutil.IsIgnorableMySQLDDLError(err) {
@@ -184,6 +157,11 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 					zap.Error(err))
 				// If the error is ignorable, we will ignore the error directly.
 				return nil
+			}
+			if m.cfg.IsTiDB && ddlCreateTime != -1 && errors.Cause(err) == mysql.ErrInvalidConn {
+				log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime),
+					zap.String("readTimeout", m.cfg.ReadTimeout), zap.Error(err))
+				return m.waitDDLDone(ctx, ddl, ddlCreateTime)
 			}
 			log.Warn("Execute DDL with error, retry later",
 				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
@@ -199,39 +177,8 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
-// isReorgOrPartitionDDL returns true if given ddl type is reorg ddl or
-// partition ddl.
-func isReorgOrPartitionDDL(t timodel.ActionType) bool {
-	// partition related ddl
-	return t == timodel.ActionAddTablePartition ||
-		t == timodel.ActionExchangeTablePartition ||
-		t == timodel.ActionReorganizePartition ||
-		// reorg ddls
-		t == timodel.ActionAddPrimaryKey ||
-		t == timodel.ActionAddIndex ||
-		t == timodel.ActionModifyColumn ||
-		// following ddls can be fast when the downstream is TiDB, we must
-		// still take them into consideration to ensure compatibility with all
-		// MySQL-compatible databases.
-		t == timodel.ActionAddColumn ||
-		t == timodel.ActionAddColumns ||
-		t == timodel.ActionDropColumn ||
-		t == timodel.ActionDropColumns
-}
-
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	ctx := pctx
-	// When executing Reorg and Partition DDLs in TiDB, there is no timeout
-	// mechanism by default. Instead, the system will wait for the DDL operation
-	// to be executed or completed before proceeding.
-	if !isReorgOrPartitionDDL(ddl.Type) {
-		writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
-		writeTimeout += networkDriftDuration
-		var cancelFunc func()
-		ctx, cancelFunc = context.WithTimeout(pctx, writeTimeout)
-		defer cancelFunc()
-	}
-
 	shouldSwitchDB := needSwitchDB(ddl)
 
 	// Convert vector type to string type for unsupport database
@@ -305,6 +252,33 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	return nil
 }
 
+func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime int64) error {
+	ticker := time.NewTimer(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		status, err1 := getDDLStatusFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
+		if err1 != nil {
+			log.Warn("Error when getting DDL status from TiDB", zap.Error(err1))
+		}
+		switch status {
+		case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
+			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime))
+			return nil
+		case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
+			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
+		case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
+		default:
+			log.Warn("Unexpected DDL status", zap.String("DDL status", status))
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // WriteCheckpointTs does nothing.
 func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
@@ -376,6 +350,13 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) int64 {
 	return ddlCreateTime
 }
 
+var checkRunningSQL = `
+SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
+FROM information_schema.ddl_jobs
+WHERE STATE = "running" OR STATE = "queueing"
+LIMIT %s;
+`
+
 // getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
 func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
 	linesOfRows := 10
@@ -385,7 +366,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 
 	for {
 		// every attempt try 10 history jobs
-		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
+		showJobs := fmt.Sprintf(checkRunningSQL, rowNum)
 		//nolint:rowserrcheck
 		jobsRows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
