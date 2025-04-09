@@ -345,6 +345,11 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 			log.Panic("fizz value is equal to the empty value", zap.Any("value", value), zap.Any("valid", valid), zap.Any("event", event))
 		}
 
+		expectedRawKvKey := []byte{'t', 1}
+		if !bytes.Equal(event.RawKV.Key, expectedRawKvKey) {
+			log.Panic("fizz event RawKv key is not equal to the expected key", zap.Any("rawKVKey", event.RawKV.Key), zap.Any("expectedKey", expectedRawKvKey), zap.Any("valid", valid), zap.Any("event", event))
+		}
+
 		// Add this check to catch the data loss issue.
 		if !bytes.Equal(event.RawKV.Value, s.hackRawKvValue) {
 			log.Error("fizz event RawKv value is not equal to the hack value", zap.Any("rawKVValue", event.RawKV.Value), zap.Any("hackValue", s.hackRawKvValue), zap.Any("valid", valid), zap.Any("event", event))

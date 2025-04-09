@@ -101,7 +101,7 @@ func main() {
 		log.Fatalf("Failed to decode base64 string: %v", err)
 	}
 	value := decodedValue
-
+	key := []byte{'t', 1}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -118,7 +118,7 @@ func main() {
 			for j := 0; j < rowsPerTrans; j++ {
 				event := model.NewPolymorphicEvent(&model.RawKVEntry{
 					OpType:  model.OpTypePut,
-					Key:     []byte{1},
+					Key:     key,
 					Value:   value,
 					StartTs: commitTs - 1,
 					CRTs:    commitTs,

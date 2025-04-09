@@ -1359,3 +1359,13 @@ func TestFormatColVal(t *testing.T) {
 	require.Equal(t, float32(0), value)
 	require.NotZero(t, warn)
 }
+
+func TestTablePrefix(t *testing.T) {
+	key := []byte{'t', 1}
+	rest, tableID, err := decodeTableID(key)
+	require.NoError(t, err)
+	require.Equal(t, []byte{'t'}, rest)
+	require.Equal(t, int64(1), tableID)
+
+	require.True(t, bytes.HasPrefix(key, tablePrefix))
+}
