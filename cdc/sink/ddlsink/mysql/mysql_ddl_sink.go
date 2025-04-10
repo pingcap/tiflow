@@ -343,7 +343,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 
 // getDDLStateFromTiDB retrieves the synchronizing status of DDL from TiDB
 // This function selects DDL jobs based on a provided timestamp, to identify downstream DDL changes applied within that timeframe.
-// We can identify the DDL statements that have been replicated downstream.
+getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
 	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs WHERE CREATE_TIME >= "%s";`, createTime)
