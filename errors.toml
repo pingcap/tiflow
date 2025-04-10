@@ -226,6 +226,11 @@ error = '''
 cannot find mysql.tidb_ddl_job schema
 '''
 
+["CDC:ErrDDLStateNotFound"]
+error = '''
+DDL state not found
+'''
+
 ["CDC:ErrDDLUnsupportType"]
 error = '''
 unsupport ddl type %s, query %s
