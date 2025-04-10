@@ -333,7 +333,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 				log.Warn("getting ddlCreateTime failed", zap.Error(err))
 			}
 		}
-		//nolint:rowserrcheck
+		//nolint:sqlclosecheck
 		_ = row.Close()
 		_ = row.Err()
 	}
