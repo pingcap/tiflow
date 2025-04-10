@@ -174,6 +174,10 @@ var (
 		"exec DDL failed",
 		errors.RFCCodeText("CDC:ErrExecDDLFailed"),
 	)
+	ErrDDLStateNotFound = errors.Normalize(
+		"DDL state not found",
+		errors.RFCCodeText("CDC:ErrDDLStateNotFound"),
+	)
 	ErrKafkaSendMessage = errors.Normalize(
 		"kafka send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaSendMessage"),

@@ -255,11 +255,11 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 	ticker := time.NewTimer(30 * time.Second)
 	defer ticker.Stop()
 	for {
-		status, err1 := getDDLStatusFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
+		state, err1 := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 		if err1 != nil {
-			log.Warn("Error when getting DDL status from TiDB", zap.Error(err1))
+			log.Warn("Error when getting DDL state from TiDB", zap.Error(err1))
 		}
-		switch status {
+		switch state {
 		case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
 			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 			return nil
@@ -267,8 +267,8 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 		case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
 		default:
-			log.Warn("Unexpected DDL status, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.String("DDL status", status))
-			return nil
+			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.String("ddlState", state))
+			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
 		}
 		select {
 		case <-ctx.Done():
@@ -349,10 +349,10 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	return ddlCreateTime
 }
 
-// getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
+// getDDLStateFromTiDB retrieves the synchronizing status of DDL from TiDB
 // This function selects DDL jobs based on a provided timestamp, to identify downstream DDL changes applied within that timeframe.
 // We can identify the DDL statements that have been replicated downstream.
-func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (string, error) {
+func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (string, error) {
 	showJobs := fmt.Sprintf(`SELECT QUERY,STATE FROM information_schema.ddl_jobs WHERE CREATE_TIME > '%s' ORDER BY CREATE_TIME DESC;`, createTime)
 	//nolint:rowserrcheck
 	jobsRows, err := db.QueryContext(ctx, showJobs)
@@ -365,13 +365,13 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	if err != nil {
 		return "", err
 	}
-
 	for i := 0; i < len(jobsResults); i++ {
+		log.Error("getDDLStateFromTiDB", zap.Any("jobsResults[i]", jobsResults[i]))
 		// ddlCreateTime and createTime are both based on UTC timezone of downstream
 		ddlQuery := jobsResults[i][0]
 		if ddl == ddlQuery {
 			return jobsResults[i][1], nil
 		}
 	}
-	return "", nil
+	return timodel.JobStateNone.String(), nil
 }
