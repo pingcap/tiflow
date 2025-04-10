@@ -44,9 +44,6 @@ import (
 const (
 	defaultDDLMaxRetry uint64 = 20
 
-	// networkDriftDuration is used to construct a context timeout for database operations.
-	networkDriftDuration = 5 * time.Second
-
 	defaultSupportVectorVersion = "8.4.0"
 )
 
@@ -336,6 +333,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 				log.Warn("getting ddlCreateTime failed", zap.Error(err))
 			}
 		}
+		//nolint:rowserrcheck
 		_ = row.Close()
 		_ = row.Err()
 	}
@@ -346,6 +344,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
 	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs WHERE CREATE_TIME >= "%s";`, createTime)
+	//nolint:rowserrcheck
 	jobsRows, err := db.QueryContext(ctx, showJobs)
 	if err != nil {
 		return timodel.JobStateNone, err
