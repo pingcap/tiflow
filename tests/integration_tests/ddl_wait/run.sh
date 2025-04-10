@@ -27,6 +27,7 @@ function run() {
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id}
 
 	run_sql "alter table test.t modify column col decimal(30,10);"
+	run_sql "alter table test.t add index (col);"
 	run_sql "create table test.finish_mark (a int primary key);"
 	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	# make sure all tables are equal in upstream and downstream

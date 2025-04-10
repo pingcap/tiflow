@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -158,8 +157,8 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 				// If the error is ignorable, we will ignore the error directly.
 				return nil
 			}
-			if m.cfg.IsTiDB && ddlCreateTime != -1 && errors.Cause(err) == mysql.ErrInvalidConn {
-				log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime),
+			if m.cfg.IsTiDB && ddlCreateTime != "" && errors.Cause(err) == mysql.ErrInvalidConn {
+				log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime),
 					zap.String("readTimeout", m.cfg.ReadTimeout), zap.Error(err))
 				return m.waitDDLDone(ctx, ddl, ddlCreateTime)
 			}
@@ -252,7 +251,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	return nil
 }
 
-func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime int64) error {
+func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
 	ticker := time.NewTimer(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -262,13 +261,13 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 		}
 		switch status {
 		case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
-			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.Int64("ddlCreateTime", ddlCreateTime))
+			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 			return nil
 		case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 		case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
 		default:
-			log.Warn("Unexpected DDL status", zap.String("DDL status", status))
+			log.Warn("Unexpected DDL status, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.String("DDL status", status))
 			return nil
 		}
 		select {
@@ -331,9 +330,9 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 	return false
 }
 
-func getDDLCreateTime(ctx context.Context, db *sql.DB) int64 {
-	var ddlCreateTime int64 = -1 // default when scan failed
-	row, err := db.QueryContext(ctx, "SELECT UNIX_TIMESTAMP()")
+func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
+	ddlCreateTime := "" // default when scan failed
+	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP()")
 	if err != nil {
 		log.Warn("selecting unix timestamp failed", zap.Error(err))
 	} else {
@@ -350,104 +349,29 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) int64 {
 	return ddlCreateTime
 }
 
-var checkRunningSQL = `
-SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
-FROM information_schema.ddl_jobs
-WHERE STATE = "running" OR STATE = "queueing"
-LIMIT %s
-`
-
 // getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
-func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
-	linesOfRows := 10
-	rowNum := linesOfRows
-	rowOffset := 0
-	queryMap := make(map[int]string)
+// This function selects DDL jobs based on a provided timestamp, to identify downstream DDL changes applied within that timeframe.
+// We can identify the DDL statements that have been replicated downstream.
+func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (string, error) {
+	showJobs := fmt.Sprintf(`SELECT QUERY,STATE FROM information_schema.ddl_jobs WHERE CREATE_TIME > '%s' ORDER BY CREATE_TIME DESC;`, createTime)
+	//nolint:rowserrcheck
+	jobsRows, err := db.QueryContext(ctx, showJobs)
+	if err != nil {
+		return "", err
+	}
 
-	for {
-		// every attempt try 10 history jobs
-		showJobs := fmt.Sprintf(checkRunningSQL, rowNum)
-		//nolint:rowserrcheck
-		jobsRows, err := db.QueryContext(ctx, showJobs)
-		if err != nil {
-			return "", err
-		}
+	var jobsResults [][]string
+	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE")
+	if err != nil {
+		return "", err
+	}
 
-		var jobsResults [][]string
-		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "JOB_ID", "CREATE_TIME", "STATE")
-		if err != nil {
-			return "", err
-		}
-
-		for i := rowNum - linesOfRows; i < rowNum && i < len(jobsResults); i++ {
-			ddlCreateTimeStr := jobsResults[i][1]
-			var ddlCreateTimeParse time.Time
-			ddlCreateTimeParse, err = time.Parse("2006-01-02 15:04:05", ddlCreateTimeStr)
-			if err != nil {
-				return "", err
-			}
-			ddlCreateTime := ddlCreateTimeParse.Unix()
-
-			// ddlCreateTime and createTime are both based on timezone of downstream
-			if ddlCreateTime >= createTime {
-				var jobID int
-				jobID, err = strconv.Atoi(jobsResults[i][0])
-				if err != nil {
-					return "", err
-				}
-
-				for {
-					ddlQuery, ok := queryMap[jobID]
-					if !ok {
-						// jobID does not exist, expand queryMap for deeper search
-						showJobsLimitNext := fmt.Sprintf("%s OFFSET %d", fmt.Sprintf(checkRunningSQL, 10), rowOffset)
-						var rowsLimitNext *sql.Rows
-						//nolint:rowserrcheck
-						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
-						if err != nil {
-							return "", err
-						}
-
-						var resultsLimitNext [][]string
-						resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, "JOB_ID", "QUERY")
-						if err != nil {
-							return "", err
-						}
-						if len(resultsLimitNext) == 0 {
-							// JOB QUERIES has been used up
-							// requested DDL cannot be found
-							return "", nil
-						}
-
-						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
-						// we may get duplicate rows here, but it does not affect the checking
-						for k := range resultsLimitNext {
-							var jobIDForLimit int
-							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
-							if err != nil {
-								return "", err
-							}
-							queryMap[jobIDForLimit] = resultsLimitNext[k][1]
-						}
-						rowOffset += linesOfRows
-					} else {
-						if ddl == ddlQuery {
-							return jobsResults[i][2], nil
-						}
-						break
-					}
-				}
-			} else {
-				// ddlCreateTime is monotonous in jobsResults
-				// requested DDL cannot be found
-				return "", nil
-			}
-		}
-		if len(jobsResults) == rowNum {
-			rowNum += linesOfRows
-		} else {
-			// jobsResults has been checked thoroughly
-			return "", nil
+	for i := 0; i < len(jobsResults); i++ {
+		// ddlCreateTime and createTime are both based on UTC timezone of downstream
+		ddlQuery := jobsResults[i][0]
+		if ddl == ddlQuery {
+			return jobsResults[i][1], nil
 		}
 	}
+	return "", nil
 }
