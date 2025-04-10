@@ -248,9 +248,9 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 	ticker := time.NewTimer(30 * time.Second)
 	defer ticker.Stop()
 	for {
-		state, err1 := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
-		if err1 != nil {
-			log.Error("Error when getting DDL state from TiDB", zap.Error(err1))
+		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
+		if err != nil {
+			log.Error("Error when getting DDL state from TiDB", zap.Error(err))
 		}
 		switch state {
 		case timodel.JobStateDone, timodel.JobStateSynced:
@@ -325,6 +325,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 
 func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
+	// FIXME: Why subtract a second?
 	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP() - INTERVAL 1 SECOND")
 	if err != nil {
 		log.Warn("selecting utc timestamp failed", zap.Error(err))
@@ -341,9 +342,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	return ddlCreateTime
 }
 
-// getDDLStateFromTiDB retrieves the synchronizing status of DDL from TiDB
-// This function selects DDL jobs based on a provided timestamp, to identify downstream DDL changes applied within that timeframe.
-getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
+// getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
 	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs WHERE CREATE_TIME >= "%s";`, createTime)
