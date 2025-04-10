@@ -143,8 +143,8 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 }
 
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+	ddlCreateTime := getDDLCreateTime(ctx, m.db)
 	return retry.Do(ctx, func() error {
-		ddlCreateTime := getDDLCreateTime(ctx, m.db)
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
 			if errorutil.IsIgnorableMySQLDDLError(err) {
@@ -257,17 +257,18 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 	for {
 		state, err1 := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 		if err1 != nil {
-			log.Warn("Error when getting DDL state from TiDB", zap.Error(err1))
+			log.Error("Error when getting DDL state from TiDB", zap.Error(err1))
 		}
 		switch state {
-		case timodel.JobStateDone.String(), timodel.JobStateSynced.String():
+		case timodel.JobStateDone, timodel.JobStateSynced:
 			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 			return nil
-		case timodel.JobStateCancelled.String(), timodel.JobStateRollingback.String(), timodel.JobStateRollbackDone.String(), timodel.JobStateCancelling.String():
+		case timodel.JobStateCancelled, timodel.JobStateRollingback, timodel.JobStateRollbackDone, timodel.JobStateCancelling:
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
-		case timodel.JobStateRunning.String(), timodel.JobStateQueueing.String(), timodel.JobStateNone.String():
+		case timodel.JobStateRunning, timodel.JobStateQueueing:
+			log.Debug("DDL is not finished", zap.String("ddl", ddl.Query), zap.Any("ddlState", state))
 		default:
-			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.String("ddlState", state))
+			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
 		}
 		select {
@@ -332,7 +333,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 
 func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
-	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP()")
+	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP(6)")
 	if err != nil {
 		log.Warn("selecting unix timestamp failed", zap.Error(err))
 	} else {
@@ -352,26 +353,31 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 // getDDLStateFromTiDB retrieves the synchronizing status of DDL from TiDB
 // This function selects DDL jobs based on a provided timestamp, to identify downstream DDL changes applied within that timeframe.
 // We can identify the DDL statements that have been replicated downstream.
-func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (string, error) {
-	showJobs := fmt.Sprintf(`SELECT QUERY,STATE FROM information_schema.ddl_jobs WHERE CREATE_TIME > '%s' ORDER BY CREATE_TIME DESC;`, createTime)
-	//nolint:rowserrcheck
+func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
+	// ddlCreateTime and createTime are both based on UTC timezone of downstream
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs WHERE CREATE_TIME >= "%s";`, createTime)
 	jobsRows, err := db.QueryContext(ctx, showJobs)
 	if err != nil {
-		return "", err
+		return timodel.JobStateNone, err
 	}
 
 	var jobsResults [][]string
-	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE")
+	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
 	if err != nil {
-		return "", err
+		return timodel.JobStateNone, err
 	}
 	for i := 0; i < len(jobsResults); i++ {
-		log.Error("getDDLStateFromTiDB", zap.Any("jobsResults[i]", jobsResults[i]))
-		// ddlCreateTime and createTime are both based on UTC timezone of downstream
 		ddlQuery := jobsResults[i][0]
 		if ddl == ddlQuery {
-			return jobsResults[i][1], nil
+			state, jobID, jobType, schemaState := jobsResults[i][1], jobsResults[i][2], jobsResults[i][3], jobsResults[i][4]
+			log.Debug("Find ddl state in downsteam",
+				zap.String("jobID", jobID),
+				zap.String("jobType", jobType),
+				zap.String("schemaState", schemaState),
+				zap.String("state", state),
+			)
+			return timodel.StrToJobState(jobsResults[i][1]), nil
 		}
 	}
-	return timodel.JobStateNone.String(), nil
+	return timodel.JobStateNone, nil
 }

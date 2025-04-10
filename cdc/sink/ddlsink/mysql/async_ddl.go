@@ -57,7 +57,7 @@ func (m *DDLSink) asyncExecDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("ddl", ddl.Query))
 	go func() {
-		if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
+		if err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) }); err != nil {
 			log.Error("async exec add index ddl failed",
 				zap.String("changefeedID", m.id.String()),
 				zap.Uint64("commitTs", ddl.CommitTs),
