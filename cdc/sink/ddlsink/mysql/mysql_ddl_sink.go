@@ -128,13 +128,6 @@ func NewDDLSink(
 
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	m.waitAsynExecDone(ctx, ddl)
-
-	if m.shouldAsyncExecDDL(ddl) {
-		m.lastExecutedNormalDDLCache.Remove(ddl.TableInfo.TableName)
-		return m.asyncExecDDL(ctx, ddl)
-	}
-
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
 		return errors.Trace(err)
 	}
@@ -266,7 +259,6 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 		case timodel.JobStateCancelled, timodel.JobStateRollingback, timodel.JobStateRollbackDone, timodel.JobStateCancelling:
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 		case timodel.JobStateRunning, timodel.JobStateQueueing:
-			log.Debug("DDL is not finished", zap.String("ddl", ddl.Query), zap.Any("ddlState", state))
 		default:
 			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
@@ -333,9 +325,9 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 
 func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
-	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP(6)")
+	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP() - INTERVAL 1 SECOND")
 	if err != nil {
-		log.Warn("selecting unix timestamp failed", zap.Error(err))
+		log.Warn("selecting utc timestamp failed", zap.Error(err))
 	} else {
 		for row.Next() {
 			err = row.Scan(&ddlCreateTime)
@@ -343,7 +335,6 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 				log.Warn("getting ddlCreateTime failed", zap.Error(err))
 			}
 		}
-		//nolint:sqlclosecheck
 		_ = row.Close()
 		_ = row.Err()
 	}
@@ -374,6 +365,7 @@ func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime
 				zap.String("jobID", jobID),
 				zap.String("jobType", jobType),
 				zap.String("schemaState", schemaState),
+				zap.String("ddlQuery", ddlQuery),
 				zap.String("state", state),
 			)
 			return timodel.StrToJobState(jobsResults[i][1]), nil
