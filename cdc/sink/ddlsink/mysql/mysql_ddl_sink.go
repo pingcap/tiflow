@@ -232,8 +232,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("Failed to exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-			zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query), zap.Error(err))
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
@@ -245,7 +243,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
 	ticker := time.NewTicker(5 * time.Second)
-	ticker1 := time.NewTicker(30 * time.Minute)
+	ticker1 := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 	defer ticker1.Stop()
 	for {

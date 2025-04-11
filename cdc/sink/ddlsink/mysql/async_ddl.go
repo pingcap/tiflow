@@ -62,7 +62,7 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		tables[ddl.PreTableInfo.TableName] = struct{}{}
 	}
 
-	log.Debug("wait async exec ddl done",
+	log.Debug("Wait previous asynchronous ddl finish",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Any("tableInfo", ddl.TableInfo),
@@ -120,7 +120,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 		}
 	}()
 	if err != nil {
-		log.Error("check async exec ddl failed",
+		log.Error("check previous asynchronous ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
 			zap.Error(err))
@@ -128,7 +128,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 	}
 	rets, err := export.GetSpecifiedColumnValuesAndClose(rows, "JOB_ID", "JOB_TYPE", "SCHEMA_STATE", "STATE")
 	if err != nil {
-		log.Error("check async exec ddl failed",
+		log.Error("check previous asynchronous ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
 			zap.Error(err))
@@ -140,7 +140,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 	}
 	ret := rets[0]
 	jobID, jobType, schemaState, state := ret[0], ret[1], ret[2], ret[3]
-	log.Info("async ddl is still running",
+	log.Info("The previous asynchronous ddl is still running",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Duration("checkDuration", time.Since(start)),
