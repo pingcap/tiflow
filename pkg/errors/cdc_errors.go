@@ -171,8 +171,12 @@ var (
 
 	// sink related errors
 	ErrExecDDLFailed = errors.Normalize(
-		"exec DDL failed",
+		"exec DDL failed %s",
 		errors.RFCCodeText("CDC:ErrExecDDLFailed"),
+	)
+	ErrDDLStateNotFound = errors.Normalize(
+		"DDL state not found %s",
+		errors.RFCCodeText("CDC:ErrDDLStateNotFound"),
 	)
 	ErrKafkaSendMessage = errors.Normalize(
 		"kafka send message failed",
