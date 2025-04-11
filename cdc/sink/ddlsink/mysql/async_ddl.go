@@ -48,7 +48,7 @@ func (m *DDLSink) needWaitAsyncExecDone(t timodel.ActionType) bool {
 	}
 }
 
-// Should always wait for async ddl done before executing the next ddl.
+// wait for the previous asynchronous DDL to finish before executing the next ddl.
 func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 	if !m.needWaitAsyncExecDone(ddl.Type) {
 		return
@@ -62,7 +62,7 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		tables[ddl.PreTableInfo.TableName] = struct{}{}
 	}
 
-	log.Debug("Wait previous asynchronous ddl finish",
+	log.Debug("Wait for the previous asynchronous DDL to finish",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Any("tableInfo", ddl.TableInfo),
