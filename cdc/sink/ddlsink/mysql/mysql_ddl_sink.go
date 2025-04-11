@@ -134,6 +134,10 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return nil
 }
 
+// execDDLWithMaxRetries will retry executing DDL statements.
+// When a DDL execution takes a long time and an invalid connection error occurs.
+// If the downstream is TiDB, it will query the DDL and wait until it finishes.
+// For 'add index' ddl, it will return immediately without waiting and will query it during the next DDL execution.
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	ddlCreateTime := getDDLCreateTime(ctx, m.db)
 	return retry.Do(ctx, func() error {
