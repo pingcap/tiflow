@@ -329,7 +329,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 
 func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
-	row, err := db.QueryContext(ctx, "BEGIN; SET @ts := TIDB_PARSE_TSO(@@tidb_current_ts); ROLLBACK; SELECT @ts; SET @ts=NULL;")
+	row, err := db.QueryContext(ctx, "BEGIN; SET @ticdc_ts := TIDB_PARSE_TSO(@@tidb_current_ts); ROLLBACK; SELECT @ticdc_ts; SET @ticdc_ts=NULL;")
 	if err != nil {
 		log.Warn("selecting utc timestamp failed", zap.Error(err))
 	} else {
