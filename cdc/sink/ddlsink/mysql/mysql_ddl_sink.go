@@ -337,7 +337,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
 	row, err := db.QueryContext(ctx, "BEGIN; SET @ticdc_ts := TIDB_PARSE_TSO(@@tidb_current_ts); ROLLBACK; SELECT @ticdc_ts; SET @ticdc_ts=NULL;")
 	if err != nil {
-		log.Warn("selecting utc timestamp failed", zap.Error(err))
+		log.Warn("selecting tidb current timestamp failed", zap.Error(err))
 	} else {
 		for row.Next() {
 			err = row.Scan(&ddlCreateTime)
