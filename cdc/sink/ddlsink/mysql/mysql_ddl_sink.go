@@ -125,6 +125,8 @@ func NewDDLSink(
 
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	m.waitAsynExecDone(ctx, ddl)
+
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
 		return errors.Trace(err)
 	}
@@ -242,7 +244,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
-	ticker := time.NewTimer(30 * time.Second)
+	ticker := time.NewTimer(5 * time.Second)
 	defer ticker.Stop()
 	for {
 		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
@@ -256,6 +258,11 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 		case timodel.JobStateCancelled, timodel.JobStateRollingback, timodel.JobStateRollbackDone, timodel.JobStateCancelling:
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 		case timodel.JobStateRunning, timodel.JobStateQueueing:
+			switch ddl.Type {
+			// returned immediately if not block dml
+			case timodel.ActionAddIndex:
+				return nil
+			}
 		default:
 			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
@@ -322,8 +329,7 @@ func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
 
 func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 	ddlCreateTime := "" // default when scan failed
-	// FIXME: Why subtract a second?
-	row, err := db.QueryContext(ctx, "SELECT UTC_TIMESTAMP() - INTERVAL 1 SECOND")
+	row, err := db.QueryContext(ctx, "BEGIN; SET @ts := TIDB_PARSE_TSO(@@tidb_current_ts); ROLLBACK; SELECT @ts; SET @ts=NULL;")
 	if err != nil {
 		log.Warn("selecting utc timestamp failed", zap.Error(err))
 	} else {
@@ -343,7 +349,8 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 // getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
-	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs WHERE CREATE_TIME >= "%s";`, createTime)
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs 
+	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
 	//nolint:rowserrcheck
 	jobsRows, err := db.QueryContext(ctx, showJobs)
 	if err != nil {
@@ -355,19 +362,17 @@ func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime
 	if err != nil {
 		return timodel.JobStateNone, err
 	}
-	for i := 0; i < len(jobsResults); i++ {
-		ddlQuery := jobsResults[i][0]
-		if ddl == ddlQuery {
-			state, jobID, jobType, schemaState := jobsResults[i][1], jobsResults[i][2], jobsResults[i][3], jobsResults[i][4]
-			log.Debug("Find ddl state in downsteam",
-				zap.String("jobID", jobID),
-				zap.String("jobType", jobType),
-				zap.String("schemaState", schemaState),
-				zap.String("ddlQuery", ddlQuery),
-				zap.String("state", state),
-			)
-			return timodel.StrToJobState(jobsResults[i][1]), nil
-		}
+	if len(jobsResults) > 0 {
+		result := jobsResults[0]
+		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]
+		log.Debug("Find ddl state in downsteam",
+			zap.String("jobID", jobID),
+			zap.String("jobType", jobType),
+			zap.String("schemaState", schemaState),
+			zap.String("ddl", ddl),
+			zap.String("state", state),
+		)
+		return timodel.StrToJobState(result[1]), nil
 	}
 	return timodel.JobStateNone, nil
 }
