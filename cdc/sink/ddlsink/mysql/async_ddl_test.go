@@ -81,22 +81,8 @@ func TestWaitAsynExecDone(t *testing.T) {
 	tables := make(map[model.TableName]struct{})
 	tables[table] = struct{}{}
 
-	// Test fast path, ddlSink.lastExecutedNormalDDLCache meet panic
-	ddlSink.lastExecutedNormalDDLCache.Add(table, timodel.ActionAddIndex)
-	require.Panics(t, func() {
-		ddlSink.checkAsyncExecDDLDone(ctx, tables)
-	})
-
-	// Test fast path, ddlSink.lastExecutedNormalDDLCache is hit
-	ddlSink.lastExecutedNormalDDLCache.Add(table, timodel.ActionCreateTable)
-	done := ddlSink.checkAsyncExecDDLDone(ctx, tables)
-	require.True(t, done)
-
-	// Clenup the cache, always check the async running state
-	ddlSink.lastExecutedNormalDDLCache.Remove(table)
-
 	// Test has running async ddl job
-	done = ddlSink.checkAsyncExecDDLDone(ctx, tables)
+	done := ddlSink.checkAsyncExecDDLDone(ctx, tables)
 	require.False(t, done)
 
 	// Test no running async ddl job

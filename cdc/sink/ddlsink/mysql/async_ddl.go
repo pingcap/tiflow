@@ -102,16 +102,6 @@ func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.Ta
 
 func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool) {
 	start := time.Now()
-	if v, ok := m.lastExecutedNormalDDLCache.Get(table); ok {
-		ddlType := v.(timodel.ActionType)
-		if ddlType == timodel.ActionAddIndex {
-			log.Panic("invalid ddl type in lastExecutedNormalDDLCache",
-				zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID),
-				zap.String("ddlType", ddlType.String()))
-		}
-		return true
-	}
 
 	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
 	defer func() {

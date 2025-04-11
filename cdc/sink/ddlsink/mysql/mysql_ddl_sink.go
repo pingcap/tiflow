@@ -22,7 +22,6 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/go-sql-driver/mysql"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/version"
@@ -65,11 +64,6 @@ type DDLSink struct {
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
 
-	// lastExecutedNormalDDLCache is a fast path to check whether aync DDL of a table
-	// is running in downstream.
-	// map: model.TableName -> timodel.ActionType
-	lastExecutedNormalDDLCache *lru.Cache
-
 	needFormat bool
 }
 
@@ -103,18 +97,12 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	lruCache, err := lru.New(1024)
-	if err != nil {
-		return nil, err
-	}
-
 	m := &DDLSink{
-		id:                         changefeedID,
-		db:                         db,
-		cfg:                        cfg,
-		statistics:                 metrics.NewStatistics(changefeedID, sink.TxnSink),
-		lastExecutedNormalDDLCache: lruCache,
-		needFormat:                 needFormatDDL(db, cfg),
+		id:         changefeedID,
+		db:         db,
+		cfg:        cfg,
+		statistics: metrics.NewStatistics(changefeedID, sink.TxnSink),
+		needFormat: needFormatDDL(db, cfg),
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -130,7 +118,6 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
 		return errors.Trace(err)
 	}
-	m.lastExecutedNormalDDLCache.Add(ddl.TableInfo.TableName, ddl.Type)
 	return nil
 }
 
