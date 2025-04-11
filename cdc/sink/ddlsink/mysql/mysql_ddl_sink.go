@@ -244,8 +244,10 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
-	ticker := time.NewTimer(5 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
+	ticker1 := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
+	defer ticker1.Stop()
 	for {
 		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 		if err != nil {
@@ -268,10 +270,13 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+		case <-ticker1.C:
+			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 		}
 	}
 }

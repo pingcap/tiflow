@@ -8,6 +8,9 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+# This test simulates DDL operations that take a long time.
+# TiCDC blocks DDL operations until its state is not running, except for adding indexes.
+# TiCDC also checks add index ddl state before execute a new DDL.
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
