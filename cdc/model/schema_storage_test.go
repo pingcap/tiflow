@@ -318,34 +318,32 @@ func TestIndexByName(t *testing.T) {
 }
 
 func TestColumnsByNames(t *testing.T) {
-	tableInfo := &TableInfo{
-		TableInfo: &timodel.TableInfo{
-			Columns: []*timodel.ColumnInfo{
-				{
-					Name:   pmodel.NewCIStr("col2"),
-					Offset: 1,
-				},
-				{
-					Name:   pmodel.NewCIStr("col1"),
-					Offset: 0,
-				},
-				{
-					Name:   pmodel.NewCIStr("col3"),
-					Offset: 2,
-				},
+	tableInfo := WrapTableInfo(100, "test", 100, &timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name: pmodel.NewCIStr("col2"),
+				ID:   1,
+			},
+			{
+				Name: pmodel.NewCIStr("col1"),
+				ID:   0,
+			},
+			{
+				Name: pmodel.NewCIStr("col3"),
+				ID:   2,
 			},
 		},
-	}
+	})
 
 	names := []string{"col1", "col2", "col3"}
 	offsets, ok := tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
-	require.Equal(t, []int{0, 1, 2}, offsets)
+	require.Equal(t, []int{1, 0, 2}, offsets)
 
 	names = []string{"col2"}
 	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
-	require.Equal(t, []int{1}, offsets)
+	require.Equal(t, []int{0}, offsets)
 
 	names = []string{"col1", "col-not-found"}
 	offsets, ok = tableInfo.OffsetsByNames(names)
