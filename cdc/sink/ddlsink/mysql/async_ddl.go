@@ -65,7 +65,8 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 	log.Debug("wait async exec ddl done",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
-		zap.Any("tables", tables),
+		zap.Any("tableInfo", ddl.TableInfo),
+		zap.Any("preTableInfo", ddl.PreTableInfo),
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("ddl", ddl.Query))
 	if len(tables) == 0 || m.checkAsyncExecDDLDone(ctx, tables) {

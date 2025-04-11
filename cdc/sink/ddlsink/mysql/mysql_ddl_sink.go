@@ -261,6 +261,7 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 			switch ddl.Type {
 			// returned immediately if not block dml
 			case timodel.ActionAddIndex:
+				log.Info("DDL is running downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 				return nil
 			}
 		default:
@@ -365,12 +366,13 @@ func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime
 	if len(jobsResults) > 0 {
 		result := jobsResults[0]
 		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]
-		log.Debug("Find ddl state in downsteam",
+		log.Debug("Find ddl state in downstream",
 			zap.String("jobID", jobID),
 			zap.String("jobType", jobType),
 			zap.String("schemaState", schemaState),
 			zap.String("ddl", ddl),
 			zap.String("state", state),
+			zap.Any("jobsResults", jobsResults),
 		)
 		return timodel.StrToJobState(result[1]), nil
 	}
