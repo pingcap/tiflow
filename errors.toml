@@ -228,7 +228,7 @@ cannot find mysql.tidb_ddl_job schema
 
 ["CDC:ErrDDLStateNotFound"]
 error = '''
-DDL state not found
+DDL state not found %s
 '''
 
 ["CDC:ErrDDLUnsupportType"]
@@ -328,7 +328,7 @@ exchange partition failed, %s
 
 ["CDC:ErrExecDDLFailed"]
 error = '''
-exec DDL failed
+exec DDL failed %s
 '''
 
 ["CDC:ErrExpressionColumnNotFound"]
