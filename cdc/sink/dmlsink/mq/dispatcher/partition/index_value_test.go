@@ -154,14 +154,10 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 		},
 		Indices: []*timodel.IndexInfo{
 			{
-				Name: pmodel.CIStr{
-					O: "index1",
-				},
+				Name: pmodel.NewCIStr("index1"),
 				Columns: []*timodel.IndexColumn{
 					{
-						Name: pmodel.CIStr{
-							O: "a",
-						},
+						Name: pmodel.NewCIStr("a"),
 					},
 				},
 			},

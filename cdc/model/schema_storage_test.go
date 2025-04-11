@@ -295,14 +295,10 @@ func TestIndexByName(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
-					Name: pmodel.CIStr{
-						O: "idx1",
-					},
+					Name: pmodel.NewCIStr("idx1"),
 					Columns: []*timodel.IndexColumn{
 						{
-							Name: pmodel.CIStr{
-								O: "col1",
-							},
+							Name: pmodel.NewCIStr("col1"),
 						},
 					},
 				},
@@ -326,21 +322,15 @@ func TestColumnsByNames(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Columns: []*timodel.ColumnInfo{
 				{
-					Name: pmodel.CIStr{
-						O: "col2",
-					},
+					Name:   pmodel.NewCIStr("col2"),
 					Offset: 1,
 				},
 				{
-					Name: pmodel.CIStr{
-						O: "col1",
-					},
+					Name:   pmodel.NewCIStr("col1"),
 					Offset: 0,
 				},
 				{
-					Name: pmodel.CIStr{
-						O: "col3",
-					},
+					Name:   pmodel.NewCIStr("col3"),
 					Offset: 2,
 				},
 			},

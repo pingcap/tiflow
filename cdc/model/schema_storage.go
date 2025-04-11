@@ -444,7 +444,7 @@ func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 }
 
 // IndexByName returns the index columns and offsets of the corresponding index by name
-// Column is not case-sensitive on any platform, nor are column aliases.
+// Index is not case-sensitive on any platform.
 // So we always match in lowercase.
 // See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
 func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
