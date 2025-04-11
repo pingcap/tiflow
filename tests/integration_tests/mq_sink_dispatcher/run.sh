@@ -42,8 +42,10 @@ function run() {
 	run_sql "DROP DATABASE if exists dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE DATABASE dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE dispatcher.index (a int primary key, b int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE TABLE dispatcher.columns (id int primary key, col1 int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "INSERT INTO dispatcher.index values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO dispatcher.columns values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrDispatcherFailed"
 
@@ -61,6 +63,13 @@ function run() {
 	run_sql "UPDATE dispatcher.index set b = 5 where a = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "UPDATE dispatcher.index set b = 6 where a = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "DELETE FROM dispatcher.index where a = 3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+	run_sql "INSERT INTO dispatcher.columns values (2, 3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO dispatcher.columns values (3, 4);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO dispatcher.columns values (4, 5);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "UPDATE dispatcher.columns set col1 = 5 where id = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "UPDATE dispatcher.columns set CoL1 = 6 where ID = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "DELETE FROM dispatcher.columns where Id = 3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "CREATE TABLE test.finish_mark (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
