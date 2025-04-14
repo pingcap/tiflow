@@ -202,6 +202,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
+				zap.String("state", job.State.String()),
 				zap.Int64("jobID", job.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),

@@ -13,3 +13,7 @@ ignore-event = ["truncate table"]
 [[filter.event-filters]]
 matcher = ["event_filter.t_alter"]
 ignore-event = ["alter table"]
+
+[[filter.event-filters]]
+matcher = ["event_filter.t_name*"]
+ignore-event = ["rename table"]
