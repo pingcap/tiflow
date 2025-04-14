@@ -180,4 +180,9 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), index)
+
+	p = NewIndexValueDispatcher("INDEX1")
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), index)
 }

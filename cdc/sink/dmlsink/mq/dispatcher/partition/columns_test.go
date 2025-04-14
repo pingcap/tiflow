@@ -55,4 +55,9 @@ func TestColumnsDispatcher(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(15), index)
+
+	p = NewColumnsDispatcher([]string{"COL2", "Col1"})
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(15), index)
 }
