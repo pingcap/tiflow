@@ -315,6 +315,16 @@ func TestIndexByName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []string{"col1"}, names)
 	require.Equal(t, []int{0}, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("IDX1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("Idx1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
 }
 
 func TestColumnsByNames(t *testing.T) {
@@ -349,6 +359,11 @@ func TestColumnsByNames(t *testing.T) {
 	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.False(t, ok)
 	require.Nil(t, offsets)
+
+	names = []string{"Col1", "COL2", "CoL3"}
+	offsets, ok = tableInfo.OffsetsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{1, 0, 2}, offsets)
 }
 
 func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
