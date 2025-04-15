@@ -109,24 +109,6 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 	return nil
 }
 
-// GetSchemaVersion returns the schema version of the meta.
-func GetSchemaVersion(meta timeta.Reader) (int64, error) {
-	// After we get the schema version at startTs, if the diff corresponding to that version does not exist,
-	// it means that the job is not committed yet, so we should subtract one from the version, i.e., version--.
-	version, err := meta.GetSchemaVersion()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	diff, err := meta.GetSchemaDiff(version)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if diff == nil {
-		version--
-	}
-	return version, nil
-}
-
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(
 	id model.ChangeFeedID,
