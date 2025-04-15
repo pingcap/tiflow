@@ -15,7 +15,7 @@ package schema
 
 import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 )
 
 type currentDBSetter struct {

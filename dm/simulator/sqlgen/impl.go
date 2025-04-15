@@ -19,8 +19,8 @@ import (
 	"github.com/chaos-mesh/go-sqlsmith/util"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // import this to make the parser work
 	"github.com/pingcap/tiflow/dm/pkg/log"
