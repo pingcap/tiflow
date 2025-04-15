@@ -147,17 +147,19 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	t.Parallel()
 
 	tidbTableInfo := &timodel.TableInfo{
-		ID:   100,
-		Name: pmodel.NewCIStr("t1"),
+		ID:         100,
+		Name:       pmodel.NewCIStr("t1"),
+		PKIsHandle: true,
 		Columns: []*timodel.ColumnInfo{
-			{ID: 1, Name: pmodel.NewCIStr("a"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 1, Name: pmodel.NewCIStr("A"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 		},
 		Indices: []*timodel.IndexInfo{
 			{
-				Name: pmodel.NewCIStr("index1"),
+				Primary: true,
+				Name:    pmodel.NewCIStr("index1"),
 				Columns: []*timodel.IndexColumn{
 					{
-						Name: pmodel.NewCIStr("a"),
+						Name: pmodel.NewCIStr("A"),
 					},
 				},
 			},
@@ -185,4 +187,9 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), index)
+
+	p = NewIndexValueDispatcher("")
+	index, _, err = p.DispatchRowChangedEvent(event, 3)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), index)
 }
