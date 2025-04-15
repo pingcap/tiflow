@@ -134,6 +134,7 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 
 func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
+		log.Error("unexpected key prefix found in row kv entry", zap.String("key", hex.EncodeToString(raw.Key)), zap.Any("eventCommitTs", raw.CRTs), zap.Any("eventStartTs", raw.StartTs))
 		return nil, nil
 	}
 	// checksumKey is only used to calculate raw checksum if necessary.
