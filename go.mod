@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.23
+go 1.23.0
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -111,19 +111,11 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
-<<<<<<< HEAD
-	golang.org/x/net v0.31.0
-	golang.org/x/oauth2 v0.23.0
-	golang.org/x/sync v0.9.0
-	golang.org/x/sys v0.27.0
-	golang.org/x/text v0.20.0
-=======
 	golang.org/x/net v0.39.0
 	golang.org/x/oauth2 v0.24.0
 	golang.org/x/sync v0.13.0
 	golang.org/x/sys v0.32.0
 	golang.org/x/text v0.24.0
->>>>>>> ae653bacb0 (kafka(ticdc): bump sarama fix kafka stuck (#12134))
 	golang.org/x/time v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240515191416-fc5f0ca64291
@@ -389,17 +381,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
-<<<<<<< HEAD
-	golang.org/x/crypto v0.29.0 // indirect
-	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/term v0.26.0
-	golang.org/x/tools v0.27.0 // indirect
-=======
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/term v0.31.0
 	golang.org/x/tools v0.28.0 // indirect
->>>>>>> ae653bacb0 (kafka(ticdc): bump sarama fix kafka stuck (#12134))
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
