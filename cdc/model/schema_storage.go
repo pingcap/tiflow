@@ -51,6 +51,8 @@ type TableInfo struct {
 	Version uint64
 	// ColumnID -> offset in model.TableInfo.Columns
 	columnsOffset map[int64]int
+	// ColumnID -> index in model.TableInfo.Columns
+	columnsIndex map[int64]int
 	// Column name -> ColumnID
 	nameToColID map[string]int64
 
@@ -109,6 +111,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
+		columnsIndex:     make(map[int64]int, len(info.Columns)),
 		nameToColID:      make(map[string]int64, len(info.Columns)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]*ColumnFlagType, len(info.Columns)),
@@ -122,7 +125,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.virtualColumnCount = 0
 	for i, col := range ti.Columns {
-		ti.columnsOffset[col.ID] = i
+		ti.columnsOffset[col.ID] = col.Offset
+		ti.columnsIndex[col.ID] = i
 		pkIsHandle := false
 		if IsColCDCVisible(col) {
 			ti.nameToColID[col.Name.O] = col.ID
@@ -288,11 +292,11 @@ func (ti *TableInfo) initColumnsFlag() {
 
 // GetColumnInfo returns the column info by ID
 func (ti *TableInfo) GetColumnInfo(colID int64) (info *model.ColumnInfo, exist bool) {
-	colOffset, exist := ti.columnsOffset[colID]
+	i, exist := ti.columnsIndex[colID]
 	if !exist {
 		return nil, false
 	}
-	return ti.Columns[colOffset], true
+	return ti.Columns[i], true
 }
 
 // ForceGetColumnInfo return the column info by ID
@@ -460,17 +464,13 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 // OffsetsByNames returns the column offsets of the corresponding columns by names
 // If any column does not exist, return false
 func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
-	// todo: optimize it
-	columnOffsets := make(map[string]int, len(ti.Columns))
-	for _, col := range ti.Columns {
-		if col != nil {
-			columnOffsets[col.Name.O] = col.Offset
-		}
-	}
-
 	result := make([]int, 0, len(names))
-	for _, col := range names {
-		offset, ok := columnOffsets[col]
+	for _, name := range names {
+		colID, ok := ti.nameToColID[name]
+		if !ok {
+			return nil, false
+		}
+		offset, ok := ti.columnsOffset[colID]
 		if !ok {
 			return nil, false
 		}
