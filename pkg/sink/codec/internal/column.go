@@ -41,6 +41,7 @@ func (c *Column) FromRowChangeColumn(col model.ColumnDataX) {
 	if c.Flag.IsHandleKey() {
 		c.WhereHandle = true
 	}
+
 	if col.Value == nil {
 		c.Value = nil
 		return
