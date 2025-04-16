@@ -1,6 +1,8 @@
 module github.com/pingcap/tiflow
 
-go 1.23.0
+go 1.23.6
+
+toolchain go1.23.8
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -19,7 +21,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220905074648-403033efad45
 	github.com/chzyer/readline v1.5.1
-	github.com/cockroachdb/pebble v1.1.0
+	github.com/cockroachdb/pebble v1.1.4-0.20250120151818-5dd133a1e6fb
 	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
 	github.com/coreos/go-semver v0.3.1
 	github.com/deepmap/oapi-codegen v1.9.0
@@ -68,8 +70,8 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20240318064555-6bd07397691f
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20241120022153-92b0414aeed8
-	github.com/pingcap/log v1.1.1-0.20240314023424-862ccc32f18d
-	github.com/pingcap/tidb v1.1.0-beta.0.20241128162802-793e77ce3706
+	github.com/pingcap/log v1.1.1-0.20241212030209-7e3ff8601a2a
+	github.com/pingcap/tidb v1.1.0-beta.0.20250415080739-a02630cc24cf
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20241120103608-82376c7732c1
 	github.com/prometheus/client_golang v1.20.5
@@ -89,9 +91,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20241121061241-006dfb024c26
+	github.com/tikv/client-go/v2 v2.0.8-0.20250304121540-cc8b9491145b
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
-	github.com/tikv/pd/client v0.0.0-20241111073742-238d4d79ea31
+	github.com/tikv/pd/client v0.0.0-20250213080903-727c2086a763
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -146,6 +148,7 @@ require (
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
@@ -236,7 +239,7 @@ require (
 	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
 	github.com/cilium/ebpf v0.4.0 // indirect
 	github.com/cloudfoundry/gosigar v1.3.6 // indirect
-	github.com/cockroachdb/errors v1.11.1 // indirect
+	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
@@ -270,7 +273,7 @@ require (
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/golang/glog v1.2.0 // indirect
+	github.com/golang/glog v1.2.4 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/pprof v0.0.0-20241001023024-f4c0cfd0cf1d // indirect
