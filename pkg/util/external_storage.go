@@ -164,7 +164,11 @@ type extStorageWithTimeout struct {
 func (s *extStorageWithTimeout) WriteFile(ctx context.Context, name string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.WriteFile(ctx, name, data)
+	err := s.ExternalStorage.WriteFile(ctx, name, data)
+	if err != nil {
+		err = errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("WriteFile")
+	}
+	return err
 }
 
 // ReadFile reads a complete file from storage, similar to os.ReadFile
