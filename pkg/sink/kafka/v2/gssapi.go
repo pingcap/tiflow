@@ -78,8 +78,8 @@ func (m mechanism) Name() string {
 //
 // client is a github.com/gokrb5/v8/client *Client instance.
 // kafkaServiceName is the name of the Kafka service in your Kerberos.
-func Gokrb5v8(client Gokrb5v8Client, kafkaServiceName string) sasl.Mechanism {
-	return mechanism{client, kafkaServiceName, ""}
+func Gokrb5v8(client Gokrb5v8Client, kafkaServiceName string, spn string) sasl.Mechanism {
+	return mechanism{client, kafkaServiceName, spn}
 }
 
 // StartWithoutHostError is the error type for when Start is called on
@@ -94,10 +94,12 @@ func (e StartWithoutHostError) Error() string {
 }
 
 func (m mechanism) Start(ctx context.Context) (sasl.StateMachine, []byte, error) {
-	metaData := sasl.MetadataFromContext(ctx)
-	m.host = metaData.Host
-	if m.host == "" {
-		return nil, nil, StartWithoutHostError{}
+	if len(m.host) == 0 {
+		metaData := sasl.MetadataFromContext(ctx)
+		m.host = metaData.Host
+		if m.host == "" {
+			return nil, nil, StartWithoutHostError{}
+		}
 	}
 
 	servicePrincipalName := m.serviceName + "/" + m.host

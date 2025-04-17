@@ -127,6 +127,7 @@ type urlConfig struct {
 	SASLGssAPIPassword           *string `form:"sasl-gssapi-password"`
 	SASLGssAPIRealm              *string `form:"sasl-gssapi-realm"`
 	SASLGssAPIDisablePafxfast    *bool   `form:"sasl-gssapi-disable-pafxfast"`
+	SASLGssAPISpn                *string `form:"sasl-gssapi-spn"`
 	EnableTLS                    *bool   `form:"enable-tls"`
 	CA                           *string `form:"ca"`
 	Cert                         *string `form:"cert"`
@@ -341,6 +342,7 @@ func mergeConfig(
 		dest.SASLGssAPIRealm = fileConifg.SASLGssAPIRealm
 		dest.SASLGssAPIUser = fileConifg.SASLGssAPIUser
 		dest.SASLGssAPIPassword = fileConifg.SASLGssAPIPassword
+		dest.SASLGssAPISpn = fileConifg.SASLGssAPISpn
 		dest.EnableTLS = fileConifg.EnableTLS
 		dest.CA = fileConifg.CA
 		dest.Cert = fileConifg.Cert
@@ -452,6 +454,10 @@ func (o *Options) applySASL(urlParameter *urlConfig, replicaConfig *config.Repli
 
 	if urlParameter.SASLGssAPIDisablePafxfast != nil {
 		o.SASL.GSSAPI.DisablePAFXFAST = *urlParameter.SASLGssAPIDisablePafxfast
+	}
+
+	if urlParameter.SASLGssAPISpn != nil && *urlParameter.SASLGssAPISpn != "" {
+		o.SASL.GSSAPI.SPN = *urlParameter.SASLGssAPISpn
 	}
 
 	if replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
