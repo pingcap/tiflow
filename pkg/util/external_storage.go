@@ -35,7 +35,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const defaultTimeout = 5 * time.Minute
+const (
+	defaultTimeout = 5 * time.Minute
+)
 
 // GetExternalStorageFromURI creates a new storage.ExternalStorage from a uri.
 func GetExternalStorageFromURI(
