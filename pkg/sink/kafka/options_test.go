@@ -654,6 +654,7 @@ func TestMerge(t *testing.T) {
 		SASLGssAPIPassword:        aws.String("pass"),
 		SASLGssAPIRealm:           aws.String("realm"),
 		SASLGssAPIDisablePafxfast: aws.Bool(true),
+		SASLGssAPISpn:             aws.String("kafka1.example.com"),
 		EnableTLS:                 aws.Bool(true),
 		CA:                        aws.String("ca.pem"),
 		Cert:                      aws.String("cert.pem"),
@@ -682,6 +683,7 @@ func TestMerge(t *testing.T) {
 	require.Equal(t, "pass", c.SASL.GSSAPI.Password)
 	require.Equal(t, "realm", c.SASL.GSSAPI.Realm)
 	require.Equal(t, true, c.SASL.GSSAPI.DisablePAFXFAST)
+	require.Equal(t, "kafka1.example.com", c.SASL.GSSAPI.SPN)
 	require.Equal(t, true, c.EnableTLS)
 	require.Equal(t, "ca.pem", c.Credential.CAPath)
 	require.Equal(t, "cert.pem", c.Credential.CertPath)
@@ -708,6 +710,7 @@ func TestMerge(t *testing.T) {
 		"&sasl-gssapi-password=pass" +
 		"&sasl-gssapi-realm=realm" +
 		"&sasl-gssapi-disable-pafxfast=true" +
+		"&sasl-gssapi-spn=kafka3.example.com" +
 		"&enable-tls=true" +
 		"&ca=ca.pem" +
 		"&cert=cert.pem" +
@@ -735,6 +738,7 @@ func TestMerge(t *testing.T) {
 		SASLGssAPIPassword:        aws.String("pass2"),
 		SASLGssAPIRealm:           aws.String("realm2"),
 		SASLGssAPIDisablePafxfast: aws.Bool(false),
+		SASLGssAPISpn:             aws.String("kafka2.example.com"),
 		EnableTLS:                 aws.Bool(false),
 		CA:                        aws.String("ca2.pem"),
 		Cert:                      aws.String("cert2.pem"),
@@ -763,6 +767,7 @@ func TestMerge(t *testing.T) {
 	require.Equal(t, "pass", c.SASL.GSSAPI.Password)
 	require.Equal(t, "realm", c.SASL.GSSAPI.Realm)
 	require.Equal(t, true, c.SASL.GSSAPI.DisablePAFXFAST)
+	require.Equal(t, "kafka3.example.com", c.SASL.GSSAPI.SPN)
 	require.Equal(t, true, c.EnableTLS)
 	require.Equal(t, "ca.pem", c.Credential.CAPath)
 	require.Equal(t, "cert.pem", c.Credential.CertPath)

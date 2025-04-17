@@ -143,6 +143,10 @@ func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Opt
 				}
 			}
 		case SASLTypeGSSAPI:
+			if len(o.SASL.GSSAPI.SPN) > 0 {
+				return errors.New("custom SPN is not yet supported, requires sarama v1.43 with https://github.com/IBM/sarama/pull/2807")
+			}
+
 			config.Net.SASL.GSSAPI.AuthType = int(o.SASL.GSSAPI.AuthType)
 			config.Net.SASL.GSSAPI.Username = o.SASL.GSSAPI.Username
 			config.Net.SASL.GSSAPI.ServiceName = o.SASL.GSSAPI.ServiceName

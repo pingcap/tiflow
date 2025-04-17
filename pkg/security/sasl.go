@@ -136,4 +136,5 @@ type GSSAPI struct {
 	Password           string         `toml:"sasl-gssapi-password" json:"sasl-gssapi-password"`
 	Realm              string         `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm"`
 	DisablePAFXFAST    bool           `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast"`
+	SPN                string         `toml:"sasl-gssapi-spn" json:"sasl-gssapi-spn"`
 }

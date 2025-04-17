@@ -151,7 +151,7 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 				return nil, errors.Trace(err)
 			}
 			return Gokrb5v8(&gokrb5v8ClientImpl{clnt},
-				o.SASL.GSSAPI.ServiceName), nil
+				o.SASL.GSSAPI.ServiceName, o.SASL.GSSAPI.SPN), nil
 
 		case pkafka.SASLTypeOAuth:
 			return nil, errors.ErrKafkaInvalidConfig.GenWithStack(

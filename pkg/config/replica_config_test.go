@@ -90,6 +90,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		SASLGssAPIPassword:           aws.String("password"),
 		SASLGssAPIRealm:              aws.String("realm"),
 		SASLGssAPIDisablePafxfast:    aws.Bool(true),
+		SASLGssAPISpn:                aws.String("kafka1.example.com"),
 		EnableTLS:                    aws.Bool(true),
 		CA:                           aws.String("ca"),
 		Cert:                         aws.String("cert"),
