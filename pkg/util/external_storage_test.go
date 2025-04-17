@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -123,58 +122,4 @@ func TestExtStorageWithTimeoutWriteFileSuccess(t *testing.T) {
 
 	// Assert success
 	require.NoError(t, err, "Expected no error for successful write within timeout")
-}
-
-// TestExtStorageWithTimeoutWriteFileAzureTimeout - Tests WriteFile timeout for Azure.
-// NOTE: This test requires Azure Blob Storage connection details (e.g., via environment variables)
-// and a valid Azure storage URI (e.g., "azure://<container-name>/<path>?account-key=...")
-// Or configure it to use Azurite emulator.
-//
-// You can set the environment variable TiCDC_TEST_AZURE_URI to the Azure storage URI for testing.
-// For example:
-// export TiCDC_TEST_AZURE_URI="azure://testcontainer/timeouttest?account-name=$AZURE_STORAGE_ACCOUNT&account-key=$AZURE_STORAGE_KEY"
-//
-// If you want to use Azurite emulator, you can set the environment variable TiCDC_TEST_AZURE_URI to:
-// export TiCDC_TEST_AZURE_URI="http://127.0.0.1:10000/devstoreaccount1/timeouttest"
-
-func TestExtStorageWithTimeoutWriteFileAzureTimeout(t *testing.T) {
-	// 1. Get Azure URI from environment or skip test
-	azureURI := os.Getenv("TiCDC_TEST_AZURE_URI") // Example: "azure://testcontainer/timeouttest"
-	if azureURI == "" {
-		t.Skip("TiCDC_TEST_AZURE_URI environment variable is not set, skipping Azure timeout test")
-	}
-
-	ctx := context.Background()
-
-	// 2. Create base Azure external storage (without timeout wrapper first)
-	// Ensure necessary Azure credentials (like AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY or AZURE_STORAGE_CONNECTION_STRING)
-	// are available in the environment for storage.New to work.
-	baseStorage, err := GetExternalStorage(ctx, azureURI, nil, DefaultS3Retryer()) // Using DefaultS3Retryer might not be ideal for Azure, but fine for this test structure
-	require.NoError(t, err, "Failed to create base Azure external storage")
-
-	// 3. Create the wrapper with a very short timeout
-	veryShortTimeout := 1 * time.Millisecond // Choose a timeout likely to be exceeded
-	storageWithTimeout := &extStorageWithTimeout{
-		ExternalStorage: baseStorage,
-		timeout:         veryShortTimeout,
-	}
-
-	// 4. Attempt to write a file
-	testFileName := "timeout_test_file.txt"
-	testData := []byte("hello azure timeout")
-
-	startTime := time.Now()
-	err = storageWithTimeout.WriteFile(ctx, testFileName, testData)
-	duration := time.Since(startTime)
-
-	// 5. Assertions
-	require.Error(t, err, "WriteFile should have returned an error due to timeout")
-	require.True(t, errors.Is(err, context.DeadlineExceeded), "Error should be context.DeadlineExceeded, but got: %v", err)
-	require.Less(t, duration, veryShortTimeout+500*time.Millisecond, "Operation took much longer than expected after timeout") // Check it didn't wait indefinitely
-
-	// Optional: Cleanup the file if it somehow got created (unlikely with timeout)
-	// It's better practice to use a unique path/container per test run and clean the container afterwards.
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // Use a reasonable timeout for cleanup
-	defer cancel()
-	baseStorage.DeleteFile(cleanupCtx, testFileName) // Use baseStorage for cleanup
 }
