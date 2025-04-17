@@ -24,7 +24,7 @@ function run() {
 	GO111MODULE=on go run test.go
 
 	TOPIC_NAME="ticdc-ddl-wait-test-$RANDOM"
-	SINK_URI="mysql://root@127.0.0.1:3306/?read-timeout=30ms"
+	SINK_URI="mysql://root@127.0.0.1:3306/?read-timeout=300ms"
 
 	changefeed_id="ddl-wait"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id}
