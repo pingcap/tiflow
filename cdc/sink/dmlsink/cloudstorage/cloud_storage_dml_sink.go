@@ -108,7 +108,7 @@ func NewDMLSink(ctx context.Context,
 	}
 
 	// create an external storage.
-	storage, err := putil.GetExternalStorageFromURI(ctx, sinkURI.String())
+	storage, err := putil.GetExternalStorageWithDefaultTimeout(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
