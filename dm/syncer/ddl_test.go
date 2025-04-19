@@ -789,6 +789,66 @@ func TestAdjustCollation(t *testing.T) {
 	}
 }
 
+func TestAdjustAutoIDCache(t *testing.T) {
+	cases := []struct {
+		sql         string
+		expectedSQL string
+		cacheSize   uint64
+	}{
+		{
+			"CREATE TABLE `test`.`t1` (`id` INT)",
+			"CREATE TABLE `test`.`t1` (`id` INT)",
+			0,
+		},
+		{
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT)",
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT)",
+			0,
+		},
+		{
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT)",
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT) /*T![auto_id_cache] AUTO_ID_CACHE = 1 */",
+			1,
+		},
+		{
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT)",
+			"CREATE TABLE `test`.`t1` (`id` INT AUTO_INCREMENT) /*T![auto_id_cache] AUTO_ID_CACHE = 30 */",
+			30,
+		},
+	}
+
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustAutoIDCache")))
+	p := parser.New()
+	tab := &filter.Table{
+		Schema: "test",
+		Name:   "t1",
+	}
+
+	for _, cse := range cases {
+		syncer := NewSyncer(&config.SubTaskConfig{
+			SyncerConfig: config.SyncerConfig{
+				AutoIDCacheSize: cse.cacheSize,
+			},
+		}, nil, nil)
+		syncer.tctx = tctx
+		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+		ddlInfo := &ddlInfo{
+			originDDL:    cse.sql,
+			routedDDL:    cse.sql,
+			sourceTables: []*filter.Table{tab},
+			targetTables: []*filter.Table{tab},
+		}
+		stmt, err := p.ParseOneStmt(cse.sql, "", "")
+		require.NoError(t, err)
+		require.NotNil(t, stmt)
+		ddlInfo.stmtCache = stmt
+		ddlWorker.adjustAutoIDCache(ddlInfo)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
+		require.NoError(t, err)
+		require.Equal(t, cse.expectedSQL, routedDDL)
+	}
+}
+
 type mockOnlinePlugin struct {
 	toFinish map[string]struct{}
 }
