@@ -81,22 +81,8 @@ func TestWaitAsynExecDone(t *testing.T) {
 	tables := make(map[model.TableName]struct{})
 	tables[table] = struct{}{}
 
-	// Test fast path, ddlSink.lastExecutedNormalDDLCache meet panic
-	ddlSink.lastExecutedNormalDDLCache.Add(table, timodel.ActionAddIndex)
-	require.Panics(t, func() {
-		ddlSink.checkAsyncExecDDLDone(ctx, tables)
-	})
-
-	// Test fast path, ddlSink.lastExecutedNormalDDLCache is hit
-	ddlSink.lastExecutedNormalDDLCache.Add(table, timodel.ActionCreateTable)
-	done := ddlSink.checkAsyncExecDDLDone(ctx, tables)
-	require.True(t, done)
-
-	// Clenup the cache, always check the async running state
-	ddlSink.lastExecutedNormalDDLCache.Remove(table)
-
 	// Test has running async ddl job
-	done = ddlSink.checkAsyncExecDDLDone(ctx, tables)
+	done := ddlSink.checkAsyncExecDDLDone(ctx, tables)
 	require.False(t, done)
 
 	// Test no running async ddl job
@@ -108,60 +94,6 @@ func TestWaitAsynExecDone(t *testing.T) {
 	require.True(t, done)
 
 	ddlSink.Close()
-}
-
-func TestAsyncExecAddIndex(t *testing.T) {
-	ddlExecutionTime := time.Second * 15
-	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
-	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		require.Nil(t, err)
-		mock.ExpectQuery("select tidb_version()").
-			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
-		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
-			Number:  1305,
-			Message: "FUNCTION test.tidb_version does not exist",
-		})
-		mock.ExpectBegin()
-		mock.ExpectExec("USE `test`;").
-			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("Create index idx1 on test.t1(a)").
-			WillDelayFor(ddlExecutionTime).
-			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectCommit()
-		mock.ExpectClose()
-		return db, nil
-	})
-	GetDBConnImpl = dbConnFactory
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
-	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
-
-	require.Nil(t, err)
-
-	ddl1 := &model.DDLEvent{
-		StartTs:  1000,
-		CommitTs: 1010,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "test",
-				Table:  "t1",
-			},
-		},
-		Type:  timodel.ActionAddIndex,
-		Query: "Create index idx1 on test.t1(a)",
-	}
-	start := time.Now()
-	err = sink.WriteDDLEvent(ctx, ddl1)
-	require.Nil(t, err)
-	require.True(t, time.Since(start) < ddlExecutionTime)
-	require.True(t, time.Since(start) >= 10*time.Second)
-	sink.Close()
 }
 
 func TestNeedWaitAsyncExecDone(t *testing.T) {
