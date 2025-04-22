@@ -341,7 +341,7 @@ func redactInfo(input string) string {
 // ZapRedactString receives string argument and returns a zap.Field with the value either:
 // - unchanged if redaction is disabled
 // - replaced with "?" if redaction is enabled
-// - wrapped in markers ‹› if marker mode is enabled
+// - wrapped in markers ‹› if marker mode is enabled.
 func ZapRedactString(key, arg string) zap.Field {
 	switch getRedactType() {
 	case RedactInfoLogON:
