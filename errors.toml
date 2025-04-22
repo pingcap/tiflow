@@ -226,6 +226,11 @@ error = '''
 cannot find mysql.tidb_ddl_job schema
 '''
 
+["CDC:ErrDDLStateNotFound"]
+error = '''
+DDL state not found %s
+'''
+
 ["CDC:ErrDDLUnsupportType"]
 error = '''
 unsupport ddl type %s, query %s
@@ -323,7 +328,7 @@ exchange partition failed, %s
 
 ["CDC:ErrExecDDLFailed"]
 error = '''
-exec DDL failed
+exec DDL failed %s
 '''
 
 ["CDC:ErrExpressionColumnNotFound"]
