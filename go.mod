@@ -18,7 +18,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/chaos-mesh/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
+	github.com/chaos-mesh/go-sqlsmith v0.0.0-20250416091313-334484c821ae
 	github.com/chzyer/readline v1.5.1
 	github.com/cockroachdb/pebble v1.1.4-0.20250120151818-5dd133a1e6fb
 	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
@@ -71,9 +71,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20250224053625-b6a98c6bf02d
 	github.com/pingcap/log v1.1.1-0.20241212030209-7e3ff8601a2a
-	github.com/pingcap/tidb v1.1.0-beta.0.20250414133207-c9b33d6a50ce
+	github.com/pingcap/tidb v1.1.0-beta.0.20250415053443-ea52376d91c8
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20250414133207-c9b33d6a50ce
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20250415053443-ea52376d91c8
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
@@ -412,8 +412,6 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
-
-replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
 
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
 // Please remove these dependencies.
