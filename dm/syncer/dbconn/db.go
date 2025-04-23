@@ -16,6 +16,7 @@ package dbconn
 import (
 	"context"
 	"database/sql"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"net"
 	"strings"
 	"time"
@@ -277,6 +278,13 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
 				zap.Error(err))
+			return true
+		}
+		if dbutil.IsRetryableError(err) {
+			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
 			return true
 		}
 		return false
