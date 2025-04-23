@@ -22,7 +22,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -280,21 +279,6 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 				zap.Error(err))
 			return true
 		}
-		if dbutil.IsRetryableError(err) {
-			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
-				zap.String("queries", utils.TruncateInterface(queries, -1)),
-				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-				log.ShortError(err))
-			return true
-		}
-		if IsDmRetryableError(err) {
-			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
-				zap.String("queries", utils.TruncateInterface(queries, -1)),
-				zap.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-				log.ShortError(err))
-			return true
-		}
-
 		return false
 	}
 }
