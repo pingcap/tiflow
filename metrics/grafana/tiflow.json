@@ -1228,10 +1228,7 @@
     "list": [
       {
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS_TIFLOW}"
-        },
+        "datasource": "-- Grafana --",
         "definition": "label_values(go_goroutines, k8s_cluster)",
         "hide": 0,
         "includeAll": false,
@@ -1252,10 +1249,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS_TIFLOW}"
-        },
+        "datasource": "-- Grafana --",
         "definition": "label_values(go_goroutines, instance)",
         "hide": 0,
         "includeAll": true,
