@@ -349,7 +349,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "dm_syncer_remaining_time{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+          "expr": "dm_syncer_remaining_time{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
           "format": "time_series",
           "interval": "$interval",
           "intervalFactor": 2,
@@ -581,7 +581,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (task,source_id) (rate(dm_syncer_finished_transaction_total{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m]))",
+          "expr": "sum by (task,source_id) (rate(dm_syncer_finished_transaction_total{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -687,7 +687,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (task,source_id) (rate(dm_syncer_finished_jobs_total{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[$interval]))",
+          "expr": "sum by (task,source_id) (rate(dm_syncer_finished_jobs_total{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[$interval]))",
           "format": "time_series",
           "interval": "$interval",
           "intervalFactor": 2,
@@ -962,7 +962,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "dumpling_dump_finished_rows{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"} / dumpling_dump_estimate_total_rows{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+          "expr": "dumpling_dump_finished_rows{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"} / dumpling_dump_estimate_total_rows{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -1065,7 +1065,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "lightning_chunks{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"finished\"} / ignoring(state) lightning_chunks{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"estimated\"}",
+          "expr": "lightning_chunks{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"finished\"} / ignoring(state) lightning_chunks{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"estimated\"}",
           "format": "time_series",
           "interval": "$interval",
           "intervalFactor": 2,
@@ -1169,7 +1169,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "lightning_tables{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"completed\"} / ignoring(state) lightning_tables{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"pending\"}",
+          "expr": "lightning_tables{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"completed\"} / ignoring(state) lightning_tables{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"pending\"}",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
@@ -1263,14 +1263,14 @@
       "pluginVersion": "7.5.7",
       "targets": [
         {
-          "expr": "lightning_row_read_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+          "expr": "lightning_row_read_bytes_sum{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "parser read size - {{task}} - {{source_id}}",
           "refId": "A"
         },
         {
-          "expr": "lightning_block_deliver_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+          "expr": "lightning_block_deliver_bytes_sum{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{kind}} deliver size - {{task}} - {{source_id}}",
@@ -1363,7 +1363,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "1/rate(lightning_chunks{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\",state=\"finished\"}[1m])",
+          "expr": "1/rate(lightning_chunks{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\",state=\"finished\"}[1m])",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
