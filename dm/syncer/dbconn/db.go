@@ -207,8 +207,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 			zap.Float64("costSeconds", time.Since(startTime).Seconds()),
 			zap.String("queries", utils.TruncateInterface(queries, -1)),
 			log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-			zap.Error(err),
-			log.ShortError(err))
+			zap.Error(err))
 		return ret.(int), err
 	}
 	return ret.(int), nil
@@ -245,12 +244,10 @@ func (conn *DBConn) ExecuteSQLAutoSplit(
 
 func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
 	return func(retryTime int, err error) bool {
-		if retry.IsConnectionError(err) || (conn.cfg.SafeMode && retry.IsRetryableConnectionErrorOnBegin(err)) {
+		if retry.IsConnectionError(err) || retry.IsRetryableConnectionErrorOnBeginOrSafeMode(conn.cfg.SafeMode, err) {
 			tctx.L().Warn("resetting connection due to error",
 				zap.Int("retryCount", retryTime),
 				zap.Bool("safeMode", conn.cfg.SafeMode),
-				zap.Bool("badConn", retry.IsConnectionError(err)),
-				zap.Bool("invalidConn", retry.IsRetryableConnectionErrorOnBegin(err)),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
 				log.ShortError(err))
 

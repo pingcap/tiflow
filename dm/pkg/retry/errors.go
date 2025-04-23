@@ -102,13 +102,10 @@ func IsUnretryableConnectionError(err error) bool {
 	return errors.Cause(err) == dmysql.ErrInvalidConn
 }
 
-// IsRetryableConnectionErrorOnBegin checks whether an invalid connection error occured on a
+// IsRetryableConnectionErrorOnBeginOrSafeMode checks whether an invalid connection error occured on a
 // transaction begin statement, when there are no operations that may need to be rolled back.
-func IsRetryableConnectionErrorOnBegin(err error) bool {
-	if !strings.Contains(strings.ToLower(err.Error()), "execute statement failed: begin") {
-		return false
-	}
-	return errors.Cause(err) == dmysql.ErrInvalidConn
+func IsRetryableConnectionErrorOnBeginOrSafeMode(safeMode bool, err error) bool {
+	return (safeMode || terror.ErrDBExecuteFailedBegin.Equal(err)) && errors.Cause(err) == dmysql.ErrInvalidConn
 }
 
 func IsRetryableErrorOnResetConn(err error) bool {
