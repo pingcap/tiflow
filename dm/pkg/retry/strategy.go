@@ -100,9 +100,8 @@ func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params, operateF
 				case <-time.After(duration):
 				}
 				continue
-			} else {
-				log.L().Warn("error is not retryable", zap.Error(err), zap.Int("retry_times", i), zap.Int("retry_count", params.RetryCount))
 			}
+			log.L().Warn("error is not retryable", zap.Error(err), zap.Int("retry_times", i), zap.Int("retry_count", params.RetryCount))
 		}
 		break
 	}

@@ -16,13 +16,13 @@ package dbconn
 import (
 	"context"
 	"database/sql"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -169,7 +169,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		IsRetryableFn:      conn.retryableFn(tctx, queries, args),
 	}
 
-	startTime := time.Now()
+	outerStartTime := time.Now()
 	ret, numRetries, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
@@ -204,7 +204,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("execute statements failed after retry",
 			zap.Int("numRetries", numRetries),
-			zap.Float64("costSeconds", time.Since(startTime).Seconds()),
+			zap.Float64("costSeconds", time.Since(outerStartTime).Seconds()),
 			zap.String("queries", utils.TruncateInterface(queries, -1)),
 			log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
 			zap.Error(err))
@@ -258,26 +258,25 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 				BackoffStrategy:    retry.Stable,
 				IsRetryableFn:      resetConnRetryableFn(tctx, queries, args),
 			}
-			_, resetRetries, err := conn.baseConn.ApplyRetryStrategy(
+			_, resetRetries, resetErr := conn.baseConn.ApplyRetryStrategy(
 				tctx,
 				resetRetryParams,
 				func(ctx *tcontext.Context) (interface{}, error) {
 					err = conn.ResetConn(tctx)
 					return nil, err
 				})
-
-			if err != nil {
+			if resetErr != nil {
 				tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
 					zap.Int("resetRetries", resetRetries),
 					zap.String("queries", utils.TruncateInterface(queries, -1)),
 					log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
+					log.ShortError(resetErr))
 				return false
 			}
 
 			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
-				zap.Error(err))
+				zap.Error(resetErr))
 			return true
 		}
 		if dbutil.IsRetryableError(err) {

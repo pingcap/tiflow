@@ -102,8 +102,9 @@ func IsUnretryableConnectionError(err error) bool {
 	return errors.Cause(err) == dmysql.ErrInvalidConn
 }
 
-// IsRetryableConnectionErrorOnBeginOrSafeMode checks whether an invalid connection error occured on a
-// transaction begin statement, when there are no operations that may need to be rolled back.
+// IsRetryableConnectionErrorOnBeginOrSafeMode checks whether an invalid connection error occurred
+// on a transaction begin statement, when there are no operations that may need to be rolled back,
+// or in safe mode, where statements are idempotent.
 func IsRetryableConnectionErrorOnBeginOrSafeMode(safeMode bool, err error) bool {
 	return (safeMode || terror.ErrDBExecuteFailedBegin.Equal(err)) && errors.Cause(err) == dmysql.ErrInvalidConn
 }
@@ -114,8 +115,5 @@ func IsRetryableErrorOnResetConn(err error) bool {
 	case driver.ErrBadConn, tmysql.ErrBadConn, gmysql.ErrBadConn, dmysql.ErrInvalidConn:
 		return true
 	}
-	if strings.Contains(strings.ToLower(err.Error()), "connect: connection refused") {
-		return true
-	}
-	return false
+	return strings.Contains(strings.ToLower(err.Error()), "connect: connection refused")
 }
