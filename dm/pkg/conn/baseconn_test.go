@@ -81,7 +81,7 @@ func TestBaseConn(t *testing.T) {
 
 	mock.ExpectBegin().WillReturnError(errors.New("begin error"))
 	_, err = baseConn.ExecuteSQL(tctx, nil, "test", []string{"create database test"})
-	require.True(t, terror.ErrDBExecuteFailed.Equal(err))
+	require.True(t, terror.ErrDBExecuteFailedBegin.Equal(err))
 
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnError(errors.New("invalid connection"))

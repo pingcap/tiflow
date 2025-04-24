@@ -169,7 +169,8 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		IsRetryableFn:      conn.retryableFn(tctx, queries, args),
 	}
 
-	ret, _, err := conn.baseConn.ApplyRetryStrategy(
+	outerStartTime := time.Now()
+	ret, numRetries, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
@@ -202,9 +203,11 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		})
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("execute statements failed after retry",
+			zap.Int("numRetries", numRetries),
+			zap.Float64("costSeconds", time.Since(outerStartTime).Seconds()),
 			zap.String("queries", utils.TruncateInterface(queries, -1)),
 			log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-			log.ShortError(err))
+			zap.Error(err))
 		return ret.(int), err
 	}
 	return ret.(int), nil
@@ -241,23 +244,59 @@ func (conn *DBConn) ExecuteSQLAutoSplit(
 
 func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
 	return func(retryTime int, err error) bool {
-		if retry.IsConnectionError(err) {
-			err = conn.ResetConn(tctx)
-			if err != nil {
+		if retry.IsConnectionError(err) || retry.IsRetryableConnectionErrorOnBeginOrSafeMode(conn.cfg.SafeMode, err) {
+			tctx.L().Warn("resetting connection due to error",
+				zap.Int("retryCount", retryTime),
+				zap.Bool("safeMode", conn.cfg.SafeMode),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				log.ShortError(err))
+
+			// nolint:dupl
+			resetRetryParams := retry.Params{
+				RetryCount:         10,
+				FirstRetryDuration: retryTimeout,
+				BackoffStrategy:    retry.Stable,
+				IsRetryableFn:      resetConnRetryableFn(tctx, queries, args),
+			}
+			_, resetRetries, resetErr := conn.baseConn.ApplyRetryStrategy(
+				tctx,
+				resetRetryParams,
+				func(ctx *tcontext.Context) (interface{}, error) {
+					err = conn.ResetConn(tctx)
+					return nil, err
+				})
+			if resetErr != nil {
 				tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
+					zap.Int("resetRetries", resetRetries),
 					zap.String("queries", utils.TruncateInterface(queries, -1)),
 					log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
+					log.ShortError(resetErr))
 				return false
 			}
+
 			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
-				zap.Error(err))
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				zap.Error(resetErr))
 			return true
 		}
 		if dbutil.IsRetryableError(err) {
 			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
 				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
+			return true
+		}
+		return false
+	}
+}
+
+func resetConnRetryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
+	return func(retryTime int, err error) bool {
+		if retry.IsRetryableErrorOnResetConn(err) {
+			tctx.L().Error("retrying reset connection", zap.Int("retry", retryTime),
+				zap.Int("resetRetries", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				zap.String("arguments", utils.TruncateInterface(args, -1)),
 				log.ShortError(err))
 			return true
 		}
