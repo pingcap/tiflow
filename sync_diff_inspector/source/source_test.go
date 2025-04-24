@@ -22,7 +22,6 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/go-sql-driver/mysql"
@@ -510,20 +509,27 @@ func TestMysqlRouter(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	rangeIter, err := mysql.GetRangeIterator(ctx, nil, mysql.GetTableAnalyzer(), 3)
 	require.NoError(t, err)
+	// Cousume all chunks
+	_, err = rangeIter.Next(ctx)
+	require.NoError(t, err)
 	_, err = rangeIter.Next(ctx)
 	require.NoError(t, err)
 	rangeIter.Close()
 
+	countRows = sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	rangeIter, err = mysql.GetRangeIterator(ctx, tableCases[0].rangeInfo, mysql.GetTableAnalyzer(), 3)
+	require.NoError(t, err)
+	// Cousume all chunks
+	_, err = rangeIter.Next(ctx)
+	require.NoError(t, err)
+	_, err = rangeIter.Next(ctx)
 	require.NoError(t, err)
 	rangeIter.Close()
 
-	// Wait goroutine quits to avoid data race
-	time.Sleep(time.Second)
-
 	// row Iterator
 	dataRows := sqlmock.NewRows(tableCases[0].rowColumns)
-	for k := 0; k < 2; k++ {
+	for k := range 2 {
 		dataRows.AddRow(tableCases[0].rows[k]...)
 	}
 	mock.ExpectQuery(tableCases[0].rowQuery).WillReturnRows(dataRows)

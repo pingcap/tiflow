@@ -15,6 +15,7 @@ package source
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,8 +37,8 @@ type ChunksIterator struct {
 	errCh            chan error
 	splitThreadCount int
 
+	wg     sync.WaitGroup
 	cancel context.CancelFunc
-	pool   *utils.WorkerPool
 }
 
 // NewChunksIterator returns a new iterator
@@ -58,14 +59,21 @@ func NewChunksIterator(
 		chunksCh: make(chan *splitter.RangeInfo, 30*splitThreadCount),
 		errCh:    make(chan error, len(tableDiffs)),
 		cancel:   cancel,
-		pool:     utils.NewWorkerPool(uint(splitThreadCount), "chunks producer"),
 	}
-	go iter.produceChunks(ctxx, startRange)
+
+	iter.wg.Add(1)
+	go iter.produceChunks(ctxx, splitThreadCount, startRange)
 	return iter, nil
 }
 
-func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter.RangeInfo) {
-	defer close(t.chunksCh)
+func (t *ChunksIterator) produceChunks(ctx context.Context, splitThreadCount int, startRange *splitter.RangeInfo) {
+	pool := utils.NewWorkerPool(uint(splitThreadCount), "chunks producer")
+	defer func() {
+		pool.WaitFinished()
+		close(t.chunksCh)
+		t.wg.Done()
+	}()
+
 	nextTableIndex := 0
 
 	// If chunkRange
@@ -75,7 +83,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 		nextTableIndex = curIndex + 1
 		// if this chunk is empty, data-check for this table should be skipped
 		if startRange.ChunkRange.Type != chunk.Empty {
-			t.pool.Apply(func() {
+			pool.Apply(func() {
 				chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, curTable, startRange)
 				if err != nil {
 					t.errCh <- errors.Trace(err)
@@ -111,7 +119,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 		curTableIndex := nextTableIndex
 		// skip data-check, but still need to send a empty chunk to make checkpoint continuous
 		if t.TableDiffs[curTableIndex].IgnoreDataCheck || !common.AllTableExist(t.TableDiffs[curTableIndex].TableLack) {
-			t.pool.Apply(func() {
+			pool.Apply(func() {
 				table := t.TableDiffs[curTableIndex]
 				progressID := dbutil.TableName(table.Schema, table.Table)
 				progress.StartTable(progressID, 1, true)
@@ -135,7 +143,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 			continue
 		}
 
-		t.pool.Apply(func() {
+		pool.Apply(func() {
 			table := t.TableDiffs[curTableIndex]
 			chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, table, nil)
 			if err != nil {
@@ -166,7 +174,6 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 			}
 		})
 	}
-	t.pool.WaitFinished()
 }
 
 // Next returns the next chunk
@@ -187,7 +194,7 @@ func (t *ChunksIterator) Next(ctx context.Context) (*splitter.RangeInfo, error) 
 // Close closes the iterator
 func (t *ChunksIterator) Close() {
 	t.cancel()
-	t.pool.WaitFinished()
+	t.wg.Wait()
 }
 
 // TODO: getCurTableIndexID only used for binary search, should be optimized later.
