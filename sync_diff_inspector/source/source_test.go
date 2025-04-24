@@ -437,7 +437,7 @@ func TestMysqlShardSources(t *testing.T) {
 	shard.Close()
 }
 
-func TestMysqlRouter(t *testing.T) {
+func TestMySQLRouter(t *testing.T) {
 	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
