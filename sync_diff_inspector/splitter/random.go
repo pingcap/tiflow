@@ -41,7 +41,7 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
-// Exported for test
+// MockRowCount is the mock row count used in unit tests
 var MockRowCount int64
 
 // a wrapper for get row count to integrate failpoint.
