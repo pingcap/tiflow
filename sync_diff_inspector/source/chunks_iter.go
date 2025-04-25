@@ -39,6 +39,7 @@ type ChunksIterator struct {
 
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
+	pool   *utils.WorkerPool
 }
 
 // NewChunksIterator returns a new iterator
@@ -59,17 +60,17 @@ func NewChunksIterator(
 		chunksCh: make(chan *splitter.RangeInfo, 30*splitThreadCount),
 		errCh:    make(chan error, len(tableDiffs)),
 		cancel:   cancel,
+		pool:     utils.NewWorkerPool(uint(splitThreadCount), "chunks producer"),
 	}
 
 	iter.wg.Add(1)
-	go iter.produceChunks(ctxx, splitThreadCount, startRange)
+	go iter.produceChunks(ctxx, startRange)
 	return iter, nil
 }
 
-func (t *ChunksIterator) produceChunks(ctx context.Context, splitThreadCount int, startRange *splitter.RangeInfo) {
-	pool := utils.NewWorkerPool(uint(splitThreadCount), "chunks producer")
+func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter.RangeInfo) {
 	defer func() {
-		pool.WaitFinished()
+		t.pool.WaitFinished()
 		close(t.chunksCh)
 		t.wg.Done()
 	}()
@@ -83,7 +84,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, splitThreadCount int
 		nextTableIndex = curIndex + 1
 		// if this chunk is empty, data-check for this table should be skipped
 		if startRange.ChunkRange.Type != chunk.Empty {
-			pool.Apply(func() {
+			t.pool.Apply(func() {
 				chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, curTable, startRange)
 				if err != nil {
 					t.errCh <- errors.Trace(err)
@@ -119,7 +120,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, splitThreadCount int
 		curTableIndex := nextTableIndex
 		// skip data-check, but still need to send a empty chunk to make checkpoint continuous
 		if t.TableDiffs[curTableIndex].IgnoreDataCheck || !common.AllTableExist(t.TableDiffs[curTableIndex].TableLack) {
-			pool.Apply(func() {
+			t.pool.Apply(func() {
 				table := t.TableDiffs[curTableIndex]
 				progressID := dbutil.TableName(table.Schema, table.Table)
 				progress.StartTable(progressID, 1, true)
@@ -143,7 +144,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, splitThreadCount int
 			continue
 		}
 
-		pool.Apply(func() {
+		t.pool.Apply(func() {
 			table := t.TableDiffs[curTableIndex]
 			chunkIter, err := t.tableAnalyzer.AnalyzeSplitter(ctx, table, nil)
 			if err != nil {
