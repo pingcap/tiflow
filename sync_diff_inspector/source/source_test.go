@@ -26,6 +26,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
@@ -220,6 +221,8 @@ func TestTiDBSource(t *testing.T) {
 	rowIter, err := tidb.GetRowsIterator(ctx, tableCase.rangeInfo)
 	require.NoError(t, err)
 
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
+
 	row := 0
 	var firstRow, secondRow map[string]*dbutil.ColumnData
 	for {
@@ -258,8 +261,6 @@ func TestTiDBSource(t *testing.T) {
 	rowIter.Close()
 
 	analyze := tidb.GetTableAnalyzer()
-	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	chunkIter, err := analyze.AnalyzeSplitter(ctx, tableDiffs[0], tableCase.rangeInfo)
 	require.NoError(t, err)
 	chunkIter.Close()
@@ -501,29 +502,14 @@ func TestMySQLRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	// random splitter
-	// query 1: SELECT COUNT(1) cnt FROM `source_test`.`test2`
-	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
-	// query 2: SELECT COUNT(1) cnt FROM `source_test_t`.`test_t`
-	countRows = sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
 	rangeIter, err := mysql.GetRangeIterator(ctx, nil, mysql.GetTableAnalyzer(), 3)
-	require.NoError(t, err)
-	// Cousume all chunks
-	_, err = rangeIter.Next(ctx)
 	require.NoError(t, err)
 	_, err = rangeIter.Next(ctx)
 	require.NoError(t, err)
 	rangeIter.Close()
 
-	countRows = sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	rangeIter, err = mysql.GetRangeIterator(ctx, tableCases[0].rangeInfo, mysql.GetTableAnalyzer(), 3)
-	require.NoError(t, err)
-	// Cousume all chunks
-	_, err = rangeIter.Next(ctx)
-	require.NoError(t, err)
-	_, err = rangeIter.Next(ctx)
 	require.NoError(t, err)
 	rangeIter.Close()
 

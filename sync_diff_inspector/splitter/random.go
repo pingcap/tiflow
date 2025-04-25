@@ -41,6 +41,17 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
+// Exported for test
+var MockRowCount int64
+
+// a wrapper for get row count to integrate failpoint.
+func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string, where string, args []any) (int64, error) {
+	failpoint.Inject("getRowCount", func() {
+		failpoint.Return(MockRowCount, nil)
+	})
+	return dbutil.GetRowCount(ctx, db, schemaName, tableName, where, args)
+}
+
 // NewRandomIterator return a new iterator
 func NewRandomIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*RandomIterator, error) {
 	return NewRandomIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
@@ -96,7 +107,7 @@ func NewRandomIteratorWithCheckpoint(
 		// For chunk splitted by random splitter, the checkpoint chunk records the tableCnt.
 		chunkCnt = bucketChunkCnt - beginIndex
 	} else {
-		cnt, err := dbutil.GetRowCount(ctx, dbConn, table.Schema, table.Table, table.Range, nil)
+		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, table.Range, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
