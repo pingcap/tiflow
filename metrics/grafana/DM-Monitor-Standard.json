@@ -127,7 +127,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "count(dm_worker_task_state{job_id=~\"$job_id\"} == 2)",
+          "expr": "count(dm_worker_task_state{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\"} == 2)",
           "instant": true,
           "interval": "",
           "legendFormat": "",
@@ -253,7 +253,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "dm_worker_task_state{job_id=~\"$job_id\"} != 2 ",
+          "expr": "dm_worker_task_state{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", job_id=~\"$job_id\"} != 2 ",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -459,7 +459,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
+          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_lag_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 90",
@@ -467,7 +467,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95,\nsum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
+          "expr": "histogram_quantile(0.95,\nsum(rate(dm_syncer_replication_lag_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 95",
@@ -475,7 +475,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.99,\nsum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
+          "expr": "histogram_quantile(0.99,\nsum(rate(dm_syncer_replication_lag_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 99",
@@ -793,7 +793,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_txn_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_txn_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -803,7 +803,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(dm_syncer_txn_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.95, sum(rate(dm_syncer_txn_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -813,7 +813,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.99, sum(rate(dm_syncer_txn_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.99, sum(rate(dm_syncer_txn_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -823,7 +823,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_query_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_query_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -833,7 +833,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(dm_syncer_query_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.95, sum(rate(dm_syncer_query_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -843,7 +843,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.99, sum(rate(dm_syncer_query_duration_time_bucket{worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
+          "expr": "histogram_quantile(0.99, sum(rate(dm_syncer_query_duration_time_bucket{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", worker=~\"$worker\",task=~\"$task\"}[$interval])) by (le,worker,task))",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",

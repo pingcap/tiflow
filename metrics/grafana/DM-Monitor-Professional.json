@@ -5510,7 +5510,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_master_start_leader_counter",
+              "expr": "dm_master_start_leader_counter{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -5608,7 +5608,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "count_values(\"state\", dm_master_worker_state)",
+              "expr": "count_values(\"state\", dm_master_worker_state{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"})",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -5705,7 +5705,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (worker) (dm_master_worker_state)",
+              "expr": "sum by (worker) (dm_master_worker_state{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"})",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -5802,7 +5802,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (type) (dm_master_worker_event_error)",
+              "expr": "sum by (type) (dm_master_worker_event_error{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"})",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -5899,7 +5899,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (task, type) (increase(dm_master_shard_ddl_error[1m]))",
+              "expr": "sum by (task, type) (increase(dm_master_shard_ddl_error{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}[1m]))",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -5996,7 +5996,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum by (task, type) (dm_master_ddl_state_number)",
+              "expr": "sum by (task, type) (dm_master_ddl_state_number{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\"})",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -6109,7 +6109,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"BeforeAnyOp\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"BeforeAnyOp\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6203,7 +6203,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"SourceBound\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"SourceBound\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6297,7 +6297,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"Start\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"Start\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6391,7 +6391,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"Pause\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"Pause\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6485,7 +6485,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"Resume\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"Resume\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6579,7 +6579,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"AutoResume\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"AutoResume\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6673,7 +6673,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"Update\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"Update\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6767,7 +6767,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_worker_operate_error{type=\"Stop\"}",
+              "expr": "dm_worker_operate_error{k8s_cluster=~\"$k8s_cluster\", tidb_cluster=~\"$tidb_cluster\", type=\"Stop\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "refId": "A"
@@ -6875,7 +6875,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_validator_validator_error_count",
+              "expr": "dm_validator_validator_error_count{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
@@ -6970,7 +6970,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_validator_validator_logpos_latency",
+              "expr": "dm_validator_validator_logpos_latency{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
@@ -7065,7 +7065,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_validator_validator_binlog_file",
+              "expr": "dm_validator_validator_binlog_file{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
@@ -7160,7 +7160,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_validator_validator_logfile_latency",
+              "expr": "dm_validator_validator_logfile_latency{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
@@ -7255,7 +7255,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_validator_validator_binlog_pos",
+              "expr": "dm_validator_validator_binlog_pos{k8s_cluster=~\"$k8s_cluster\",tidb_cluster=~\"$tidb_cluster\"}",
               "interval": "",
               "legendFormat": "",
               "queryType": "randomWalk",
