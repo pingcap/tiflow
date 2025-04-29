@@ -416,6 +416,7 @@ func TestHandleRenameTableAcrossDatabases(t *testing.T) {
 	skip, err = ddlJobPullerImpl.handleJob(job)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ErrSyncRenameTableFailed")
+	require.Equal(t, "RENAME TABLE `test3`.`rename_table_across_databases` TO `test1`.`rename_table_across_databases`", job.Query)
 }
 
 func TestHandleJob(t *testing.T) {
