@@ -1092,15 +1092,6 @@ func (d *DDLEvent) FromJobWithArgs(
 	case model.ActionDropView:
 		d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`",
 			d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
-	case model.ActionRenameTable:
-		// Note: preTableInfo may not be accurate for rename table.
-		// after pr: https://github.com/pingcap/tidb/pull/43341,
-		// assume there is a table `test.t` and a ddl: `rename table t to test2.t;`, and its commit ts is `100`.
-		// if you get a ddl snapshot at ts `99`, table `t` is already in `test2`.
-		// so preTableInfo.TableName.Schema will also be `test2`.
-		d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
-			job.InvolvingSchemaInfo[0].Database, job.InvolvingSchemaInfo[0].Table,
-			tableInfo.TableName.Schema, tableInfo.TableName.Table)
 	case model.ActionRenameTables:
 		oldTableName := preTableInfo.Name.O
 		newTableName := tableInfo.Name.O
