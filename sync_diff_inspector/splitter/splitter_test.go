@@ -689,7 +689,7 @@ func TestBucketSpliter(t *testing.T) {
 	db, mock, err = sqlmock.New()
 	require.NoError(t, err)
 	createFakeResultForBucketSplit(mock, nil, nil)
-	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(64)")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
 	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ:], testCases[0].bRandomValues[stopJ:])
 	iter, err = NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"))
 	require.NoError(t, err)
