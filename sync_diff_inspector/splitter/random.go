@@ -41,13 +41,12 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
-// MockRowCount is the mock row count used in unit tests
-var MockRowCount int64
-
 // a wrapper for get row count to integrate failpoint.
 func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string, where string, args []any) (int64, error) {
-	failpoint.Inject("getRowCount", func() {
-		failpoint.Return(MockRowCount, nil)
+	failpoint.Inject("getRowCount", func(val failpoint.Value) {
+		if count, ok := val.(int); ok {
+			failpoint.Return(int64(count), nil)
+		}
 	})
 	return dbutil.GetRowCount(ctx, db, schemaName, tableName, where, args)
 }

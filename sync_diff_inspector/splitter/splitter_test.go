@@ -689,7 +689,7 @@ func TestBucketSpliter(t *testing.T) {
 	db, mock, err = sqlmock.New()
 	require.NoError(t, err)
 	createFakeResultForBucketSplit(mock, nil, nil)
-	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(64)")
 	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ:], testCases[0].bRandomValues[stopJ:])
 	iter, err = NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"))
 	require.NoError(t, err)
@@ -726,8 +726,10 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 func createFakeResultForCount(t *testing.T, count int) {
 	if count > 0 {
 		// generate fake result for get the row count of this table
-		testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
-		MockRowCount = int64(count)
+		testfailpoint.Enable(t,
+			"github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount",
+			fmt.Sprintf("return(%d)", count),
+		)
 	}
 }
 

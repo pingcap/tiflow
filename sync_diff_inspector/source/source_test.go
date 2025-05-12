@@ -221,7 +221,7 @@ func TestTiDBSource(t *testing.T) {
 	rowIter, err := tidb.GetRowsIterator(ctx, tableCase.rangeInfo)
 	require.NoError(t, err)
 
-	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(0)")
 
 	row := 0
 	var firstRow, secondRow map[string]*dbutil.ColumnData
@@ -502,7 +502,7 @@ func TestMySQLRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	// random splitter
-	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(0)")
 	rangeIter, err := mysql.GetRangeIterator(ctx, nil, mysql.GetTableAnalyzer(), 3)
 	require.NoError(t, err)
 	_, err = rangeIter.Next(ctx)
