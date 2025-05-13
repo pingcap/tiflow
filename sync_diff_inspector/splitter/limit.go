@@ -123,7 +123,7 @@ func NewLimitIteratorWithCheckpoint(
 
 	chunkSize := table.ChunkSize
 	if chunkSize <= 0 {
-		cnt, err := dbutil.GetRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
+		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
