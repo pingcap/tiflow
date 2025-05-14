@@ -199,8 +199,8 @@ func TestGetGTID(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("GTID_MODE", "ON")
-	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'GTID_MODE'`).WillReturnRows(rows)
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_mode", "ON")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_mode'`).WillReturnRows(rows)
 	mode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "ON", mode)
