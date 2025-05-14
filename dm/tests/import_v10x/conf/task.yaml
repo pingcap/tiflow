@@ -110,6 +110,7 @@ syncers:
     checkpoint-flush-interval: 30
     compact: false
     multiple-rows: false
+    create-table-auto-id-cache-size: 0
     max-retry: 0
     auto-fix-gtid: false
     enable-gtid: false
@@ -125,6 +126,7 @@ syncers:
     checkpoint-flush-interval: 30
     compact: false
     multiple-rows: false
+    create-table-auto-id-cache-size: 0
     max-retry: 0
     auto-fix-gtid: false
     enable-gtid: true
