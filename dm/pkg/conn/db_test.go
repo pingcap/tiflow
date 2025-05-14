@@ -629,10 +629,7 @@ func addRowsForTables(rows *sqlmock.Rows, tables []string) {
 }
 
 func TestGetGTIDMode(t *testing.T) {
-	// Mock BaseDB and GetGlobalVariable behavior
-	mockDB := &BaseDB{
-		// ...mock initialization...
-	}
+	mockDB := &BaseDB{}
 	mockCtx := tcontext.NewContext(context.Background(), log.L())
 
 	// Mock implementation of GetGlobalVariable
@@ -641,10 +638,8 @@ func TestGetGTIDMode(t *testing.T) {
 		return "ON", nil
 	}
 
-	// Call the function with the mock implementation
 	gtidMode, err := GetGTIDModeWithMock(mockCtx, mockDB, mockGetGlobalVariable)
 
-	// Assert the results
 	require.NoError(t, err)
 	require.Equal(t, "ON", gtidMode)
 }
