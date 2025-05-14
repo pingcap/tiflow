@@ -290,7 +290,7 @@ func IsNoSuchThreadError(err error) bool {
 
 // GetGTIDMode return GTID_MODE.
 func GetGTIDMode(ctx *tcontext.Context, db *BaseDB) (string, error) {
-	val, err := GetGlobalVariable(ctx, db, "GTID_MODE")
+	val, err := GetGlobalVariable(ctx, db, "gtid_mode")
 	return val, err
 }
 
