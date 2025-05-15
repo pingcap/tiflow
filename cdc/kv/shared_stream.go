@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"sync"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/pkg/chann"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
@@ -100,10 +100,11 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 					zap.Uint64("storeID", r.storeID),
 					zap.String("addr", r.storeAddr),
 					zap.Error(err))
-				if errors.Cause(err) == context.Canceled {
+				if cerrors.Is(context.Cause(ctx), context.Canceled) {
 					return nil
-				} else if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
-					regionErr = &getStoreErr{}
+				}
+				if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
+					regionErr = newGetStoreErr(r.storeID)
 				} else {
 					regionErr = &sendRequestToStoreErr{}
 				}

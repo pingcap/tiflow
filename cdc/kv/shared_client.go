@@ -109,9 +109,17 @@ func (e *rpcCtxUnavailableErr) Error() string {
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
 }
 
-type getStoreErr struct{}
+type getStoreErr struct {
+	storeID uint64
+}
 
-func (e *getStoreErr) Error() string { return "get store error" }
+func newGetStoreErr(storeID uint64) *getStoreErr {
+	return &getStoreErr{storeID: storeID}
+}
+
+func (e *getStoreErr) Error() string {
+	return fmt.Sprintf("cannot get store: %d", e.storeID)
+}
 
 type sendRequestToStoreErr struct{}
 
@@ -748,6 +756,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		metricGetStoreErr.Inc()
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		// cannot get the store the region belongs to, so we need to reload the region.
+		// s.regionCache.InvalidateCachedRegion(errInfo.verID)
 		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, true, err)
 		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 		return nil

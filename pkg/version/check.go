@@ -203,8 +203,10 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	failpoint.Inject("GetStoreFailed", func() {
 		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
 	})
-	var stores []*metapb.Store
-	var err error
+	var (
+		stores []*metapb.Store
+		err    error
+	)
 	if storeID == 0 {
 		stores, err = client.GetAllStores(ctx, pd.WithExcludeTombstone())
 	} else {
@@ -215,12 +217,16 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}
 
+	var ver *semver.Version
 	for _, s := range stores {
+		if s == nil {
+			return cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf(`type:UNKNOWN message:"invalid store ID %d, not found"`, storeID))
+		}
 		if engine.IsTiFlash(s) {
 			continue
 		}
 
-		ver, err := semver.NewVersion(SanitizeVersion(s.Version))
+		ver, err = semver.NewVersion(SanitizeVersion(s.Version))
 		if err != nil {
 			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
