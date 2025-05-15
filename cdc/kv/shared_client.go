@@ -756,7 +756,7 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		metricGetStoreErr.Inc()
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		// cannot get the store the region belongs to, so we need to reload the region.
-		// s.regionCache.InvalidateCachedRegion(errInfo.verID)
+		s.regionCache.InvalidateCachedRegion(errInfo.verID)
 		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, true, err)
 		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 		return nil
