@@ -449,7 +449,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				continue
 			}
 
-			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
+			store := s.getStore(ctx, eg, region.rpcCtx.Store.StoreID(), region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
 
