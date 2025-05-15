@@ -15,7 +15,6 @@ package kv
 
 import (
 	"context"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"sync"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"

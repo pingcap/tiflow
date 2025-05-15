@@ -220,6 +220,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	var ver *semver.Version
 	for _, s := range stores {
 		if s == nil {
+			log.Warn("check tikv store version failed since it's nil", zap.Uint64("storeID", storeID))
 			return cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf(`type:UNKNOWN message:"invalid store ID %d, not found"`, storeID))
 		}
 		if engine.IsTiFlash(s) {
