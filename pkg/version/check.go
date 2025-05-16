@@ -200,7 +200,7 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 // If storeID is 0, it checks all TiKV.
 func CheckStoreVersion(ctx context.Context, client pd.Client) error {
 	failpoint.Inject("GetStoreFailed", func() {
-		failpoint.Return(cerror.ErrGetAllStoresFailed.FastGen("unknown store"))
+		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, errors.New("unknown store")))
 	})
 	stores, err := client.GetAllStores(ctx, pd.WithExcludeTombstone())
 	if err != nil {
