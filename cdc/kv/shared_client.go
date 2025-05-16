@@ -189,7 +189,6 @@ type rangeTask struct {
 // requestedStore represents a store that has been connected.
 // A store may have multiple streams.
 type requestedStore struct {
-	storeID   uint64
 	storeAddr string
 	// Use to select a stream to send request.
 	nextStream atomic.Uint32
@@ -447,7 +446,6 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
 				zap.String("span", region.span.String()),
-				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
 	}
@@ -483,7 +481,7 @@ func (s *SharedClient) getStore(
 	if rs = s.stores[storeAddr]; rs != nil {
 		return rs
 	}
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
+	rs = &requestedStore{storeAddr: storeAddr}
 	s.stores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
