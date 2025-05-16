@@ -82,7 +82,7 @@ func CheckClusterVersion(
 	ctx context.Context, client pd.Client, pdAddrs []string,
 	credential *security.Credential, errorTiKVIncompat bool,
 ) error {
-	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
+	err := CheckStoreVersion(ctx, client)
 	if err != nil {
 		if errorTiKVIncompat {
 			return err
@@ -198,28 +198,19 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 
 // CheckStoreVersion checks whether the given TiKV is compatible with this CDC.
 // If storeID is 0, it checks all TiKV.
-func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) error {
+func CheckStoreVersion(ctx context.Context, client pd.Client) error {
 	failpoint.Inject("GetStoreFailed", func() {
-		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
+		failpoint.Return(cerror.ErrGetAllStoresFailed.FastGen("unknown store"))
 	})
 	stores, err := client.GetAllStores(ctx, pd.WithExcludeTombstone())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}
 
-	var (
-		ver      *semver.Version
-		found    bool
-		storeIDs []uint64
-	)
+	var ver *semver.Version
 	for _, s := range stores {
 		if engine.IsTiFlash(s) {
 			continue
-		}
-
-		storeIDs = append(storeIDs, s.Id)
-		if s.Id == storeID {
-			found = true
 		}
 
 		ver, err = semver.NewVersion(SanitizeVersion(s.Version))
@@ -239,10 +230,6 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 				SanitizeVersion(s.Version), maxTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
-	}
-	if !found {
-		log.Warn("cannot find the store",
-			zap.Uint64("storeID", storeID), zap.Uint64s("storeIDs", storeIDs))
 	}
 	return nil
 }
