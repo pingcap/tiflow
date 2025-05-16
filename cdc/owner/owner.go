@@ -190,7 +190,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// admin job, which will cause all http api unavailable.
 	o.handleJobs(stdCtx)
 
-	if !o.clusterVersionConsistent(stdCtx, o.captures) {
+	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
 	}
 
@@ -509,7 +509,7 @@ func (o *ownerImpl) updateMetrics() {
 	}
 }
 
-func (o *ownerImpl) clusterVersionConsistent(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) bool {
+func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
 	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
 		versions[capture.Version] = struct{}{}
@@ -540,6 +540,7 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 		close(done)
 		return
 	}
+
 	var (
 		changefeedWithTableCount int
 		totalTableCount          int
@@ -626,7 +627,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 				cfReactor.scheduler.Rebalance()
 			}
 		case ownerJobTypeQuery:
-			job.done <- o.handleQueries(ctx, job.query)
+			job.done <- o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
@@ -634,7 +635,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 	}
 }
 
-func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
+func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedSCheckpointTs:
 		ret := make(map[model.ChangeFeedID]uint64)
@@ -758,7 +759,7 @@ func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		query.Data = o.isHealthy(ctx)
+		query.Data = o.isHealthy()
 	case QueryOwner:
 		_, exist := o.changefeeds[query.ChangeFeedID]
 		query.Data = exist
@@ -769,14 +770,14 @@ func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 	return nil
 }
 
-func (o *ownerImpl) isHealthy(ctx context.Context) bool {
+func (o *ownerImpl) isHealthy() bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
 		log.Warn("owner is not healthy since changefeeds are not ticked")
 		return false
 	}
-	if !o.clusterVersionConsistent(ctx, o.captures) {
+	if !o.clusterVersionConsistent(o.captures) {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {
