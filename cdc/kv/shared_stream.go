@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"sync"
 	"time"
 
@@ -89,13 +90,36 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			if err := waitForPreFetching(); err != nil {
 				return err
 			}
+			var regionErr error
+			if err := version.CheckStoreVersion(ctx, c.pd); err != nil {
+				log.Info("event feed check store version fails",
+					zap.String("namespace", c.changefeed.Namespace),
+					zap.String("changefeed", c.changefeed.ID),
+					zap.Uint64("streamID", stream.streamID),
+					zap.String("addr", r.storeAddr),
+					zap.Error(err))
+				if errors.Cause(err) == context.Canceled {
+					return nil
+				}
+				if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
+					regionErr = &getStoreErr{}
+				} else {
+					regionErr = &sendRequestToStoreErr{}
+				}
+			} else {
+				if canceled := stream.run(ctx, c, r); canceled {
+					return nil
+				}
+				regionErr = &sendRequestToStoreErr{}
+			}
+
 			if canceled := stream.run(ctx, c, r); canceled {
 				return nil
 			}
 			err := &sendRequestToStoreErr{}
 			for _, m := range stream.clearStates() {
 				for _, state := range m {
-					state.markStopped(err)
+					state.markStopped(regionErr)
 					sfEvent := newEventItem(nil, state, stream)
 					slot := hashRegionID(state.region.verID.GetID(), len(c.workers))
 					_ = c.workers[slot].sendEvent(ctx, sfEvent)
@@ -108,7 +132,7 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 					// It means it's a special task for stopping the table.
 					continue
 				}
-				c.onRegionFail(newRegionErrorInfo(region, err))
+				c.onRegionFail(newRegionErrorInfo(region, regionErr))
 			}
 			if err := util.Hang(ctx, time.Second); err != nil {
 				return err

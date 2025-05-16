@@ -85,6 +85,7 @@ var (
 	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricGetStoreErr                 = eventFeedErrorCounter.WithLabelValues("GetStoreErr")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
 	metricKvCongestedCounter          = eventFeedErrorCounter.WithLabelValues("KvCongested")
@@ -107,6 +108,10 @@ func (e *rpcCtxUnavailableErr) Error() string {
 	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
 }
+
+type getStoreErr struct{}
+
+func (e *getStoreErr) Error() string { return "get store error" }
 
 type sendRequestToStoreErr struct{}
 
@@ -355,7 +360,6 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.handleResolveLockTasks(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
-	g.Go(func() error { return s.checkTiKVStoresVersion(ctx) })
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -737,6 +741,13 @@ func (s *SharedClient) doHandleError(ctx context.Context, errInfo regionErrorInf
 		metricFeedRPCCtxUnavailable.Inc()
 		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
 		return nil
+	case *getStoreErr:
+		metricGetStoreErr.Inc()
+		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		// cannot get the store the region belongs to, so we need to reload the region.
+		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, true, err)
+		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.subscribedTable)
+		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -808,22 +819,6 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		case task = <-s.resolveLockTaskCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.create).Milliseconds()))
 			doResolve(task.regionID, task.state, task.targetTs)
-		}
-	}
-}
-
-func (s *SharedClient) checkTiKVStoresVersion(ctx context.Context) error {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		case <-ticker.C:
-		}
-		if err := version.CheckStoreVersion(ctx, s.pd); err != nil {
-			log.Warn("check store version failed", zap.Error(err))
-			return errors.Trace(err)
 		}
 	}
 }
