@@ -523,29 +523,16 @@ func (o *ownerImpl) clusterVersionConsistent(ctx context.Context, captures map[m
 		}
 		return false
 	}
-
-	if err := o.checkAllUpstreamTiKVStoresVersion(ctx); err != nil {
-		if o.logLimiter.Allow() {
-			log.Warn("TiKV cluster versions not allowed",
-				zap.String("ownerVer", version.ReleaseVersion),
-				zap.Any("captures", captures), zap.Error(err))
-		}
-		return false
-	}
 	return true
 }
 
-func (o *ownerImpl) checkAllUpstreamTiKVStoresVersion(ctx context.Context) error {
-	return o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
+func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
+	if err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
 		if err := upstream.CheckTiKVStoresVersion(ctx); err != nil {
 			return errors.Trace(err)
 		}
 		return nil
-	})
-}
-
-func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
-	if err := o.checkAllUpstreamTiKVStoresVersion(ctx); err != nil {
+	}); err != nil {
 		log.Info("owner handle drain capture failed, since check upstream store version failed",
 			zap.String("target", query.CaptureID), zap.Error(err))
 		query.Resp = &model.DrainCaptureResp{CurrentTableCount: 0}
