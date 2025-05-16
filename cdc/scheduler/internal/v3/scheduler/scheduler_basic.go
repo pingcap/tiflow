@@ -154,8 +154,9 @@ func newBurstAddTables(
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
-			zap.String("captureID", targetCapture),
-			zap.Any("tableID", span.TableID))
+			zap.String("targetCapture", targetCapture),
+			zap.Any("tableID", span.TableID),
+			zap.Any("checkpoint", checkpointTs))
 
 		idx++
 		if idx >= len(captureIDs) {
