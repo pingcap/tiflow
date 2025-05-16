@@ -60,11 +60,14 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &saramaAdminClient{
+	a := saramaAdminClient{
 		client:     client,
 		admin:      admin,
 		changefeed: f.changefeedID,
-	}, nil
+		done:       make(chan struct{}),
+	}
+	go a.keepConnAlive()
+	return &a, nil
 }
 
 // SyncProducer returns a Sync Producer,

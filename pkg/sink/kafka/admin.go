@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/pingcap/errors"
@@ -31,6 +32,7 @@ type saramaAdminClient struct {
 
 	client sarama.Client
 	admin  sarama.ClusterAdmin
+	done   chan struct{}
 }
 
 func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
@@ -176,10 +178,28 @@ func (a *saramaAdminClient) CreateTopic(
 }
 
 func (a *saramaAdminClient) Close() {
+	close(a.done)
 	if err := a.admin.Close(); err != nil {
 		log.Warn("close admin client meet error",
 			zap.String("namespace", a.changefeed.Namespace),
 			zap.String("changefeed", a.changefeed.ID),
 			zap.Error(err))
+	}
+}
+
+func (a *saramaAdminClient) keepConnAlive() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			brokers := a.client.Brokers()
+			for _, b := range brokers {
+				_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+			}
+		case <-a.done:
+			return
+		}
 	}
 }
