@@ -15,7 +15,6 @@ package kv
 
 import (
 	"context"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"sync"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
@@ -112,11 +112,6 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 				}
 				regionErr = &sendRequestToStoreErr{}
 			}
-
-			if canceled := stream.run(ctx, c, r); canceled {
-				return nil
-			}
-			err := &sendRequestToStoreErr{}
 			for _, m := range stream.clearStates() {
 				for _, state := range m {
 					state.markStopped(regionErr)
