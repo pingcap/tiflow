@@ -190,7 +190,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// admin job, which will cause all http api unavailable.
 	o.handleJobs(stdCtx)
 
-	if !o.clusterVersionConsistent(o.captures) {
+	if !o.clusterVersionConsistent(stdCtx, o.captures) {
 		return state, nil
 	}
 
@@ -509,7 +509,7 @@ func (o *ownerImpl) updateMetrics() {
 	}
 }
 
-func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
+func (o *ownerImpl) clusterVersionConsistent(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) bool {
 	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
 		versions[capture.Version] = struct{}{}
@@ -523,16 +523,29 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 		}
 		return false
 	}
+
+	if err := o.checkAllUpstreamTiKVStoresVersion(ctx); err != nil {
+		if o.logLimiter.Allow() {
+			log.Warn("TiKV cluster versions not allowed",
+				zap.String("ownerVer", version.ReleaseVersion),
+				zap.Any("captures", captures), zap.Error(err))
+		}
+		return false
+	}
 	return true
 }
 
-func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
-	if err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
-		if err := version.CheckStoreVersion(ctx, upstream.PDClient, 0); err != nil {
+func (o *ownerImpl) checkAllUpstreamTiKVStoresVersion(ctx context.Context) error {
+	return o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
+		if err := upstream.CheckTiKVStoresVersion(ctx); err != nil {
 			return errors.Trace(err)
 		}
 		return nil
-	}); err != nil {
+	})
+}
+
+func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
+	if err := o.checkAllUpstreamTiKVStoresVersion(ctx); err != nil {
 		log.Info("owner handle drain capture failed, since check upstream store version failed",
 			zap.String("target", query.CaptureID), zap.Error(err))
 		query.Resp = &model.DrainCaptureResp{CurrentTableCount: 0}
@@ -540,7 +553,6 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 		close(done)
 		return
 	}
-
 	var (
 		changefeedWithTableCount int
 		totalTableCount          int
@@ -627,7 +639,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 				cfReactor.scheduler.Rebalance()
 			}
 		case ownerJobTypeQuery:
-			job.done <- o.handleQueries(job.query)
+			job.done <- o.handleQueries(ctx, job.query)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
@@ -635,7 +647,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 	}
 }
 
-func (o *ownerImpl) handleQueries(query *Query) error {
+func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedSCheckpointTs:
 		ret := make(map[model.ChangeFeedID]uint64)
@@ -759,7 +771,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		query.Data = o.isHealthy()
+		query.Data = o.isHealthy(ctx)
 	case QueryOwner:
 		_, exist := o.changefeeds[query.ChangeFeedID]
 		query.Data = exist
@@ -770,14 +782,14 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 	return nil
 }
 
-func (o *ownerImpl) isHealthy() bool {
+func (o *ownerImpl) isHealthy(ctx context.Context) bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
 		log.Warn("owner is not healthy since changefeeds are not ticked")
 		return false
 	}
-	if !o.clusterVersionConsistent(o.captures) {
+	if !o.clusterVersionConsistent(ctx, o.captures) {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {
