@@ -355,6 +355,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.handleResolveLockTasks(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
+	g.Go(func() error { return s.checkTiKVStoresVersion(ctx) })
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -807,6 +808,22 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 		case task = <-s.resolveLockTaskCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.create).Milliseconds()))
 			doResolve(task.regionID, task.state, task.targetTs)
+		}
+	}
+}
+
+func (s *SharedClient) checkTiKVStoresVersion(ctx context.Context) error {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-ticker.C:
+		}
+		if err := version.CheckStoreVersion(ctx, s.pd); err != nil {
+			log.Warn("check store version failed", zap.Error(err))
+			return errors.Trace(err)
 		}
 	}
 }
