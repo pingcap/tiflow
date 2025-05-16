@@ -435,7 +435,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				continue
 			}
 
-			store := s.getStore(ctx, eg, region.rpcCtx.Store.StoreID(), region.rpcCtx.Addr)
+			store := s.getStore(ctx, eg, region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
 
@@ -474,8 +474,7 @@ func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region reg
 
 // getStore gets a requestedStore from requestedStores by storeAddr.
 func (s *SharedClient) getStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
+	ctx context.Context, g *errgroup.Group, storeAddr string,
 ) *requestedStore {
 	var rs *requestedStore
 	if rs = s.stores[storeAddr]; rs != nil {
