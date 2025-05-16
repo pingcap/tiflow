@@ -187,6 +187,7 @@ func (a *saramaAdminClient) Close() {
 	}
 }
 
+// keepConnAlive is used to keep the connection alive.
 func (a *saramaAdminClient) keepConnAlive() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -194,6 +195,11 @@ func (a *saramaAdminClient) keepConnAlive() {
 	for {
 		select {
 		case <-ticker.C:
+			// We don't care about the response and error here, even the connection
+			// is unestablished, we just need to keep the connection alive when it's established.
+			// The connection will be established when a producer send messages.
+			// This is a workaround for the issue that sarama doesn't keep the connection alive
+			// when the connection is idle for a long time and we have disabled the retry in sarama.
 			brokers := a.client.Brokers()
 			for _, b := range brokers {
 				_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})

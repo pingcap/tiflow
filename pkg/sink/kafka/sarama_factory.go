@@ -29,7 +29,14 @@ import (
 type saramaFactory struct {
 	changefeedID model.ChangeFeedID
 	option       *Options
-	client       sarama.Client
+	// This client is shared by all producers and admin clients.
+	// It is created when the first producer or admin client is created.
+	// NOTE: Do not close this client before all producers and admin clients are useless and closed.
+	// Why we need to share the client?
+	// Because we have to keep the connection alive to the kafka cluster. And the best way to do this is to
+	// use the same client for all producers and admin clients, and keep them alive.
+	// The keep-alive mechanism is running in saramaAdminClient.keepConnAlive.
+	client sarama.Client
 
 	registry metrics.Registry
 }
