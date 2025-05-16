@@ -25,7 +25,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/engine"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -203,28 +202,24 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	failpoint.Inject("GetStoreFailed", func() {
 		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
 	})
-	var (
-		stores []*metapb.Store
-		err    error
-	)
-	if storeID == 0 {
-		stores, err = client.GetAllStores(ctx, pd.WithExcludeTombstone())
-	} else {
-		stores = make([]*metapb.Store, 1)
-		stores[0], err = client.GetStore(ctx, storeID)
-	}
+	stores, err := client.GetAllStores(ctx, pd.WithExcludeTombstone())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}
 
-	var ver *semver.Version
+	var (
+		ver      *semver.Version
+		found    bool
+		storeIDs []uint64
+	)
 	for _, s := range stores {
-		if s == nil {
-			log.Warn("check tikv store version failed since it's nil", zap.Uint64("storeID", storeID))
-			return cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf(`type:UNKNOWN message:"invalid store ID %d, not found"`, storeID))
-		}
 		if engine.IsTiFlash(s) {
 			continue
+		}
+
+		storeIDs = append(storeIDs, s.Id)
+		if s.Id == storeID {
+			found = true
 		}
 
 		ver, err = semver.NewVersion(SanitizeVersion(s.Version))
@@ -244,6 +239,10 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 				SanitizeVersion(s.Version), maxTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
+	}
+	if !found {
+		log.Warn("cannot find the store",
+			zap.Uint64("storeID", storeID), zap.Uint64s("storeIDs", storeIDs))
 	}
 	return nil
 }
