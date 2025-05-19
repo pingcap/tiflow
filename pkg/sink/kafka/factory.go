@@ -160,19 +160,17 @@ func (p *saramaAsyncProducer) Close() {
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
-		if !p.client.Closed() {
-			if err := p.client.Close(); err != nil {
-				log.Warn("Close kafka async producer client error",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Duration("duration", time.Since(start)),
-					zap.Error(err))
-			} else {
-				log.Info("Close kafka async producer client success",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Duration("duration", time.Since(start)))
-			}
+		if err := p.client.Close(); err != nil {
+			log.Warn("Close kafka async producer client error",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Close kafka async producer client success",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)))
 		}
 
 		start = time.Now()
