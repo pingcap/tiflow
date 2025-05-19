@@ -440,3 +440,11 @@ func (up *Upstream) doVerify(ctx context.Context, dsnStr string) error {
 		zap.Uint64("upstreamID", up.ID))
 	return nil
 }
+
+// CheckTiKVStoresVersion checks the version of all TiKV stores in the cluster.
+func (up *Upstream) CheckTiKVStoresVersion(ctx context.Context) error {
+	if err := version.CheckStoreVersion(ctx, up.PDClient); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
