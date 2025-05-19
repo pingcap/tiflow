@@ -188,8 +188,13 @@ func (a *saramaAdminClient) Close() {
 }
 
 // keepConnAlive is used to keep the connection alive.
-func (a *saramaAdminClient) keepConnAlive() {
-	ticker := time.NewTicker(5 * time.Second)
+func (a *saramaAdminClient) keepConnAlive(duration time.Duration) {
+	if duration <= 0 {
+		log.Warn("keepConnAlive duration is less than or equal to 0")
+		return
+	}
+	log.Info("keepConnAlive for sarama", zap.Duration("duration", duration))
+	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
 	for {

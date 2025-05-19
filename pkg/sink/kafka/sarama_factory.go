@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -73,7 +74,17 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 		changefeed: f.changefeedID,
 		done:       make(chan struct{}),
 	}
-	go a.keepConnAlive()
+	idleMs, err := a.GetBrokerConfig(ctx, BrokerConnectionsMaxIdleMsConfigName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	idleMsInt, err := strconv.Atoi(idleMs)
+	if err != nil || idleMsInt <= 0 {
+		log.Warn("invalid broker config",
+			zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
+		return nil, errors.Trace(err)
+	}
+	go a.keepConnAlive(time.Duration(idleMsInt/2) * time.Millisecond)
 	return &a, nil
 }
 
