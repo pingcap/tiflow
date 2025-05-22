@@ -31,6 +31,7 @@ type saramaAdminClient struct {
 
 	client sarama.Client
 	admin  sarama.ClusterAdmin
+	done   chan struct{}
 }
 
 func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
@@ -176,6 +177,7 @@ func (a *saramaAdminClient) CreateTopic(
 }
 
 func (a *saramaAdminClient) Close() {
+	close(a.done)
 	if err := a.admin.Close(); err != nil {
 		log.Warn("close admin client meet error",
 			zap.String("namespace", a.changefeed.Namespace),
