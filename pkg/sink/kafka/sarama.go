@@ -255,3 +255,40 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 	}
 	return KafkaVersion, nil
 }
+
+// keepConnAlive is used to keep the connection alive.
+func keepConnAlive(client sarama.Client, duration time.Duration, done chan struct{}) {
+	if client == nil || done == nil {
+		log.Warn("keepConnAlive client or done is nil")
+		return
+	}
+	if duration <= 0 {
+		log.Warn("keepConnAlive duration is less than or equal to 0")
+		return
+	}
+	log.Info("keepConnAlive for sarama", zap.Duration("duration", duration))
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// We don't care about the response and error here, even the connection
+			// is unestablished, we just need to keep the connection alive when it's established.
+			// The connection will be established when a producer send messages.
+			// This is a workaround for the issue that sarama doesn't keep the connection alive
+			// when the connection is idle for a long time and we have disabled the retry in sarama.
+			hearbeatBroker(client)
+		case <-done:
+			log.Info("keepConnAlive done")
+			return
+		}
+	}
+}
+
+func hearbeatBroker(client sarama.Client) {
+	brokers := client.Brokers()
+	for _, b := range brokers {
+		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+	}
+}
