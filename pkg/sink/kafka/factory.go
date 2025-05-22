@@ -85,6 +85,7 @@ type AsyncProducer interface {
 type saramaSyncProducer struct {
 	id       model.ChangeFeedID
 	producer sarama.SyncProducer
+	done     chan struct{}
 }
 
 func (p *saramaSyncProducer) SendMessage(
@@ -116,6 +117,7 @@ func (p *saramaSyncProducer) SendMessages(_ context.Context, topic string, parti
 }
 
 func (p *saramaSyncProducer) Close() {
+	close(p.done)
 	start := time.Now()
 	err := p.producer.Close()
 	if err != nil {
@@ -192,6 +194,8 @@ func (p *saramaAsyncProducer) Close() {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
+	ticker := time.NewTicker(keepConnAliveInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -212,6 +216,8 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 			}
+		case <-ticker.C:
+			hearbeatBroker(p.client)
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info

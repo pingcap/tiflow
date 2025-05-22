@@ -29,8 +29,9 @@ import (
 )
 
 var (
-	defaultKafkaVersion = sarama.V2_0_0_0
-	maxKafkaVersion     = sarama.V2_8_0_0
+	defaultKafkaVersion   = sarama.V2_0_0_0
+	maxKafkaVersion       = sarama.V2_8_0_0
+	keepConnAliveInterval = 5 * time.Minute
 )
 
 // NewSaramaConfig return the default config and set the according version and metrics
@@ -257,17 +258,17 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 }
 
 // keepConnAlive is used to keep the connection alive.
-func keepConnAlive(client sarama.Client, duration time.Duration, done chan struct{}) {
+func keepConnAlive(client sarama.Client, done chan struct{}) {
 	if client == nil || done == nil {
 		log.Warn("keepConnAlive client or done is nil")
 		return
 	}
-	if duration <= 0 {
+	if keepConnAliveInterval <= 0 {
 		log.Warn("keepConnAlive duration is less than or equal to 0")
 		return
 	}
-	log.Info("keepConnAlive for sarama", zap.Duration("duration", duration))
-	ticker := time.NewTicker(duration)
+	log.Info("keepConnAlive for sarama", zap.Duration("keepConnAliveInterval", keepConnAliveInterval))
+	ticker := time.NewTicker(keepConnAliveInterval)
 	defer ticker.Stop()
 
 	for {
