@@ -14,6 +14,7 @@
 package csv
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -101,4 +102,56 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 1, "expected one message")
 	msgs[0].Callback()
 	require.Equal(t, 1, count, "expected all callbacks to be called")
+}
+
+func TestCSVBatchCodecWithHeader(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	ddl := helper.DDL2Event("create table test.table1(col1 int primary key)")
+	event1 := helper.DML2Event("insert into test.table1 values (1)", "test", "table1")
+	event2 := helper.DML2Event("insert into test.table1 values (2)", "test", "table1")
+
+	cs := &model.SingleTableTxn{
+		Rows: []*model.RowChangedEvent{
+			event1,
+			event2,
+		},
+	}
+	cfg := &common.Config{
+		Delimiter:            ",",
+		Quote:                "\"",
+		Terminator:           "\n",
+		NullString:           "\\N",
+		IncludeCommitTs:      true,
+		CSVOutputFieldHeader: true,
+	}
+	encoder := newBatchEncoder(cfg)
+	err := encoder.AppendTxnEvent(cs, nil)
+	require.Nil(t, err)
+	messages := encoder.Build()
+	require.Len(t, messages, 1)
+	header := strings.Split(string(messages[0].Value), cfg.Terminator)[0]
+	require.Equal(t, "type,table,schema,commit-ts,col1", header)
+	require.Equal(t, len(cs.Rows), messages[0].GetRowsCount())
+
+	cfg.CSVOutputFieldHeader = false
+	encoder = newBatchEncoder(cfg)
+	err = encoder.AppendTxnEvent(cs, nil)
+	require.Nil(t, err)
+	messages1 := encoder.Build()
+	require.Len(t, messages1, 1)
+	require.NotEqual(t, messages1[0].Value, messages[0].Value)
+	require.Equal(t, len(cs.Rows), messages1[0].GetRowsCount())
+
+	cfg.CSVOutputFieldHeader = true
+	cs = &model.SingleTableTxn{
+		TableInfo: ddl.TableInfo,
+		Rows:      nil,
+	}
+	encoder = newBatchEncoder(cfg)
+	err = encoder.AppendTxnEvent(cs, nil)
+	require.Nil(t, err)
+	messages = encoder.Build()
+	require.Len(t, messages, 0)
 }
