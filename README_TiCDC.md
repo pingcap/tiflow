@@ -64,6 +64,10 @@ $ sysbench --mysql-host=127.0.0.1 --mysql-user=root --mysql-port=4000 --mysql-db
 $ mysql -h 127.0.0.1 -P 5000 -u root -e "SELECT COUNT(*) FROM test.sbtest1"
 ```
 
+## Roadmap
+
+For TiCDC engineering and architecture roadmap, plese see [TiCDC RoadMap](./docs/cdc-eng-roadmap.md)
+
 ## Contributing
 
 We welcome and greatly appreciate contributions. See [CONTRIBUTING.md](./CONTRIBUTING.md)
