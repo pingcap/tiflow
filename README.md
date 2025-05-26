@@ -7,6 +7,7 @@
 [![Build Status](https://github.com/pingcap/tiflow/actions/workflows/check_and_build.yaml/badge.svg?branch=master)](https://github.com/pingcap/tiflow/actions/workflows/check_and_build.yaml?query=event%3Apush+branch%3Amaster)
 [![codecov](https://codecov.io/gh/pingcap/tiflow/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/tiflow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/tiflow)](https://goreportcard.com/report/github.com/pingcap/tiflow)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pingcap/ticdc)
 
 ## Introduction
 
@@ -16,6 +17,8 @@
 * TiCDC replicates change data to various downstream systems, such as MySQL protocol-compatible databases and [Kafka](https://kafka.apache.org/).
 
 For more details, see [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
+
+You can also check out the [DeepWiki documentation](https://deepwiki.com/pingcap/tiflow) for more information.
 
 ## License
 
