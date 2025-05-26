@@ -141,7 +141,7 @@ func (s *TiDBSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.Ra
 		// If sqlHint is set to "auto" and there are index column names in the chunk,
 		// we attempt to find a matching index in the source table to use as an index hint.
 		// This is necessary because the index name might differ between the source and target tables,
-		// even if the index columns are the same. For example:
+		// although the possibility is low. For example:
 		// 		Source: idx1(c1, c2)
 		// 		Target: idx2(c1, c2)
 		// In this case, we use the column names [c1, c2] from idx1 to find the corresponding index name (idx2) in the source table.

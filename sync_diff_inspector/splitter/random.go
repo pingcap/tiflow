@@ -84,7 +84,7 @@ func NewRandomIteratorWithCheckpoint(
 	// Below logic is modified from BucketIterator
 	// It's used to find the index which can match the split fields in RandomIterator.
 	fieldNames := utils.GetColumnNames(fields)
-	var indices = dbutil.FindAllIndex(table.Info)
+	indices := dbutil.FindAllIndex(table.Info)
 NEXTINDEX:
 	for _, index := range indices {
 		if index == nil {

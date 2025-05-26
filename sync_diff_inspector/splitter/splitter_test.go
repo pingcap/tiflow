@@ -997,7 +997,7 @@ func TestBucketSpliterHint(t *testing.T) {
 }
 
 func TestRandomSpliterHint(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	ctx := context.Background()
 
@@ -1027,6 +1027,8 @@ func TestRandomSpliterHint(t *testing.T) {
 		},
 	}
 
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(320)")
+
 	for _, tc := range testCases {
 		tableInfo, err := utils.GetTableInfoBySQL(tc.tableSQL, parser.New())
 		require.NoError(t, err)
@@ -1038,8 +1040,6 @@ func TestRandomSpliterHint(t *testing.T) {
 				Info:   tableInfo,
 				Range:  tableRange,
 			}
-
-			mock.ExpectQuery("SELECT COUNT*").WillReturnRows(sqlmock.NewRows([]string{"CNT"}).AddRow("320"))
 
 			iter, err := NewRandomIteratorWithCheckpoint(ctx, "", tableDiff, db, nil)
 			require.NoError(t, err)
@@ -1064,13 +1064,13 @@ func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 	*/
 	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
 	for _, indexName := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			statsRows.AddRow("test", "test", indexName, 1, (i+1)*64, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
 		}
 	}
 	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
 
-	for i := 0; i < indexCount; i++ {
+	for range indexCount {
 		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
 	}
 }
