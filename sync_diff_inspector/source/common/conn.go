@@ -16,11 +16,15 @@ package common
 import (
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"go.uber.org/zap"
 )
 
 func tryConnectMySQL(cfg *mysql.Config) (*sql.DB, error) {
@@ -43,8 +47,39 @@ func tryConnectMySQL(cfg *mysql.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+func verifyParams(db *sql.DB, sessionCfg *config.SessionConfig) error {
+	if sessionCfg == nil {
+		return nil
+	}
+	for param, value := range *sessionCfg {
+		res, err := db.Query("show session variables like ?", param)
+		if err != nil {
+			return err
+		}
+		//nolint: errcheck
+		defer res.Close()
+		if res.Next() {
+			var paramName, actual string
+			if err := res.Scan(&paramName, &actual); err != nil {
+				return err
+			}
+			expected := fmt.Sprint(value)
+			if actual != expected {
+				log.Warn("The session variable was set, but the database returned a different value",
+					zap.String("variable", param),
+					zap.String("configured_value", expected),
+					zap.String("effective_value", actual),
+				)
+			}
+		} else {
+			return fmt.Errorf("parameter %s not found", param)
+		}
+	}
+	return nil
+}
+
 // ConnectMySQL creates sql.DB used for select data
-func ConnectMySQL(cfg *mysql.Config, num int) (db *sql.DB, err error) {
+func ConnectMySQL(sessionCfg *config.SessionConfig, cfg *mysql.Config, num int) (db *sql.DB, err error) {
 	defer func() {
 		if err == nil && db != nil {
 			// SetMaxOpenConns and SetMaxIdleConns for connection to avoid error like
@@ -55,7 +90,7 @@ func ConnectMySQL(cfg *mysql.Config, num int) (db *sql.DB, err error) {
 	}()
 	// Try plain password first.
 	db, firstErr := tryConnectMySQL(cfg)
-	if firstErr == nil {
+	if firstErr == nil && verifyParams(db, sessionCfg) == nil {
 		return db, nil
 	}
 	// If access is denied and password is encoded by base64, try the decoded string as well.
@@ -64,7 +99,7 @@ func ConnectMySQL(cfg *mysql.Config, num int) (db *sql.DB, err error) {
 		if password, decodeErr := base64.StdEncoding.DecodeString(cfg.Passwd); decodeErr == nil && string(password) != cfg.Passwd {
 			cfg.Passwd = string(password)
 			db2, err := tryConnectMySQL(cfg)
-			if err == nil {
+			if err == nil && verifyParams(db2, sessionCfg) == nil {
 				return db2, nil
 			}
 		}
