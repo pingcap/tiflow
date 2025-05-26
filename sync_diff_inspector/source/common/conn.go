@@ -74,6 +74,10 @@ func verifyParams(db *sql.DB, sessionCfg *config.SessionConfig) error {
 		} else {
 			return fmt.Errorf("parameter %s not found", param)
 		}
+
+		if err := res.Err(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
