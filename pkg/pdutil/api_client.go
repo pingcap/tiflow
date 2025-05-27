@@ -347,8 +347,8 @@ func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	result := make([]string, 0, len(members))
-	for _, m := range members {
+	result := make([]string, 0, len(members.Members))
+	for _, m := range members.Members {
 		clientUrls := m.GetClientUrls()
 		if len(clientUrls) > 0 {
 			result = append(result, clientUrls[0])

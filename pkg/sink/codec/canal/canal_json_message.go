@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -192,7 +192,7 @@ func newTableInfo(msg canalJSONMessageInterface, partitionInfo *timodel.Partitio
 	schema := *msg.getSchema()
 	table := *msg.getTable()
 	tidbTableInfo := &timodel.TableInfo{}
-	tidbTableInfo.Name = pmodel.NewCIStr(table)
+	tidbTableInfo.Name = ast.NewCIStr(table)
 
 	rawColumns := msg.getData()
 	pkNames := msg.pkNameSet()
@@ -213,7 +213,7 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 		return nil
 	}
 	switch event.TableInfo.Partition.Type {
-	case pmodel.PartitionTypeRange:
+	case ast.PartitionTypeRange:
 		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
 		columns := event.Columns
 		if columns == nil {
@@ -243,7 +243,7 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 		}
 		return fmt.Errorf("cannot found partition for column value %s", columnValue)
 	// todo: support following rule if meet the corresponding workload
-	case pmodel.PartitionTypeHash:
+	case ast.PartitionTypeHash:
 		targetColumnID := event.TableInfo.ForceGetColumnIDByName(strings.ReplaceAll(event.TableInfo.Partition.Expr, "`", ""))
 		columns := event.Columns
 		if columns == nil {
@@ -260,9 +260,9 @@ func (b *batchDecoder) setPhysicalTableID(event *model.RowChangedEvent, physical
 		partitionID := event.TableInfo.GetPartitionInfo().Definitions[result].ID
 		event.PhysicalTableID = partitionID
 		return nil
-	case pmodel.PartitionTypeKey:
-	case pmodel.PartitionTypeList:
-	case pmodel.PartitionTypeNone:
+	case ast.PartitionTypeKey:
+	case ast.PartitionTypeList:
+	case ast.PartitionTypeNone:
 	default:
 	}
 	return fmt.Errorf("manually set partition id for partition type %s not supported yet", event.TableInfo.Partition.Type)
