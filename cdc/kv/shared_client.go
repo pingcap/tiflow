@@ -776,7 +776,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 			now := time.Now()
 			for regionID, lastRun := range resolveLastRun {
 				if now.Sub(lastRun) < resolveLockMinInterval {
-					resolveLastRun[regionID] = lastRun
+					copied[regionID] = lastRun
 				}
 			}
 			resolveLastRun = copied
