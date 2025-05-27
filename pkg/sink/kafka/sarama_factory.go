@@ -92,7 +92,7 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 			zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
 		return nil, errors.Trace(err)
 	}
-	keepConnAliveInterval = time.Duration(idleMsInt) * time.Millisecond
+	keepConnAliveInterval = time.Duration(idleMsInt/2) * time.Millisecond
 	go keepConnAlive(client, a.done)
 	return &a, nil
 }
