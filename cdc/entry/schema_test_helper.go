@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	timeta "github.com/pingcap/tidb/pkg/meta"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
@@ -136,8 +136,8 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 			NewSchemaID:   res.SchemaID,
 			TableID:       res.BinlogInfo.MultipleTableInfos[i].ID,
 			NewTableName:  res.BinlogInfo.MultipleTableInfos[i].Name,
-			OldSchemaName: pmodel.NewCIStr(schema),
-			OldTableName:  pmodel.NewCIStr(fmt.Sprintf("old_%d", i)),
+			OldSchemaName: ast.NewCIStr(schema),
+			OldTableName:  ast.NewCIStr(fmt.Sprintf("old_%d", i)),
 		})
 	}
 	res, err = GetNewJobWithArgs(res, args)
@@ -243,8 +243,8 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 				NewSchemaID:   res.SchemaID,
 				NewTableName:  res.BinlogInfo.MultipleTableInfos[i].Name,
 				TableID:       res.BinlogInfo.MultipleTableInfos[i].ID,
-				OldSchemaName: pmodel.NewCIStr(schema),
-				OldTableName:  pmodel.NewCIStr("old" + res.BinlogInfo.MultipleTableInfos[i].Name.L),
+				OldSchemaName: ast.NewCIStr(schema),
+				OldTableName:  ast.NewCIStr("old" + res.BinlogInfo.MultipleTableInfos[i].Name.L),
 			})
 		}
 		res, err = GetNewJobWithArgs(res, args)

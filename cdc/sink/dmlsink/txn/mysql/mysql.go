@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -170,7 +170,7 @@ func NewMySQLBackends(
 		log.Warn("failed to query max_allowed_packet, use default value",
 			zap.String("changefeed", changefeed),
 			zap.Error(err))
-		maxAllowedPacket = int64(variable.DefMaxAllowedPacket)
+		maxAllowedPacket = int64(vardef.DefMaxAllowedPacket)
 	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)

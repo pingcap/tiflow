@@ -20,7 +20,7 @@ import (
 	"time"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -69,7 +69,7 @@ func newFakeDDLEvent(
 	}
 	info.TableInfo = &timodel.TableInfo{
 		ID:   tableID,
-		Name: pmodel.NewCIStr(tableName),
+		Name: ast.NewCIStr(tableName),
 	}
 	return &model.DDLEvent{
 		TableInfo: info,
@@ -217,18 +217,18 @@ func TestExecRenameTablesDDL(t *testing.T) {
 			{
 				OldSchemaID:   oldSchemaIDs[0],
 				NewSchemaID:   oldSchemaIDs[1],
-				NewTableName:  pmodel.NewCIStr("tb20"),
+				NewTableName:  ast.NewCIStr("tb20"),
 				TableID:       oldTableIDs[0],
-				OldSchemaName: pmodel.NewCIStr("test1"),
-				OldTableName:  pmodel.NewCIStr("oldtb20"),
+				OldSchemaName: ast.NewCIStr("test1"),
+				OldTableName:  ast.NewCIStr("oldtb20"),
 			},
 			{
 				OldSchemaID:   oldSchemaIDs[1],
 				NewSchemaID:   oldSchemaIDs[0],
-				NewTableName:  pmodel.NewCIStr("tb10"),
+				NewTableName:  ast.NewCIStr("tb10"),
 				TableID:       oldTableIDs[1],
-				OldSchemaName: pmodel.NewCIStr("test2"),
-				OldTableName:  pmodel.NewCIStr("oldtb10"),
+				OldSchemaName: ast.NewCIStr("test2"),
+				OldTableName:  ast.NewCIStr("oldtb10"),
 			},
 		},
 	}

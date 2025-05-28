@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -148,18 +148,18 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 
 	tidbTableInfo := &timodel.TableInfo{
 		ID:         100,
-		Name:       pmodel.NewCIStr("t1"),
+		Name:       ast.NewCIStr("t1"),
 		PKIsHandle: true,
 		Columns: []*timodel.ColumnInfo{
-			{ID: 1, Name: pmodel.NewCIStr("A"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 1, Name: ast.NewCIStr("A"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 		},
 		Indices: []*timodel.IndexInfo{
 			{
 				Primary: true,
-				Name:    pmodel.NewCIStr("index1"),
+				Name:    ast.NewCIStr("index1"),
 				Columns: []*timodel.IndexColumn{
 					{
-						Name: pmodel.NewCIStr("A"),
+						Name: ast.NewCIStr("A"),
 					},
 				},
 			},

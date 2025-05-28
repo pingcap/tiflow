@@ -41,6 +41,8 @@ import (
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"github.com/tikv/pd/client/opt"
+	"github.com/tikv/pd/client/pkg/caller"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -457,8 +459,10 @@ func (APIV2HelpersImpl) getPDClient(
 	}
 
 	pdClient, err := pd.NewClientWithContext(
-		ctx, pdAddrs, credential.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
+		ctx,
+		caller.Component("cdc-pd-controller"),
+		pdAddrs, credential.PDSecurityOption(),
+		opt.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -471,7 +475,7 @@ func (APIV2HelpersImpl) getPDClient(
 				MinConnectTimeout: 3 * time.Second,
 			}),
 		),
-		pd.WithForwardingOption(config.EnablePDForwarding))
+		opt.WithForwardingOption(config.EnablePDForwarding))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
 	}

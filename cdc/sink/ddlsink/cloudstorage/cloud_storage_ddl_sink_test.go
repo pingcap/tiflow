@@ -24,7 +24,7 @@ import (
 	"time"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -60,11 +60,11 @@ func TestWriteDDLEvent(t *testing.T) {
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
 					{
-						Name:      pmodel.NewCIStr("col1"),
+						Name:      ast.NewCIStr("col1"),
 						FieldType: *types.NewFieldType(mysql.TypeLong),
 					},
 					{
-						Name:      pmodel.NewCIStr("col2"),
+						Name:      ast.NewCIStr("col2"),
 						FieldType: *types.NewFieldType(mysql.TypeVarchar),
 					},
 				},
@@ -123,11 +123,11 @@ func TestWriteCheckpointTs(t *testing.T) {
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
 					{
-						Name:      pmodel.NewCIStr("col1"),
+						Name:      ast.NewCIStr("col1"),
 						FieldType: *types.NewFieldType(mysql.TypeLong),
 					},
 					{
-						Name:      pmodel.NewCIStr("col2"),
+						Name:      ast.NewCIStr("col2"),
 						FieldType: *types.NewFieldType(mysql.TypeVarchar),
 					},
 				},
