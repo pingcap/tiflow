@@ -36,6 +36,20 @@ func (b *BatchEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, rowEvent := range e.Rows {
+		if b.config.CSVOutputFieldHeader && b.batchSize == 0 {
+			names := make(map[int64]string, len(rowEvent.TableInfo.Columns))
+			colNames := make([]string, 0, len(rowEvent.Columns))
+			for _, col := range rowEvent.TableInfo.Columns {
+				names[col.ID] = col.Name.O
+			}
+			for _, col := range rowEvent.Columns {
+				if col == nil {
+					continue
+				}
+				colNames = append(colNames, names[col.ColumnID])
+			}
+			b.valueBuf.Write(encodeHeader(b.config, colNames))
+		}
 		row, err := rowChangedEvent2CSVMsg(b.config, rowEvent)
 		if err != nil {
 			return err

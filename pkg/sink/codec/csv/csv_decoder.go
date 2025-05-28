@@ -57,6 +57,7 @@ func NewBatchDecoder(ctx context.Context,
 		Terminator:      codecConfig.Terminator,
 		Null:            []string{codecConfig.NullString},
 		BackslashEscape: backslashEscape,
+		Header:          codecConfig.CSVOutputFieldHeader,
 	}
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
 		mydump.NewStringReader(string(value)),
@@ -89,7 +90,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		}
 		return model.MessageTypeUnknown, false, err
 	}
-
 	row := b.parser.LastRow()
 	if err = b.msg.decode(row.Row); err != nil {
 		return model.MessageTypeUnknown, false, errors.Trace(err)
