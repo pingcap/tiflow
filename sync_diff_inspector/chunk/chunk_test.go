@@ -16,6 +16,7 @@ package chunk
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -419,6 +420,29 @@ func TestChunkToString(t *testing.T) {
 	}
 	require.Equal(t, chunk.String(), `{"index":null,"type":0,"bounds":[{"column":"a","lower":"1","upper":"1","has-lower":true,"has-upper":true},{"column":"b","lower":"3","upper":"3","has-lower":true,"has-upper":true},{"column":"c","lower":"6","upper":"6","has-lower":true,"has-upper":true}],"is-first":false,"is-last":false,"where":"","args":null}`)
 	require.Equal(t, chunk.ToMeta(), "range in sequence: (1,3,6) < (a,b,c) <= (1,3,6)")
+
+	// with index names
+	chunk = &Range{
+		Bounds: []*Bound{
+			{
+				Column:   "a",
+				Lower:    "1",
+				Upper:    "1",
+				HasLower: true,
+				HasUpper: true,
+			}, {
+				Column:   "b",
+				Lower:    "3",
+				Upper:    "3",
+				HasLower: true,
+				HasUpper: true,
+			},
+		},
+		IndexColumnNames: []model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+	}
+
+	require.Equal(t, chunk.String(), "{\"index\":null,\"type\":0,\"bounds\":[{\"column\":\"a\",\"lower\":\"1\",\"upper\":\"1\",\"has-lower\":true,\"has-upper\":true},{\"column\":\"b\",\"lower\":\"3\",\"upper\":\"3\",\"has-lower\":true,\"has-upper\":true}],\"is-first\":false,\"is-last\":false,\"where\":\"\",\"args\":null,\"index-column-names\":[{\"O\":\"a\",\"L\":\"a\"},{\"O\":\"b\",\"L\":\"b\"}]}")
+	require.Equal(t, chunk.ToMeta(), "range in sequence: (1,3) < (a,b) <= (1,3)")
 }
 
 func TestChunkInit(t *testing.T) {

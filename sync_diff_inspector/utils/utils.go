@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
@@ -184,6 +185,14 @@ func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, c
 	return query, orderKeyCols
 }
 
+// escapeString escapes special characters in the given string
+func escapeString(bs []byte) string {
+	s := string(bs)
+	s = strings.Replace(s, "\\", "\\\\", -1)
+	s = strings.Replace(s, "'", "\\'", -1)
+	return s
+}
+
 // GenerateReplaceDML returns the insert SQL for the specific row values.
 func GenerateReplaceDML(data map[string]*dbutil.ColumnData, table *model.TableInfo, schema string) string {
 	colNames := make([]string, 0, len(table.Columns))
@@ -203,7 +212,7 @@ func GenerateReplaceDML(data map[string]*dbutil.ColumnData, table *model.TableIn
 			if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 				values = append(values, fmt.Sprintf("x'%x'", data[col.Name.O].Data))
 			} else {
-				values = append(values, fmt.Sprintf("'%s'", strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
+				values = append(values, fmt.Sprintf("'%s'", escapeString(data[col.Name.O].Data)))
 			}
 		} else {
 			values = append(values, string(data[col.Name.O].Data))
@@ -240,7 +249,7 @@ func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnDa
 				if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 					value1 = fmt.Sprintf("x'%x'", data1.Data)
 				} else {
-					value1 = fmt.Sprintf("'%s'", strings.Replace(string(data1.Data), "'", "\\'", -1))
+					value1 = fmt.Sprintf("'%s'", escapeString(data1.Data))
 				}
 			} else {
 				value1 = string(data1.Data)
@@ -265,7 +274,7 @@ func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnDa
 				if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 					values2 = append(values2, fmt.Sprintf("x'%x'", data1.Data))
 				} else {
-					values2 = append(values2, fmt.Sprintf("'%s'", strings.Replace(string(data2.Data), "'", "\\'", -1)))
+					values2 = append(values2, fmt.Sprintf("'%s'", escapeString(data2.Data)))
 				}
 			} else {
 				values2 = append(values2, string(data2.Data))
@@ -305,7 +314,7 @@ func GenerateDeleteDML(data map[string]*dbutil.ColumnData, table *model.TableInf
 			if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 				kvs = append(kvs, fmt.Sprintf("%s = x'%x'", dbutil.ColumnName(col.Name.O), data[col.Name.O].Data))
 			} else {
-				kvs = append(kvs, fmt.Sprintf("%s = '%s'", dbutil.ColumnName(col.Name.O), strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
+				kvs = append(kvs, fmt.Sprintf("%s = '%s'", dbutil.ColumnName(col.Name.O), escapeString(data[col.Name.O].Data)))
 			}
 		} else {
 			kvs = append(kvs, fmt.Sprintf("%s = %s", dbutil.ColumnName(col.Name.O), string(data[col.Name.O].Data)))
@@ -776,7 +785,11 @@ func GetTableSize(ctx context.Context, db *sql.DB, schemaName, tableName string)
 }
 
 // GetCountAndMD5Checksum returns checksum code and count of some data by given condition
-func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableName string, tbInfo *model.TableInfo, limitRange string, args []interface{}) (int64, uint64, error) {
+func GetCountAndMD5Checksum(
+	ctx context.Context,
+	db *sql.DB, schemaName, tableName string,
+	tbInfo *model.TableInfo, limitRange string, indexHint string, args []any,
+) (int64, uint64, error) {
 	/*
 		calculate MD5 checksum and count example:
 		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
@@ -806,8 +819,15 @@ func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableNa
 		columnIsNull = append(columnIsNull, fmt.Sprintf("ISNULL(%s)", name))
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
-		strings.Join(columnNames, ", "), strings.Join(columnIsNull, ", "), strings.Join(columnNames, ", "), strings.Join(columnIsNull, ", "), dbutil.TableName(schemaName, tableName), limitRange)
+	query := fmt.Sprintf("SELECT %s COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
+		indexHint,
+		strings.Join(columnNames, ", "),
+		strings.Join(columnIsNull, ", "),
+		strings.Join(columnNames, ", "),
+		strings.Join(columnIsNull, ", "),
+		dbutil.TableName(schemaName, tableName),
+		limitRange,
+	)
 	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args))
 
 	var count sql.NullInt64
@@ -1057,4 +1077,27 @@ func IsRangeTrivial(rangeCond string) bool {
 func IsBinaryColumn(col *model.ColumnInfo) bool {
 	// varbinary or binary
 	return (col.GetType() == mysql.TypeVarchar || col.GetType() == mysql.TypeString) && mysql.HasBinaryFlag(col.GetFlag())
+}
+
+// IsIndexMatchingColumns checks if the given index matches the provided columns.
+// It uses the number of columns and their names to do the check.
+func IsIndexMatchingColumns(index *model.IndexInfo, columnNames []pmodel.CIStr) bool {
+	if len(index.Columns) != len(columnNames) {
+		return false
+	}
+	for i, col := range index.Columns {
+		if col.Name.L != columnNames[i].L {
+			return false
+		}
+	}
+	return true
+}
+
+// GetColumnNames extract column names from column infos
+func GetColumnNames(columns []*model.ColumnInfo) []pmodel.CIStr {
+	columnNames := make([]pmodel.CIStr, 0, len(columns))
+	for _, c := range columns {
+		columnNames = append(columnNames, c.Name)
+	}
+	return columnNames
 }

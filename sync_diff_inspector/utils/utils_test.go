@@ -59,7 +59,7 @@ func TestWorkerPool(t *testing.T) {
 }
 
 func TestStringsToInterface(t *testing.T) {
-	res := []interface{}{"1", "2", "3"}
+	res := []any{"1", "2", "3"}
 	require.Equal(t, res[0], "1")
 	require.Equal(t, res[1], "2")
 	require.Equal(t, res[2], "3")
@@ -270,7 +270,7 @@ func TestGetCountAndMD5Checksum(t *testing.T) {
 
 	mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE \\[23 45\\].*").WithArgs("123", "234").WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456))
 
-	count, checksum, err := GetCountAndMD5Checksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", []interface{}{"123", "234"})
+	count, checksum, err := GetCountAndMD5Checksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", "", []any{"123", "234"})
 	require.NoError(t, err)
 	require.Equal(t, count, int64(123))
 	require.Equal(t, checksum, uint64(0x1c8))
@@ -291,7 +291,7 @@ func TestGetApproximateMid(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"a", "b"}).AddRow("5", "10")
 	mock.ExpectQuery("SELECT `a`, `b` FROM `test`.`test_utils` WHERE 2222 ORDER BY `a`, `b` LIMIT 1 OFFSET 10").WithArgs("aaaa").WillReturnRows(rows)
 
-	data, err := GetApproximateMidBySize(ctx, conn, "test", "test_utils", tableInfo.Columns, "2222", []interface{}{"aaaa"}, 20)
+	data, err := GetApproximateMidBySize(ctx, conn, "test", "test_utils", tableInfo.Columns, "2222", []any{"aaaa"}, 20)
 	require.NoError(t, err)
 	require.Equal(t, data["a"], "5")
 	require.Equal(t, data["b"], "10")
@@ -300,7 +300,7 @@ func TestGetApproximateMid(t *testing.T) {
 	rows = sqlmock.NewRows([]string{"a", "b"})
 	mock.ExpectQuery("SELECT `a`, `b` FROM `test`\\.`test_utils` WHERE 2222.* LIMIT 1 OFFSET 10*").WithArgs("aaaa").WillReturnRows(rows)
 
-	data, err = GetApproximateMidBySize(ctx, conn, "test", "test_utils", tableInfo.Columns, "2222", []interface{}{"aaaa"}, 20)
+	data, err = GetApproximateMidBySize(ctx, conn, "test", "test_utils", tableInfo.Columns, "2222", []any{"aaaa"}, 20)
 	require.NoError(t, err)
 	require.Nil(t, data)
 }
@@ -346,12 +346,12 @@ func TestGenerateSQLs(t *testing.T) {
 	require.Equal(t, replaceSQL, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,NULL,'2018-01-01 00:00:00','10:10:10',11.1111);")
 	require.Equal(t, deleteSQL, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` is NULL AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111 LIMIT 1;")
 
-	// test value with "'"
-	rowsData["name"] = &dbutil.ColumnData{Data: []byte("a'a"), IsNull: false}
+	// test value with special characters
+	rowsData["name"] = &dbutil.ColumnData{Data: []byte("\b\"\n\\1'`"), IsNull: false}
 	replaceSQL = GenerateReplaceDML(rowsData, tableInfo, "diff_test")
 	deleteSQL = GenerateDeleteDML(rowsData, tableInfo, "diff_test")
-	require.Equal(t, replaceSQL, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,'a\\'a','2018-01-01 00:00:00','10:10:10',11.1111);")
-	require.Equal(t, deleteSQL, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` = 'a\\'a' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111 LIMIT 1;")
+	require.Equal(t, replaceSQL, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,'\b\"\n\\\\1\\'`','2018-01-01 00:00:00','10:10:10',11.1111);")
+	require.Equal(t, deleteSQL, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` = '\b\"\n\\\\1\\'`' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111 LIMIT 1;")
 }
 
 func TestResetColumns(t *testing.T) {
