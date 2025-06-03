@@ -50,7 +50,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("a", "0", "10", true, true).CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("a", "0", "10", true, true).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"5", "7"},
 				{"g", "n"},
@@ -71,7 +71,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`, `a`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true).CopyAndUpdate("a", "0", "10", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true).CopyAndUpdate("a", "0", "10", true, true),
 			[][]string{
 				{"g", "n"},
 				{"5", "7"},
@@ -92,7 +92,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"g", "n"},
 			},
@@ -112,7 +112,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			2,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"g"},
 			},
@@ -129,7 +129,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{},
 			},
@@ -860,7 +860,7 @@ func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValu
 
 func TestRangeInfo(t *testing.T) {
 	rangeInfo := &RangeInfo{
-		ChunkRange: chunk.NewChunkRange(),
+		ChunkRange: chunk.NewChunkRange(chunk.GenFakeTableInfo("a")),
 		IndexID:    2,
 		ProgressID: "324312",
 	}
