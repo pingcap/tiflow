@@ -692,7 +692,7 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, pullerSplitUpdateMode,
-		util.GetOrZero(cfConfig.BDRMode),
+		true,
 		util.GetOrZero(cfConfig.EnableTableMonitor))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
