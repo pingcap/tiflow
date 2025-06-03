@@ -111,6 +111,10 @@ func newSourceManager(
 	bdrMode bool,
 	enableTableMonitor bool,
 ) *SourceManager {
+	log.Info("Creating source manager",
+		zap.Bool("bdr_mode", bdrMode),
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID))
 	mgr := &SourceManager{
 		ready:              make(chan struct{}),
 		changefeedID:       changefeedID,
