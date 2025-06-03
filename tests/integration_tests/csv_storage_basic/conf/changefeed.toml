@@ -14,3 +14,5 @@ quote = '"'
 null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = true
+# output header in CSV files. The default value is false.
+output-field-header = true

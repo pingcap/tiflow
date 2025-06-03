@@ -24,6 +24,7 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
+	header    []byte
 	valueBuf  *bytes.Buffer
 	callback  func()
 	batchSize int
@@ -37,18 +38,7 @@ func (b *BatchEncoder) AppendTxnEvent(
 ) error {
 	for _, rowEvent := range e.Rows {
 		if b.config.CSVOutputFieldHeader && b.batchSize == 0 {
-			names := make(map[int64]string, len(rowEvent.TableInfo.Columns))
-			colNames := make([]string, 0, len(rowEvent.Columns))
-			for _, col := range rowEvent.TableInfo.Columns {
-				names[col.ID] = col.Name.O
-			}
-			for _, col := range rowEvent.Columns {
-				if col == nil {
-					continue
-				}
-				colNames = append(colNames, names[col.ColumnID])
-			}
-			b.valueBuf.Write(encodeHeader(b.config, colNames))
+			b.setHeader(rowEvent)
 		}
 		row, err := rowChangedEvent2CSVMsg(b.config, rowEvent)
 		if err != nil {
@@ -67,8 +57,16 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 		return nil
 	}
 
-	ret := common.NewMsg(config.ProtocolCsv, nil,
-		b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
+	ret := &common.Message{
+		Header:   b.header,
+		Key:      nil,
+		Value:    b.valueBuf.Bytes(),
+		Ts:       0,
+		Schema:   nil,
+		Table:    nil,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolCsv,
+	}
 	ret.SetRowsCount(b.batchSize)
 	ret.Callback = b.callback
 	if b.valueBuf.Cap() > codec.MemBufShrinkThreshold {
@@ -78,8 +76,30 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 	}
 	b.callback = nil
 	b.batchSize = 0
+	b.header = nil
 
 	return []*common.Message{ret}
+}
+
+func (b *BatchEncoder) setHeader(rowEvent *model.RowChangedEvent) {
+	buf := &bytes.Buffer{}
+	columns := rowEvent.Columns
+	if rowEvent.IsDelete() {
+		columns = rowEvent.PreColumns
+	}
+	names := make(map[int64]string, len(rowEvent.TableInfo.Columns))
+	colNames := make([]string, 0, len(columns))
+	for _, col := range rowEvent.TableInfo.Columns {
+		names[col.ID] = col.Name.O
+	}
+	for _, col := range columns {
+		if col == nil {
+			continue
+		}
+		colNames = append(colNames, names[col.ColumnID])
+	}
+	buf.Write(encodeHeader(b.config, colNames))
+	b.header = buf.Bytes()
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.

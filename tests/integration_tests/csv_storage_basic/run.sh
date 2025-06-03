@@ -26,6 +26,13 @@ function run() {
 	run_storage_consumer $WORK_DIR $SINK_URI $CUR/conf/changefeed.toml ""
 	sleep 8
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
+	# check csv header
+	find "$WORK_DIR/storage_test/" -type f -name "*.csv" | while read -r file; do
+		first_line=$(head -n 1 $file)
+		if [[ "$first_line" != type* ]]; then
+			echo "check CSV header failed. header: $first_line"
+		fi
+	done
 }
 
 trap stop_tidb_cluster EXIT
