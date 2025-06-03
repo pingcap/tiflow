@@ -44,12 +44,12 @@ func Validate(ctx context.Context,
 		return err
 	}
 
-	if util.GetOrZero(cfg.BDRMode) {
-		err := checkBDRMode(ctx, uri, cfg)
-		if err != nil {
-			return err
-		}
-	}
+	// if util.GetOrZero(cfg.BDRMode) {
+	// 	err := checkBDRMode(ctx, uri, cfg)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	ctx, cancel := context.WithCancel(ctx)
 	s, err := factory.New(ctx, changefeedID, sinkURI, cfg, make(chan error), pdClock)
