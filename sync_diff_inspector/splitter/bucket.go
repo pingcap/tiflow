@@ -296,7 +296,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 		// build left chunks for this bucket
 		leftCnt := c.Index.ChunkCnt - c.Index.ChunkIndex - 1
 		if leftCnt > 0 {
-			chunkRange := chunk.NewChunkRange()
+			chunkRange := chunk.NewChunkRange(s.table.Info)
 			chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 
 			for i, column := range s.indexColumns {
@@ -329,7 +329,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 			return
 		}
 
-		chunkRange := chunk.NewChunkRange()
+		chunkRange := chunk.NewChunkRange(s.table.Info)
 		chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 		for j, column := range s.indexColumns {
 			var lowerValue, upperValue string
@@ -367,7 +367,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 	}
 
 	// merge the rest keys into one chunk
-	chunkRange := chunk.NewChunkRange()
+	chunkRange := chunk.NewChunkRange(s.table.Info)
 	chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 	if len(lowerValues) > 0 {
 		for j, column := range s.indexColumns {

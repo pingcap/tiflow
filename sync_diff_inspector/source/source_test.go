@@ -628,7 +628,7 @@ func prepareTiDBTables(t *testing.T, tableCases []*tableCaseType) []*common.Tabl
 			Info:   tableInfo,
 		})
 
-		chunkRange := chunk.NewChunkRange()
+		chunkRange := chunk.NewChunkRange(nil)
 		for i, column := range tableCase.rangeColumns {
 			chunkRange.Update(column, tableCase.rangeLeft[i], tableCase.rangeRight[i], true, true)
 		}
