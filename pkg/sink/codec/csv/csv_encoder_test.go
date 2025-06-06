@@ -131,7 +131,7 @@ func TestCSVBatchCodecWithHeader(t *testing.T) {
 	require.Nil(t, err)
 	messages := encoder.Build()
 	require.Len(t, messages, 1)
-	header := strings.Split(string(messages[0].Header), cfg.Terminator)[0]
+	header := strings.Split(string(messages[0].Key), cfg.Terminator)[0]
 	require.Equal(t, "ticdc-meta$operation,ticdc-meta$table,ticdc-meta$schema,ticdc-meta$commit-ts,col1", header)
 	require.Equal(t, len(cs.Rows), messages[0].GetRowsCount())
 

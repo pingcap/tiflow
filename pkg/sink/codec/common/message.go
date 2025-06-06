@@ -32,7 +32,6 @@ const MaxRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
 
 // Message represents an message to the sink
 type Message struct {
-	Header    []byte // only for csv header
 	Key       []byte
 	Value     []byte
 	Ts        uint64            // reserved for possible output sorting
