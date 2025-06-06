@@ -58,8 +58,7 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 	}
 
 	ret := &common.Message{
-		Header:   b.header,
-		Key:      nil,
+		Key:      b.header,
 		Value:    b.valueBuf.Bytes(),
 		Ts:       0,
 		Schema:   nil,
