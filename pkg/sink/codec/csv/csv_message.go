@@ -490,24 +490,24 @@ func csvColumns2RowChangeColumns(csvConfig *common.Config, csvCols []any, ticols
 
 // The header should contain the name corresponding to the file record field,
 // and should have the same number as the record field.
-// | type | table | schema | commit-ts | is-update | col1 | col2 | ... |
+// | ticdc-meta$operation | ticdc-meta$table | ticdc-meta$schema | ticdc-meta$commit-ts | ticdc-meta$is-update | col1 | col2 | ... |
 func encodeHeader(config *common.Config, colNames []string) []byte {
 	if !config.CSVOutputFieldHeader {
 		return nil
 	}
 	strBuilder := new(strings.Builder)
-	strBuilder.WriteString("type")
+	strBuilder.WriteString("ticdc-meta$operation")
 	strBuilder.WriteString(config.Delimiter)
-	strBuilder.WriteString("table")
+	strBuilder.WriteString("ticdc-meta$table")
 	strBuilder.WriteString(config.Delimiter)
-	strBuilder.WriteString("schema")
+	strBuilder.WriteString("ticdc-meta$schema")
 	if config.IncludeCommitTs {
 		strBuilder.WriteString(config.Delimiter)
-		strBuilder.WriteString("commit-ts")
+		strBuilder.WriteString("ticdc-meta$commit-ts")
 	}
 	if config.OutputOldValue {
 		strBuilder.WriteString(config.Delimiter)
-		strBuilder.WriteString("is-update")
+		strBuilder.WriteString("ticdc-meta$is-update")
 	}
 	for _, name := range colNames {
 		strBuilder.WriteString(config.Delimiter)
