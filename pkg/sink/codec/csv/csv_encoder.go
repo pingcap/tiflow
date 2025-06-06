@@ -87,16 +87,13 @@ func (b *BatchEncoder) setHeader(rowEvent *model.RowChangedEvent) {
 	if rowEvent.IsDelete() {
 		columns = rowEvent.PreColumns
 	}
-	names := make(map[int64]string, len(rowEvent.TableInfo.Columns))
 	colNames := make([]string, 0, len(columns))
-	for _, col := range rowEvent.TableInfo.Columns {
-		names[col.ID] = col.Name.O
-	}
 	for _, col := range columns {
 		if col == nil {
 			continue
 		}
-		colNames = append(colNames, names[col.ColumnID])
+		info := rowEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
+		colNames = append(colNames, info.Name.O)
 	}
 	buf.Write(encodeHeader(b.config, colNames))
 	b.header = buf.Bytes()
