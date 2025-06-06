@@ -985,7 +985,7 @@ type CSVConfig struct {
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
 	OutputOldValue       bool   `json:"output_old_value"`
 	OutputHandleKey      bool   `json:"output_handle_key"`
-	OutputFieldHeader    bool   `json:"output-field-header"`
+	OutputFieldHeader    bool   `json:"output_field_header"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config
