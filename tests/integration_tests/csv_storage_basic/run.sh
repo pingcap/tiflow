@@ -29,7 +29,7 @@ function run() {
 	# check csv header
 	find "$WORK_DIR/storage_test/" -type f -name "*.csv" | while read -r file; do
 		first_line=$(head -n 1 $file)
-		if [[ "$first_line" != type* ]]; then
+		if [[ "$first_line" != ticdc-meta* ]]; then
 			echo "check CSV header failed. header: $first_line"
 		fi
 	done

@@ -1111,23 +1111,23 @@ func TestEncodeHeader(t *testing.T) {
 	}
 	colNames := []string{"col1", "col2"}
 	header := encodeHeader(cfg, colNames)
-	require.Equal(t, "type table schema commit-ts is-update col1 col2", string(header))
+	require.Equal(t, "ticdc-meta$operation ticdc-meta$table ticdc-meta$schema ticdc-meta$commit-ts ticdc-meta$is-update col1 col2", string(header))
 
 	cfg.OutputOldValue = false
 	header = encodeHeader(cfg, colNames)
-	require.Equal(t, "type table schema commit-ts col1 col2", string(header))
+	require.Equal(t, "ticdc-meta$operation ticdc-meta$table ticdc-meta$schema ticdc-meta$commit-ts col1 col2", string(header))
 
 	cfg.IncludeCommitTs = false
 	header = encodeHeader(cfg, colNames)
-	require.Equal(t, "type table schema col1 col2", string(header))
+	require.Equal(t, "ticdc-meta$operation ticdc-meta$table ticdc-meta$schema col1 col2", string(header))
 
 	cfg.Delimiter = ","
 	header = encodeHeader(cfg, colNames)
-	require.Equal(t, "type,table,schema,col1,col2", string(header))
+	require.Equal(t, "ticdc-meta$operation,ticdc-meta$table,ticdc-meta$schema,col1,col2", string(header))
 
 	cfg.Terminator = "\n"
 	header = encodeHeader(cfg, colNames)
-	require.Equal(t, "type,table,schema,col1,col2\n", string(header))
+	require.Equal(t, "ticdc-meta$operation,ticdc-meta$table,ticdc-meta$schema,col1,col2\n", string(header))
 
 	cfg.CSVOutputFieldHeader = false
 	header = encodeHeader(cfg, colNames)
