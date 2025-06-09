@@ -105,7 +105,7 @@ type avroMarshaller struct {
 }
 
 func newAvroMarshaller(config *common.Config, schema string) (*avroMarshaller, error) {
-	codec, err := goavro.NewCodec(schema)
+	codec, err := goavro.NewCodecWithOptions(schema, &goavro.CodecOption{EnableStringNull: false})
 	return &avroMarshaller{
 		codec:  codec,
 		config: config,

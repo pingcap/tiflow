@@ -247,14 +247,14 @@ func TestAvroEnvelope(t *testing.T) {
 	t.Parallel()
 	cManager := &confluentSchemaManager{}
 	gManager := &glueSchemaManager{}
-	avroCodec, err := goavro.NewCodec(`
+	avroCodec, err := goavro.NewCodecWithOptions(`
        {
          "type": "record",
          "name": "testdb.avroenvelope",
          "fields" : [
            {"name": "id", "type": "int", "default": 0}
          ]
-       }`)
+       }`, &goavro.CodecOption{EnableStringNull: false})
 
 	require.NoError(t, err)
 

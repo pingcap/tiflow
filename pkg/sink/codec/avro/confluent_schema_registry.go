@@ -267,7 +267,7 @@ func (m *confluentSchemaManager) Lookup(
 	}
 
 	cacheEntry := new(schemaCacheEntry)
-	cacheEntry.codec, err = goavro.NewCodec(jsonResp.Schema)
+	cacheEntry.codec, err = goavro.NewCodecWithOptions(jsonResp.Schema, &goavro.CodecOption{EnableStringNull: false})
 	if err != nil {
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -314,7 +314,7 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 		return nil, nil, err
 	}
 
-	codec, err := goavro.NewCodec(schema)
+	codec, err := goavro.NewCodecWithOptions(schema, &goavro.CodecOption{EnableStringNull: false})
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not make goavro codec", zap.Error(err))
 		return nil, nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
