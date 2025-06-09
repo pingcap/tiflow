@@ -57,15 +57,8 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 		return nil
 	}
 
-	ret := &common.Message{
-		Key:      b.header,
-		Value:    b.valueBuf.Bytes(),
-		Ts:       0,
-		Schema:   nil,
-		Table:    nil,
-		Type:     model.MessageTypeRow,
-		Protocol: config.ProtocolCsv,
-	}
+	ret := common.NewMsg(config.ProtocolCsv, b.header,
+		b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(b.batchSize)
 	ret.Callback = b.callback
 	if b.valueBuf.Cap() > codec.MemBufShrinkThreshold {
