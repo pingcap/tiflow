@@ -79,7 +79,7 @@ func NewBatchDecoder(ctx context.Context,
 		// check column name
 		idx := len(header) - len(tableInfo.Columns)
 		for i, col := range tableInfo.Columns {
-			if col.Name.O != header[idx+i] {
+			if col.Name.L != header[idx+i] {
 				log.Panic("check column name order failed", zap.Any("col", col.Name.O), zap.Any("header", header[idx+i]))
 			}
 		}
