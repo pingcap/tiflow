@@ -23,6 +23,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -946,4 +947,130 @@ func TestChunkSize(t *testing.T) {
 	mock.ExpectQuery("SELECT `a`,.*limit 50000.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
 	_, err = NewLimitIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
+}
+
+func TestBucketSpliterHint(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	testCases := []struct {
+		tableSQL      string
+		indexCount    int
+		expectColumns []model.CIStr
+	}{
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
+			0,
+			[]model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`))",
+			0,
+			[]model.CIStr{model.NewCIStr("c")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
+			1,
+			[]model.CIStr{model.NewCIStr("b")},
+		},
+	}
+
+	for _, tc := range testCases {
+		tableInfo, err := utils.GetTableInfoBySQL(tc.tableSQL, parser.New())
+		require.NoError(t, err)
+
+		tableDiff := &common.TableDiff{
+			Schema: "test",
+			Table:  "test",
+			Info:   tableInfo,
+		}
+
+		createFakeResultForBucketIterator(mock, tc.indexCount)
+
+		iter, err := NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, nil, utils.NewWorkerPool(1, "bucketIter"))
+		require.NoError(t, err)
+		chunk, err := iter.Next()
+		require.NoError(t, err)
+		require.Equal(t, tc.expectColumns, chunk.IndexColumnNames)
+	}
+}
+
+func TestRandomSpliterHint(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	testCases := []struct {
+		tableSQL      string
+		expectColumns []model.CIStr
+	}{
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
+			[]model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`), key i2(`b`))",
+			[]model.CIStr{model.NewCIStr("c")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
+			[]model.CIStr{model.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`b`, `a`), unique key i1(`c`))",
+			[]model.CIStr{model.NewCIStr("b"), model.NewCIStr("a")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int)",
+			nil,
+		},
+	}
+
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(320)")
+
+	for _, tc := range testCases {
+		tableInfo, err := utils.GetTableInfoBySQL(tc.tableSQL, parser.New())
+		require.NoError(t, err)
+
+		for _, tableRange := range []string{"", "c > 100"} {
+			tableDiff := &common.TableDiff{
+				Schema: "test",
+				Table:  "test",
+				Info:   tableInfo,
+				Range:  tableRange,
+			}
+
+			iter, err := NewRandomIteratorWithCheckpoint(ctx, "", tableDiff, db, nil)
+			require.NoError(t, err)
+			chunk, err := iter.Next()
+			require.NoError(t, err)
+			require.Equal(t, tc.expectColumns, chunk.IndexColumnNames)
+		}
+	}
+}
+
+func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
+	/*
+		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
+		| Db_name | Table_name | Column_name | Is_index | Bucket_id | Count | Repeats | Lower_Bound | Upper_Bound |
+		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
+		| test    | test       | PRIMARY     |        1 |         0 |    64 |       1 | (0, 0)      | (63, 11)    |
+		| test    | test       | PRIMARY     |        1 |         1 |   128 |       1 | (64, 12)    | (127, 23)   |
+		| test    | test       | PRIMARY     |        1 |         2 |   192 |       1 | (128, 24)   | (191, 35)   |
+		| test    | test       | PRIMARY     |        1 |         3 |   256 |       1 | (192, 36)   | (255, 47)   |
+		| test    | test       | PRIMARY     |        1 |         4 |   320 |       1 | (256, 48)   | (319, 59)   |
+		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
+	*/
+	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
+	for _, indexName := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
+		for i := range 5 {
+			statsRows.AddRow("test", "test", indexName, 1, (i+1)*64, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		}
+	}
+	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+
+	for range indexCount {
+		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
+	}
 }
