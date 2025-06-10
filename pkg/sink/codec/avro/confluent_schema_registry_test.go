@@ -47,7 +47,7 @@ func TestSchemaRegistry(t *testing.T) {
 	_, err = manager.Lookup(ctx, topic, schemaID{confluentSchemaID: 1})
 	require.Regexp(t, `.*not\sfound.*`, err)
 
-	codec, err := goavro.NewCodecWithOptions(`{
+	codec, err := GenCodec(`{
        "type": "record",
        "name": "test",
        "fields":
@@ -57,7 +57,7 @@ func TestSchemaRegistry(t *testing.T) {
              "name": "field1"
            }
           ]
-     }`, &goavro.CodecOption{EnableStringNull: false})
+     }`)
 	require.NoError(t, err)
 
 	schemaID, err := manager.Register(ctx, topic, codec.Schema())
@@ -67,7 +67,7 @@ func TestSchemaRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 
-	codec, err = goavro.NewCodecWithOptions(`{
+	codec, err = GenCodec(`{
        "type": "record",
        "name": "test",
        "fields":
@@ -93,7 +93,7 @@ func TestSchemaRegistry(t *testing.T) {
 			"name": "field3"
 		   }
           ]
-     }`, &goavro.CodecOption{EnableStringNull: false})
+     }`)
 	require.NoError(t, err)
 	schemaID, err = manager.Register(ctx, topic, codec.Schema())
 	require.NoError(t, err)
@@ -101,41 +101,6 @@ func TestSchemaRegistry(t *testing.T) {
 	codec2, err = manager.Lookup(ctx, topic, schemaID)
 	require.NoError(t, err)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
-}
-
-func TestStringNull(t *testing.T) {
-	_, err := goavro.NewCodec(`{
-		"type": "record",
-		"name": "test",
-		"fields":
-		  [
-			{
-			 "type": [
-				 "string",
-				 "null"
-			 ],
-			 "default": "null",
-			 "name": "field"
-			}
-		   ]
-	  }`)
-	require.Error(t, err)
-	_, err = goavro.NewCodecWithOptions(`{
-		"type": "record",
-		"name": "test",
-		"fields":
-		  [
-			{
-			 "type": [
-				 "string",
-				 "null"
-			 ],
-			 "default": "null",
-			 "name": "field"
-			}
-		   ]
-	  }`, &goavro.CodecOption{EnableStringNull: false})
-	require.NoError(t, err)
 }
 
 func TestSchemaRegistryBad(t *testing.T) {

@@ -153,7 +153,7 @@ func (m *glueSchemaManager) Lookup(
 			GenWithStackByArgs("schema not found in registry, name: %s, id: %s", schemaName, schemaID.glueSchemaID)
 	}
 
-	codec, err := goavro.NewCodecWithOptions(schema, &goavro.CodecOption{EnableStringNull: false})
+	codec, err := GenCodec(schema)
 	if err != nil {
 		log.Error("could not make goavro codec", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -206,7 +206,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 		return nil, nil, err
 	}
 
-	codec, err := goavro.NewCodecWithOptions(schema, &goavro.CodecOption{EnableStringNull: false})
+	codec, err := GenCodec(schema)
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not make goavro codec", zap.Error(err))
 		return nil, nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
