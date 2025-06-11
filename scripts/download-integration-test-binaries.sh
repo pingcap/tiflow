@@ -152,7 +152,7 @@ download_binaries() {
 	local schema_registry_url="${FILE_SERVER_URL}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 
 	# Download and extract binaries
-	download_and_extract "$tidb_download_url" "tidb-server.tar.gz" "bin/tidb-server"
+	download_and_extract "$tidb_download_url" "tidb-server.tar.gz" "tidb-server"
 	download_and_extract "$pd_download_url" "pd-server.tar.gz" "bin/*"
 	download_and_extract "$tikv_download_url" "tikv-server.tar.gz" "bin/tikv-server"
 	download_and_extract "$tiflash_download_url" "tiflash.tar.gz"
@@ -180,7 +180,7 @@ download_and_extract() {
 
 	# Move extracted files if necessary
 	case $file_name in
-	"tidb-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tidb-server ${THIRD_BIN_DIR}/ ;;
+	# "tidb-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tidb-server ${THIRD_BIN_DIR}/ ;;
 	"pd-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/* ${THIRD_BIN_DIR}/ ;;
 	"tikv-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tikv-server ${THIRD_BIN_DIR}/ ;;
 	"tiflash.tar.gz")
