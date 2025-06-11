@@ -141,7 +141,7 @@ download_binaries() {
 
 	# Define download URLs
 	# local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-        local tidb_download_url="https://fileserver.pingcap.net/download/builds/devbuild/7983/tidb-linux-amd64.tar.gz" # 51f0587d495686f1bd7b39fee59121e3650c2bba
+        local tidb_download_url="https://fileserver.pingcap.net/download/builds/devbuild/7985/tidb-linux-amd64.tar.gz" # e70afd2a44be8800051fab17569220bdd3f325b4
 	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
 	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
 	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
