@@ -435,6 +435,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(
 		gcServiceID,
 		changefeedID,
 		gcTTL, overrideCheckpointTs)
+	log.Info("EnsureChangefeedStartTsSafety from pd", zap.Uint64("overrideCheckpointTs", overrideCheckpointTs), zap.Error(err))
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return cerror.ErrPDEtcdAPIError.Wrap(err)
