@@ -57,6 +57,9 @@ type SyncProducer interface {
 	// SendMessages will return an error.
 	SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error
 
+	// HeartbeatBrokers sends heartbeat to all brokers to keep the connection alive.
+	HeartbeatBrokers()
+
 	// Close shuts down the producer; you must call this function before a producer
 	// object passes out of scope, as it may otherwise leak memory.
 	// You must call this before calling Close on the underlying client.
@@ -83,9 +86,11 @@ type AsyncProducer interface {
 }
 
 type saramaSyncProducer struct {
-	id       model.ChangeFeedID
-	producer sarama.SyncProducer
-	done     chan struct{}
+	id                    model.ChangeFeedID
+	producer              sarama.SyncProducer
+	client                sarama.Client
+	keepConnAliveInterval time.Duration
+	lastHeartbeatTime     time.Time // used to check if we need to send heartbeat
 }
 
 func (p *saramaSyncProducer) SendMessage(
@@ -116,8 +121,27 @@ func (p *saramaSyncProducer) SendMessages(_ context.Context, topic string, parti
 	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
+func (p *saramaSyncProducer) HeartbeatBrokers() {
+	// We only send heartbeat to brokers when the last heartbeat time is
+	// older than the keep connection alive interval, to avoid sending heartbeat
+	// too frequently.
+	// This function will be called periodically in DDLSink.WriteCheckpointTs.
+	if time.Now().Sub(p.lastHeartbeatTime) < p.keepConnAliveInterval {
+		return
+	}
+
+	// We don't care about the response and error here, even the connection
+	// is unestablished, we just need to keep the connection alive WHEN it's established.
+	// The connection will be established when a producer send messages.
+	// This is a workaround for the issue that sarama doesn't keep the connection alive
+	// when the connection is idle for a long time and we have disabled the retry in sarama.
+	brokers := p.client.Brokers()
+	for _, b := range brokers {
+		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+	}
+}
+
 func (p *saramaSyncProducer) Close() {
-	close(p.done)
 	start := time.Now()
 	err := p.producer.Close()
 	if err != nil {
@@ -135,10 +159,11 @@ func (p *saramaSyncProducer) Close() {
 }
 
 type saramaAsyncProducer struct {
-	client       sarama.Client
-	producer     sarama.AsyncProducer
-	changefeedID model.ChangeFeedID
-	failpointCh  chan error
+	client                sarama.Client
+	producer              sarama.AsyncProducer
+	changefeedID          model.ChangeFeedID
+	keepConnAliveInterval time.Duration
+	failpointCh           chan error
 }
 
 func (p *saramaAsyncProducer) Close() {
@@ -194,7 +219,7 @@ func (p *saramaAsyncProducer) Close() {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
-	ticker := time.NewTicker(keepConnAliveInterval)
+	ticker := time.NewTicker(p.keepConnAliveInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -217,7 +242,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				}
 			}
 		case <-ticker.C:
-			hearbeatBroker(p.client)
+			p.heartbeatBrokers()
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info
@@ -248,4 +273,16 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	case p.producer.Input() <- msg:
 	}
 	return nil
+}
+
+func (p *saramaAsyncProducer) heartbeatBrokers() {
+	// We don't care about the response and error here, even the connection
+	// is unestablished, we just need to keep the connection alive WHEN it's established.
+	// The connection will be established when a producer send messages.
+	// This is a workaround for the issue that sarama doesn't keep the connection alive
+	// when the connection is idle for a long time and we have disabled the retry in sarama.
+	brokers := p.client.Brokers()
+	for _, b := range brokers {
+		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+	}
 }

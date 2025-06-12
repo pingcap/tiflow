@@ -48,7 +48,8 @@ type kafkaTopicManager struct {
 
 	topics sync.Map
 
-	metaRefreshTicker *time.Ticker
+	metaRefreshTicker   *time.Ticker
+	keepConnAliveTicker *time.Ticker
 
 	// cancel is used to cancel the background goroutine.
 	cancel context.CancelFunc
@@ -61,13 +62,15 @@ func NewKafkaTopicManager(
 	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
+	keepConnAliveInterval time.Duration,
 ) *kafkaTopicManager {
 	mgr := &kafkaTopicManager{
-		defaultTopic:      defaultTopic,
-		changefeedID:      changefeedID,
-		admin:             admin,
-		cfg:               cfg,
-		metaRefreshTicker: time.NewTicker(metaRefreshInterval),
+		defaultTopic:        defaultTopic,
+		changefeedID:        changefeedID,
+		admin:               admin,
+		cfg:                 cfg,
+		metaRefreshTicker:   time.NewTicker(metaRefreshInterval),
+		keepConnAliveTicker: time.NewTicker(keepConnAliveInterval),
 	}
 
 	ctx, mgr.cancel = context.WithCancel(ctx)
@@ -112,6 +115,10 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			for topic, partitionNum := range topicPartitionNums {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
+		case <-m.keepConnAliveTicker.C:
+			// This operation is used to keep the kafka connection alive.
+			// For more details, see https://github.com/pingcap/tiflow/pull/12173
+			m.admin.HeartbeatBrokers()
 		}
 	}
 }

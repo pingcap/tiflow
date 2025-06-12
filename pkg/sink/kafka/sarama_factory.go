@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -80,20 +79,8 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 		client:     client,
 		admin:      admin,
 		changefeed: f.changefeedID,
-		done:       make(chan struct{}),
 	}
-	idleMs, err := a.GetBrokerConfig(ctx, BrokerConnectionsMaxIdleMsConfigName)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	idleMsInt, err := strconv.Atoi(idleMs)
-	if err != nil || idleMsInt <= 0 {
-		log.Warn("invalid broker config",
-			zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
-		return nil, errors.Trace(err)
-	}
-	keepConnAliveInterval = time.Duration(idleMsInt/2) * time.Millisecond
-	go keepConnAlive(client, a.done)
+
 	return &a, nil
 }
 
@@ -115,11 +102,12 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, errors.Trace(err)
 	}
 	sp := saramaSyncProducer{
-		id:       f.changefeedID,
-		producer: p,
-		done:     make(chan struct{}),
+		id:                    f.changefeedID,
+		producer:              p,
+		client:                client,
+		keepConnAliveInterval: f.option.KeepConnAliveInterval,
+		lastHeartbeatTime:     time.Now().Add(-f.option.KeepConnAliveInterval),
 	}
-	go keepConnAlive(client, sp.done)
 	return &sp, nil
 }
 
@@ -144,10 +132,11 @@ func (f *saramaFactory) AsyncProducer(
 		return nil, errors.Trace(err)
 	}
 	return &saramaAsyncProducer{
-		client:       client,
-		producer:     p,
-		changefeedID: f.changefeedID,
-		failpointCh:  failpointCh,
+		client:                client,
+		producer:              p,
+		changefeedID:          f.changefeedID,
+		keepConnAliveInterval: f.option.KeepConnAliveInterval,
+		failpointCh:           failpointCh,
 	}, nil
 }
 

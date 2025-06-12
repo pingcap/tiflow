@@ -171,9 +171,10 @@ type Options struct {
 	SASL               *security.SASL
 
 	// Timeout for network configurations, default to `10s`
-	DialTimeout  time.Duration
-	WriteTimeout time.Duration
-	ReadTimeout  time.Duration
+	DialTimeout           time.Duration
+	WriteTimeout          time.Duration
+	ReadTimeout           time.Duration
+	KeepConnAliveInterval time.Duration
 }
 
 // NewOptions returns a default Kafka configuration
@@ -181,17 +182,18 @@ func NewOptions() *Options {
 	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:    config.DefaultMaxMessageBytes,
-		ReplicationFactor:  1,
-		Compression:        "none",
-		RequiredAcks:       WaitForAll,
-		Credential:         &security.Credential{},
-		InsecureSkipVerify: false,
-		SASL:               &security.SASL{},
-		AutoCreate:         true,
-		DialTimeout:        10 * time.Second,
-		WriteTimeout:       10 * time.Second,
-		ReadTimeout:        10 * time.Second,
+		MaxMessageBytes:       config.DefaultMaxMessageBytes,
+		ReplicationFactor:     1,
+		Compression:           "none",
+		RequiredAcks:          WaitForAll,
+		Credential:            &security.Credential{},
+		InsecureSkipVerify:    false,
+		SASL:                  &security.SASL{},
+		AutoCreate:            true,
+		DialTimeout:           10 * time.Second,
+		WriteTimeout:          10 * time.Second,
+		ReadTimeout:           10 * time.Second,
+		KeepConnAliveInterval: 5 * time.Minute,
 	}
 }
 
@@ -668,6 +670,20 @@ func AdjustOptions(
 			options.MaxMessageBytes = maxMessageBytes
 		}
 	}
+
+	// adjust keepConnAliveInterval by `connections.max.idle.ms` broker config.
+	idleMs, err := admin.GetBrokerConfig(ctx, BrokerConnectionsMaxIdleMsConfigName)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	idleMsInt, err := strconv.Atoi(idleMs)
+	if err != nil || idleMsInt <= 0 {
+		log.Warn("invalid broker config",
+			zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
+		return errors.Trace(err)
+	}
+	options.KeepConnAliveInterval = time.Duration(idleMsInt/3) * time.Millisecond
+	log.Info("Adjust KeepConnAliveInterval", zap.Duration("KeepConnAliveInterval", options.KeepConnAliveInterval))
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if options.PartitionNum == 0 {

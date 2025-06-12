@@ -31,7 +31,6 @@ type saramaAdminClient struct {
 
 	client sarama.Client
 	admin  sarama.ClusterAdmin
-	done   chan struct{}
 }
 
 func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
@@ -177,11 +176,22 @@ func (a *saramaAdminClient) CreateTopic(
 }
 
 func (a *saramaAdminClient) Close() {
-	close(a.done)
 	if err := a.admin.Close(); err != nil {
 		log.Warn("close admin client meet error",
 			zap.String("namespace", a.changefeed.Namespace),
 			zap.String("changefeed", a.changefeed.ID),
 			zap.Error(err))
+	}
+}
+
+func (a *saramaAdminClient) HeartbeatBrokers() {
+	// We don't care about the response and error here, even the connection
+	// is unestablished, we just need to keep the connection alive WHEN it's established.
+	// The connection will be established when a producer send messages.
+	// This is a workaround for the issue that sarama doesn't keep the connection alive
+	// when the connection is idle for a long time and we have disabled the retry in sarama.
+	brokers := a.client.Brokers()
+	for _, b := range brokers {
+		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
 	}
 }
