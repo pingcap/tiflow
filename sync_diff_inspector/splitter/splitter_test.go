@@ -23,7 +23,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -957,22 +957,22 @@ func TestBucketSpliterHint(t *testing.T) {
 	testCases := []struct {
 		tableSQL      string
 		indexCount    int
-		expectColumns []model.CIStr
+		expectColumns []ast.CIStr
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
 			0,
-			[]model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`))",
 			0,
-			[]model.CIStr{model.NewCIStr("c")},
+			[]ast.CIStr{ast.NewCIStr("c")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
 			1,
-			[]model.CIStr{model.NewCIStr("b")},
+			[]ast.CIStr{ast.NewCIStr("b")},
 		},
 	}
 
@@ -1003,23 +1003,23 @@ func TestRandomSpliterHint(t *testing.T) {
 
 	testCases := []struct {
 		tableSQL      string
-		expectColumns []model.CIStr
+		expectColumns []ast.CIStr
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
-			[]model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`), key i2(`b`))",
-			[]model.CIStr{model.NewCIStr("c")},
+			[]ast.CIStr{ast.NewCIStr("c")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
-			[]model.CIStr{model.NewCIStr("b")},
+			[]ast.CIStr{ast.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`b`, `a`), unique key i1(`c`))",
-			[]model.CIStr{model.NewCIStr("b"), model.NewCIStr("a")},
+			[]ast.CIStr{ast.NewCIStr("b"), ast.NewCIStr("a")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int)",
