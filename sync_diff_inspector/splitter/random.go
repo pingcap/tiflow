@@ -41,6 +41,16 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
+// a wrapper for get row count to integrate failpoint.
+func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string, where string, args []any) (int64, error) {
+	failpoint.Inject("getRowCount", func(val failpoint.Value) {
+		if count, ok := val.(int); ok {
+			failpoint.Return(int64(count), nil)
+		}
+	})
+	return dbutil.GetRowCount(ctx, db, schemaName, tableName, where, args)
+}
+
 // NewRandomIterator return a new iterator
 func NewRandomIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*RandomIterator, error) {
 	return NewRandomIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
@@ -70,6 +80,44 @@ func NewRandomIteratorWithCheckpoint(
 	}
 
 	chunkRange := chunk.NewChunkRange()
+
+	// Below logic is modified from BucketIterator
+	// It's used to find the index which can match the split fields in RandomIterator.
+	fieldNames := utils.GetColumnNames(fields)
+	indices := dbutil.FindAllIndex(table.Info)
+NEXTINDEX:
+	for _, index := range indices {
+		if index == nil {
+			continue
+		}
+		if startRange != nil && startRange.IndexID != index.ID {
+			continue
+		}
+
+		indexColumns := utils.GetColumnsFromIndex(index, table.Info)
+
+		if len(indexColumns) < len(index.Columns) {
+			// some column in index is ignored.
+			continue
+		}
+
+		if !utils.IsIndexMatchingColumns(index, fieldNames) {
+			// We are enforcing user configured "index-fields" settings.
+			continue
+		}
+
+		// skip the index that has expression column
+		for _, col := range indexColumns {
+			if col.Hidden {
+				continue NEXTINDEX
+			}
+		}
+
+		// Found the index, store column names
+		chunkRange.IndexColumnNames = utils.GetColumnNames(indexColumns)
+		break
+	}
+
 	beginIndex := 0
 	bucketChunkCnt := 0
 	chunkCnt := 0
@@ -96,7 +144,7 @@ func NewRandomIteratorWithCheckpoint(
 		// For chunk splitted by random splitter, the checkpoint chunk records the tableCnt.
 		chunkCnt = bucketChunkCnt - beginIndex
 	} else {
-		cnt, err := dbutil.GetRowCount(ctx, dbConn, table.Schema, table.Table, table.Range, nil)
+		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, table.Range, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

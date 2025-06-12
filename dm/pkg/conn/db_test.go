@@ -199,8 +199,8 @@ func TestGetGTID(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("GTID_MODE", "ON")
-	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'GTID_MODE'`).WillReturnRows(rows)
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_mode", "ON")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_mode'`).WillReturnRows(rows)
 	mode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "ON", mode)
@@ -626,4 +626,25 @@ func addRowsForTables(rows *sqlmock.Rows, tables []string) {
 	for _, table := range tables {
 		rows.AddRow(table, "BASE TABLE")
 	}
+}
+
+func TestGetGTIDMode(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	tctx := tcontext.NewContext(context.Background(), log.L())
+
+	// Mock the query for GetGlobalVariable
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_mode", "ON")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_mode'`).WillReturnRows(rows)
+
+	// Call the actual GetGTIDMode function
+	gtidMode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
+
+	// Assert the results when we use lowercase gtid_mode
+	require.NoError(t, err)
+	require.Equal(t, "ON", gtidMode)
+	require.NoError(t, mock.ExpectationsWereMet())
 }

@@ -18,6 +18,7 @@ import (
 	"io"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	lconfig "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/lightning/worker"
@@ -25,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"go.uber.org/zap"
 )
 
 const defaultIOConcurrency = 1
@@ -57,6 +59,8 @@ func NewBatchDecoder(ctx context.Context,
 		LinesTerminatedBy:  codecConfig.Terminator,
 		FieldNullDefinedBy: []string{codecConfig.NullString},
 		BackslashEscape:    backslashEscape,
+		HeaderSchemaMatch:  true,
+		Header:             codecConfig.CSVOutputFieldHeader,
 	}
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
 		mydump.NewStringReader(string(value)),
@@ -64,6 +68,21 @@ func NewBatchDecoder(ctx context.Context,
 		worker.NewPool(ctx, defaultIOConcurrency, "io"), false, nil)
 	if err != nil {
 		return nil, err
+	}
+	if codecConfig.CSVOutputFieldHeader {
+		err := csvParser.ReadColumns()
+		if err != nil {
+			return nil, err
+		}
+		header := csvParser.Columns()
+		log.Info("parser CSV header", zap.Any("header", header), zap.Any("cap", cap(header)))
+		// check column name
+		idx := len(header) - len(tableInfo.Columns)
+		for i, col := range tableInfo.Columns {
+			if col.Name.L != header[idx+i] {
+				log.Panic("check column name order failed", zap.Any("col", col.Name.O), zap.Any("header", header[idx+i]))
+			}
+		}
 	}
 	return &batchDecoder{
 		codecConfig: codecConfig,

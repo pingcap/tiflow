@@ -145,6 +145,7 @@ CREATE TABLE t9 (
 /* RENAME TABLE */
 RENAME TABLE t7 TO rename_t7;
 RENAME TABLE t8 To rename_t8, t9 To rename_t9;
+RENAME TABLE rename_t8 TO test.t8;
 
 /* TRUNCATE TABLE */
 TRUNCATE TABLE rename_t7;
