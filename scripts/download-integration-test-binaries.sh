@@ -142,8 +142,8 @@ download_binaries() {
 	# Define download URLs
 	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
 	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-	# local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-	local pd_download_url="https://fileserver.pingcap.net/download/builds/devbuild/8007/pd-linux-amd64.tar.gz"
+	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+	local pd_download_url_new="https://fileserver.pingcap.net/download/builds/devbuild/8007/pd-linux-amd64.tar.gz"
 	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
 	local minio_download_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 	local go_ycsb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
@@ -153,7 +153,8 @@ download_binaries() {
 
 	# Download and extract binaries
 	download_and_extract "$tidb_download_url" "tidb-server.tar.gz" "bin/tidb-server"
-	download_and_extract "$pd_download_url" "pd-server.tar.gz"
+	download_and_extract "$pd_download_url" "pd-server.tar.gz" "bin/*"
+	download_and_extract "$pd_download_url_new" "pd-server-new.tar.gz"
 	download_and_extract "$tikv_download_url" "tikv-server.tar.gz" "bin/tikv-server"
 	download_and_extract "$tiflash_download_url" "tiflash.tar.gz"
 	download_and_extract "$minio_download_url" "minio.tar.gz"
@@ -181,7 +182,7 @@ download_and_extract() {
 	# Move extracted files if necessary
 	case $file_name in
 	"tidb-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tidb-server ${THIRD_BIN_DIR}/ ;;
-	# "pd-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/* ${THIRD_BIN_DIR}/ ;;
+	"pd-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/* ${THIRD_BIN_DIR}/ ;;
 	"tikv-server.tar.gz") mv ${THIRD_BIN_DIR}/bin/tikv-server ${THIRD_BIN_DIR}/ ;;
 	"tiflash.tar.gz")
 		mv ${THIRD_BIN_DIR}/tiflash ${THIRD_BIN_DIR}/_tiflash
