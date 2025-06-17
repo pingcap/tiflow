@@ -179,7 +179,6 @@ func (m *confluentSchemaManager) Register(
 
 	var jsonResp registerResponse
 	err = json.Unmarshal(body, &jsonResp)
-
 	if err != nil {
 		log.Error("Failed to parse result from Registry", zap.Error(err))
 		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -451,7 +450,6 @@ func httpRetry(
 			r.Body = io.NopCloser(bytes.NewReader(data))
 		}
 		resp, err = httpCli.Do(r)
-
 		if err != nil {
 			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
 			goto checkCtx
