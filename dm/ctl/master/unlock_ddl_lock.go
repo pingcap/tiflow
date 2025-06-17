@@ -107,6 +107,7 @@ func unlockDDLLockFunc(cmd *cobra.Command, _ []string) error {
 		},
 		&resp,
 	)
+
 	if err != nil {
 		common.PrintLinesf("can not unlock DDL lock %s", lockID)
 		return err
