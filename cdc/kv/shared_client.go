@@ -203,7 +203,6 @@ type rangeTask struct {
 // requestedStore represents a store that has been connected.
 // A store may have multiple streams.
 type requestedStore struct {
-	storeID   uint64
 	storeAddr string
 	// Use to select a stream to send request.
 	nextStream atomic.Uint32
@@ -440,7 +439,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				continue
 			}
 
-			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
+			store := s.getStore(ctx, eg, region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
 
@@ -450,7 +449,11 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Uint64("streamID", stream.streamID),
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
+<<<<<<< HEAD
 				zap.Uint64("storeID", store.storeID),
+=======
+				zap.String("span", region.span.String()),
+>>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 				zap.String("addr", store.storeAddr))
 		}
 	}
@@ -479,14 +482,13 @@ func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region reg
 
 // getStore gets a requestedStore from requestedStores by storeAddr.
 func (s *SharedClient) getStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
+	ctx context.Context, g *errgroup.Group, storeAddr string,
 ) *requestedStore {
 	var rs *requestedStore
 	if rs = s.stores[storeAddr]; rs != nil {
 		return rs
 	}
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
+	rs = &requestedStore{storeAddr: storeAddr}
 	s.stores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
