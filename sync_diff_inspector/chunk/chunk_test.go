@@ -16,7 +16,7 @@ package chunk
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/stretchr/testify/require"
 )
 
@@ -438,7 +438,7 @@ func TestChunkToString(t *testing.T) {
 				HasUpper: true,
 			},
 		},
-		IndexColumnNames: []model.CIStr{model.NewCIStr("a"), model.NewCIStr("b")},
+		IndexColumnNames: []ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
 	}
 
 	require.Equal(t, chunk.String(), "{\"index\":null,\"type\":0,\"bounds\":[{\"column\":\"a\",\"lower\":\"1\",\"upper\":\"1\",\"has-lower\":true,\"has-upper\":true},{\"column\":\"b\",\"lower\":\"3\",\"upper\":\"3\",\"has-lower\":true,\"has-upper\":true}],\"is-first\":false,\"is-last\":false,\"where\":\"\",\"args\":null,\"index-column-names\":[{\"O\":\"a\",\"L\":\"a\"},{\"O\":\"b\",\"L\":\"b\"}]}")

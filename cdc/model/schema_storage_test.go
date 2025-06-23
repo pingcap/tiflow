@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/stretchr/testify/require"
