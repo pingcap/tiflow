@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -138,7 +138,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: 114,
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
@@ -150,7 +150,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: 114,
 	}, tableName)
 }
 

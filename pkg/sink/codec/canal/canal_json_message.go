@@ -20,6 +20,10 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+<<<<<<< HEAD
+=======
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
