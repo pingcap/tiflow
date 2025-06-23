@@ -17,7 +17,12 @@ import (
 	"fmt"
 	"testing"
 
+<<<<<<< HEAD
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )

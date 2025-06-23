@@ -19,7 +19,10 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/pkg/parser/model"
+=======
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // for import parser driver
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -128,8 +131,13 @@ func (v *tableRenameVisitor) Enter(in ast.Node) (ast.Node, bool) {
 			v.hasErr = true
 			return in, true
 		}
+<<<<<<< HEAD
 		t.Schema = model.NewCIStr(v.targetNames[v.i].Schema)
 		t.Name = model.NewCIStr(v.targetNames[v.i].Name)
+=======
+		t.Schema = ast.NewCIStr(v.targetNames[v.i].Schema)
+		t.Name = ast.NewCIStr(v.targetNames[v.i].Name)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 		v.i++
 		return in, true
 	}
@@ -155,11 +163,19 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 
 	switch v := stmt.(type) {
 	case *ast.AlterDatabaseStmt:
+<<<<<<< HEAD
 		v.Name = model.NewCIStr(targetTables[0].Schema)
 	case *ast.CreateDatabaseStmt:
 		v.Name = model.NewCIStr(targetTables[0].Schema)
 	case *ast.DropDatabaseStmt:
 		v.Name = model.NewCIStr(targetTables[0].Schema)
+=======
+		v.Name = ast.NewCIStr(targetTables[0].Schema)
+	case *ast.CreateDatabaseStmt:
+		v.Name = ast.NewCIStr(targetTables[0].Schema)
+	case *ast.DropDatabaseStmt:
+		v.Name = ast.NewCIStr(targetTables[0].Schema)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	default:
 		visitor := &tableRenameVisitor{
 			targetNames: targetTables,
@@ -188,7 +204,11 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 // if fail to restore, it would not restore the value of `stmt` (it changes it's values if `stmt` is one of  DropTableStmt, RenameTableStmt, AlterTableStmt).
 func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 	var (
+<<<<<<< HEAD
 		schemaName = model.NewCIStr(schema) // fill schema name
+=======
+		schemaName = ast.NewCIStr(schema) // fill schema name
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 		bf         = new(bytes.Buffer)
 		ctx        = &format.RestoreCtx{
 			Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment | format.RestoreStringWithoutDefaultCharset,

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 )
 
 type mockPDClient struct {
@@ -32,8 +33,13 @@ type mockPDClient struct {
 
 var _ pd.Client = &mockPDClient{}
 
+<<<<<<< HEAD
 func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
 	s, err := m.Client.GetStore(ctx, storeID)
+=======
+func (m *mockPDClient) GetAllStores(ctx context.Context, _ ...pdopt.GetStoreOption) ([]*metapb.Store, error) {
+	s, err := m.Client.GetAllStores(ctx)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if err != nil {
 		return nil, err
 	}
