@@ -785,3 +785,84 @@ func TestMerge(t *testing.T) {
 	require.Equal(t, "cert.pem", c.Credential.CertPath)
 	require.Equal(t, "key.pem", c.Credential.KeyPath)
 }
+
+// mockAdminClientForAdjust mocks the ClusterAdminClient to test AdjustOptions.
+type mockAdminClientForAdjust struct {
+	ClusterAdminClientMockImpl // We know there is a Mock implementation from the diff
+	brokerConfigValue          string
+	shouldError                bool
+}
+
+// GetBrokerConfig simulates the behavior of getting configuration from a broker.
+func (m *mockAdminClientForAdjust) GetBrokerConfig(_ context.Context, configName string) (string, error) {
+	if m.shouldError {
+		return "", errors.New("mock error: cannot get broker config")
+	}
+	if configName == BrokerConnectionsMaxIdleMsConfigName {
+		return m.brokerConfigValue, nil
+	}
+	return "", errors.Errorf("unexpected config name: %s", configName)
+}
+
+func TestAdjustOptionsKeepAlive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Case 1: Successful adjustment.
+	// The broker returns a valid idle time, KeepConnAliveInterval should be set to 1/3 of it.
+	t.Run("SuccessfulAdjustment", func(t *testing.T) {
+		o := NewOptions()
+		adminClient := &mockAdminClientForAdjust{
+			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
+			brokerConfigValue:          "300000", // 300,000 ms = 300 s
+		}
+		err := AdjustOptions(ctx, adminClient, o, adminClient.GetDefaultMockTopicName())
+		require.NoError(t, err)
+		// Expected value is 300000ms / 3 = 100000ms = 100s
+		require.Equal(t, 100*time.Second, o.KeepConnAliveInterval)
+	})
+
+	// Case 2: Error when getting config from admin client.
+	t.Run("ErrorFromAdminClient", func(t *testing.T) {
+		o := NewOptions()
+		adminClient := &mockAdminClientForAdjust{
+			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
+			shouldError:                true,
+		}
+		err := AdjustOptions(ctx, adminClient, o, adminClient.GetDefaultMockTopicName())
+		require.Error(t, err)
+		require.Regexp(t, "mock error: cannot get broker config", err)
+	})
+
+	// Case 3: Broker returns an invalid (non-integer) config value.
+	t.Run("InvalidNonIntegerConfig", func(t *testing.T) {
+		o := NewOptions()
+		adminClient := &mockAdminClientForAdjust{
+			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
+			brokerConfigValue:          "not-a-number",
+		}
+		err := AdjustOptions(ctx, adminClient, o, adminClient.GetDefaultMockTopicName())
+		require.Error(t, err)
+		// The error should be a type conversion error.
+		_, ok := errors.Cause(err).(*strconv.NumError)
+		require.True(t, ok, "error should be of type strconv.NumError")
+	})
+
+	// Case 4: Broker returns an invalid (zero or negative) config value.
+	// According to the code in the diff, this case will log a warning and return a nil error,
+	// and the configuration item will not be updated.
+	t.Run("InvalidZeroOrNegativeConfig", func(t *testing.T) {
+		for _, val := range []string{"0", "-1000"} {
+			o := NewOptions()
+			defaultInterval := o.KeepConnAliveInterval
+			adminClient := &mockAdminClientForAdjust{
+				ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
+				brokerConfigValue:          val,
+			}
+			err := AdjustOptions(ctx, adminClient, o, adminClient.GetDefaultMockTopicName())
+			require.NoError(t, err, "should not return error for zero or negative idle time")
+			// KeepConnAliveInterval should remain its default value.
+			require.Equal(t, defaultInterval, o.KeepConnAliveInterval, "interval should not be changed")
+		}
+	})
+}

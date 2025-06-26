@@ -15,11 +15,15 @@ package kafka
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/IBM/sarama"
+	"github.com/IBM/sarama/mocks"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
+
+	"time"
 )
 
 func TestNewSaramaFactory(t *testing.T) {
@@ -100,4 +104,120 @@ func TestAsyncProducer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, async)
 	async.Close()
+}
+
+// mockClientForHeartbeat is a mock sarama.Client used to verify
+// that the Brokers() method is called as part of the heartbeat logic.
+type mockClientForHeartbeat struct {
+	sarama.Client // Embed the interface to avoid implementing all methods.
+	brokersCalled chan struct{}
+}
+
+// Brokers is the mocked method. It sends a signal to a channel when called.
+func (c *mockClientForHeartbeat) Brokers() []*sarama.Broker {
+	// The function under test iterates over the returned slice.
+	// Returning nil is fine, as we only want to check if this method was called.
+	c.brokersCalled <- struct{}{}
+	return nil
+}
+
+// Close closes the signal channel.
+func (c *mockClientForHeartbeat) Close() error {
+	close(c.brokersCalled)
+	return nil
+}
+
+func TestSaramaSyncProducerHeartbeatThrottling(t *testing.T) {
+	t.Parallel()
+
+	mockClient := &mockClientForHeartbeat{
+		// Use a buffered channel to prevent blocking in case of unexpected calls.
+		brokersCalled: make(chan struct{}, 10),
+	}
+
+	producer := &saramaSyncProducer{
+		id:                    model.DefaultChangeFeedID("test-sync-producer"),
+		producer:              nil, // Not needed for this test.
+		client:                mockClient,
+		keepConnAliveInterval: 100 * time.Millisecond,
+		// Set the last heartbeat time to a long time ago to ensure the first call is not throttled.
+		lastHeartbeatTime: time.Now().Add(-200 * time.Millisecond),
+	}
+
+	// First call, should trigger a call to Brokers().
+	producer.HeartbeatBrokers()
+	select {
+	case <-mockClient.brokersCalled:
+		// Expected behavior.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("HeartbeatBrokers should have called client.Brokers(), but it did not")
+	}
+
+	// Second call immediately after, should be throttled.
+	producer.HeartbeatBrokers()
+	select {
+	case <-mockClient.brokersCalled:
+		t.Fatal("client.Brokers() was called, but it should have been throttled")
+	case <-time.After(50 * time.Millisecond):
+		// Expected behavior, no call was made.
+	}
+
+	// Wait for the interval to pass.
+	time.Sleep(producer.keepConnAliveInterval)
+
+	// Third call, should trigger a call to Brokers() again.
+	producer.HeartbeatBrokers()
+	select {
+	case <-mockClient.brokersCalled:
+		// Expected behavior.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("HeartbeatBrokers should have called client.Brokers() again, but it did not")
+	}
+}
+
+func TestSaramaAsyncProducerHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	mockClient := &mockClientForHeartbeat{
+		brokersCalled: make(chan struct{}, 10),
+	}
+	// We need a mock sarama.AsyncProducer that doesn't do anything,
+	// but allows its Close() method to be called.
+	mockAsyncProducer := mocks.NewAsyncProducer(t, nil)
+
+	producer := &saramaAsyncProducer{
+		client:                mockClient,
+		producer:              mockAsyncProducer, // Use a mock producer.
+		changefeedID:          model.DefaultChangeFeedID("test-async-producer"),
+		keepConnAliveInterval: 50 * time.Millisecond, // Use a short interval for testing.
+		failpointCh:           make(chan error, 1),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = producer.AsyncRunCallback(ctx)
+	}()
+
+	// Check for the first heartbeat.
+	select {
+	case <-mockClient.brokersCalled:
+		// Good, first heartbeat received.
+	case <-time.After(producer.keepConnAliveInterval * 2):
+		t.Fatal("Timed out waiting for the first heartbeat")
+	}
+
+	// Check for the second heartbeat.
+	select {
+	case <-mockClient.brokersCalled:
+		// Good, second heartbeat received.
+	case <-time.After(producer.keepConnAliveInterval * 2):
+		t.Fatal("Timed out waiting for the second heartbeat")
+	}
+
+	// Stop the goroutine.
+	cancel()
+	wg.Wait()
 }

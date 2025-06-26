@@ -129,6 +129,7 @@ func (p *saramaSyncProducer) HeartbeatBrokers() {
 	if time.Since(p.lastHeartbeatTime) < p.keepConnAliveInterval {
 		return
 	}
+	p.lastHeartbeatTime = time.Now()
 
 	// We don't care about the response and error here, even the connection
 	// is unestablished, we just need to keep the connection alive WHEN it's established.
