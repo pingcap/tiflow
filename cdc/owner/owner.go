@@ -847,7 +847,7 @@ func (o *ownerImpl) updateGCSafepoint(
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
-	log.Info("fizz minChekpoinTsMap", zap.Any("minChekpoinTsMap", minChekpoinTsMap))
+	//log.Info("fizz minChekpoinTsMap", zap.Any("minChekpoinTsMap", minChekpoinTsMap))
 
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
 		up, ok := o.upstreamManager.Get(upstreamID)
@@ -872,7 +872,7 @@ func (o *ownerImpl) updateGCSafepoint(
 			forceUpdate = true
 		}
 
-		log.Info("fizz upstream id", zap.Uint64("upstreamID", upstreamID), zap.Uint64("gcSafepointUpperBound", gcSafepointUpperBound), zap.Bool("forceUpdate", forceUpdate))
+		//log.Info("fizz upstream id", zap.Uint64("upstreamID", upstreamID), zap.Uint64("gcSafepointUpperBound", gcSafepointUpperBound), zap.Bool("forceUpdate", forceUpdate))
 
 		err := up.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 		if err != nil {
@@ -900,7 +900,7 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
 		upstreamID := changefeedState.Info.UpstreamID
 
-		log.Info("fizz upstream id", zap.Uint64("upstreamID", upstreamID))
+		//log.Info("fizz upstream id", zap.Uint64("upstreamID", upstreamID))
 
 		if _, exist := minCheckpointTsMap[upstreamID]; !exist {
 			minCheckpointTsMap[upstreamID] = checkpointTs

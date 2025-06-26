@@ -89,7 +89,7 @@ const (
 func SetServiceGCSafepoint(
 	ctx context.Context, pdCli pd.Client, serviceID string, TTL int64, safePoint uint64,
 ) (minServiceGCTs uint64, err error) {
-	log.Info("fizz set service gc safepoint", zap.String("serviceID", serviceID), zap.Uint64("safePoint", safePoint))
+	//log.Info("fizz set service gc safepoint", zap.String("serviceID", serviceID), zap.Uint64("safePoint", safePoint))
 	err = retry.Do(ctx,
 		func() error {
 			var err1 error
