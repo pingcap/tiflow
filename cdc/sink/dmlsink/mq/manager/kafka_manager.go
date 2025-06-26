@@ -100,6 +100,7 @@ func (m *kafkaTopicManager) GetPartitionNum(
 }
 
 func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
+	defer m.keepConnAliveTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
