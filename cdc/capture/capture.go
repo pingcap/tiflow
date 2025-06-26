@@ -235,7 +235,7 @@ func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 	c.info = &model.CaptureInfo{
 		ID:             uuid.New().String(),
 		AdvertiseAddr:  c.config.AdvertiseAddr,
-		Version:        "v8.5.2",
+		Version:        version.ReleaseVersion,
 		GitHash:        version.GitHash,
 		DeployPath:     deployPath,
 		StartTimestamp: time.Now().Unix(),
