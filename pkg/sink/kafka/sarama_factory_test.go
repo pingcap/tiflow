@@ -17,13 +17,12 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/IBM/sarama/mocks"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
-
-	"time"
 )
 
 func TestNewSaramaFactory(t *testing.T) {

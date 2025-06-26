@@ -17,20 +17,18 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sync"
 	"testing"
 
 	mm "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/stretchr/testify/require"
-
-	"sync"
-
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewKafkaDDLSinkFailed(t *testing.T) {
