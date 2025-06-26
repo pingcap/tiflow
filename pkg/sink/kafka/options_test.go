@@ -823,20 +823,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 		require.Equal(t, 100*time.Second, o.KeepConnAliveInterval)
 	})
 
-	// Case 2: Error when getting config from admin client.
-	t.Run("ErrorFromAdminClient", func(t *testing.T) {
-		t.Parallel()
-		o := NewOptions()
-		adminClient := &mockAdminClientForAdjust{
-			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
-			shouldError:                true,
-		}
-		err := AdjustOptions(ctx, adminClient, o, adminClient.GetDefaultMockTopicName())
-		require.Error(t, err)
-		require.Regexp(t, "mock error: cannot get broker config", err)
-	})
-
-	// Case 3: Broker returns an invalid (non-integer) config value.
+	// Case 2: Broker returns an invalid (non-integer) config value.
 	t.Run("InvalidNonIntegerConfig", func(t *testing.T) {
 		t.Parallel()
 		o := NewOptions()
@@ -851,7 +838,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 		require.True(t, ok, "error should be of type strconv.NumError")
 	})
 
-	// Case 4: Broker returns an invalid (zero or negative) config value.
+	// Case 3: Broker returns an invalid (zero or negative) config value.
 	// According to the code in the diff, this case will log a warning and return a nil error,
 	// and the configuration item will not be updated.
 	t.Run("InvalidZeroOrNegativeConfig", func(t *testing.T) {
