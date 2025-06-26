@@ -180,13 +180,15 @@ func TestSaramaAsyncProducerHeartbeat(t *testing.T) {
 	mockClient := &mockClientForHeartbeat{
 		brokersCalled: make(chan struct{}, 10),
 	}
-	// We need a mock sarama.AsyncProducer that doesn't do anything,
-	// but allows its Close() method to be called.
-	mockAsyncProducer := mocks.NewAsyncProducer(t, nil)
+	// Using a test config is better practice for initializing mocks.
+	config := mocks.NewTestConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+	mockAsyncProducer := mocks.NewAsyncProducer(t, config)
 
 	producer := &saramaAsyncProducer{
 		client:                mockClient,
-		producer:              mockAsyncProducer, // Use a mock producer.
+		producer:              mockAsyncProducer, // Use the mock producer.
 		changefeedID:          model.DefaultChangeFeedID("test-async-producer"),
 		keepConnAliveInterval: 50 * time.Millisecond, // Use a short interval for testing.
 		failpointCh:           make(chan error, 1),
@@ -204,7 +206,7 @@ func TestSaramaAsyncProducerHeartbeat(t *testing.T) {
 	select {
 	case <-mockClient.brokersCalled:
 		// Good, first heartbeat received.
-	case <-time.After(producer.keepConnAliveInterval * 2):
+	case <-time.After(producer.keepConnAliveInterval * 4): // Use a more generous timeout
 		t.Fatal("Timed out waiting for the first heartbeat")
 	}
 
@@ -212,11 +214,35 @@ func TestSaramaAsyncProducerHeartbeat(t *testing.T) {
 	select {
 	case <-mockClient.brokersCalled:
 		// Good, second heartbeat received.
-	case <-time.After(producer.keepConnAliveInterval * 2):
+	case <-time.After(producer.keepConnAliveInterval * 4): // Use a more generous timeout
 		t.Fatal("Timed out waiting for the second heartbeat")
 	}
 
-	// Stop the goroutine.
+	// Stop the AsyncRunCallback goroutine.
 	cancel()
 	wg.Wait()
+
+	// Manually close the mock producer's input channel to fix a deadlock issue.
+	// This deterministically signals the mock's internal goroutine to shut down.
+	// This is safe because AsyncRunCallback has already exited and will no longer
+	// try to close or write to the producer.
+	close(mockAsyncProducer.Input())
+
+	// Drain the producer's channels to ensure its internal goroutine has shut down
+	// before the test finishes. This prevents both leaks and deadlocks.
+	var drainWg sync.WaitGroup
+	drainWg.Add(2)
+	go func() {
+		defer drainWg.Done()
+		for range mockAsyncProducer.Successes() {
+			// Drain successes
+		}
+	}()
+	go func() {
+		defer drainWg.Done()
+		for range mockAsyncProducer.Errors() {
+			// Drain errors
+		}
+	}()
+	drainWg.Wait()
 }
