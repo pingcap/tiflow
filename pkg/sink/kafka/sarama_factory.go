@@ -75,13 +75,12 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	a := saramaAdminClient{
+
+	return &saramaAdminClient{
 		client:     client,
 		admin:      admin,
 		changefeed: f.changefeedID,
-	}
-
-	return &a, nil
+	}, nil
 }
 
 // SyncProducer returns a Sync Producer,
@@ -101,14 +100,14 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sp := saramaSyncProducer{
+
+	return &saramaSyncProducer{
 		id:                    f.changefeedID,
 		producer:              p,
 		client:                client,
 		keepConnAliveInterval: f.option.KeepConnAliveInterval,
 		lastHeartbeatTime:     time.Now().Add(-f.option.KeepConnAliveInterval),
-	}
-	return &sp, nil
+	}, nil
 }
 
 // AsyncProducer return an Async Producer,
