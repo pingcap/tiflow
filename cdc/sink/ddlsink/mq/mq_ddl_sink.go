@@ -87,14 +87,15 @@ func newDDLSink(
 	connRefresherForDDL kafka.SyncProducer,
 ) *DDLSink {
 	return &DDLSink{
-		id:           changefeedID,
-		protocol:     protocol,
-		eventRouter:  eventRouter,
-		topicManager: topicManager,
-		encoder:      encoder,
-		producer:     producer,
-		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
-		admin:        adminClient,
+		id:                  changefeedID,
+		protocol:            protocol,
+		eventRouter:         eventRouter,
+		topicManager:        topicManager,
+		encoder:             encoder,
+		producer:            producer,
+		statistics:          metrics.NewStatistics(changefeedID, sink.RowSink),
+		admin:               adminClient,
+		connRefresherForDDL: connRefresherForDDL,
 	}
 }
 

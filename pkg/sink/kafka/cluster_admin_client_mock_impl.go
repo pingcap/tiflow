@@ -100,6 +100,9 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, e
 	return nil, nil
 }
 
+// HeartbeatBrokers implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) HeartbeatBrokers() {}
+
 // GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 	_ context.Context,

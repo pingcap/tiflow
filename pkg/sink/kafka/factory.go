@@ -126,7 +126,7 @@ func (p *saramaSyncProducer) HeartbeatBrokers() {
 	// older than the keep connection alive interval, to avoid sending heartbeat
 	// too frequently.
 	// This function will be called periodically in DDLSink.WriteCheckpointTs.
-	if time.Now().Sub(p.lastHeartbeatTime) < p.keepConnAliveInterval {
+	if time.Since(p.lastHeartbeatTime) < p.keepConnAliveInterval {
 		return
 	}
 

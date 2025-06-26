@@ -15,12 +15,17 @@ package manager
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
+
+// A fake interval to keep the connection alive in kafka topic manager.
+const FOREVER = time.Duration(math.MaxInt64)
 
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
@@ -35,7 +40,7 @@ func TestCreateTopic(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -50,7 +55,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -67,7 +72,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
@@ -91,7 +96,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	topic := "new_topic"
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
 	require.NoError(t, err)
