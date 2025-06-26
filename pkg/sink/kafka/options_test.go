@@ -811,6 +811,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 	// Case 1: Successful adjustment.
 	// The broker returns a valid idle time, KeepConnAliveInterval should be set to 1/3 of it.
 	t.Run("SuccessfulAdjustment", func(t *testing.T) {
+		t.Parallel()
 		o := NewOptions()
 		adminClient := &mockAdminClientForAdjust{
 			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
@@ -824,6 +825,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 
 	// Case 2: Error when getting config from admin client.
 	t.Run("ErrorFromAdminClient", func(t *testing.T) {
+		t.Parallel()
 		o := NewOptions()
 		adminClient := &mockAdminClientForAdjust{
 			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
@@ -836,6 +838,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 
 	// Case 3: Broker returns an invalid (non-integer) config value.
 	t.Run("InvalidNonIntegerConfig", func(t *testing.T) {
+		t.Parallel()
 		o := NewOptions()
 		adminClient := &mockAdminClientForAdjust{
 			ClusterAdminClientMockImpl: *NewClusterAdminClientMockImpl(),
@@ -852,6 +855,7 @@ func TestAdjustOptionsKeepAlive(t *testing.T) {
 	// According to the code in the diff, this case will log a warning and return a nil error,
 	// and the configuration item will not be updated.
 	t.Run("InvalidZeroOrNegativeConfig", func(t *testing.T) {
+		t.Parallel()
 		for _, val := range []string{"0", "-1000"} {
 			o := NewOptions()
 			defaultInterval := o.KeepConnAliveInterval

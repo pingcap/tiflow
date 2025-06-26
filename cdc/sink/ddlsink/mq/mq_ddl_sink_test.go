@@ -340,9 +340,11 @@ func (m *mockEncoder) AppendRowChangedEvent(
 ) error {
 	return nil
 }
+
 func (m *mockEncoder) Build() []*common.Message {
 	return nil
 }
+
 func (m *mockEncoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
 	return nil, nil
 }
