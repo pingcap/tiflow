@@ -42,6 +42,9 @@ const (
 
 	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
 	defaultMinInsyncReplicas = "1"
+
+	// 10 minutes, identical to kafka broker's `connections.max.idle.ms`
+	defaultBrokerConnectionsMaxIdleMs = "600000"
 )
 
 var (
@@ -51,6 +54,8 @@ var (
 	TopicMaxMessageBytes = defaultMaxMessageBytes
 	// MinInSyncReplicas is the `min.insync.replicas`
 	MinInSyncReplicas = defaultMinInsyncReplicas
+	// BrokerConnectionsMaxIdleMs is the broker's `connections.max.idle.ms`
+	BrokerConnectionsMaxIdleMs = defaultBrokerConnectionsMaxIdleMs
 )
 
 type topicDetail struct {
@@ -81,6 +86,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	brokerConfigs := make(map[string]string)
 	brokerConfigs[BrokerMessageMaxBytesConfigName] = BrokerMessageMaxBytes
 	brokerConfigs[MinInsyncReplicasConfigName] = MinInSyncReplicas
+	brokerConfigs[BrokerConnectionsMaxIdleMsConfigName] = BrokerConnectionsMaxIdleMs
 
 	topicConfigs := make(map[string]map[string]string)
 	topicConfigs[DefaultMockTopicName] = make(map[string]string)
