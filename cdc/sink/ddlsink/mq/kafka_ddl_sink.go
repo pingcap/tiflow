@@ -83,6 +83,7 @@ func NewKafkaDDLSink(
 		topic,
 		options.DeriveTopicConfig(),
 		adminClient,
+		options.KeepConnAliveInterval,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -112,7 +113,11 @@ func NewKafkaDDLSink(
 	}
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
+<<<<<<< HEAD
 	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
+=======
+	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder.Build(), protocol, syncProducer)
+>>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	return s, nil
 }

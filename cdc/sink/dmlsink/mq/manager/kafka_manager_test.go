@@ -15,12 +15,18 @@ package manager
 
 import (
 	"context"
+	"math"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
+
+// A fake interval to keep the connection alive in kafka topic manager.
+const FOREVER = time.Duration(math.MaxInt64)
 
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
@@ -35,7 +41,7 @@ func TestCreateTopic(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -50,7 +56,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -67,7 +73,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
@@ -91,7 +97,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	topic := "new_topic"
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
 	require.NoError(t, err)
@@ -100,4 +106,54 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	err = manager.waitUntilTopicVisible(ctx, topic)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
+}
+
+// mockAdminClientForHeartbeat is used to count the calls to HeartbeatBrokers.
+type mockAdminClientForHeartbeat struct {
+	kafka.ClusterAdminClientMockImpl
+	heartbeatCount int
+	mu             sync.Mutex
+}
+
+func (m *mockAdminClientForHeartbeat) HeartbeatBrokers() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.heartbeatCount++
+}
+
+func (m *mockAdminClientForHeartbeat) GetHeartbeatCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.heartbeatCount
+}
+
+func TestKafkaManagerHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	adminClient := &mockAdminClientForHeartbeat{}
+	cfg := &kafka.AutoCreateTopicConfig{AutoCreate: false}
+	changefeedID := model.DefaultChangeFeedID("test-heartbeat")
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Use a short interval for testing.
+	keepAliveInterval := 50 * time.Millisecond
+	manager := NewKafkaTopicManager(ctx, "topic", changefeedID, adminClient, cfg, keepAliveInterval)
+
+	// Ensure the manager is closed and the context is canceled at the end of the test.
+	defer manager.Close()
+	defer cancel()
+
+	// Wait for a sufficient amount of time to ensure the heartbeat ticker triggers several times.
+	// Waiting for 175ms should be enough to trigger 3 times (at 50ms, 100ms, 150ms).
+	// Use Eventually to avoid test flakiness.
+	require.Eventually(t, func() bool {
+		return adminClient.GetHeartbeatCount() >= 2
+	}, 2*time.Second, 50*time.Millisecond, "HeartbeatBrokers should be called periodically")
+
+	// Verify that closing the manager stops the heartbeat.
+	countBeforeClose := adminClient.GetHeartbeatCount()
+	manager.Close()
+	// Wait for a short period to ensure no new heartbeats occur.
+	time.Sleep(keepAliveInterval * 2)
+	require.Equal(t, countBeforeClose, adminClient.GetHeartbeatCount(), "Heartbeat should stop after manager is closed")
 }

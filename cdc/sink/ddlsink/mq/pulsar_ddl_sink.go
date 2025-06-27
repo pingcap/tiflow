@@ -100,7 +100,11 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
+=======
+	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder.Build(), protocol, nil)
+>>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 
 	return s, nil
 }
