@@ -75,6 +75,7 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	return &saramaAdminClient{
 		client:     client,
 		admin:      admin,
@@ -90,13 +91,22 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, err
 	}
 	config.MetricRegistry = f.registry
-	p, err := sarama.NewSyncProducer(f.option.BrokerEndpoints, config)
+
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	p, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &saramaSyncProducer{
-		id:       f.changefeedID,
-		producer: p,
+		id:                    f.changefeedID,
+		producer:              p,
+		client:                client,
+		keepConnAliveInterval: f.option.KeepConnAliveInterval,
+		lastHeartbeatTime:     time.Now().Add(-f.option.KeepConnAliveInterval),
 	}, nil
 }
 
@@ -121,10 +131,11 @@ func (f *saramaFactory) AsyncProducer(
 		return nil, errors.Trace(err)
 	}
 	return &saramaAsyncProducer{
-		client:       client,
-		producer:     p,
-		changefeedID: f.changefeedID,
-		failpointCh:  failpointCh,
+		client:                client,
+		producer:              p,
+		changefeedID:          f.changefeedID,
+		keepConnAliveInterval: f.option.KeepConnAliveInterval,
+		failpointCh:           failpointCh,
 	}, nil
 }
 
