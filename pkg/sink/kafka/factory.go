@@ -130,16 +130,7 @@ func (p *saramaSyncProducer) HeartbeatBrokers() {
 		return
 	}
 	p.lastHeartbeatTime = time.Now()
-
-	// We don't care about the response and error here, even the connection
-	// is unestablished, we just need to keep the connection alive WHEN it's established.
-	// The connection will be established when a producer send messages.
-	// This is a workaround for the issue that sarama doesn't keep the connection alive
-	// when the connection is idle for a long time and we have disabled the retry in sarama.
-	brokers := p.client.Brokers()
-	for _, b := range brokers {
-		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
-	}
+	KeepConnAlive(p.client)
 }
 
 func (p *saramaSyncProducer) Close() {
@@ -276,14 +267,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	return nil
 }
 
+// heartbeatBrokers sends heartbeat to all brokers to keep the connection alive.
 func (p *saramaAsyncProducer) heartbeatBrokers() {
-	// We don't care about the response and error here, even the connection
-	// is unestablished, we just need to keep the connection alive WHEN it's established.
-	// The connection will be established when a producer send messages.
-	// This is a workaround for the issue that sarama doesn't keep the connection alive
-	// when the connection is idle for a long time and we have disabled the retry in sarama.
-	brokers := p.client.Brokers()
-	for _, b := range brokers {
-		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
-	}
+	KeepConnAlive(p.client)
 }
