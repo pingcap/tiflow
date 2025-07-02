@@ -395,3 +395,5 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
 replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
+
+replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20250617
