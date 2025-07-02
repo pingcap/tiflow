@@ -352,7 +352,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 
 func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
 	if err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
-		if err := upstream.CheckTiKVStoresVersion(ctx); err != nil {
+		if err := version.CheckStoreVersion(ctx, upstream.PDClient); err != nil {
 			return errors.Trace(err)
 		}
 		return nil

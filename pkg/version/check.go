@@ -206,6 +206,9 @@ func CheckStoreVersion(ctx context.Context, client pd.Client) error {
 
 	var ver *semver.Version
 	for _, s := range stores {
+		if s == nil {
+			continue
+		}
 		if engine.IsTiFlash(s) {
 			continue
 		}

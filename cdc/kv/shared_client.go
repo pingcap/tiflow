@@ -106,8 +106,7 @@ type rangeTask struct {
 }
 
 type requestedStore struct {
-	storeAddr string
-	// Use to select a stream to send request.
+	storeAddr  string
 	nextStream atomic.Uint32
 	streams    []*requestedStream
 }
@@ -384,7 +383,7 @@ func (s *SharedClient) requestStore(
 		return rs
 	}
 	rs = &requestedStore{storeAddr: storeAddr}
-	s.stores[storeAddr] = rs
+	s.requestedStores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
@@ -415,7 +414,6 @@ func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 		zap.Uint64("streamID", r.streams[offset].streamID),
 		zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
 		zap.Uint64("regionID", sri.verID.GetID()),
-		zap.Uint64("storeID", r.storeID),
 		zap.String("addr", r.storeAddr))
 	r.streams[offset].requests.In() <- sri
 }

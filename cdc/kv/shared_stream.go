@@ -262,7 +262,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				zap.Uint64("streamID", s.streamID),
 				zap.Any("subscriptionID", subscriptionID),
 				zap.Uint64("regionID", req.RegionId),
-				zap.Uint64("storeID", rs.storeID),
 				zap.String("addr", rs.storeAddr),
 				zap.Error(err))
 			return errors.Trace(err)
@@ -273,7 +272,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			zap.Uint64("streamID", s.streamID),
 			zap.Any("subscriptionID", subscriptionID),
 			zap.Uint64("regionID", req.RegionId),
-			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr))
 		return nil
 	}
@@ -335,7 +333,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			zap.Uint64("streamID", s.streamID),
 			zap.Any("subscriptionID", subscriptionID),
 			zap.Uint64("regionID", sri.verID.GetID()),
-			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr))
 		// It means it's a special task for stopping the table.
 		if sri.lockedRange == nil {
