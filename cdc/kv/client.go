@@ -221,7 +221,7 @@ func NewCDCClient(
 	return c
 }
 
-func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
+func (c *CDCClient) newStream(ctx context.Context, addr string) (stream *eventFeedStream, newStreamErr error) {
 	streamFunc := func() (err error) {
 		var conn *sharedConn
 		defer func() {
@@ -233,7 +233,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = version.CheckStoreVersion(ctx, c.pd, storeID)
+		err = version.CheckStoreVersion(ctx, c.pd)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -641,7 +641,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			storePendingRegions[storeAddr] = pendingRegions
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
-			stream, err = s.client.newStream(streamCtx, storeAddr, storeID)
+			stream, err = s.client.newStream(streamCtx, storeAddr)
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",

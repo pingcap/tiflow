@@ -193,8 +193,7 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	return nil
 }
 
-// CheckStoreVersion checks whether the given TiKV is compatible with this CDC.
-// If storeID is 0, it checks all TiKV.
+// CheckStoreVersion return whether all TiKV stores compatible to the TiCDC cluster.
 func CheckStoreVersion(ctx context.Context, client pd.Client) error {
 	failpoint.Inject("GetStoreFailed", func() {
 		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, errors.New("unknown store")))
