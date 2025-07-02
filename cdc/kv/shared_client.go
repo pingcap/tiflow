@@ -106,7 +106,6 @@ type rangeTask struct {
 }
 
 type requestedStore struct {
-	storeID    uint64
 	storeAddr  string
 	nextStream atomic.Uint32
 	streams    []*requestedStream
@@ -360,9 +359,8 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			continue
 		}
 
-		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		s.appendRequest(s.requestStore(ctx, g, storeID, storeAddr), sri)
+		s.appendRequest(s.requestStore(ctx, g, storeAddr), sri)
 	}
 }
 
@@ -375,16 +373,12 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 	return rpcCtx, nil
 }
 
-func (s *SharedClient) requestStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
-) *requestedStore {
+func (s *SharedClient) requestStore(ctx context.Context, g *errgroup.Group, storeAddr string) *requestedStore {
 	var rs *requestedStore
 	if rs = s.requestedStores[storeAddr]; rs != nil {
 		return rs
 	}
-
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
+	rs = &requestedStore{storeAddr: storeAddr}
 	s.requestedStores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
@@ -416,7 +410,6 @@ func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 		zap.Uint64("streamID", r.streams[offset].streamID),
 		zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
 		zap.Uint64("regionID", sri.verID.GetID()),
-		zap.Uint64("storeID", r.storeID),
 		zap.String("addr", r.storeAddr))
 	r.streams[offset].requests.In() <- sri
 }
