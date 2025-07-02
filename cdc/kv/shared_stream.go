@@ -346,21 +346,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 						Deregister: &cdcpb.ChangeDataRequest_Deregister{},
 					},
 				}
-<<<<<<< HEAD
 				if err = doSend(s.multiplexing, req, subscriptionID); err != nil {
 					return err
-=======
-				if err = s.multiplexing.Client().Send(req); err != nil {
-					log.Warn("event feed send deregister request to grpc stream failed",
-						zap.String("namespace", c.changefeed.Namespace),
-						zap.String("changefeed", c.changefeed.ID),
-						zap.Uint64("streamID", s.streamID),
-						zap.Any("subscriptionID", subscriptionID),
-						zap.Int64("tableID", region.span.TableID),
-						zap.Uint64("regionID", req.RegionId),
-						zap.String("addr", rs.storeAddr),
-						zap.Error(err))
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 				}
 			} else if cc := tableExclusives[subscriptionID]; cc != nil {
 				delete(tableExclusives, subscriptionID)
@@ -400,21 +387,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			} else if cc, err = getTableExclusiveConn(subscriptionID); err != nil {
 				return err
 			}
-<<<<<<< HEAD
 			if err = doSend(cc, c.createRegionRequest(sri), subscriptionID); err != nil {
 				return err
-=======
-			if err = cc.Client().Send(c.createRegionRequest(region)); err != nil {
-				log.Warn("event feed send request to grpc stream failed",
-					zap.String("namespace", c.changefeed.Namespace),
-					zap.String("changefeed", c.changefeed.ID),
-					zap.Uint64("streamID", s.streamID),
-					zap.Any("subscriptionID", subscriptionID),
-					zap.Uint64("regionID", region.verID.GetID()),
-					zap.Int64("tableID", region.span.TableID),
-					zap.String("addr", rs.storeAddr),
-					zap.Error(err))
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 			}
 		}
 

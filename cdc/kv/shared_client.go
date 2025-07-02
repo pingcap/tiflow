@@ -106,13 +106,8 @@ type rangeTask struct {
 }
 
 type requestedStore struct {
-<<<<<<< HEAD
-	storeID    uint64
-	storeAddr  string
-=======
 	storeAddr string
 	// Use to select a stream to send request.
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 	nextStream atomic.Uint32
 	streams    []*requestedStream
 }
@@ -343,37 +338,8 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-<<<<<<< HEAD
 		case sri := <-s.regionCh.Out():
 			attachCtx(ctx, sri)
-=======
-		case region := <-s.regionCh.Out():
-			if region.isStopped() {
-				for _, rs := range s.stores {
-					s.broadcastRequest(rs, region)
-				}
-				continue
-			}
-
-			region, ok := s.attachRPCContextForRegion(ctx, region)
-			// If attachRPCContextForRegion fails, the region will be re-scheduled.
-			if !ok {
-				continue
-			}
-
-			store := s.getStore(ctx, eg, region.rpcCtx.Addr)
-			stream := store.getStream()
-			stream.requests.In() <- region
-
-			s.logRegionDetails("event feed will request a region",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("streamID", stream.streamID),
-				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
-				zap.Uint64("regionID", region.verID.GetID()),
-				zap.String("span", region.span.String()),
-				zap.String("addr", store.storeAddr))
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 		}
 	}
 }
@@ -400,7 +366,6 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 	}
 }
 
-<<<<<<< HEAD
 func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, kvclientv2.ReplicaReadLeader, 0)
@@ -413,24 +378,13 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 func (s *SharedClient) requestStore(
 	ctx context.Context, g *errgroup.Group,
 	storeID uint64, storeAddr string,
-=======
-// getStore gets a requestedStore from requestedStores by storeAddr.
-func (s *SharedClient) getStore(
-	ctx context.Context, g *errgroup.Group, storeAddr string,
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 ) *requestedStore {
 	var rs *requestedStore
 	if rs = s.requestedStores[storeAddr]; rs != nil {
 		return rs
 	}
-<<<<<<< HEAD
-
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
-	s.requestedStores[storeAddr] = rs
-=======
 	rs = &requestedStore{storeAddr: storeAddr}
 	s.stores[storeAddr] = rs
->>>>>>> 40b34d5c91 (kvclient(ticdc): fix the resolved ts lag increase since the store id incorrect then cause the store version check failed (#12172))
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
