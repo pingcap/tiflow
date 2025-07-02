@@ -1,0 +1,4 @@
+[consistent]
+level = "eventual"
+storage = "file:///tmp/redo"
+
