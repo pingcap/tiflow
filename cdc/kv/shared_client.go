@@ -359,9 +359,8 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			continue
 		}
 
-		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		s.appendRequest(s.requestStore(ctx, g, storeID, storeAddr), sri)
+		s.appendRequest(s.requestStore(ctx, g, storeAddr), sri)
 	}
 }
 
@@ -374,10 +373,7 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 	return rpcCtx, nil
 }
 
-func (s *SharedClient) requestStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
-) *requestedStore {
+func (s *SharedClient) requestStore(ctx context.Context, g *errgroup.Group, storeAddr string) *requestedStore {
 	var rs *requestedStore
 	if rs = s.requestedStores[storeAddr]; rs != nil {
 		return rs
