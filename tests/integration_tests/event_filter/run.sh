@@ -62,17 +62,35 @@ function run() {
 	run_sql "select count(5) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "count(5): 1"
 
-	# check virtual column table filtering
+	# Add these checks after the existing checks for t_virtual
+	# check virtual column table filtering with virtual column condition
 	run_sql "select count(1) from event_filter.t_virtual;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "count(1): 2"
+	check_contains "count(1): 3"  # Only 3 rows should pass the filter
+
 	run_sql "select count(1) from event_filter.t_virtual where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "count(1): 1"
+
 	run_sql "select count(1) from event_filter.t_virtual where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "count(1): 0"
+	check_contains "count(1): 0"  # filtered by id=2
+
 	run_sql "select count(1) from event_filter.t_virtual where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "count(1): 0"
+	check_contains "count(1): 0"  # filtered by category and is_discounted
+
 	run_sql "select count(1) from event_filter.t_virtual where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "count(1): 1"
+
+	run_sql "select count(1) from event_filter.t_virtual where id=5;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 0"  # filtered by is_discounted
+
+	run_sql "select count(1) from event_filter.t_virtual where id=6;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 0"  # filtered by is_discounted
+
+	run_sql "select count(1) from event_filter.t_virtual where id=7;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 1"
+
+	# Verify that rows with is_discounted=true are filtered
+	run_sql "select count(1) from event_filter.t_virtual where quantity > 10;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 0"  # All discounted items should be filtered
 
 	run_sql "TRUNCATE TABLE event_filter.t_truncate;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql_file $CUR/data/test_truncate.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
