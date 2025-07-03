@@ -227,6 +227,9 @@ func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, co
 		datum := types.NewDatum(d)
 		// fix the next not virtual column
 		for !model.IsColCDCVisible(cols[colIndex]) {
+			if colIndex >= len(cols) {
+				return nil, fmt.Errorf("colIndex out of bounds")
+			}
 			colIndex++
 		}
 		castDatum, err := table.CastValue(ctx, datum, cols[colIndex], false, false)

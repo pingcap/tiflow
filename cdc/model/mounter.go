@@ -34,7 +34,10 @@ func (r *RowChangedDatums) mergeDatumWithVirtualCols(datums []types.Datum, virtu
 	if len(virtualColsOffset) == 0 {
 		return datums
 	}
-	sort.Ints(virtualColsOffset)
+	if !sort.IntsAreSorted(virtualColsOffset) {
+		log.Panic("virtual column offsets must be sorted",
+			zap.Ints("virtualColsOffset", virtualColsOffset))
+	}
 
 	// checks if virtual column offsets are within valid range.
 	maxAllowedIndex := len(datums) + len(virtualColsOffset)
