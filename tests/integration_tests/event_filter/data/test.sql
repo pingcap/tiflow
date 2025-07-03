@@ -111,3 +111,22 @@ CREATE TABLE t_name3 (
                     name varchar(128),
                     PRIMARY KEY (id)
 );
+
+-- Table with virtual columns for testing ignore-insert-value-expr
+CREATE TABLE t_virtual (
+    id INT PRIMARY KEY,
+    price DECIMAL(10,2),
+    quantity INT,
+    total_price DECIMAL(10,2) AS (price * quantity) VIRTUAL,
+    discount DECIMAL(10,2) AS (CASE WHEN quantity > 10 THEN price * 0.9 ELSE price END) VIRTUAL,
+    category VARCHAR(20),
+    is_discounted BOOLEAN AS (quantity > 10) VIRTUAL
+);
+
+-- These inserts should be filtered based on the rules
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (2, 100.00, 5, 'electronics');
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (3, 200.00, 15, 'furniture');
+
+-- These inserts should not be filtered
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (1, 50.00, 2, 'clothing');
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (4, 150.00, 1, 'books');

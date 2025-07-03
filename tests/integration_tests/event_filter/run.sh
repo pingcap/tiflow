@@ -48,6 +48,7 @@ function run() {
 	check_table_exists "event_filter.t_name1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "event_filter.t_name2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "event_filter.t_name3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "event_filter.t_virtual" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	# check those rows that are not filtered are synced to downstream
 	run_sql "select count(1) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -60,6 +61,18 @@ function run() {
 	check_contains "count(4): 0"
 	run_sql "select count(5) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "count(5): 1"
+
+	# check virtual column table filtering
+	run_sql "select count(1) from event_filter.t_virtual;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 2"
+	run_sql "select count(1) from event_filter.t_virtual where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 1"
+	run_sql "select count(1) from event_filter.t_virtual where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 0"
+	run_sql "select count(1) from event_filter.t_virtual where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 0"
+	run_sql "select count(1) from event_filter.t_virtual where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(1): 1"
 
 	run_sql "TRUNCATE TABLE event_filter.t_truncate;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql_file $CUR/data/test_truncate.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
