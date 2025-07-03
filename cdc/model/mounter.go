@@ -16,6 +16,7 @@ package model
 import (
 	"context"
 	"math"
+	"sort"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/types"
@@ -24,8 +25,46 @@ import (
 
 // RowChangedDatums is used to store the changed datums of a row.
 type RowChangedDatums struct {
-	RowDatums    []types.Datum
-	PreRowDatums []types.Datum
+	RowDatums    []types.Datum // datums without virtual columns
+	PreRowDatums []types.Datum // pre datums without virtual columns
+}
+
+func (r *RowChangedDatums) getDatumsWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
+	if len(virtualColsOffset) == 0 {
+		return datums
+	}
+	sort.Ints(virtualColsOffset)
+
+	maxAllowedIndex := len(datums) + len(virtualColsOffset)
+	for _, idx := range virtualColsOffset {
+		if idx < 0 || idx >= maxAllowedIndex {
+			log.Panic("invalid virtual column index",
+				zap.Int("index", idx),
+				zap.Int("maxAllowedIndex", maxAllowedIndex-1))
+		}
+	}
+
+	result := make([]types.Datum, 0, maxAllowedIndex)
+	originalIdx := 0
+	virtualIdx := 0
+	for originalIdx < len(datums) || virtualIdx < len(virtualColsOffset) {
+		if virtualIdx < len(virtualColsOffset) && virtualColsOffset[virtualIdx] == len(result) {
+			result = append(result, types.Datum{})
+			virtualIdx++
+		} else if originalIdx < len(datums) {
+			result = append(result, datums[originalIdx])
+			originalIdx++
+		}
+	}
+	return result
+}
+
+func (r *RowChangedDatums) GetRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return r.getDatumsWithVirtualCols(r.RowDatums, virtualColsOffset)
+}
+
+func (r *RowChangedDatums) GetPreRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return r.getDatumsWithVirtualCols(r.PreRowDatums, virtualColsOffset)
 }
 
 // IsEmpty returns true if the RowChangeDatums is empty.
