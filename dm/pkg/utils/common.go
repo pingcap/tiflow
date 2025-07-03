@@ -22,13 +22,14 @@ import (
 	"github.com/pingcap/tidb/pkg/expression/exprctx"
 	"github.com/pingcap/tidb/pkg/expression/sessionexpr"
 	infoschema "github.com/pingcap/tidb/pkg/infoschema/context"
-	"github.com/pingcap/tidb/pkg/meta/model"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -219,15 +220,21 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 }
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
-func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
+func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*timodel.ColumnInfo) ([]types.Datum, error) {
 	ret := make([]types.Datum, 0, len(data))
-	for i, d := range data {
+	colIndex := 0
+	for _, d := range data {
 		datum := types.NewDatum(d)
-		castDatum, err := table.CastValue(ctx, datum, cols[i], false, false)
+		// fix the next not virtual column
+		for !model.IsColCDCVisible(cols[colIndex]) {
+			colIndex++
+		}
+		castDatum, err := table.CastValue(ctx, datum, cols[colIndex], false, false)
 		if err != nil {
 			return nil, err
 		}
 		ret = append(ret, castDatum)
+		colIndex++
 	}
 	return ret, nil
 }
