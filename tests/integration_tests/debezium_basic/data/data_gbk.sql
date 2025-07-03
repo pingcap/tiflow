@@ -18,22 +18,22 @@ CREATE TABLE cs_gbk (
 ) ENGINE = InnoDB CHARSET = utf8mb4;
 
 INSERT INTO cs_gbk
-VALUES (1, '????', "?й?", "???", "???,????"
+VALUES (1, '测试', "中国", "上海", "你好,世界"
 	, 0xC4E3BAC3CAC0BDE7);
 
 INSERT INTO cs_gbk
-VALUES (2, '????', "????", "??", "????,???"
+VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
 UPDATE cs_gbk
-SET name = '????'
-WHERE name = '????';
+SET name = '开发'
+WHERE name = '测试';
 
 DELETE FROM cs_gbk
-WHERE name = '????'
-	AND country = '????'
-	AND city = '??'
-	AND description = '????,???';
+WHERE name = '部署'
+	AND country = '美国'
+	AND city = '纽约'
+	AND description = '世界,你好';
 
 -- ddls
 CREATE TABLE test_ddl1
@@ -73,24 +73,24 @@ CREATE TABLE test_ddl2
 
 CREATE TABLE test_ddl3 (
 	id INT,
-	???? varchar(128),
+	名称 varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
 ALTER TABLE test_ddl3
-	ADD COLUMN ???? char(32);
+	ADD COLUMN 城市 char(32);
 
 ALTER TABLE test_ddl3
-	MODIFY COLUMN ???? varchar(32);
+	MODIFY COLUMN 城市 varchar(32);
 
 ALTER TABLE test_ddl3
-	DROP COLUMN ????;
+	DROP COLUMN 城市;
 
 /* this is a DDL test for table */
-CREATE TABLE ??1 (
+CREATE TABLE 表1 (
 	id INT,
 	name varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
-RENAME TABLE ??1 TO ??2;
+RENAME TABLE 表1 TO 表2;
