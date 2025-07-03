@@ -276,7 +276,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.GetRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
 			ti,
 		)
@@ -290,7 +290,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		ignoreOld, err := r.skipDMLByExpression(
-			rawRow.GetPreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			oldExprs,
 			ti,
 		)
@@ -298,7 +298,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		ignoreNew, err := r.skipDMLByExpression(
-			rawRow.GetRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			newExprs,
 			ti,
 		)
@@ -312,7 +312,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.GetPreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
 			ti,
 		)
