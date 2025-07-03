@@ -17,3 +17,7 @@ ignore-event = ["alter table"]
 [[filter.event-filters]]
 matcher = ["event_filter.t_name*"]
 ignore-event = ["rename table"]
+
+[[filter.event-filters]]
+matcher = ["event_filter.t_virtual"]
+ignore-insert-value-expr = "id = 2 or category = 'furniture'"
