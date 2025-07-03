@@ -91,6 +91,10 @@ type TableInfo struct {
 	handleColID []int64
 
 	// offset of virtual columns in TableInfo.Columns
+	// for example:
+	// Table has 4 columns: a (physical), b (physical), c (virtual), d (virtual)
+	// TableInfo.Columns order: a, b, c, d
+	// VirtualColumnsOffset will be [2, 3] (indices of virtual columns c and d)
 	VirtualColumnsOffset []int
 	// rowColInfosWithoutVirtualCols is the same as rowColInfos, but without virtual columns
 	rowColInfosWithoutVirtualCols *[]rowcodec.ColInfo
@@ -195,7 +199,7 @@ func (ti *TableInfo) initRowColInfosWithoutVirtualCols() {
 		log.Panic("invalid rowColInfosWithoutVirtualCols",
 			zap.Int("len(colInfos)", len(colInfos)),
 			zap.Int("len(ti.rowColInfos)", len(ti.rowColInfos)),
-			zap.Int("ti.len(ti.VirtualColumnsOffset)", len(ti.VirtualColumnsOffset)))
+			zap.Any("ti.VirtualColumnsOffset", ti.VirtualColumnsOffset))
 	}
 	ti.rowColInfosWithoutVirtualCols = &colInfos
 }

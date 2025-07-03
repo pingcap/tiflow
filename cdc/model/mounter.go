@@ -25,16 +25,18 @@ import (
 
 // RowChangedDatums is used to store the changed datums of a row.
 type RowChangedDatums struct {
-	RowDatums    []types.Datum // datums without virtual columns
-	PreRowDatums []types.Datum // pre datums without virtual columns
+	RowDatums    []types.Datum // row datums (excluding virtual columns)
+	PreRowDatums []types.Datum // pre row datums (excluding virtual columns)
 }
 
-func (r *RowChangedDatums) getDatumsWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
+// mergeDatumWithVirtualCols returns a slice of row datums with placeholders for virtual columns placed at the specified offset.
+func (r *RowChangedDatums) mergeDatumWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
 	if len(virtualColsOffset) == 0 {
 		return datums
 	}
 	sort.Ints(virtualColsOffset)
 
+	// checks if virtual column offsets are within valid range.
 	maxAllowedIndex := len(datums) + len(virtualColsOffset)
 	for _, idx := range virtualColsOffset {
 		if idx < 0 || idx >= maxAllowedIndex {
@@ -59,12 +61,12 @@ func (r *RowChangedDatums) getDatumsWithVirtualCols(datums []types.Datum, virtua
 	return result
 }
 
-func (r *RowChangedDatums) GetRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
-	return r.getDatumsWithVirtualCols(r.RowDatums, virtualColsOffset)
+func (r *RowChangedDatums) RowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return r.mergeDatumWithVirtualCols(r.RowDatums, virtualColsOffset)
 }
 
-func (r *RowChangedDatums) GetPreRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
-	return r.getDatumsWithVirtualCols(r.PreRowDatums, virtualColsOffset)
+func (r *RowChangedDatums) PreRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return r.mergeDatumWithVirtualCols(r.PreRowDatums, virtualColsOffset)
 }
 
 // IsEmpty returns true if the RowChangeDatums is empty.
