@@ -16,7 +16,6 @@ package filter
 import (
 	"testing"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -24,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestShouldSkipDMLBasic(t *testing.T) {
@@ -434,7 +432,6 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		log.Info("test case", zap.Any("tableInfo", tableInfo))
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
