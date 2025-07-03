@@ -123,10 +123,16 @@ CREATE TABLE t_virtual (
     is_discounted BOOLEAN AS (quantity > 10) VIRTUAL
 );
 
--- These inserts should be filtered based on the rules
-INSERT INTO t_virtual (id, price, quantity, category) VALUES (2, 100.00, 5, 'electronics');
-INSERT INTO t_virtual (id, price, quantity, category) VALUES (3, 200.00, 15, 'furniture');
+-- These inserts should be filtered based on the rules:
+-- 1. id = 2
+-- 2. category = 'furniture'
+-- 3. is_discounted = true (quantity > 10)
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (2, 100.00, 5, 'electronics');  -- filtered by id=2
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (3, 200.00, 15, 'furniture');  -- filtered by category and is_discounted
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (5, 300.00, 20, 'electronics'); -- filtered by is_discounted
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (6, 400.00, 12, 'clothing');   -- filtered by is_discounted
 
 -- These inserts should not be filtered
 INSERT INTO t_virtual (id, price, quantity, category) VALUES (1, 50.00, 2, 'clothing');
 INSERT INTO t_virtual (id, price, quantity, category) VALUES (4, 150.00, 1, 'books');
+INSERT INTO t_virtual (id, price, quantity, category) VALUES (7, 250.00, 8, 'electronics');
