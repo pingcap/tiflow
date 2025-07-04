@@ -19,11 +19,11 @@ while [ $i -lt $check_time ]; do
 		break
 	fi
 	((i++))
-	echo "table $1 not exists for $i-th check, retry later"
+	echo "table $1 exists for $i-th check, retry later"
 	sleep 2
 done
 
 if [ $i -ge $check_time ]; then
-	echo "table $1 not exists at last check"
+	echo "table $1 exists at last check"
 	exit 1
 fi
