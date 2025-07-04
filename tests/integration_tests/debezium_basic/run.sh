@@ -8,9 +8,9 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-# use kafka-consumer with canal-json decoder to sync data from kafka to mysql
+# use kafka-consumer with debezium decoder to sync data from kafka to mysql
 function run() {
-	if [ "$SINK_TYPE" != "kafka" ] && [ "$SINK_TYPE" != "pulsar" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 
@@ -22,34 +22,18 @@ function run() {
 
 	cd $WORK_DIR
 
-	TOPIC_NAME="ticdc-canal-json-content-compatible"
+	TOPIC_NAME="ticdc-debezium-basic-$RANDOM"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&content-compatible=true"
-	fi
+	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=debezium&enable-tidb-extension=true"
 
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		run_pulsar_cluster $WORK_DIR normal
-		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
-	fi
-
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml
 	sleep 5 # wait for changefeed to start
 	# determine the sink uri and run corresponding consumer
-	# currently only kafka and pulsar are supported
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR $SINK_URI
-	fi
-
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		run_pulsar_consumer --upstream-uri $SINK_URI
-	fi
+	run_kafka_consumer $WORK_DIR $SINK_URI $CUR/conf/changefeed.toml
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
-	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	run_sql "CREATE TABLE test.finish_mark1 (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists test.finish_mark1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -58,6 +42,17 @@ function run() {
 	run_sql "CREATE TABLE test.finish_mark2 (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists test.finish_mark2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE TABLE test.finish_mark3 (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_table_exists test.finish_mark3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+	echo "Starting build checksum checker..."
+	cd $CUR/../../utils/checksum_checker
+	if [ ! -f ./checksum_checker ]; then
+		GO111MODULE=on go build
+	fi
+	./checksum_checker --upstream-uri "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/" --downstream-uri "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/" --databases "test" --config="$CUR/conf/changefeed.toml"
 
 	cleanup_process $CDC_BINARY
 }
