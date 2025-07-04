@@ -323,8 +323,3 @@ CREATE TABLE 表1 (
 RENAME TABLE 表1 TO 表2;
 
 DROP TABLE 表2;
-
-create table finish_mark
-(
-    id int PRIMARY KEY
-);
