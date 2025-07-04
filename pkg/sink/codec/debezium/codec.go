@@ -1089,15 +1089,11 @@ func (c *dbzCodec) EncodeValue(
 						} else if e.IsUpdate() {
 							validCols = e.Columns
 						}
-<<<<<<< HEAD
 						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
 						for i, col := range validCols {
-=======
-						for _, col := range validCols {
 							if col == nil {
 								continue
 							}
->>>>>>> 9bc740d55a (codec: fix a panic in Debezium when configuring column-selector (#12210))
 							colx := model.GetColumnDataX(col, e.TableInfo)
 							c.writeDebeziumFieldSchema(fieldsWriter, colx, colInfos[i].Ft)
 						}
