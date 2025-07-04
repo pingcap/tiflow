@@ -94,8 +94,3 @@ CREATE TABLE ±í1 (
 ) ENGINE = InnoDB;
 
 RENAME TABLE ±í1 TO ±í2;
-
-create table finish_mark
-(
-    id int PRIMARY KEY
-);

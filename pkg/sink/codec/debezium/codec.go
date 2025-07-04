@@ -49,6 +49,9 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
+			if col == nil {
+				continue
+			}
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
 			if err != nil {
@@ -1088,6 +1091,9 @@ func (c *dbzCodec) EncodeValue(
 						}
 						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
 						for i, col := range validCols {
+							if col == nil {
+								continue
+							}
 							colx := model.GetColumnDataX(col, e.TableInfo)
 							c.writeDebeziumFieldSchema(fieldsWriter, colx, colInfos[i].Ft)
 						}
