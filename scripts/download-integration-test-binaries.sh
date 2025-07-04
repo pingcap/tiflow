@@ -142,7 +142,8 @@ download_binaries() {
 	# Define download URLs
 	local tidb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
 	local tikv_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-	local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+	# local pd_download_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+	local pd_download_url="https://fileserver.pingcap.net/download/builds/devbuild/8007/pd-build-linux-amd64.tar.gz"
 	local tiflash_download_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
 	local minio_download_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 	local go_ycsb_download_url="${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
