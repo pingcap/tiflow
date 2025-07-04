@@ -50,6 +50,9 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
+			if col == nil {
+				continue
+			}
 			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
 			if err != nil {
 				break
@@ -994,6 +997,9 @@ func (c *dbzCodec) EncodeValue(
 						}
 						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
 						for i, col := range validCols {
+							if col == nil {
+								continue
+							}
 							c.writeDebeziumFieldSchema(fieldsWriter, col, colInfos[i].Ft)
 						}
 						util.ReturnJSONWriter(fieldsWriter)
