@@ -177,6 +177,116 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				},
 			},
 		},
+		// test table with vitual columns
+		{
+			ddl: "create table test.student_score(id int primary key, name char(50), score int, total_score INT GENERATED ALWAYS AS (score + 10) VIRTUAL, gender char(10))",
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:                  []string{"test.student_score"},
+						IgnoreInsertValueExpr:    "score >= 20 or gender = 'female'",
+						IgnoreDeleteValueExpr:    "score >= 32 and gender = 'female'",
+						IgnoreUpdateOldValueExpr: "gender = 'male'",
+						IgnoreUpdateNewValueExpr: "total_score > 38",
+					},
+				},
+			},
+			cases: []innerCase{
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{1, "Dongmen", 20, "male"},
+					ignore: true,
+				},
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{2, "Rustin", 18, "male"},
+					ignore: false,
+				},
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{3, "Susan", 3, "female"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{4, "Helen", 18, "female"},
+					ignore: false,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{5, "Madonna", 32, "female"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{6, "Madison", 48, "male"},
+					ignore: false,
+				},
+				{ // update, filler by new value
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{7, "Marry", 28, "female"},
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{7, "Marry", 32, "female"},
+					ignore: true,
+				},
+				{ // update
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{8, "Marilyn", 18, "female"},
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{8, "Monroe", 22, "female"},
+					ignore: false,
+				},
+				{ // update, filter by old value
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					preRow: []interface{}{9, "Andreja", 25, "male"},
+					columns: []*model.ColumnData{
+						{ColumnID: 0},
+					},
+					row:    []interface{}{9, "Andreja", 25, "female"},
+					ignore: true,
+				},
+			},
+		},
 		{
 			ddl: "create table test.computer(id int primary key, brand char(50), price int)",
 			cfg: &config.FilterConfig{
