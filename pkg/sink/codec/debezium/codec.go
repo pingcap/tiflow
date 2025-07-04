@@ -50,15 +50,10 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
-<<<<<<< HEAD
-			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
-=======
 			if col == nil {
 				continue
 			}
-			colx := model.GetColumnDataX(col, tableInfo)
-			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
->>>>>>> 9bc740d55a (codec: fix a panic in Debezium when configuring column-selector (#12210))
+			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
 			if err != nil {
 				break
 			}
@@ -1000,30 +995,12 @@ func (c *dbzCodec) EncodeValue(
 						} else if e.IsUpdate() {
 							validCols = e.GetColumns()
 						}
-<<<<<<< HEAD
 						colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
 						for i, col := range validCols {
-							c.writeDebeziumFieldSchema(fieldsWriter, col, colInfos[i].Ft)
-=======
-						for _, col := range validCols {
 							if col == nil {
 								continue
 							}
-							colx := model.GetColumnDataX(col, e.TableInfo)
-							ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
-							c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
-						}
-						if e.TableInfo.HasVirtualColumns() {
-							for _, colInfo := range e.TableInfo.Columns {
-								if model.IsColCDCVisible(colInfo) {
-									continue
-								}
-								data := &model.ColumnData{ColumnID: colInfo.ID}
-								colx := model.GetColumnDataX(data, e.TableInfo)
-								ft := &e.TableInfo.GetColumnByID(colx.ColumnID).FieldType
-								c.writeDebeziumFieldSchema(fieldsWriter, colx, ft)
-							}
->>>>>>> 9bc740d55a (codec: fix a panic in Debezium when configuring column-selector (#12210))
+							c.writeDebeziumFieldSchema(fieldsWriter, col, colInfos[i].Ft)
 						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()
