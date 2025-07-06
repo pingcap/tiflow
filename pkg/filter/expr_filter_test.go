@@ -14,9 +14,14 @@
 package filter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -24,6 +29,29 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// adjustBinaryProtocolForDatumWithoutVirtualCol converts the data in binlog to TiDB datum.
+func adjustBinaryProtocolForDatumWithoutVirtualCol(ctx sessionctx.Context, data []interface{}, cols []*timodel.ColumnInfo) ([]types.Datum, error) {
+	ret := make([]types.Datum, 0, len(data))
+	colIndex := 0
+	for _, d := range data {
+		datum := types.NewDatum(d)
+		// fix the next not virtual column
+		for !model.IsColCDCVisible(cols[colIndex]) {
+			if colIndex >= len(cols) {
+				return nil, fmt.Errorf("colIndex out of bounds")
+			}
+			colIndex++
+		}
+		castDatum, err := table.CastValue(ctx, datum, cols[colIndex], false, false)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, castDatum)
+		colIndex++
+	}
+	return ret, nil
+}
 
 func TestShouldSkipDMLBasic(t *testing.T) {
 	helper := newTestHelper(t)
@@ -435,9 +463,9 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				TableInfo: &model.TableInfo{
@@ -554,9 +582,9 @@ func TestShouldSkipDMLError(t *testing.T) {
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				TableInfo: &model.TableInfo{
@@ -752,9 +780,9 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 			if c.updateDDl != "" {
 				tableInfo = helper.execDDL(c.updateDDl)
 			}
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				TableInfo: &model.TableInfo{
