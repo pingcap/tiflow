@@ -511,7 +511,7 @@ func TestBuildTiDBTableInfoWithUniqueKey(t *testing.T) {
 	require.Equal(t, columns[3].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[3].ID))
 }
 
-func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
+func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
 	t.Parallel()
 	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
 	ftNull.SetFlag(mysql.NotNullFlag)
@@ -519,7 +519,7 @@ func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
 	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
 	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
 
-	tableInfo := timodel.TableInfo{
+	tidbTableInfo := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name:      pmodel.CIStr{O: "a"},
@@ -590,7 +590,8 @@ func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	infoWithourVirtualCols := BuildTiDBTableInfoWithoutVirtualColumns(&tableInfo)
+	// test BuildTiDBTableInfoWithoutVirtualColumns
+	infoWithourVirtualCols := BuildTiDBTableInfoWithoutVirtualColumns(&tidbTableInfo)
 	require.Equal(t, 3, len(infoWithourVirtualCols.Columns))
 	require.Equal(t, 0, infoWithourVirtualCols.Columns[0].Offset)
 	require.Equal(t, "a", infoWithourVirtualCols.Columns[0].Name.O)
@@ -598,4 +599,7 @@ func TestBuildTiDBTableInfoWithoutVirtualColumns(t *testing.T) {
 	require.Equal(t, "b", infoWithourVirtualCols.Columns[1].Name.O)
 	require.Equal(t, 2, infoWithourVirtualCols.Columns[2].Offset)
 	require.Equal(t, "d", infoWithourVirtualCols.Columns[2].Name.O)
+
+	tableInfo := WrapTableInfo(100, "test", 1000, &tidbTableInfo)
+	require.Equal(t, []int{2}, tableInfo.VirtualColumnsOffset)
 }
