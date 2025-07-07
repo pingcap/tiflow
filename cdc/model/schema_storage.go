@@ -76,6 +76,20 @@ type TableInfo struct {
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+<<<<<<< HEAD
+=======
+	// only for new row format decoder
+	handleColID []int64
+
+	// offset of virtual columns in TableInfo.Columns
+	// for example:
+	// Table has 4 columns: a (physical), b (physical), c (virtual), d (virtual)
+	// TableInfo.Columns order: a, b, c, d
+	// VirtualColumnsOffset will be [2, 3] (indices of virtual columns c and d)
+	VirtualColumnsOffset []int
+	// rowColInfosWithoutVirtualCols is the same as rowColInfos, but without virtual columns
+	rowColInfosWithoutVirtualCols *[]rowcodec.ColInfo
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -127,7 +141,12 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 					ti.handleColID = append(ti.handleColID, id)
 				}
 			}
+<<<<<<< HEAD
 
+=======
+		} else {
+			ti.VirtualColumnsOffset = append(ti.VirtualColumnsOffset, i)
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:            col.ID,
@@ -162,6 +181,29 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	return ti
 }
 
+<<<<<<< HEAD
+=======
+func (ti *TableInfo) initRowColInfosWithoutVirtualCols() {
+	if len(ti.VirtualColumnsOffset) == 0 {
+		ti.rowColInfosWithoutVirtualCols = &ti.rowColInfos
+		return
+	}
+	colInfos := make([]rowcodec.ColInfo, 0, len(ti.rowColInfos)-len(ti.VirtualColumnsOffset))
+	for i, col := range ti.Columns {
+		if IsColCDCVisible(col) {
+			colInfos = append(colInfos, ti.rowColInfos[i])
+		}
+	}
+	if len(colInfos) != len(ti.rowColInfos)-len(ti.VirtualColumnsOffset) {
+		log.Panic("invalid rowColInfosWithoutVirtualCols",
+			zap.Int("len(colInfos)", len(colInfos)),
+			zap.Int("len(ti.rowColInfos)", len(ti.rowColInfos)),
+			zap.Any("ti.VirtualColumnsOffset", ti.VirtualColumnsOffset))
+	}
+	ti.rowColInfosWithoutVirtualCols = &colInfos
+}
+
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 func (ti *TableInfo) findHandleIndex() {
 	if ti.HandleIndexID == HandleIndexPKIsHandle {
 		// pk is handle
@@ -283,6 +325,14 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 	return ti.hasUniqueColumn
 }
 
+<<<<<<< HEAD
+=======
+// HasVirtualColumns returns whether the table has virtual columns
+func (ti *TableInfo) HasVirtualColumns() bool {
+	return len(ti.VirtualColumnsOffset) > 0
+}
+
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 // IsEligible returns whether the table is a eligible table
 func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
 	// Sequence is not supported yet, TiCDC needs to filter all sequence tables.

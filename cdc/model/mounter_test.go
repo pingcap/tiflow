@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,5 +127,39 @@ func TestComparePolymorphicEvents(t *testing.T) {
 	}
 	for _, item := range cases {
 		require.True(t, ComparePolymorphicEvents(item.a, item.b))
+	}
+}
+
+func TestMergeDatumWithVirtualCols(t *testing.T) {
+	t.Parallel()
+	datums := []types.Datum{
+		types.NewStringDatum("I"),
+		types.NewStringDatum("employee"),
+		types.NewStringDatum("hr"),
+		types.NewStringDatum("433305438660591626"),
+		types.NewStringDatum("101"),
+		types.NewStringDatum("Smith"),
+		types.NewStringDatum("Bob"),
+		types.NewStringDatum("2014-06-04"),
+		types.NewDatum(nil),
+	}
+	virtualColsOffset := []int{0, 3, 11}
+	mergedDatums := mergeDatumWithVirtualCols(datums, virtualColsOffset)
+
+	// Original length (9) + virtual columns (3) = 12
+	require.Len(t, mergedDatums, 12)
+
+	// Verify positions of virtual columns and original data
+	for _, pos := range virtualColsOffset {
+		// Virtual columns should be empty Datums
+		require.Equal(t, types.Datum{}, mergedDatums[pos],
+			"Virtual column at position %d should be empty", pos)
+	}
+
+	// Verify original data is in correct positions (skipping virtual columns)
+	originalIndices := []int{1, 2, 4, 5, 6, 7, 8, 9, 10}
+	for i, origIdx := range originalIndices {
+		require.Equal(t, datums[i], mergedDatums[origIdx],
+			"Original datum at position %d doesn't match", origIdx)
 	}
 }
