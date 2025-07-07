@@ -30,7 +30,7 @@ type RowChangedDatums struct {
 }
 
 // mergeDatumWithVirtualCols returns a slice of row datums with placeholders for virtual columns placed at the specified offset.
-func (r *RowChangedDatums) mergeDatumWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
+func mergeDatumWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
 	if len(virtualColsOffset) == 0 {
 		return datums
 	}
@@ -66,12 +66,12 @@ func (r *RowChangedDatums) mergeDatumWithVirtualCols(datums []types.Datum, virtu
 
 // RowDatumsWithVirtualCols returns the row datums with placeholders for virtual columns placed at the specified offset.
 func (r *RowChangedDatums) RowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
-	return r.mergeDatumWithVirtualCols(r.RowDatums, virtualColsOffset)
+	return mergeDatumWithVirtualCols(r.RowDatums, virtualColsOffset)
 }
 
 // PreRowDatumsWithVirtualCols returns the pre row datums with placeholders for virtual columns placed at the specified offset.
 func (r *RowChangedDatums) PreRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
-	return r.mergeDatumWithVirtualCols(r.PreRowDatums, virtualColsOffset)
+	return mergeDatumWithVirtualCols(r.PreRowDatums, virtualColsOffset)
 }
 
 // IsEmpty returns true if the RowChangeDatums is empty.
