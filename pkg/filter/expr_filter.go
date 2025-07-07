@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -28,6 +29,17 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
+=======
+	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -280,8 +292,9 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.RowDatums,
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
+			ti,
 		)
 	case row.IsUpdate():
 		oldExprs, err := r.getUpdateOldExpr(ti)
@@ -293,15 +306,17 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		ignoreOld, err := r.skipDMLByExpression(
-			rawRow.PreRowDatums,
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			oldExprs,
+			ti,
 		)
 		if err != nil {
 			return false, err
 		}
 		ignoreNew, err := r.skipDMLByExpression(
-			rawRow.RowDatums,
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			newExprs,
+			ti,
 		)
 		if err != nil {
 			return false, err
@@ -313,8 +328,9 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.PreRowDatums,
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
+			ti,
 		)
 	default:
 		log.Warn("unknown row changed event type")
@@ -322,17 +338,68 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 	}
 }
 
+func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
+	rowData []types.Datum,
+	tableInfo *model.TableInfo,
+) (chunk.Row, error) {
+	row := chunk.MutRowFromDatums(rowData).ToRow()
+	if len(tableInfo.VirtualColumnsOffset) == 0 {
+		// If there is no virtual column, we can return the row directly.
+		return row, nil
+	}
+
+	columns, _, err := expression.ColumnInfos2ColumnsAndNames(r.sessCtx.GetExprCtx(),
+		ast.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
+	if err != nil {
+		return chunk.Row{}, err
+	}
+	var fts []*types.FieldType
+	for _, col := range columns {
+		fts = append(fts, col.GetType(r.sessCtx.GetExprCtx().GetEvalCtx()))
+	}
+	ch := chunk.NewEmptyChunk(fts)
+	ch.AppendRow(row)
+
+	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(r.sessCtx.GetExprCtx().GetEvalCtx(), columns)
+	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), ch)
+	if err != nil {
+		return chunk.Row{}, err
+	}
+	return ch.GetRow(0), nil
+}
+
+func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*expression.Column) ([]int, []*types.FieldType) {
+	var offsets []int
+	var fts []*types.FieldType
+	for i, col := range cols {
+		if col.VirtualExpr != nil {
+			offsets = append(offsets, i)
+			fts = append(fts, col.GetType(ctx))
+		}
+	}
+	return offsets, fts
+}
+
 func (r *dmlExprFilterRule) skipDMLByExpression(
 	rowData []types.Datum,
 	expr expression.Expression,
+	tableInfo *model.TableInfo,
 ) (bool, error) {
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
+<<<<<<< HEAD
 
 	row := chunk.MutRowFromDatums(rowData).ToRow()
 
 	d, err := expr.Eval(row)
+=======
+	row, err := r.buildRowWithVirtualColumns(rowData, tableInfo)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
+>>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)
