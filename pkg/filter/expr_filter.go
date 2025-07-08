@@ -337,22 +337,17 @@ func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	var fts []*types.FieldType
-	for _, col := range columns {
-		fts = append(fts, col.GetType())
-	}
-	ch := chunk.NewEmptyChunk(fts)
-	ch.AppendRow(row)
 
-	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(r.sessCtx.GetExprCtx().GetEvalCtx(), columns)
-	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), ch)
+	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(columns)
+	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), row.Chunk())
+
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	return ch.GetRow(0), nil
+	return row, nil
 }
 
-func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*expression.Column) ([]int, []*types.FieldType) {
+func collectVirtualColumnOffsetsAndTypes(cols []*expression.Column) ([]int, []*types.FieldType) {
 	var offsets []int
 	var fts []*types.FieldType
 	for i, col := range cols {
@@ -372,10 +367,19 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
+	log.Info("evaluating expression for filtering DML",
+		zap.String("expression", expr.String()),
+		zap.String("table", tableInfo.TableName.String()),
+		zap.String("schema", tableInfo.TableName.Schema),
+		zap.Int("row_data_length", len(rowData)))
 	row, err := r.buildRowWithVirtualColumns(rowData, tableInfo)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	log.Info("built row with virtual columns",
+		zap.String("table", tableInfo.TableName.String()),
+		zap.String("schema", tableInfo.TableName.Schema),
+		zap.Int("row_length", row.Len()))
 	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
