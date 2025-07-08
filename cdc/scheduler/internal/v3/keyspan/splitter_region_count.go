@@ -16,6 +16,7 @@ package keyspan
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"math"
 
 	"github.com/pingcap/log"
@@ -81,8 +82,8 @@ func (m *regionCountSplitter) split(
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("span", span.String()),
 				zap.Stringer("lastSpan", &spans[len(spans)-1]),
-				zap.Any("startKey", startKey),
-				zap.Any("endKey", endKey))
+				zap.String("startKey", hex.EncodeToString(startKey)),
+				zap.String("endKey", hex.EncodeToString(endKey)))
 			return []tablepb.Span{span}
 		}
 		spans = append(spans, tablepb.Span{
