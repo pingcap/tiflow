@@ -337,19 +337,13 @@ func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	var fts []*types.FieldType
-	for _, col := range columns {
-		fts = append(fts, col.GetType(r.sessCtx.GetExprCtx().GetEvalCtx()))
-	}
-	ch := chunk.NewEmptyChunk(fts)
-	ch.AppendRow(row)
 
 	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(r.sessCtx.GetExprCtx().GetEvalCtx(), columns)
-	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), ch)
+	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), row.Chunk())
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	return ch.GetRow(0), nil
+	return row, nil
 }
 
 func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*expression.Column) ([]int, []*types.FieldType) {
