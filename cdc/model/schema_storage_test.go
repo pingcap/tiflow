@@ -353,3 +353,87 @@ func TestColumnsByNames(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, offsets)
 }
+
+func TestWrapTableInfoWithVirtualColumns(t *testing.T) {
+	t.Parallel()
+	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(mysql.NotNullFlag)
+
+	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
+
+	tidbTableInfo := timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name:      timodel.CIStr{O: "a"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:      timodel.CIStr{O: "b"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:                timodel.CIStr{O: "c"},
+				FieldType:           *ftNull,
+				State:               timodel.StatePublic,
+				GeneratedExprString: "as d",
+				GeneratedStored:     false,
+			},
+			{
+				Name:      timodel.CIStr{O: "d"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+		},
+		Indices: []*timodel.IndexInfo{
+			{
+				ID: 10,
+				Name: timodel.CIStr{
+					O: "a,b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "a"}, Offset: 0},
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 9,
+				Name: timodel.CIStr{
+					O: "c",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "c"}, Offset: 2},
+				},
+				Unique: true,
+			},
+			{
+				ID: 8,
+				Name: timodel.CIStr{
+					O: "b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 7,
+				Name: timodel.CIStr{
+					O: "d",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "d"}, Offset: 3},
+				},
+				Unique: true,
+			},
+		},
+		IsCommonHandle: false,
+		PKIsHandle:     false,
+	}
+
+	tableInfo := WrapTableInfo(100, "test", 1000, &tidbTableInfo)
+	require.Equal(t, []int{2}, tableInfo.VirtualColumnsOffset)
+}
