@@ -18,15 +18,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
 	"github.com/pingcap/tidb/planner/core"
-=======
-	timodel "github.com/pingcap/tidb/pkg/meta/model"
-	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tidb/pkg/table"
-	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/types"
+
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -227,8 +224,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // insert
 					schema: "test",
 					table:  "student_score",
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{1, "Dongmen", 20, "male"},
 					ignore: true,
@@ -236,8 +233,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // insert
 					schema: "test",
 					table:  "student_score",
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{2, "Rustin", 18, "male"},
 					ignore: false,
@@ -245,8 +242,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // insert
 					schema: "test",
 					table:  "student_score",
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{3, "Susan", 3, "female"},
 					ignore: true,
@@ -254,8 +251,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // delete
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{4, "Helen", 18, "female"},
 					ignore: false,
@@ -263,8 +260,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // delete
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{5, "Madonna", 32, "female"},
 					ignore: true,
@@ -272,8 +269,8 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // delete
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{6, "Madison", 48, "male"},
 					ignore: false,
@@ -281,12 +278,12 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // update, filler by new value
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{7, "Marry", 28, "female"},
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{7, "Marry", 32, "female"},
 					ignore: true,
@@ -294,12 +291,12 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // update
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{8, "Marilyn", 18, "female"},
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{8, "Monroe", 22, "female"},
 					ignore: false,
@@ -307,12 +304,12 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // update, filter by old value
 					schema: "test",
 					table:  "student_score",
-					preColumns: []*model.ColumnData{
-						{ColumnID: 0},
+					preColumns: []*model.Column{
+						{Name: "none"},
 					},
 					preRow: []interface{}{9, "Andreja", 25, "male"},
-					columns: []*model.ColumnData{
-						{ColumnID: 0},
+					columns: []*model.Column{
+						{Name: "none"},
 					},
 					row:    []interface{}{9, "Andreja", 25, "female"},
 					ignore: true,

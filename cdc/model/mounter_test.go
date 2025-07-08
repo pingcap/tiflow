@@ -17,7 +17,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,7 +115,6 @@ func TestComparePolymorphicEvents(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestResolvedTsEqual(t *testing.T) {
 	t1 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
 	t2 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
@@ -129,7 +128,8 @@ func TestResolvedTsEqual(t *testing.T) {
 
 	t5 := ResolvedTs{Mode: BatchResolvedMode, Ts: 2, BatchID: 1}
 	require.False(t, t1.Equal(t5))
-=======
+}
+
 func TestMergeDatumWithVirtualCols(t *testing.T) {
 	t.Parallel()
 	datums := []types.Datum{
@@ -162,5 +162,4 @@ func TestMergeDatumWithVirtualCols(t *testing.T) {
 		require.Equal(t, datums[i], mergedDatums[origIdx],
 			"Original datum at position %d doesn't match", origIdx)
 	}
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 }
