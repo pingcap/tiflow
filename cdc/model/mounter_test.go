@@ -17,7 +17,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/stretchr/testify/require"
 )
 

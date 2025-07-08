@@ -119,7 +119,7 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-require github.com/pingcap/tidb/pkg/parser v0.0.0-20231103042308-035ad5ccbe67 // indirect
+require github.com/pingcap/tidb/pkg/parser v0.0.0-20231103042308-035ad5ccbe67
 
 require (
 	cloud.google.com/go v0.110.0 // indirect

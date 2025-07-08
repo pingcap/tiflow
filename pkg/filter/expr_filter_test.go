@@ -18,15 +18,11 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/planner/core"
-=======
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/table"
-	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
+	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"

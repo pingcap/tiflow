@@ -270,239 +270,6 @@ func TestTableInfoClone(t *testing.T) {
 	cloned.SchemaID = 100
 	require.Equal(t, int64(10), info.SchemaID)
 }
-<<<<<<< HEAD
-=======
-
-func TestIndexByName(t *testing.T) {
-	tableInfo := &TableInfo{
-		TableInfo: &timodel.TableInfo{
-			Indices: nil,
-		},
-	}
-	names, offsets, ok := tableInfo.IndexByName("idx1")
-	require.False(t, ok)
-	require.Nil(t, names)
-	require.Nil(t, offsets)
-
-	tableInfo = &TableInfo{
-		TableInfo: &timodel.TableInfo{
-			Indices: []*timodel.IndexInfo{
-				{
-					Name: pmodel.NewCIStr("idx1"),
-					Columns: []*timodel.IndexColumn{
-						{
-							Name: pmodel.NewCIStr("col1"),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	names, offsets, ok = tableInfo.IndexByName("idx2")
-	require.False(t, ok)
-	require.Nil(t, names)
-	require.Nil(t, offsets)
-
-	names, offsets, ok = tableInfo.IndexByName("idx1")
-	require.True(t, ok)
-	require.Equal(t, []string{"col1"}, names)
-	require.Equal(t, []int{0}, offsets)
-
-	names, offsets, ok = tableInfo.IndexByName("IDX1")
-	require.True(t, ok)
-	require.Equal(t, []string{"col1"}, names)
-	require.Equal(t, []int{0}, offsets)
-
-	names, offsets, ok = tableInfo.IndexByName("Idx1")
-	require.True(t, ok)
-	require.Equal(t, []string{"col1"}, names)
-	require.Equal(t, []int{0}, offsets)
-}
-
-func TestColumnsByNames(t *testing.T) {
-	tableInfo := WrapTableInfo(100, "test", 100, &timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: pmodel.NewCIStr("col2"),
-				ID:   1,
-			},
-			{
-				Name: pmodel.NewCIStr("col1"),
-				ID:   0,
-			},
-			{
-				Name: pmodel.NewCIStr("col3"),
-				ID:   2,
-			},
-		},
-	})
-
-	names := []string{"col1", "col2", "col3"}
-	offsets, ok := tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
-	require.Equal(t, []int{1, 0, 2}, offsets)
-
-	names = []string{"col2"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
-	require.Equal(t, []int{0}, offsets)
-
-	names = []string{"col1", "col-not-found"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.False(t, ok)
-	require.Nil(t, offsets)
-
-	names = []string{"Col1", "COL2", "CoL3"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
-	require.Equal(t, []int{1, 0, 2}, offsets)
-}
-
-func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
-	columns := []*Column{{
-		Name: "a1",
-		Type: mysql.TypeLong,
-		Flag: BinaryFlag | PrimaryKeyFlag | HandleKeyFlag,
-	}, {
-		Name:      "a2",
-		Type:      mysql.TypeVarchar,
-		Collation: charset.CollationUTF8,
-	}, {
-		Name:    "a4",
-		Type:    mysql.TypeTinyBlob,
-		Charset: charset.CharsetLatin1,
-	}}
-	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0}})
-	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
-	require.Equal(t, "test", tableInfo.TableName.Schema)
-	require.Equal(t, "t", tableInfo.TableName.Table)
-	require.Equal(t, 3, len(tableInfo.columnsOffset))
-	require.Equal(t, 3, len(tableInfo.Columns))
-
-	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
-	require.Equal(t, columns[0].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[0].ID))
-	require.Equal(t, columns[0].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetType())
-	require.Equal(t, "binary", tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCollate())
-	require.Equal(t, columns[0].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[0].ID))
-
-	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
-	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
-	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
-	require.Equal(t, charset.CollationUTF8, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
-	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
-
-	require.Equal(t, columns[2].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[2].ID))
-	require.Equal(t, columns[2].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetType())
-	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCollate())
-	require.Equal(t, columns[2].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[2].ID))
-}
-
-func TestBuildTiDBTableInfoWithCommonPrimaryKey(t *testing.T) {
-	columns := []*Column{{
-		Name: "a1",
-		Type: mysql.TypeLong,
-		Flag: BinaryFlag | PrimaryKeyFlag | UniqueKeyFlag | HandleKeyFlag | MultipleKeyFlag,
-	}, {
-		Name:    "a2",
-		Type:    mysql.TypeTinyBlob,
-		Charset: charset.CharsetLatin1,
-		Flag:    UniqueKeyFlag | UnsignedFlag | MultipleKeyFlag,
-	}, {
-		Name: "a4",
-		Type: mysql.TypeVarchar,
-		Flag: PrimaryKeyFlag | UniqueKeyFlag | HandleKeyFlag | MultipleKeyFlag,
-	}, {
-		Name: "a9",
-		Type: mysql.TypeLong,
-		Flag: NullableFlag | UnsignedFlag,
-	}}
-	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0, 2}, {0, 1}, {2}})
-	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
-	require.Equal(t, "test", tableInfo.TableName.Schema)
-	require.Equal(t, "t", tableInfo.TableName.Table)
-	require.Equal(t, 4, len(tableInfo.columnsOffset))
-	require.Equal(t, 4, len(tableInfo.Columns))
-
-	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
-	require.Equal(t, columns[0].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[0].ID))
-	require.Equal(t, columns[0].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetType())
-	require.Equal(t, "binary", tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCollate())
-	require.Equal(t, columns[0].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[0].ID))
-
-	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
-	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
-	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
-	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
-
-	require.Equal(t, columns[2].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[2].ID))
-	require.Equal(t, columns[2].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetType())
-	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCollate())
-	require.Equal(t, columns[2].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[2].ID))
-
-	require.Equal(t, columns[3].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[3].ID))
-	require.Equal(t, columns[3].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetType())
-	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetCollate())
-	require.Equal(t, columns[3].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[3].ID))
-}
-
-func TestBuildTiDBTableInfoWithUniqueKey(t *testing.T) {
-	columns := []*Column{{
-		Name: "a1",
-		Type: mysql.TypeLong,
-		Flag: BinaryFlag | UniqueKeyFlag | HandleKeyFlag | MultipleKeyFlag,
-	}, {
-		Name:    "a2",
-		Type:    mysql.TypeTinyBlob,
-		Charset: charset.CharsetLatin1,
-		Flag:    UniqueKeyFlag | MultipleKeyFlag,
-	}, {
-		Name: "a4",
-		Type: mysql.TypeVarchar,
-		Flag: UniqueKeyFlag | HandleKeyFlag | MultipleKeyFlag,
-	}, {
-		Name: "a9",
-		Type: mysql.TypeLong,
-		Flag: UnsignedFlag | UniqueKeyFlag | MultipleKeyFlag,
-	}}
-	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0, 2}, {1, 3}})
-	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
-	require.Equal(t, "test", tableInfo.TableName.Schema)
-	require.Equal(t, "t", tableInfo.TableName.Table)
-	require.Equal(t, 4, len(tableInfo.columnsOffset))
-	require.Equal(t, 4, len(tableInfo.Columns))
-
-	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
-	require.Equal(t, columns[0].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[0].ID))
-	require.Equal(t, columns[0].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetType())
-	require.Equal(t, "binary", tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[0].ID).GetCollate())
-	require.Equal(t, columns[0].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[0].ID))
-
-	require.Equal(t, columns[1].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[1].ID))
-	require.Equal(t, columns[1].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetType())
-	require.Equal(t, charset.CharsetLatin1, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[1].ID).GetCollate())
-	require.Equal(t, columns[1].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[1].ID))
-
-	require.Equal(t, columns[2].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[2].ID))
-	require.Equal(t, columns[2].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetType())
-	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[2].ID).GetCollate())
-	require.Equal(t, columns[2].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[2].ID))
-
-	require.Equal(t, columns[3].Name, tableInfo.ForceGetColumnName(tableInfo.Columns[3].ID))
-	require.Equal(t, columns[3].Type, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetType())
-	require.Equal(t, mysql.UTF8MB4Charset, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetCharset())
-	require.Equal(t, mysql.UTF8MB4DefaultCollation, tableInfo.ForceGetColumnInfo(tableInfo.Columns[3].ID).GetCollate())
-	require.Equal(t, columns[3].Flag, *tableInfo.ForceGetColumnFlagType(tableInfo.Columns[3].ID))
-}
 
 func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
 	t.Parallel()
@@ -515,24 +282,24 @@ func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
 	tidbTableInfo := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name:      pmodel.CIStr{O: "a"},
+				Name:      timodel.CIStr{O: "a"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      pmodel.CIStr{O: "b"},
+				Name:      timodel.CIStr{O: "b"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:                pmodel.CIStr{O: "c"},
+				Name:                timodel.CIStr{O: "c"},
 				FieldType:           *ftNull,
 				State:               timodel.StatePublic,
 				GeneratedExprString: "as d",
 				GeneratedStored:     false,
 			},
 			{
-				Name:      pmodel.CIStr{O: "d"},
+				Name:      timodel.CIStr{O: "d"},
 				FieldType: *ftNotNull,
 				State:     timodel.StatePublic,
 			},
@@ -540,42 +307,42 @@ func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
 		Indices: []*timodel.IndexInfo{
 			{
 				ID: 10,
-				Name: pmodel.CIStr{
+				Name: timodel.CIStr{
 					O: "a,b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: pmodel.CIStr{O: "a"}, Offset: 0},
-					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
+					{Name: timodel.CIStr{O: "a"}, Offset: 0},
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 9,
-				Name: pmodel.CIStr{
+				Name: timodel.CIStr{
 					O: "c",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: pmodel.CIStr{O: "c"}, Offset: 2},
+					{Name: timodel.CIStr{O: "c"}, Offset: 2},
 				},
 				Unique: true,
 			},
 			{
 				ID: 8,
-				Name: pmodel.CIStr{
+				Name: timodel.CIStr{
 					O: "b",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
 				},
 				Unique: true,
 			},
 			{
 				ID: 7,
-				Name: pmodel.CIStr{
+				Name: timodel.CIStr{
 					O: "d",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: pmodel.CIStr{O: "d"}, Offset: 3},
+					{Name: timodel.CIStr{O: "d"}, Offset: 3},
 				},
 				Unique: true,
 			},
@@ -583,17 +350,7 @@ func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
 		IsCommonHandle: false,
 		PKIsHandle:     false,
 	}
-	// test BuildTiDBTableInfoWithoutVirtualColumns
-	infoWithourVirtualCols := BuildTiDBTableInfoWithoutVirtualColumns(&tidbTableInfo)
-	require.Equal(t, 3, len(infoWithourVirtualCols.Columns))
-	require.Equal(t, 0, infoWithourVirtualCols.Columns[0].Offset)
-	require.Equal(t, "a", infoWithourVirtualCols.Columns[0].Name.O)
-	require.Equal(t, 1, infoWithourVirtualCols.Columns[1].Offset)
-	require.Equal(t, "b", infoWithourVirtualCols.Columns[1].Name.O)
-	require.Equal(t, 2, infoWithourVirtualCols.Columns[2].Offset)
-	require.Equal(t, "d", infoWithourVirtualCols.Columns[2].Name.O)
 
 	tableInfo := WrapTableInfo(100, "test", 1000, &tidbTableInfo)
 	require.Equal(t, []int{2}, tableInfo.VirtualColumnsOffset)
 }
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
