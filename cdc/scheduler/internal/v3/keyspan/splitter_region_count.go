@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/hex"
 	"math"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -45,6 +46,7 @@ func newRegionCountSplitter(
 func (m *regionCountSplitter) split(
 	ctx context.Context, span tablepb.Span, captureNum int,
 ) []tablepb.Span {
+	startTimestamp := time.Now()
 	bo := tikv.NewBackoffer(ctx, 500)
 	regions, err := m.regionCache.LoadRegionsInKeyRange(bo, span.StartKey, span.EndKey)
 	if err != nil {
@@ -114,7 +116,8 @@ func (m *regionCountSplitter) split(
 		zap.Int("totalCaptures", captureNum),
 		zap.Int("regionCount", len(regions)),
 		zap.Int("regionThreshold", m.regionThreshold),
-		zap.Int("spanRegionLimit", spanRegionLimit))
+		zap.Int("spanRegionLimit", spanRegionLimit),
+		zap.Duration("time", time.Since(startTimestamp)))
 	return spans
 }
 
