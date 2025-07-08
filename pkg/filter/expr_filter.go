@@ -22,12 +22,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser"
-<<<<<<< HEAD
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core"
-=======
-	"github.com/pingcap/tidb/pkg/parser/ast"
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/types"
@@ -341,33 +338,27 @@ func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
 		return row, nil
 	}
 
-	columns, _, err := expression.ColumnInfos2ColumnsAndNames(r.sessCtx.GetExprCtx(),
-		ast.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
+	columns, _, err := expression.ColumnInfos2ColumnsAndNames(r.sessCtx,
+		timodel.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	var fts []*types.FieldType
-	for _, col := range columns {
-		fts = append(fts, col.GetType(r.sessCtx.GetExprCtx().GetEvalCtx()))
-	}
-	ch := chunk.NewEmptyChunk(fts)
-	ch.AppendRow(row)
 
-	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(r.sessCtx.GetExprCtx().GetEvalCtx(), columns)
-	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), ch)
+	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(columns)
+	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx, row.Chunk())
 	if err != nil {
 		return chunk.Row{}, err
 	}
-	return ch.GetRow(0), nil
+	return row, nil
 }
 
-func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*expression.Column) ([]int, []*types.FieldType) {
+func collectVirtualColumnOffsetsAndTypes(cols []*expression.Column) ([]int, []*types.FieldType) {
 	var offsets []int
 	var fts []*types.FieldType
 	for i, col := range cols {
 		if col.VirtualExpr != nil {
 			offsets = append(offsets, i)
-			fts = append(fts, col.GetType(ctx))
+			fts = append(fts, col.GetType())
 		}
 	}
 	return offsets, fts
@@ -381,18 +372,12 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
-<<<<<<< HEAD
 
-	row := chunk.MutRowFromDatums(rowData).ToRow()
-
-	d, err := expr.Eval(row)
-=======
 	row, err := r.buildRowWithVirtualColumns(rowData, tableInfo)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
->>>>>>> b144e40569 (event filter: fix panic when evaluate expressions for table with virtual columns (#12211))
+	d, err := expr.Eval(row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)
