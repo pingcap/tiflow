@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/ast"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/types"
@@ -333,13 +333,13 @@ func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
 	}
 
 	columns, _, err := expression.ColumnInfos2ColumnsAndNames(r.sessCtx.GetExprCtx(),
-		ast.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
+		timodel.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
 	if err != nil {
 		return chunk.Row{}, err
 	}
 	var fts []*types.FieldType
 	for _, col := range columns {
-		fts = append(fts, col.GetType(r.sessCtx.GetExprCtx().GetEvalCtx()))
+		fts = append(fts, col.GetType())
 	}
 	ch := chunk.NewEmptyChunk(fts)
 	ch.AppendRow(row)
@@ -358,7 +358,7 @@ func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*exp
 	for i, col := range cols {
 		if col.VirtualExpr != nil {
 			offsets = append(offsets, i)
-			fts = append(fts, col.GetType(ctx))
+			fts = append(fts, col.GetType())
 		}
 	}
 	return offsets, fts
