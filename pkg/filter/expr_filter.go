@@ -367,19 +367,10 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
-	log.Info("evaluating expression for filtering DML",
-		zap.String("expression", expr.String()),
-		zap.String("table", tableInfo.TableName.String()),
-		zap.String("schema", tableInfo.TableName.Schema),
-		zap.Int("row_data_length", len(rowData)))
 	row, err := r.buildRowWithVirtualColumns(rowData, tableInfo)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	log.Info("built row with virtual columns",
-		zap.String("table", tableInfo.TableName.String()),
-		zap.String("schema", tableInfo.TableName.Schema),
-		zap.Int("row_length", row.Len()))
 	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
