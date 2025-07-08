@@ -36,11 +36,11 @@ func adjustBinaryProtocolForDatumWithoutVirtualCol(ctx sessionctx.Context, data 
 	colIndex := 0
 	for _, d := range data {
 		datum := types.NewDatum(d)
-		// fix the next not virtual column
+		// find the next not virtual column
+		if colIndex >= len(cols) {
+			return nil, fmt.Errorf("colIndex out of bounds")
+		}
 		for !model.IsColCDCVisible(cols[colIndex]) {
-			if colIndex >= len(cols) {
-				return nil, fmt.Errorf("colIndex out of bounds")
-			}
 			colIndex++
 		}
 		castDatum, err := table.CastValue(ctx, datum, cols[colIndex], false, false)
