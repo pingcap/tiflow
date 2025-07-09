@@ -15,7 +15,6 @@ package partition
 
 import (
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -70,7 +69,8 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 		if col == nil {
 			continue
 		}
-		r.hasher.Write([]byte(strings.ToLower(r.Columns[idx])), []byte(model.ColumnValueString(col.Value)))
+		colInfo := row.TableInfo.ForceGetColumnInfo(col.ColumnID)
+		r.hasher.Write([]byte(colInfo.Name.O), []byte(model.ColumnValueString(col.Value)))
 	}
 
 	sum32 := r.hasher.Sum32()

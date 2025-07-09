@@ -15,7 +15,6 @@ package partition
 
 import (
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -62,7 +61,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 				continue
 			}
 			if tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-				r.hasher.Write([]byte(strings.ToLower(tableInfo.ForceGetColumnName(col.ColumnID))), []byte(model.ColumnValueString(col.Value)))
+				r.hasher.Write([]byte(tableInfo.ForceGetColumnName(col.ColumnID)), []byte(model.ColumnValueString(col.Value)))
 			}
 		}
 	} else {
