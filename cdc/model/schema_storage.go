@@ -76,6 +76,13 @@ type TableInfo struct {
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+
+	// offset of virtual columns in TableInfo.Columns
+	// for example:
+	// Table has 4 columns: a (physical), b (physical), c (virtual), d (virtual)
+	// TableInfo.Columns order: a, b, c, d
+	// VirtualColumnsOffset will be [2, 3] (indices of virtual columns c and d)
+	VirtualColumnsOffset []int
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -127,7 +134,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 					ti.handleColID = append(ti.handleColID, id)
 				}
 			}
-
+		} else {
+			ti.VirtualColumnsOffset = append(ti.VirtualColumnsOffset, i)
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:            col.ID,
