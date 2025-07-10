@@ -21,7 +21,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/parser"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
@@ -274,8 +276,9 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.RowDatums,
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
+			ti,
 		)
 	case row.IsUpdate():
 		oldExprs, err := r.getUpdateOldExpr(ti)
@@ -287,15 +290,17 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		ignoreOld, err := r.skipDMLByExpression(
-			rawRow.PreRowDatums,
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			oldExprs,
+			ti,
 		)
 		if err != nil {
 			return false, err
 		}
 		ignoreNew, err := r.skipDMLByExpression(
-			rawRow.RowDatums,
+			rawRow.RowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			newExprs,
+			ti,
 		)
 		if err != nil {
 			return false, err
@@ -307,8 +312,9 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			rawRow.PreRowDatums,
+			rawRow.PreRowDatumsWithVirtualCols(ti.VirtualColumnsOffset),
 			exprs,
+			ti,
 		)
 	default:
 		log.Warn("unknown row changed event type")
@@ -316,16 +322,54 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 	}
 }
 
+func (r *dmlExprFilterRule) buildRowWithVirtualColumns(
+	rowData []types.Datum,
+	tableInfo *model.TableInfo,
+) (chunk.Row, error) {
+	row := chunk.MutRowFromDatums(rowData).ToRow()
+	if len(tableInfo.VirtualColumnsOffset) == 0 {
+		// If there is no virtual column, we can return the row directly.
+		return row, nil
+	}
+
+	columns, _, err := expression.ColumnInfos2ColumnsAndNames(r.sessCtx.GetExprCtx(),
+		timodel.CIStr{} /* unused */, tableInfo.Name, tableInfo.Columns, tableInfo.TableInfo)
+	if err != nil {
+		return chunk.Row{}, err
+	}
+
+	vColOffsets, vColFts := collectVirtualColumnOffsetsAndTypes(r.sessCtx.GetExprCtx().GetEvalCtx(), columns)
+	err = table.FillVirtualColumnValue(vColFts, vColOffsets, columns, tableInfo.Columns, r.sessCtx.GetExprCtx(), row.Chunk())
+	if err != nil {
+		return chunk.Row{}, err
+	}
+	return row, nil
+}
+
+func collectVirtualColumnOffsetsAndTypes(ctx expression.EvalContext, cols []*expression.Column) ([]int, []*types.FieldType) {
+	var offsets []int
+	var fts []*types.FieldType
+	for i, col := range cols {
+		if col.VirtualExpr != nil {
+			offsets = append(offsets, i)
+			fts = append(fts, col.GetType(ctx))
+		}
+	}
+	return offsets, fts
+}
+
 func (r *dmlExprFilterRule) skipDMLByExpression(
 	rowData []types.Datum,
 	expr expression.Expression,
+	tableInfo *model.TableInfo,
 ) (bool, error) {
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
-
-	row := chunk.MutRowFromDatums(rowData).ToRow()
-
+	row, err := r.buildRowWithVirtualColumns(rowData, tableInfo)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
 	d, err := expr.Eval(r.sessCtx.GetExprCtx().GetEvalCtx(), row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
