@@ -146,6 +146,7 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	t.Parallel()
 
 	tidbTableInfo := &timodel.TableInfo{
+<<<<<<< HEAD
 		ID:   100,
 		Name: timodel.NewCIStr("t1"),
 		Columns: []*timodel.ColumnInfo{
@@ -161,6 +162,21 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 						Name: timodel.CIStr{
 							O: "a",
 						},
+=======
+		ID:         100,
+		Name:       pmodel.NewCIStr("t1"),
+		PKIsHandle: true,
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: pmodel.NewCIStr("A"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+		},
+		Indices: []*timodel.IndexInfo{
+			{
+				Primary: true,
+				Name:    pmodel.NewCIStr("index1"),
+				Columns: []*timodel.IndexColumn{
+					{
+						Name: pmodel.NewCIStr("A"),
+>>>>>>> 0b2636a5ad (sink(ticdc): Treat column and index names as case insensitive (#12132))
 					},
 				},
 			},
@@ -183,4 +199,14 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), index)
+
+	p = NewIndexValueDispatcher("INDEX1")
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), index)
+
+	p = NewIndexValueDispatcher("")
+	index, _, err = p.DispatchRowChangedEvent(event, 3)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), index)
 }
