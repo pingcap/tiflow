@@ -14,16 +14,44 @@
 package filter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/planner/core"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// adjustBinaryProtocolForDatumWithoutVirtualCol converts the data in binlog to TiDB datum.
+func adjustBinaryProtocolForDatumWithoutVirtualCol(ctx sessionctx.Context, data []interface{}, cols []*timodel.ColumnInfo) ([]types.Datum, error) {
+	ret := make([]types.Datum, 0, len(data))
+	colIndex := 0
+	for _, d := range data {
+		datum := types.NewDatum(d)
+		// fix the next not virtual column
+		if colIndex >= len(cols) {
+			return nil, fmt.Errorf("colIndex out of bounds")
+		}
+		for !model.IsColCDCVisible(cols[colIndex]) {
+			colIndex++
+		}
+		castDatum, err := table.CastValue(ctx, datum, cols[colIndex], false, false)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, castDatum)
+		colIndex++
+	}
+	return ret, nil
+}
 
 func TestShouldSkipDMLBasic(t *testing.T) {
 	helper := newTestHelper(t)
@@ -165,6 +193,116 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				{ // update, filter by old value
 					schema: "test",
 					table:  "student",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{9, "Andreja", 25, "male"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{9, "Andreja", 25, "female"},
+					ignore: true,
+				},
+			},
+		},
+		// test table with vitual columns
+		{
+			ddl: "create table test.student_score(id int primary key, name char(50), score int, total_score INT GENERATED ALWAYS AS (score + 10) VIRTUAL, gender char(10))",
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:                  []string{"test.student_score"},
+						IgnoreInsertValueExpr:    "score >= 20 or gender = 'female'",
+						IgnoreDeleteValueExpr:    "score >= 32 and gender = 'female'",
+						IgnoreUpdateOldValueExpr: "gender = 'male'",
+						IgnoreUpdateNewValueExpr: "total_score > 38",
+					},
+				},
+			},
+			cases: []innerCase{
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{1, "Dongmen", 20, "male"},
+					ignore: true,
+				},
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{2, "Rustin", 18, "male"},
+					ignore: false,
+				},
+				{ // insert
+					schema: "test",
+					table:  "student_score",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{3, "Susan", 3, "female"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{4, "Helen", 18, "female"},
+					ignore: false,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{5, "Madonna", 32, "female"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{6, "Madison", 48, "male"},
+					ignore: false,
+				},
+				{ // update, filler by new value
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{7, "Marry", 28, "female"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{7, "Marry", 32, "female"},
+					ignore: true,
+				},
+				{ // update
+					schema: "test",
+					table:  "student_score",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{8, "Marilyn", 18, "female"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{8, "Monroe", 22, "female"},
+					ignore: false,
+				},
+				{ // update, filter by old value
+					schema: "test",
+					table:  "student_score",
 					preColumns: []*model.Column{
 						{Name: "none"},
 					},
@@ -327,9 +465,9 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				Table: &model.TableName{
@@ -444,9 +582,9 @@ func TestShouldSkipDMLError(t *testing.T) {
 		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				Table: &model.TableName{
@@ -640,9 +778,9 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 			if c.updateDDl != "" {
 				tableInfo = helper.execDDL(c.updateDDl)
 			}
-			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			rowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
-			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			preRowDatums, err := adjustBinaryProtocolForDatumWithoutVirtualCol(sessCtx, c.preRow, tableInfo.Columns)
 			require.Nil(t, err)
 			row := &model.RowChangedEvent{
 				Table: &model.TableName{
