@@ -60,13 +60,8 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			if col == nil {
 				continue
 			}
-<<<<<<< HEAD
 			if col.Flag.IsHandleKey() {
 				r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
-=======
-			if tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
-				r.hasher.Write([]byte(strings.ToLower(tableInfo.ForceGetColumnName(col.ColumnID))), []byte(model.ColumnValueString(col.Value)))
->>>>>>> 0b2636a5ad (sink(ticdc): Treat column and index names as case insensitive (#12132))
 			}
 		}
 	} else {

@@ -286,7 +286,6 @@ func TestIndexByName(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
-<<<<<<< HEAD
 					Name: timodel.CIStr{
 						O: "idx1",
 					},
@@ -295,12 +294,6 @@ func TestIndexByName(t *testing.T) {
 							Name: timodel.CIStr{
 								O: "col1",
 							},
-=======
-					Name: pmodel.NewCIStr("idx1"),
-					Columns: []*timodel.IndexColumn{
-						{
-							Name: pmodel.NewCIStr("col1"),
->>>>>>> 0b2636a5ad (sink(ticdc): Treat column and index names as case insensitive (#12132))
 						},
 					},
 				},
@@ -330,7 +323,6 @@ func TestIndexByName(t *testing.T) {
 }
 
 func TestColumnsByNames(t *testing.T) {
-<<<<<<< HEAD
 	tableInfo := &TableInfo{
 		TableInfo: &timodel.TableInfo{
 			Columns: []*timodel.ColumnInfo{
@@ -352,24 +344,9 @@ func TestColumnsByNames(t *testing.T) {
 					},
 					Offset: 2,
 				},
-=======
-	tableInfo := WrapTableInfo(100, "test", 100, &timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: pmodel.NewCIStr("col2"),
-				ID:   1,
-			},
-			{
-				Name: pmodel.NewCIStr("col1"),
-				ID:   0,
-			},
-			{
-				Name: pmodel.NewCIStr("col3"),
-				ID:   2,
->>>>>>> 0b2636a5ad (sink(ticdc): Treat column and index names as case insensitive (#12132))
 			},
 		},
-	})
+	}
 
 	names := []string{"col1", "col2", "col3"}
 	offsets, ok := tableInfo.OffsetsByNames(names)
