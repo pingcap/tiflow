@@ -165,28 +165,49 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 			Schema: "test",
 			Table:  "t1",
 		},
-		TableInfo: &model.TableInfo{
-			TableInfo: &timodel.TableInfo{
-				Indices: []*timodel.IndexInfo{
-					{
-						Name: timodel.CIStr{
-							O: "index1",
-						},
-						Columns: []*timodel.IndexColumn{
-							{
-								Name: timodel.CIStr{
-									O: "a",
-								},
-							},
-						},
+		TableInfo: model.WrapTableInfo(100, "test", 100, &timodel.TableInfo{
+			Indices: []*timodel.IndexInfo{
+				{
+					Name: timodel.NewCIStr("index1"),
+					Columns: []*timodel.IndexColumn{
+						{Name: timodel.NewCIStr("COL2"), Offset: 1},
+						{Name: timodel.NewCIStr("Col1"), Offset: 0},
 					},
+					Primary: true,
 				},
 			},
-		},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:     0,
+					Name:   timodel.NewCIStr("COL2"),
+					Offset: 1,
+				},
+				{
+					ID:     1,
+					Name:   timodel.NewCIStr("Col1"),
+					Offset: 0,
+				},
+				{
+					ID:     2,
+					Name:   timodel.NewCIStr("col3"),
+					Offset: 2,
+				},
+			},
+		}),
 		Columns: []*model.Column{
 			{
-				Name:  "a",
+				Name:  "Col1",
 				Value: 11,
+				Flag:  model.HandleKeyFlag,
+			},
+			{
+				Name:  "COL2",
+				Value: 22,
+				Flag:  model.HandleKeyFlag,
+			},
+			{
+				Name:  "col3",
+				Value: 33,
 			},
 		},
 	}
@@ -198,15 +219,16 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	p = NewIndexValueDispatcher("index1")
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-	require.Equal(t, int32(2), index)
+	require.Equal(t, int32(5), index)
 
+	idx := index
 	p = NewIndexValueDispatcher("INDEX1")
 	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-	require.Equal(t, int32(2), index)
+	require.Equal(t, idx, index)
 
 	p = NewIndexValueDispatcher("")
-	index, _, err = p.DispatchRowChangedEvent(event, 3)
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-	require.Equal(t, int32(0), index)
+	require.Equal(t, idx, index)
 }

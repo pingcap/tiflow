@@ -15,7 +15,6 @@ package partition
 
 import (
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/pingcap/log"
