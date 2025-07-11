@@ -61,4 +61,14 @@ func TestColumnsDispatcher(t *testing.T) {
 	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, idx, index)
+
+	event.TableInfo.Columns = []*timodel.ColumnInfo{
+		{ID: 1, Name: pmodel.NewCIStr("COL2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
+		{ID: 2, Name: pmodel.NewCIStr("Col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
+		{ID: 3, Name: pmodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
+	}
+	p = NewColumnsDispatcher([]string{"col2", "col1"})
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(5), index)
 }
