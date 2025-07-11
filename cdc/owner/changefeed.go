@@ -265,17 +265,11 @@ func newChangefeed4Test(
 	return c
 }
 
-var a = time.Now()
-
 func (c *changefeed) Tick(ctx context.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (model.Ts, model.Ts) {
-	if time.Since(a) > time.Second*60 {
-		log.Panic("fizz panic", zap.Any("a", a))
-		a = time.Now()
-	}
 	startTime := time.Now()
 	c.latestInfo = cfInfo
 	c.latestStatus = cfStatus
