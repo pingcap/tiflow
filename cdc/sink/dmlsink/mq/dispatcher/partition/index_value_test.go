@@ -151,7 +151,9 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 		Name:       pmodel.NewCIStr("t1"),
 		PKIsHandle: true,
 		Columns: []*timodel.ColumnInfo{
-			{ID: 1, Name: pmodel.NewCIStr("A"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 1, Name: pmodel.NewCIStr("col2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: pmodel.NewCIStr("col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 3, Name: pmodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
 		},
 		Indices: []*timodel.IndexInfo{
 			{
@@ -159,7 +161,10 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 				Name:    pmodel.NewCIStr("index1"),
 				Columns: []*timodel.IndexColumn{
 					{
-						Name: pmodel.NewCIStr("A"),
+						Name: pmodel.NewCIStr("col2"), Offset: 1,
+					},
+					{
+						Name: pmodel.NewCIStr("col1"), Offset: 0,
 					},
 				},
 			},
@@ -171,6 +176,8 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 		TableInfo: tableInfo,
 		Columns: []*model.ColumnData{
 			{ColumnID: 1, Value: 11},
+			{ColumnID: 2, Value: 22},
+			{ColumnID: 3, Value: 33},
 		},
 	}
 
@@ -181,7 +188,7 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	p = NewIndexValueDispatcher("index1")
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-	require.Equal(t, int32(2), index)
+	require.Equal(t, int32(15), index)
 
 	idx := index
 	p = NewIndexValueDispatcher("INDEX1")
@@ -190,7 +197,7 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	require.Equal(t, idx, index)
 
 	p = NewIndexValueDispatcher("")
-	index, _, err = p.DispatchRowChangedEvent(event, 3)
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-	require.Equal(t, 1, index)
+	require.Equal(t, idx, index)
 }
