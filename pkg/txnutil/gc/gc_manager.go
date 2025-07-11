@@ -15,6 +15,7 @@ package gc
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -82,6 +83,10 @@ func (m *gcManager) TryUpdateGCSafePoint(
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", checkpointTs),
 			zap.Error(err))
+		if strings.Contains(err.Error(), "NOT_BOOTSTRAPPED") {
+			log.Info("upstream cluster is not bootstrapped, skip update gc safepoint")
+			return nil
+		}
 		if time.Since(m.lastSucceededTime) >= time.Second*time.Duration(m.gcTTL) {
 			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 		}
