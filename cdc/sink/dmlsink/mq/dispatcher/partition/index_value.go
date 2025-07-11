@@ -59,8 +59,13 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			if col == nil {
 				continue
 			}
+<<<<<<< HEAD
 			if col.Flag.IsHandleKey() {
 				r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+=======
+			if tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
+				r.hasher.Write([]byte(tableInfo.ForceGetColumnName(col.ColumnID)), []byte(model.ColumnValueString(col.Value)))
+>>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 			}
 		}
 	} else {

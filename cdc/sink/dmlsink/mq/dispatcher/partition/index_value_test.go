@@ -160,15 +160,27 @@ func TestIndexValueDispatcher(t *testing.T) {
 func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	event := &model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
 			Table:  "t1",
+=======
+	tidbTableInfo := &timodel.TableInfo{
+		ID:         100,
+		Name:       pmodel.NewCIStr("t1"),
+		PKIsHandle: true,
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: pmodel.NewCIStr("col2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, Name: pmodel.NewCIStr("col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 3, Name: pmodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
+>>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 		},
 		TableInfo: &model.TableInfo{
 			TableInfo: &timodel.TableInfo{
 				Indices: []*timodel.IndexInfo{
 					{
+<<<<<<< HEAD
 						Name: timodel.CIStr{
 							O: "index1",
 						},
@@ -179,15 +191,33 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 								},
 							},
 						},
+=======
+						Name: pmodel.NewCIStr("col2"), Offset: 1,
+					},
+					{
+						Name: pmodel.NewCIStr("col1"), Offset: 0,
+>>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 					},
 				},
 			},
 		},
+<<<<<<< HEAD
 		Columns: []*model.Column{
 			{
 				Name:  "a",
 				Value: 11,
 			},
+=======
+	}
+	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
+
+	event := &model.RowChangedEvent{
+		TableInfo: tableInfo,
+		Columns: []*model.ColumnData{
+			{ColumnID: 1, Value: 11},
+			{ColumnID: 2, Value: 22},
+			{ColumnID: 3, Value: 33},
+>>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 		},
 	}
 
@@ -198,5 +228,20 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	p = NewIndexValueDispatcher("index1")
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
+<<<<<<< HEAD
 	require.Equal(t, int32(2), index)
+=======
+	require.Equal(t, int32(15), index)
+
+	idx := index
+	p = NewIndexValueDispatcher("INDEX1")
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, idx, index)
+
+	p = NewIndexValueDispatcher("")
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, idx, index)
+>>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 }
