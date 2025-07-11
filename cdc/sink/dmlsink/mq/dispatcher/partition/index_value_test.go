@@ -147,34 +147,24 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	t.Parallel()
 
 	tidbTableInfo := &timodel.TableInfo{
-		ID:   100,
-		Name: pmodel.NewCIStr("t1"),
+		ID:         100,
+		Name:       pmodel.NewCIStr("t1"),
+		PKIsHandle: true,
 		Columns: []*timodel.ColumnInfo{
-<<<<<<< HEAD
-			{ID: 1, Name: pmodel.NewCIStr("a"), FieldType: *types.NewFieldType(mysql.TypeLong)},
-=======
 			{ID: 1, Name: pmodel.NewCIStr("col2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
 			{ID: 2, Name: pmodel.NewCIStr("col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
 			{ID: 3, Name: pmodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
->>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 		},
 		Indices: []*timodel.IndexInfo{
 			{
-				Name: pmodel.CIStr{
-					O: "index1",
-				},
+				Primary: true,
+				Name:    pmodel.NewCIStr("index1"),
 				Columns: []*timodel.IndexColumn{
 					{
-<<<<<<< HEAD
-						Name: pmodel.CIStr{
-							O: "a",
-						},
-=======
 						Name: pmodel.NewCIStr("col2"), Offset: 1,
 					},
 					{
 						Name: pmodel.NewCIStr("col1"), Offset: 0,
->>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 					},
 				},
 			},
@@ -198,9 +188,6 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	p = NewIndexValueDispatcher("index1")
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
-<<<<<<< HEAD
-	require.Equal(t, int32(2), index)
-=======
 	require.Equal(t, int32(15), index)
 
 	idx := index
@@ -213,5 +200,4 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, idx, index)
->>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 }

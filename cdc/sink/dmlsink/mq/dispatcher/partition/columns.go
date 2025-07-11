@@ -15,6 +15,7 @@ package partition
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -69,12 +70,8 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 		if col == nil {
 			continue
 		}
-<<<<<<< HEAD
-		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(col.Value)))
-=======
 		colInfo := row.TableInfo.ForceGetColumnInfo(col.ColumnID)
 		r.hasher.Write([]byte(colInfo.Name.O), []byte(model.ColumnValueString(col.Value)))
->>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 	}
 
 	sum32 := r.hasher.Sum32()

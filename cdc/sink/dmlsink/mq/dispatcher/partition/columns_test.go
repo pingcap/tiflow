@@ -55,8 +55,6 @@ func TestColumnsDispatcher(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(15), index)
-<<<<<<< HEAD
-=======
 
 	idx := index
 	p = NewColumnsDispatcher([]string{"COL2", "Col1"})
@@ -73,5 +71,4 @@ func TestColumnsDispatcher(t *testing.T) {
 	index, _, err = p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(5), index)
->>>>>>> fb2490a01a (sink(ticdc): calculate partition by the orignal column name (#12236))
 }
