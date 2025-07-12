@@ -560,10 +560,7 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 			}
 		} else {
 			if colx.GetFlag().IsNullable() {
-				// the string literal "null" must be coerced to a `nil`
-				// see https://github.com/linkedin/goavro/blob/5ec5a5ee7ec82e16e6e2b438d610e1cab2588393/record.go#L109-L114
-				// https://stackoverflow.com/questions/22938124/avro-field-default-values
-				if defaultValue == nil || defaultValue == "null" {
+				if defaultValue == nil {
 					field["type"] = []interface{}{"null", avroType}
 				} else {
 					field["type"] = []interface{}{avroType, "null"}
@@ -1043,4 +1040,11 @@ func SetupEncoderAndSchemaRegistry4Testing(
 // TeardownEncoderAndSchemaRegistry4Testing stop the local schema registry for testing.
 func TeardownEncoderAndSchemaRegistry4Testing() {
 	stopHTTPInterceptForTestingRegistry()
+}
+
+// GenCodec generate avro codec.
+// Don't treat string literal "null" as null, because we can distinguish them.
+// See https://github.com/pingcap/tiflow/issues/11994
+func GenCodec(schema string) (*goavro.Codec, error) {
+	return goavro.NewCodecWithOptions(schema, &goavro.CodecOption{EnableStringNull: false})
 }
