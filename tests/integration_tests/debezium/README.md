@@ -37,7 +37,7 @@ EOF
 ```
 
 ```
-tiup playground nightly --tiflash 0 --ticdc 1 
+tiup playground nightly --tiflash 1 --ticdc 1 
 ```
 
 ```

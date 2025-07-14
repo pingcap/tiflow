@@ -1,4 +1,3 @@
-SET time_zone='UTC';
 CREATE TABLE t_user_black_list (
     `id` int(10) unsigned NOT NULL,
     `data` varchar(20),

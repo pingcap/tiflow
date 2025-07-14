@@ -1,4 +1,3 @@
-SET time_zone='UTC';
 CREATE TABLE dbz_1143_year_test (
       id INT AUTO_INCREMENT NOT NULL,
       y18 YEAR,

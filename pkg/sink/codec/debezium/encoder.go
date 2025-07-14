@@ -78,6 +78,7 @@ func (d *BatchEncoder) encodeKey(e *model.RowChangedEvent) ([]byte, error) {
 		d.config.LargeMessageHandle.LargeMessageHandleCompression,
 		keyBuf.Bytes(),
 	)
+	log.Error("key", zap.ByteString("k", keyBuf.Bytes()))
 	return key, err
 }
 
@@ -93,6 +94,7 @@ func (d *BatchEncoder) encodeValue(e *model.RowChangedEvent) ([]byte, error) {
 		d.config.LargeMessageHandle.LargeMessageHandleCompression,
 		valueBuf.Bytes(),
 	)
+	log.Error("value", zap.ByteString("v", valueBuf.Bytes()))
 	return value, err
 }
 

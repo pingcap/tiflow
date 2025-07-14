@@ -1,4 +1,3 @@
-SET time_zone='UTC';
 /* Debezium convert charsetName to "utf8mb4" when column collate is utf8_unicode_ci */
 CREATE TABLE `test_stations_10` (
     `id` int(10) unsigned NOT NULL AUTO_INCREMENT,

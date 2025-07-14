@@ -39,7 +39,6 @@ CREATE TABLE dbz84_integer_types_table (
 INSERT INTO dbz84_integer_types_table
 VALUES(127,-128,128,255, default,201,202,203, default,301,302,303, default,401,402,403, default,501,502,503, 1);
 
-SET time_zone='UTC';
 -- DBZ-85 handle fractional part of seconds
 CREATE TABLE dbz_85_fractest (
   c1 DATE,

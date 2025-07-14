@@ -1,4 +1,3 @@
-SET time_zone = 'UTC';
 -- Create a table, mainly MySQL time type fields
 CREATE TABLE binary_field
 (
