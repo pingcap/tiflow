@@ -195,7 +195,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					writer.WriteInt64Field("default", 0)
 					return
 				}
-				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 				if err != nil {
 					writer.WriteInt64Field("default", 0)
 					return
@@ -238,7 +238,7 @@ func (c *dbzCodec) writeDebeziumFieldSchema(
 					}
 					return
 				}
-				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+				t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 				if err != nil {
 					writer.WriteInt64Field("default", 0)
 					return
@@ -614,7 +614,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			writer.WriteInt64Field(col.GetName(), 0)
 			return nil
 		}
-		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
+		t, err := types.StrToDateTime(types.DefaultStmtNoWarningContext.WithLocation(c.config.TimeZone), v, ft.GetDecimal())
 		if err != nil {
 			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
