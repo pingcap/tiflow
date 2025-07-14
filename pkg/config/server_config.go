@@ -98,7 +98,7 @@ var defaultServerConfig = &ServerConfig{
 	},
 	DataDir: "",
 	GcTTL:   24 * 60 * 60, // 24H
-	TZ:      "System",
+	TZ:      "Asia/Shanghai",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
