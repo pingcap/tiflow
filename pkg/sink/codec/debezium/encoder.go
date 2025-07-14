@@ -185,6 +185,7 @@ func newBatchEncoder(c *common.Config, clusterID string) codec.RowEventEncoder {
 			nowFunc:   time.Now,
 		},
 	}
+	log.Error("debezium config", zap.Any("timezone", c.TimeZone))
 	return batch
 }
 
