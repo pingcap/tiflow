@@ -1,4 +1,3 @@
-SET GLOBAL time_zone = 'Asia/Shanghai';
 CREATE TABLE user_info (
 id bigint NOT NULL AUTO_INCREMENT,
 user_code varchar(200) NOT NULL,
