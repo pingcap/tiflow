@@ -235,7 +235,7 @@ func (ch *Chann[T]) unboundedTerminate() {
 	close(ch.close)
 }
 
-// isClose reports the close status of a channel.
+// isClose reports the close status of a channel. Only for UnboundedChann test.
 func (ch *Chann[T]) isClosed() bool {
 	return ch.closed.Load()
 }
