@@ -49,8 +49,10 @@ const (
 
 func prepareDBConn(kind Kind, connString string) *DBHelper {
 	db := NewDBHelper(kind)
-	db.MustOpen(connString, "")
 	db.MustExec("SET GLOBAL time_zone = 'Asia/Shanghai';")
+	db.MustClose()
+	db = NewDBHelper(kind)
+	db.MustOpen(connString, "")
 	return db
 }
 
