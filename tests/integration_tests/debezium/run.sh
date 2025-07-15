@@ -53,6 +53,10 @@ start_tidb_cluster --workdir $WORK_DIR
 run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 run_cdc_cli changefeed create -c test --sink-uri="kafka://127.0.0.1:9092/output_ticdc?protocol=debezium&kafka-version=2.4.0" --config "$CUR/changefeed.toml"
 
+sql="SET GLOBAL time_zone = 'Asia/Shanghai';"
+run_sql ${sql} ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+mysql -uroot -h 127.0.0.1 -P 3310 -u debezium --password dbz --default-character-set utf8mb4 -E -e "${sql}" >>"$OUT_DIR/sql_res.$TEST_NAME.txt"
+
 cd $CUR
 go run ./src
 
