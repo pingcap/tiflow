@@ -693,6 +693,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				err)
 		}
 		str := gt.UTC().Format("2006-01-02T15:04:05")
+		log.Error("TypeTimestamp", zap.Any("v", v), zap.Any("t", t), zap.Any("gt", gt), zap.Any("str", str))
 		fsp := ft.GetDecimal()
 		if fsp > 0 {
 			tmp := fmt.Sprintf(".%06d", gt.Nanosecond()/1000)
