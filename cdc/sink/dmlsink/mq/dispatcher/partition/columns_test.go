@@ -30,30 +30,25 @@ func TestColumnsDispatcher(t *testing.T) {
 			Schema: "test",
 			Table:  "t1",
 		},
-		TableInfo: &model.TableInfo{
-			TableInfo: &timodel.TableInfo{
-				Columns: []*timodel.ColumnInfo{
-					{
-						Name: timodel.CIStr{
-							O: "col2",
-						},
-						Offset: 1,
-					},
-					{
-						Name: timodel.CIStr{
-							O: "col1",
-						},
-						Offset: 0,
-					},
-					{
-						Name: timodel.CIStr{
-							O: "col3",
-						},
-						Offset: 2,
-					},
+		TableInfo: model.WrapTableInfo(100, "test", 100, &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:     0,
+					Name:   timodel.NewCIStr("col2"),
+					Offset: 1,
+				},
+				{
+					ID:     1,
+					Name:   timodel.NewCIStr("col1"),
+					Offset: 0,
+				},
+				{
+					ID:     2,
+					Name:   timodel.NewCIStr("col3"),
+					Offset: 2,
 				},
 			},
-		},
+		}),
 		Columns: []*model.Column{
 			{
 				Name:  "col1",
@@ -78,4 +73,37 @@ func TestColumnsDispatcher(t *testing.T) {
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.NoError(t, err)
 	require.Equal(t, int32(15), index)
+
+	idx := index
+	p = NewColumnsDispatcher([]string{"COL2", "Col1"})
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, idx, index)
+
+	event.TableInfo = model.WrapTableInfo(100, "test", 100, &timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{ID: 1, Name: timodel.NewCIStr("COL2"), Offset: 1},
+			{ID: 2, Name: timodel.NewCIStr("Col1"), Offset: 0},
+			{ID: 3, Name: timodel.NewCIStr("col3"), Offset: 2},
+		},
+	})
+	event.Columns = []*model.Column{
+		{
+			Name:  "Col1",
+			Value: 11,
+		},
+		{
+			Name:  "COL2",
+			Value: 22,
+		},
+		{
+			Name:  "col3",
+			Value: 33,
+		},
+	}
+
+	p = NewColumnsDispatcher([]string{"col2", "col1"})
+	index, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(5), index)
 }
