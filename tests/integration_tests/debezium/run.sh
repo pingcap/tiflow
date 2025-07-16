@@ -59,5 +59,6 @@ go run ./src
 if [ $? -ne 0 ]; then
 	exit 1
 fi
+exit 1
 
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
