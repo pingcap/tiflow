@@ -44,7 +44,7 @@ curl -i -X POST \
     "transforms.x.replacement":"output_debezium",
     "binary.handling.mode": "base64",
     "decimal.handling.mode": "double",
-    "database.connectionTimeZone": "Asia/Shanghai"
+    "database.connectionTimeZone": "GMT+8"
   }
 }
 EOF
