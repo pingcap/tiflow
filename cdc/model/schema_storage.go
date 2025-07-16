@@ -364,7 +364,7 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 	columnOffsets := make(map[string]int, len(ti.Columns))
 	for _, col := range ti.Columns {
 		if col != nil {
-			columnOffsets[col.Name.L] = col.Offset
+			columnOffsets[col.Name.L] = ti.columnsOffset[col.ID]
 		}
 	}
 
