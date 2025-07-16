@@ -322,16 +322,19 @@ func TestColumnsByNames(t *testing.T) {
 	tableInfo := WrapTableInfo(100, "test", 100, &timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name: timodel.NewCIStr("col2"),
-				ID:   1,
+				Name:   timodel.NewCIStr("col2"),
+				ID:     1,
+				Offset: 0,
 			},
 			{
-				Name: timodel.NewCIStr("col1"),
-				ID:   0,
+				Name:   timodel.NewCIStr("col1"),
+				ID:     0,
+				Offset: 1,
 			},
 			{
-				Name: timodel.NewCIStr("col3"),
-				ID:   2,
+				Name:   timodel.NewCIStr("col3"),
+				ID:     2,
+				Offset: 2,
 			},
 		},
 	})
