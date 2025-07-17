@@ -796,6 +796,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
+		c.ddlPuller = nil
 	}
 	c.wg.Wait()
 
