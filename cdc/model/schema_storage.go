@@ -459,7 +459,7 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 	names := make([]string, 0, len(index.Columns))
 	offset := make([]int, 0, len(index.Columns))
 	for _, col := range index.Columns {
-		names = append(names, col.Name.L)
+		names = append(names, col.Name.O)
 		offset = append(offset, col.Offset)
 	}
 	return names, offset, true
