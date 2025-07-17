@@ -35,6 +35,7 @@ func TestColumnsDispatcher(t *testing.T) {
 			{ID: 1, Name: pmodel.NewCIStr("col2"), Offset: 1, FieldType: *types.NewFieldType(mysql.TypeLong)},
 			{ID: 2, Name: pmodel.NewCIStr("col1"), Offset: 0, FieldType: *types.NewFieldType(mysql.TypeLong)},
 			{ID: 3, Name: pmodel.NewCIStr("col3"), Offset: 2, FieldType: *types.NewFieldType(mysql.TypeLong)},
+			{ID: 4, Name: pmodel.NewCIStr("col4"), Offset: 3, FieldType: *types.NewFieldType(mysql.TypeLong), GeneratedExprString: "generated"},
 		},
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
@@ -47,9 +48,15 @@ func TestColumnsDispatcher(t *testing.T) {
 		},
 	}
 
-	p := NewColumnsDispatcher([]string{"col-2", "col-not-found"})
+	p := NewColumnsDispatcher([]string{"col2", "col-not-found"})
 	_, _, err := p.DispatchRowChangedEvent(event, 16)
 	require.ErrorIs(t, err, errors.ErrDispatcherFailed)
+	require.ErrorContains(t, err, "columns not found")
+
+	p = NewColumnsDispatcher([]string{"col4"})
+	_, _, err = p.DispatchRowChangedEvent(event, 16)
+	require.ErrorIs(t, err, errors.ErrDispatcherFailed)
+	require.ErrorContains(t, err, "found virtual generated columns")
 
 	p = NewColumnsDispatcher([]string{"col2", "col1"})
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
