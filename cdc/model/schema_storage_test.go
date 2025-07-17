@@ -16,6 +16,7 @@ package model
 import (
 	"testing"
 
+	pmodel "github.com/pingcap/tidb/parser/model"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	parser_types "github.com/pingcap/tidb/parser/types"
@@ -269,4 +270,88 @@ func TestTableInfoClone(t *testing.T) {
 	require.Equal(t, cloned.SchemaID, info.SchemaID)
 	cloned.SchemaID = 100
 	require.Equal(t, int64(10), info.SchemaID)
+}
+
+func TestBuildTiDBTableInfoWithVirtualColumns(t *testing.T) {
+	t.Parallel()
+	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(mysql.NotNullFlag)
+
+	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
+
+	tidbTableInfo := timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name:      pmodel.CIStr{O: "a"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:      pmodel.CIStr{O: "b"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:                pmodel.CIStr{O: "c"},
+				FieldType:           *ftNull,
+				State:               timodel.StatePublic,
+				GeneratedExprString: "as d",
+				GeneratedStored:     false,
+			},
+			{
+				Name:      pmodel.CIStr{O: "d"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+		},
+		Indices: []*timodel.IndexInfo{
+			{
+				ID: 10,
+				Name: pmodel.CIStr{
+					O: "a,b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: pmodel.CIStr{O: "a"}, Offset: 0},
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 9,
+				Name: pmodel.CIStr{
+					O: "c",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: pmodel.CIStr{O: "c"}, Offset: 2},
+				},
+				Unique: true,
+			},
+			{
+				ID: 8,
+				Name: pmodel.CIStr{
+					O: "b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: pmodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 7,
+				Name: pmodel.CIStr{
+					O: "d",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: pmodel.CIStr{O: "d"}, Offset: 3},
+				},
+				Unique: true,
+			},
+		},
+		IsCommonHandle: false,
+		PKIsHandle:     false,
+	}
+
+	tableInfo := WrapTableInfo(100, "test", 1000, &tidbTableInfo)
+	require.Equal(t, []int{2}, tableInfo.VirtualColumnsOffset)
 }
