@@ -742,7 +742,7 @@ func TestBarrierAdvance(t *testing.T) {
 	}
 }
 
-func TestReleaseResourcesDouble(t *testing.T) {
+func TestReleaseResourcesTwice(t *testing.T) {
 	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
