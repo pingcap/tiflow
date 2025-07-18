@@ -486,6 +486,7 @@ func TestDDLEvent(t *testing.T) {
 	query = "DROP TABLE test.table2"
 	e = &model.DDLEvent{
 		CommitTs:     1,
+		TableInfo:    preTableInfo,
 		PreTableInfo: preTableInfo,
 		Query:        query,
 		Type:         timodel.ActionDropTable,
@@ -509,8 +510,8 @@ func TestDDLEvent(t *testing.T) {
 				"name": "test_cluster",
 				"ts_ms": 0,
 				"snapshot": "false",
-				"db": "",
-				"table": "",
+				"db": "test",
+				"table": "table2",
 				"server_id": 0,
 				"gtid": null,
 				"file": "",
@@ -525,7 +526,13 @@ func TestDDLEvent(t *testing.T) {
 			"databaseName": "test", 
       		"schemaName": null,
     		"ddl": "DROP TABLE test.table2",
-			"tableChanges": []
+			"tableChanges": [
+				{
+					"type": "DROP", 
+					"id": "\"test\".\"table2\"", 
+					"table": null
+				}
+			]
 		}
 	}`, buf.String())
 }

@@ -69,7 +69,6 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
 				zap.Uint64("streamID", stream.streamID),
-				zap.Uint64("storeID", r.storeID),
 				zap.String("addr", r.storeAddr))
 		}
 		for {
@@ -92,17 +91,17 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 				return err
 			}
 			var regionErr error
-			if err := version.CheckStoreVersion(ctx, c.pd, r.storeID); err != nil {
+			if err := version.CheckStoreVersion(ctx, c.pd); err != nil {
 				log.Info("event feed check store version fails",
 					zap.String("namespace", c.changefeed.Namespace),
 					zap.String("changefeed", c.changefeed.ID),
 					zap.Uint64("streamID", stream.streamID),
-					zap.Uint64("storeID", r.storeID),
 					zap.String("addr", r.storeAddr),
 					zap.Error(err))
 				if errors.Cause(err) == context.Canceled {
 					return nil
-				} else if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
+				}
+				if cerrors.Is(err, cerrors.ErrGetAllStoresFailed) {
 					regionErr = &getStoreErr{}
 				} else {
 					regionErr = &sendRequestToStoreErr{}
@@ -159,7 +158,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		zap.String("namespace", c.changefeed.Namespace),
 		zap.String("changefeed", c.changefeed.ID),
 		zap.Uint64("streamID", s.streamID),
-		zap.Uint64("storeID", rs.storeID),
 		zap.String("addr", rs.storeAddr))
 
 	defer func() {
@@ -167,7 +165,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
-			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
@@ -187,7 +184,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
-			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
 			zap.Error(err))
 		return isCanceled()
@@ -201,7 +197,6 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Uint64("streamID", s.streamID),
-			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr))
 		cc.Release()
 
@@ -239,7 +234,6 @@ func (s *requestedStream) receive(
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
 				zap.Uint64("streamID", s.streamID),
-				zap.Uint64("storeID", rs.storeID),
 				zap.String("addr", rs.storeAddr),
 				zap.String("code", grpcstatus.Code(err).String()),
 				zap.Error(err))
@@ -332,7 +326,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 						zap.Any("subscriptionID", subscriptionID),
 						zap.Int64("tableID", region.span.TableID),
 						zap.Uint64("regionID", req.RegionId),
-						zap.Uint64("storeID", rs.storeID),
 						zap.String("addr", rs.storeAddr),
 						zap.Error(err))
 				}
@@ -382,7 +375,6 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					zap.Any("subscriptionID", subscriptionID),
 					zap.Uint64("regionID", region.verID.GetID()),
 					zap.Int64("tableID", region.span.TableID),
-					zap.Uint64("storeID", rs.storeID),
 					zap.String("addr", rs.storeAddr),
 					zap.Error(err))
 			}

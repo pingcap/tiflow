@@ -16,6 +16,7 @@ package model
 import (
 	"context"
 	"math"
+	"sort"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/types"
@@ -24,8 +25,53 @@ import (
 
 // RowChangedDatums is used to store the changed datums of a row.
 type RowChangedDatums struct {
-	RowDatums    []types.Datum
-	PreRowDatums []types.Datum
+	RowDatums    []types.Datum // row datums (excluding virtual columns)
+	PreRowDatums []types.Datum // pre row datums (excluding virtual columns)
+}
+
+// mergeDatumWithVirtualCols returns a slice of row datums with placeholders for virtual columns placed at the specified offset.
+func mergeDatumWithVirtualCols(datums []types.Datum, virtualColsOffset []int) []types.Datum {
+	if len(virtualColsOffset) == 0 {
+		return datums
+	}
+	if !sort.IntsAreSorted(virtualColsOffset) {
+		log.Panic("virtual column offsets must be sorted",
+			zap.Ints("virtualColsOffset", virtualColsOffset))
+	}
+
+	// checks if virtual column offsets are within valid range.
+	maxAllowedIndex := len(datums) + len(virtualColsOffset)
+	for _, idx := range virtualColsOffset {
+		if idx < 0 || idx >= maxAllowedIndex {
+			log.Panic("invalid virtual column index",
+				zap.Int("index", idx),
+				zap.Int("maxAllowedIndex", maxAllowedIndex-1))
+		}
+	}
+
+	result := make([]types.Datum, 0, maxAllowedIndex)
+	originalIdx := 0
+	virtualIdx := 0
+	for originalIdx < len(datums) || virtualIdx < len(virtualColsOffset) {
+		if virtualIdx < len(virtualColsOffset) && virtualColsOffset[virtualIdx] == len(result) {
+			result = append(result, types.Datum{})
+			virtualIdx++
+		} else if originalIdx < len(datums) {
+			result = append(result, datums[originalIdx])
+			originalIdx++
+		}
+	}
+	return result
+}
+
+// RowDatumsWithVirtualCols returns the row datums with placeholders for virtual columns placed at the specified offset.
+func (r *RowChangedDatums) RowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return mergeDatumWithVirtualCols(r.RowDatums, virtualColsOffset)
+}
+
+// PreRowDatumsWithVirtualCols returns the pre row datums with placeholders for virtual columns placed at the specified offset.
+func (r *RowChangedDatums) PreRowDatumsWithVirtualCols(virtualColsOffset []int) []types.Datum {
+	return mergeDatumWithVirtualCols(r.PreRowDatums, virtualColsOffset)
 }
 
 // IsEmpty returns true if the RowChangeDatums is empty.

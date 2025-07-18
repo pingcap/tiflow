@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"go.uber.org/zap"
 )
@@ -157,6 +158,10 @@ type Range struct {
 	Where string        `json:"where"`
 	Args  []interface{} `json:"args"`
 
+	// IndexColumnNames store column names of index splitting chunks.
+	// It's used to find index name and generate index hint in checksum query.
+	IndexColumnNames []ast.CIStr `json:"index-column-names,omitempty"`
+
 	columnOffset map[string]int
 }
 
@@ -248,14 +253,14 @@ func (r *Range) ToString(collation string) (string, []interface{}) {
 	sameCondition := make([]string, 0, 1)
 	lowerCondition := make([]string, 0, 1)
 	upperCondition := make([]string, 0, 1)
-	sameArgs := make([]interface{}, 0, 1)
-	lowerArgs := make([]interface{}, 0, 1)
-	upperArgs := make([]interface{}, 0, 1)
+	sameArgs := make([]any, 0, 1)
+	lowerArgs := make([]any, 0, 1)
+	upperArgs := make([]any, 0, 1)
 
 	preConditionForLower := make([]string, 0, 1)
 	preConditionForUpper := make([]string, 0, 1)
-	preConditionArgsForLower := make([]interface{}, 0, 1)
-	preConditionArgsForUpper := make([]interface{}, 0, 1)
+	preConditionArgsForLower := make([]any, 0, 1)
+	preConditionArgsForUpper := make([]any, 0, 1)
 
 	i := 0
 	for ; i < len(r.Bounds); i++ {
@@ -401,6 +406,7 @@ func (r *Range) Update(column, lower, upper string, updateLower, updateUpper boo
 // Copy return a new range
 func (r *Range) Copy() *Range {
 	newChunk := NewChunkRange()
+	newChunk.IndexColumnNames = r.IndexColumnNames
 	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
 			Column:   bound.Column,
@@ -417,6 +423,7 @@ func (r *Range) Copy() *Range {
 // Clone return a new range
 func (r *Range) Clone() *Range {
 	newChunk := NewChunkRange()
+	newChunk.IndexColumnNames = r.IndexColumnNames
 	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
 			Column:   bound.Column,

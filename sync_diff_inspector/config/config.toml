@@ -20,6 +20,8 @@ check-struct-only = false
     port = 3306
     user = "root"
     password = ""
+    session.max_execution_time = 3600
+    session.net_read_timeout = 60
 # MySQL doesn't has snapshot config
 
 [data-sources.tidb0]
@@ -27,6 +29,8 @@ check-struct-only = false
     port = 4000
     user = "root"
     password = ""
+    session.tidb_opt_prefer_range_scan = "ON"
+    session.max_execution_time = 86400
 
 # Support tls connection
     # security.ca-path = "..."

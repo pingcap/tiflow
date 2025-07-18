@@ -25,7 +25,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/engine"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	"go.uber.org/zap"
 )
 
@@ -83,7 +83,7 @@ func CheckClusterVersion(
 	ctx context.Context, client pd.Client, pdAddrs []string,
 	credential *security.Credential, errorTiKVIncompat bool,
 ) error {
-	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
+	err := CheckStoreVersion(ctx, client)
 	if err != nil {
 		if errorTiKVIncompat {
 			return err
@@ -199,28 +199,22 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 
 // CheckStoreVersion checks whether the given TiKV is compatible with this CDC.
 // If storeID is 0, it checks all TiKV.
-func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) error {
+func CheckStoreVersion(ctx context.Context, client pd.Client) error {
 	failpoint.Inject("GetStoreFailed", func() {
-		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
+		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, errors.New("unknown store")))
 	})
-	var stores []*metapb.Store
-	var err error
-	if storeID == 0 {
-		stores, err = client.GetAllStores(ctx, pd.WithExcludeTombstone())
-	} else {
-		stores = make([]*metapb.Store, 1)
-		stores[0], err = client.GetStore(ctx, storeID)
-	}
+	stores, err := client.GetAllStores(ctx, pdopt.WithExcludeTombstone())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}
 
+	var ver *semver.Version
 	for _, s := range stores {
 		if engine.IsTiFlash(s) {
 			continue
 		}
 
-		ver, err := semver.NewVersion(SanitizeVersion(s.Version))
+		ver, err = semver.NewVersion(SanitizeVersion(s.Version))
 		if err != nil {
 			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)

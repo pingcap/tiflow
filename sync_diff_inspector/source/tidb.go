@@ -90,6 +90,7 @@ type TiDBSource struct {
 	tableDiffs     []*common.TableDiff
 	sourceTableMap map[string]*common.TableSource
 	snapshot       string
+	sqlHint        string
 	// bucketSpliterPool is the shared pool to produce chunks using bucket
 	bucketSpliterPool *utils.WorkerPool
 	dbConn            *sql.DB
@@ -135,7 +136,31 @@ func (s *TiDBSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.Ra
 	chunk := tableRange.GetChunk()
 
 	matchSource := getMatchSource(s.sourceTableMap, table)
-	count, checksum, err := utils.GetCountAndMD5Checksum(ctx, s.dbConn, matchSource.OriginSchema, matchSource.OriginTable, table.Info, chunk.Where, chunk.Args)
+	indexHint := ""
+	if s.sqlHint == "auto" && len(chunk.IndexColumnNames) > 0 {
+		// If sqlHint is set to "auto" and there are index column names in the chunk,
+		// we attempt to find a matching index in the source table to use as an index hint.
+		// This is necessary because the index name might differ between the source and target tables,
+		// although the possibility is low. For example:
+		// 		Source: idx1(c1, c2)
+		// 		Target: idx2(c1, c2)
+		// In this case, we use the column names [c1, c2] from idx1 to find the corresponding index name (idx2) in the source table.
+		if tableInfos, err := s.GetSourceStructInfo(ctx, tableRange.GetTableIndex()); err == nil {
+			for _, index := range dbutil.FindAllIndex(tableInfos[0]) {
+				if utils.IsIndexMatchingColumns(index, chunk.IndexColumnNames) {
+					indexHint = fmt.Sprintf("/*+ USE_INDEX(%s, %s) */",
+						dbutil.TableName(matchSource.OriginSchema, matchSource.OriginTable),
+						dbutil.ColumnName(index.Name.O),
+					)
+					break
+				}
+			}
+		}
+	}
+
+	count, checksum, err := utils.GetCountAndMD5Checksum(
+		ctx, s.dbConn, matchSource.OriginSchema, matchSource.OriginTable, table.Info,
+		chunk.Where, indexHint, chunk.Args)
 
 	cost := time.Since(beginTime)
 	return &ChecksumInfo{
@@ -301,6 +326,7 @@ func NewTiDBSource(
 		dbConn:            ds.Conn,
 		bucketSpliterPool: bucketSpliterPool,
 		version:           utils.TryToGetVersion(ctx, ds.Conn),
+		sqlHint:           ds.SQLHintUseIndex,
 	}
 	return ts, nil
 }

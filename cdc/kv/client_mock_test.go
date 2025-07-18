@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 )
 
 type mockPDClient struct {
@@ -32,12 +33,14 @@ type mockPDClient struct {
 
 var _ pd.Client = &mockPDClient{}
 
-func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
-	s, err := m.Client.GetStore(ctx, storeID)
+func (m *mockPDClient) GetAllStores(ctx context.Context, _ ...pdopt.GetStoreOption) ([]*metapb.Store, error) {
+	s, err := m.Client.GetAllStores(ctx)
 	if err != nil {
 		return nil, err
 	}
-	s.Version = m.versionGen()
+	for _, store := range s {
+		store.Version = m.versionGen()
+	}
 	return s, nil
 }
 

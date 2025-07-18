@@ -15,6 +15,7 @@ package source
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,6 +37,7 @@ type ChunksIterator struct {
 	errCh            chan error
 	splitThreadCount int
 
+	wg     sync.WaitGroup
 	cancel context.CancelFunc
 	pool   *utils.WorkerPool
 }
@@ -60,12 +62,19 @@ func NewChunksIterator(
 		cancel:   cancel,
 		pool:     utils.NewWorkerPool(uint(splitThreadCount), "chunks producer"),
 	}
+
+	iter.wg.Add(1)
 	go iter.produceChunks(ctxx, startRange)
 	return iter, nil
 }
 
 func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter.RangeInfo) {
-	defer close(t.chunksCh)
+	defer func() {
+		t.pool.WaitFinished()
+		close(t.chunksCh)
+		t.wg.Done()
+	}()
+
 	nextTableIndex := 0
 
 	// If chunkRange
@@ -166,7 +175,6 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 			}
 		})
 	}
-	t.pool.WaitFinished()
 }
 
 // Next returns the next chunk
@@ -187,7 +195,7 @@ func (t *ChunksIterator) Next(ctx context.Context) (*splitter.RangeInfo, error) 
 // Close closes the iterator
 func (t *ChunksIterator) Close() {
 	t.cancel()
-	t.pool.WaitFinished()
+	t.wg.Wait()
 }
 
 // TODO: getCurTableIndexID only used for binary search, should be optimized later.
