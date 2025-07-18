@@ -758,7 +758,7 @@ func TestReleaseResourcesTwice(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Equal(t, cf.initialized.Load(), true)
 
-	// double close
+	// close twice
 	cf.releaseResources(ctx)
 	cf.isReleased = false
 	cf.releaseResources(ctx)
