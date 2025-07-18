@@ -25,7 +25,12 @@ import (
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/kv"
 	timeta "github.com/pingcap/tidb/pkg/meta"
+<<<<<<< HEAD
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"

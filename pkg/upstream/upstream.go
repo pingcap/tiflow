@@ -39,6 +39,7 @@ import (
 	tikvconfig "github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	uatomic "github.com/uber-go/atomic"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -137,11 +138,11 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 	// default upstream always use the pdClient pass from cdc server
 	if !up.isDefaultUpstream {
 		up.PDClient, err = pd.NewClientWithContext(
-			ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+			ctx, "cdc-upstream", up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
 			// the default `timeout` is 3s, maybe too small if the pd is busy,
 			// set to 10s to avoid frequent timeout.
-			pd.WithCustomTimeoutOption(10*time.Second),
-			pd.WithGRPCDialOptions(
+			pdopt.WithCustomTimeoutOption(10*time.Second),
+			pdopt.WithGRPCDialOptions(
 				grpcTLSOption,
 				grpc.WithBlock(),
 				grpc.WithConnectParams(grpc.ConnectParams{
@@ -154,7 +155,7 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					MinConnectTimeout: 3 * time.Second,
 				}),
 			),
-			pd.WithForwardingOption(config.EnablePDForwarding))
+			pdopt.WithForwardingOption(config.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)

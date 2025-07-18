@@ -26,7 +26,10 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/autoid"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/pkg/parser/model"
+=======
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -114,8 +117,13 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			return "", terror.ErrSchemaTrackerInvalidCreateTableStmt.Generate(req.Schema)
 		}
 		// ensure correct table name.
+<<<<<<< HEAD
 		stmt.Table.Schema = model.NewCIStr(req.Database)
 		stmt.Table.Name = model.NewCIStr(req.Table)
+=======
+		stmt.Table.Schema = ast.NewCIStr(req.Database)
+		stmt.Table.Name = ast.NewCIStr(req.Table)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 		stmt.IfNotExists = false // we must ensure drop the previous one.
 
 		var newCreateSQLBuilder strings.Builder
