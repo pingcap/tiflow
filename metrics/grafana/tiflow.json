@@ -292,32 +292,6 @@
       "type": "row"
     },
     {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 1
-      },
-      "id": 20,
-      "libraryPanel": {
-        "uid": "WBa0-4KVz",
-        "name": "Uptime"
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 1
-      },
-      "id": 22,
-      "libraryPanel": {
-        "uid": "XeEAa4FVk",
-        "name": "Goroutine count"
-      }
-    },
-    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1254,10 +1228,7 @@
     "list": [
       {
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS_TIFLOW}"
-        },
+        "datasource": "-- Grafana --",
         "definition": "label_values(go_goroutines, k8s_cluster)",
         "hide": 0,
         "includeAll": false,
@@ -1278,10 +1249,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS_TIFLOW}"
-        },
+        "datasource": "-- Grafana --",
         "definition": "label_values(go_goroutines, instance)",
         "hide": 0,
         "includeAll": true,
