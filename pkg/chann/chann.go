@@ -102,7 +102,6 @@ type Chann[T any] struct {
 	q       []T
 	in, out chan T
 	close   chan struct{}
-	closed  atomic.Bool
 	cfg     *config
 }
 
@@ -169,9 +168,7 @@ func (ch *Chann[T]) Close() {
 		close(ch.in)
 		close(ch.close)
 	default:
-		if ch.closed.CompareAndSwap(false, true) {
-			ch.close <- struct{}{}
-		}
+		ch.close <- struct{}{}
 	}
 }
 
@@ -235,9 +232,14 @@ func (ch *Chann[T]) unboundedTerminate() {
 	close(ch.close)
 }
 
-// isClose reports the close status of a channel. Only for UnboundedChann test.
+// isClose reports the close status of a channel.
 func (ch *Chann[T]) isClosed() bool {
-	return ch.closed.Load()
+	select {
+	case <-ch.close:
+		return true
+	default:
+		return false
+	}
 }
 
 // Len returns an approximation of the length of the channel.

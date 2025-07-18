@@ -492,31 +492,6 @@ func TestUnboundedChannClose(t *testing.T) {
 		require.LessOrEqualf(t, runtime.NumGoroutine(), grs+2, "leaking goroutines: %v", n)
 		require.Equalf(t, N, n, "After close, not all elements are received")
 	})
-
-	t.Run("double-close", func(t *testing.T) {
-		ch := New[any]()
-		for i := 0; i < 100; i++ {
-			ch.In() <- 0
-		}
-		ch.Close()
-		go func() {
-			for range ch.Out() {
-			}
-		}()
-		time.Sleep(time.Second * 3)
-		ch.Close()
-		go func() {
-			for range ch.Out() {
-			}
-		}()
-
-		// Theoretically, this is not a dead loop. If the channel
-		// is closed, then this loop must terminate at somepoint.
-		// If not, we will meet timeout in the test.
-		for !ch.isClosed() {
-			t.Log("unbounded channel is still not entirely closed")
-		}
-	})
 }
 
 func BenchmarkUnboundedChann(b *testing.B) {
