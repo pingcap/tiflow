@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/cdc/vars"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -51,6 +52,7 @@ type mockDDLPuller struct {
 	resolvedTs    model.Ts
 	ddlQueue      []*timodel.Job
 	schemaStorage entry.SchemaStorage
+	ch            *chann.DrainableChann[struct{}]
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
@@ -66,7 +68,9 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	return m.resolvedTs, nil
 }
 
-func (m *mockDDLPuller) Close() {}
+func (m *mockDDLPuller) Close() {
+	m.ch.CloseAndDrain()
+}
 
 func (m *mockDDLPuller) Run(ctx context.Context) error {
 	<-ctx.Done()
@@ -213,7 +217,7 @@ func newMockDDLSinkWithBootstrapError(_ model.ChangeFeedID, _ *model.ChangeFeedI
 }
 
 func newMockPuller(_ *upstream.Upstream, startTs uint64, _ model.ChangeFeedID, schemaStorage entry.SchemaStorage, _ filter.Filter) puller.DDLPuller {
-	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage}
+	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage, ch: chann.NewAutoDrainChann[struct{}]()}
 }
 
 func createChangefeed4Test(globalVars *vars.GlobalVars,
@@ -736,4 +740,26 @@ func TestBarrierAdvance(t *testing.T) {
 			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
 		}
 	}
+}
+
+func TestReleaseResourcesDouble(t *testing.T) {
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
+
+	// pre check
+	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state.Info, state.Status, captures)
+	tester.MustApplyPatches()
+	require.Equal(t, cf.initialized.Load(), true)
+
+	// double close
+	cf.releaseResources(ctx)
+	cf.isReleased = false
+	cf.releaseResources(ctx)
 }

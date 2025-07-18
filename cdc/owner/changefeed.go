@@ -793,6 +793,8 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 		c.cancel()
 	}
 	c.cancel = func() {}
+	// ddlPuller might still be referenced in initialize.
+	// we have to wait it done
 	c.wg.Wait()
 
 	if c.ddlPuller != nil {

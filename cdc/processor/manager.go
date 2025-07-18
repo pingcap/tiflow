@@ -122,10 +122,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		currentChangefeedEpoch := changefeedState.Info.Epoch
 		p, exist := m.processors[changefeedID]
 		if !exist {
-			// if the changefeed state is abnormal, it could be skippied
-			if !checkChangefeedNormal(changefeedState) {
-				continue
-			}
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
