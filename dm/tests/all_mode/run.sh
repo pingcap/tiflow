@@ -481,7 +481,7 @@ function run() {
 
 	# dm-worker execute sql failed, and will try auto resume task
 	run_sql_file $cur/data/db2.increment0.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	sleep 2
+	sleep 45
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "dispatch auto resume task"
 
 	# restart tidb, and task will recover success
