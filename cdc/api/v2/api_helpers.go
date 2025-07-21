@@ -359,7 +359,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		// use checkpointTs get snapshot from kv storage
 		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 		if !newInfo.Config.ForceReplicate && !newInfo.Config.IgnoreIneligibleTable {
 			if len(ineligibleTables) != 0 {
