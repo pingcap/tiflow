@@ -57,6 +57,13 @@ var customReplicaConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		Protocol: "arvo",
+		DispatchRules: []*DispatchRule{
+			{
+				Matcher:       []string{"test.worker"},
+				PartitionRule: "columns",
+				Columns:       []string{"c"},
+			},
+		},
 		ColumnSelectors: []*ColumnSelector{
 			{
 				[]string{"a.b"},

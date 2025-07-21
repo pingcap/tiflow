@@ -21,10 +21,11 @@ PD_ADDR = "http://127.0.0.1:2379"
 # MTIzNDU2
 # Use this value here to test redo apply function works well
 # when use base64 encoded password
-ENPASSWORD="MTIzNDU2"
-SINK_URI="mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
+ENPASSWORD = "MTIzNDU2"
+SINK_URI = "mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
 
 physicalShiftBits = 18
+
 
 def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     """
@@ -46,6 +47,8 @@ def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     return None
 
 # we should write some SQLs in the run.sh after call create_changefeed
+
+
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
     # create changefeed
@@ -69,6 +72,23 @@ def create_changefeed(sink_uri):
         "changefeed_id": "changefeed-test",
         "sink_uri": "mysql://127.0.0.1:1111",
         "ignore_ineligible_table": True
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert resp.status_code == rq.codes.bad_request
+
+    # create changefeed fail because dispatcher is invalid
+    url = BASE_URL1_V2+"/changefeeds"
+    data = json.dumps({
+        "changefeed_id": "changefeed-test",
+        "sink": {
+            "dispatchers": {
+                "matcher": ["*.*"],
+                "partition": "columns",
+                "columns": ["a.b"],
+            }
+        },
+        "ignore_ineligible_table": False
     })
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
@@ -100,6 +120,7 @@ def list_changefeed():
         assert changefeed["state"] == "stopped"
 
     print("pass test: list changefeed")
+
 
 def get_changefeed():
     # test get changefeed success
@@ -149,6 +170,7 @@ def pause_changefeed():
 
     print("pass test: pause changefeed")
 
+
 def update_changefeed():
     # update fail
     # can only update a stopped changefeed
@@ -169,6 +191,19 @@ def update_changefeed():
     # can't update start_ts
     url = BASE_URL0+"/changefeeds/changefeed-test2"
     data = json.dumps({"start_ts": 0})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.put(url, data=data, headers=headers)
+    assert resp.status_code == rq.codes.bad_request
+
+    # can't update dispatchers
+    url = BASE_URL0_V2+"/changefeeds/changefeed-test2"
+    data = json.dumps({"sink": {
+        "dispatchers": {
+            "matcher": ["*.*"],
+            "partition": "columns",
+            "columns": ["a.b"],
+        }
+    }})
     headers = {"Content-Type": "application/json"}
     resp = rq.put(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.bad_request
@@ -222,7 +257,8 @@ def remove_changefeed():
     # test remove changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists"
     resp = rq.delete(url)
-    assert (resp.status_code == rq.codes.bad_request or resp.status_code == rq.codes.internal_server_error)
+    assert (resp.status_code == rq.codes.bad_request or resp.status_code ==
+            rq.codes.internal_server_error)
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
 
@@ -281,7 +317,7 @@ def list_processor():
 
 
 def get_processor():
-    # list processor to get changefeed_id and capture_id 
+    # list processor to get changefeed_id and capture_id
     base_url = BASE_URL0 + "/processors"
     resp = requests_get_with_retry(base_url)
     assert resp.status_code == rq.codes.ok
@@ -289,7 +325,7 @@ def get_processor():
     time.sleep(2)
     url = base_url + "/changefeed-test1/" + data["capture_id"]
     resp = requests_get_with_retry(url)
-    # print error message for debug 
+    # print error message for debug
     if (resp.status_code != rq.codes.ok):
         print("request url", url)
         print("response status code:", resp.status_code)
@@ -337,6 +373,7 @@ def set_log_level():
 
     print("pass test: set log level")
 
+
 def get_tso():
     # test state: all
     url = BASE_URL0_V2+"/tso"
@@ -361,8 +398,11 @@ def get_tso():
 # util functions define belows
 
 # compose physical time and logical time into tso
+
+
 def compose_tso(ps, ls):
     return (ps << physicalShiftBits) + ls
+
 
 # arg1: test case name
 # arg2: certificates dir
@@ -396,4 +436,3 @@ if __name__ == "__main__":
         func(*sys.argv[2:])
     else:
         func()
-
