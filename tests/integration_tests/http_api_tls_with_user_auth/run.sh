@@ -69,6 +69,8 @@ function run() {
 	python3 $CUR/util/test_case.py check_health $TLS_DIR
 	python3 $CUR/util/test_case.py get_status $TLS_DIR
 
+	run_sql "CREATE table test.t1(id int primary key, val int);"
+	sleep 3
 	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for all changefeed created
 	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test1" "normal" "null" ${TLS_DIR}

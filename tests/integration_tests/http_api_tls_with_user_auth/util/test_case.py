@@ -54,19 +54,23 @@ def create_changefeed(sink_uri):
     # create changefeed fail because dispatcher is invalid
     url = BASE_URL1_V2+"/changefeeds"
     data = json.dumps({
-        "changefeed_id": "changefeed-test",
-        "sink": {
-            "dispatchers": {
-                "matcher": ["*.*"],
-                "partition": "columns",
-                "columns": ["a.b"],
+        "changefeed_id": "changefeed-test-v2",
+        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"]
+                    }
+                ]
             }
-        },
-        "ignore_ineligible_table": False
+        }
     })
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
-    assert resp.status_code == rq.codes.bad_request
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     print("pass test: create changefeed")
 
@@ -170,16 +174,23 @@ def update_changefeed():
 
     # can't update dispatchers
     url = BASE_URL0_V2+"/changefeeds/changefeed-test2"
-    data = json.dumps({"sink": {
-        "dispatchers": {
-            "matcher": ["*.*"],
-            "partition": "columns",
-            "columns": ["a.b"],
+    data = json.dumps({
+        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"]
+                    }
+                ]
+            }
         }
-    }})
+    })
     headers = {"Content-Type": "application/json"}
     resp = rq.put(url, data=data, headers=headers)
-    assert resp.status_code == rq.codes.bad_request
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     print("pass test: update changefeed")
 
