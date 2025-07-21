@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/cdc/vars"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -52,7 +52,7 @@ type mockDDLPuller struct {
 	resolvedTs    model.Ts
 	ddlQueue      []*timodel.Job
 	schemaStorage entry.SchemaStorage
-	ch            *chann.DrainableChann[struct{}]
+	closed        int64
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
@@ -69,7 +69,9 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 }
 
 func (m *mockDDLPuller) Close() {
-	m.ch.CloseAndDrain()
+	if !atomic.CompareAndSwapInt64(&m.closed, 0, 1) {
+		panic("close twice!")
+	}
 }
 
 func (m *mockDDLPuller) Run(ctx context.Context) error {
@@ -217,7 +219,7 @@ func newMockDDLSinkWithBootstrapError(_ model.ChangeFeedID, _ *model.ChangeFeedI
 }
 
 func newMockPuller(_ *upstream.Upstream, startTs uint64, _ model.ChangeFeedID, schemaStorage entry.SchemaStorage, _ filter.Filter) puller.DDLPuller {
-	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage, ch: chann.NewAutoDrainChann[struct{}]()}
+	return &mockDDLPuller{resolvedTs: startTs, schemaStorage: schemaStorage}
 }
 
 func createChangefeed4Test(globalVars *vars.GlobalVars,
@@ -640,6 +642,7 @@ func testChangefeedReleaseResource(
 ) {
 	var err error
 	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
 
 	// pre check
 	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)

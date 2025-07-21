@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/vars"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -116,7 +115,7 @@ func createOwner4Test(globalVars *vars.GlobalVars, t *testing.T) (*ownerImpl, *o
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
 		) puller.DDLPuller {
-			return &mockDDLPuller{resolvedTs: startTs - 1, ch: chann.NewAutoDrainChann[struct{}]()}
+			return &mockDDLPuller{resolvedTs: startTs - 1}
 		},
 		// new ddl sink
 		func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink {
