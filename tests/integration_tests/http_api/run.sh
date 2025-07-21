@@ -40,6 +40,8 @@ function run() {
 	python3 $CUR/util/test_case.py get_status
 
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+	run_sql "CREATE table test.t1(id int primary key, val int);"
+	sleep 3
 	python3 $CUR/util/test_case.py create_changefeed "$SINK_URI"
 
 	run_sql "CREATE table test.simple(id int primary key, val int);"

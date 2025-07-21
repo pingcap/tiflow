@@ -176,13 +176,13 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.NotNil(t, err)
 
 	commitTs := job.BinlogInfo.FinishedTS
-	cfg.StartTs = commitTs
 	cfg.TargetTs = commitTs + 1
 	// invalid dispatcher partition
 	cfg.SinkURI = "kafka://127.0.0.1:9092/test?protocol=simple"
 	cfg.ReplicaConfig.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"*.*"}, PartitionRule: "columns", Columns: []string{"id.name"}},
 	}
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
-	require.ErrorIs(t, err, cerror.ErrDispatcherFailed)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
+	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
+	require.ErrorContains(t, err, string(cerror.ErrDispatcherFailed.RFCCode()))
 }
