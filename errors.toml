@@ -611,11 +611,6 @@ error = '''
 this capture is not a owner
 '''
 
-["CDC:ErrOldValueNotEnabled"]
-error = '''
-old value is not enabled
-'''
-
 ["CDC:ErrOpenProtocolCodecInvalidData"]
 error = '''
 open-protocol codec invalid data
