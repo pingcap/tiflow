@@ -190,8 +190,8 @@ def update_changefeed():
         }
     })
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, auth=Auth, data=data,
-                   headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.put(url, auth=Auth, data=data,
+                  headers=headers, cert=CERT, verify=VERIFY)
     assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     print("pass test: update changefeed")
