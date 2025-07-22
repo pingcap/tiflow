@@ -53,7 +53,7 @@ def create_changefeed(sink_uri):
     url = BASE_URL1_V2+"/changefeeds"
     data = json.dumps({
         "changefeed_id": "changefeed-test-v2",
-        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "sink_uri": "kafka://127.0.0.1:9092/http_api_tls?protocol=simple",
         "replica_config": {
             "sink": {
                 "dispatchers": [
@@ -67,7 +67,8 @@ def create_changefeed(sink_uri):
         }
     })
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, data=data, headers=headers)
+    resp = rq.post(url, data=data, headers=headers,
+                   cert=CERT, verify=VERIFY)
     assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     print("pass test: create changefeed")
@@ -170,7 +171,7 @@ def update_changefeed():
     # can't update dispatchers
     url = BASE_URL0_V2+"/changefeeds/changefeed-test2"
     data = json.dumps({
-        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "sink_uri": "kafka://127.0.0.1:9092/http_api_tls?protocol=simple",
         "replica_config": {
             "sink": {
                 "dispatchers": [
@@ -184,7 +185,8 @@ def update_changefeed():
         }
     })
     headers = {"Content-Type": "application/json"}
-    resp = rq.put(url, data=data, headers=headers)
+    resp = rq.put(url, data=data, headers=headers,
+                  cert=CERT, verify=VERIFY)
     assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     print("pass test: update changefeed")
