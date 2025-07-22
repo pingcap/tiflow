@@ -63,7 +63,10 @@ function run() {
 	python3 $CUR/util/test_case.py check_health $TLS_DIR
 	python3 $CUR/util/test_case.py get_status $TLS_DIR
 
-	run_sql "CREATE table test.t1(id int primary key, val int);"
+	run_sql "CREATE table test.t1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
 	sleep 3
 	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for all changefeed created
