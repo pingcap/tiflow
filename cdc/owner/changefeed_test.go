@@ -621,13 +621,8 @@ func testChangefeedReleaseResource(
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
-<<<<<<< HEAD
 	cf, captures, tester := createChangefeed4Test(ctx, newMockDDLSink, t)
-=======
-	var err error
-	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
 	defer cf.Close(ctx)
->>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 
 	// pre check
 	cf.Tick(ctx, captures)
