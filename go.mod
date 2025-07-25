@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.23.0
+go 1.21
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -110,9 +110,9 @@ require (
 	golang.org/x/net v0.31.0
 	golang.org/x/oauth2 v0.23.0
 	golang.org/x/sync v0.9.0
-	golang.org/x/sys v0.31.0
+	golang.org/x/sys v0.27.0
 	golang.org/x/text v0.20.0
-	golang.org/x/time v0.5.0
+	golang.org/x/time v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240521202816-d264139d666e
 	google.golang.org/grpc v1.64.0
