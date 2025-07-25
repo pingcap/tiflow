@@ -411,10 +411,6 @@ var (
 		"canal encode failed",
 		errors.RFCCodeText("CDC:ErrCanalEncodeFailed"),
 	)
-	ErrOldValueNotEnabled = errors.Normalize(
-		"old value is not enabled",
-		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
-	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
