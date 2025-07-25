@@ -908,6 +908,7 @@ func (p *processor) Close() error {
 	p.redo.stop()
 	p.mg.stop()
 	p.ddlHandler.stop()
+	p.ddlHandler.r = nil
 
 	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
 		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
