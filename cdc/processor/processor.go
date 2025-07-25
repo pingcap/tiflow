@@ -905,6 +905,7 @@ func (p *processor) Close() error {
 	// when error occurs during closing the processor
 	p.cleanupMetrics()
 
+<<<<<<< HEAD
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -914,6 +915,16 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 	p.upStream.Release()
+=======
+	p.sinkManager.stop()
+	p.sinkManager.r = nil
+	p.sourceManager.stop()
+	p.sourceManager.r = nil
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
+	p.ddlHandler.r = nil
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 
 	if p.agent == nil {
 		return nil
