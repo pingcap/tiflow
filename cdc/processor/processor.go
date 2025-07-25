@@ -487,6 +487,32 @@ func isProcessorIgnorableError(err error) bool {
 	return false
 }
 
+func (p *processor) checkUpstream() (skip bool, err error) {
+	if err = p.upstream.Error(); err != nil {
+		p.metricProcessorErrorCounter.Inc()
+		return true, err
+	}
+	if p.upstream.IsClosed() {
+		log.Warn("upstream is closed",
+			zap.Uint64("upstreamID", p.upstream.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		return true, cerror.
+			WrapChangefeedUnretryableErr(
+				cerror.ErrUpstreamClosed.GenWithStackByArgs())
+	}
+	// upstream is still in initializing phase
+	// skip this changefeed tick
+	if !p.upstream.IsNormal() {
+		log.Info("upstream is not normal, skip",
+			zap.Uint64("upstreamID", p.upstream.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		return true, nil
+	}
+	return
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `info` parameter is sent by metadata store, the `info` must be the latest value snapshot.
 // the `status` parameter is sent by metadata store, the `status` must be the latest value snapshot.
@@ -499,6 +525,12 @@ func (p *processor) Tick(
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
 	if !p.initialized.Load() {
+
+		// Skip initialize if upstream is not normal
+		if skip, err := p.checkUpstream(); skip {
+			return err, nil
+		}
+
 		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, p.globalVars.ChangefeedThreadPool)
 		if err != nil {
 			return errors.Trace(err), nil
@@ -511,27 +543,11 @@ func (p *processor) Tick(
 	p.latestInfo = info
 	p.latestStatus = status
 
-	// check upstream error first
-	if err := p.upstream.Error(); err != nil {
-		p.metricProcessorErrorCounter.Inc()
+	// check upstream first
+	if skip, err := p.checkUpstream(); skip {
 		return err, nil
 	}
-	if p.upstream.IsClosed() {
-		log.Error("upstream is closed",
-			zap.Uint64("upstreamID", p.upstream.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		return cerror.ErrUnexpected.FastGenByArgs("upstream is closed"), nil
-	}
-	// skip this tick
-	if !p.upstream.IsNormal() {
-		log.Warn("upstream is not ready, skip",
-			zap.Uint64("id", p.upstream.ID),
-			zap.Strings("pd", p.upstream.PdEndpoints),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		return nil, nil
-	}
+
 	startTime := time.Now()
 	err, warning := p.tick(ctx)
 	costTime := time.Since(startTime)

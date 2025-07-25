@@ -151,13 +151,14 @@ func (m *Manager) add(upstreamID uint64,
 		}
 	}
 	up := newUpstream(pdEndpoints, securityConf)
+	up.ID = upstreamID
 	m.ups.Store(upstreamID, up)
 	go func() {
 		err := m.initUpstreamFunc(m.ctx, up, m.captureCfg)
 		up.err.Store(err)
 	}()
 	up.resetIdleTime()
-	log.Info("new upstream is added", zap.Uint64("id", up.ID))
+	log.Info("new upstream is added", zap.Uint64("id", upstreamID))
 	return up
 }
 
