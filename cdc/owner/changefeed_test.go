@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 
 type mockDDLPuller struct {
 	// DDLPuller
+<<<<<<< HEAD
 	resolvedTs model.Ts
 	ddlQueue   []*timodel.Job
 }
@@ -51,6 +53,12 @@ func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
 		return m.ddlQueue[0].BinlogInfo.FinishedTS, m.ddlQueue[0]
 	}
 	return m.resolvedTs, nil
+=======
+	resolvedTs    model.Ts
+	ddlQueue      []*timodel.Job
+	schemaStorage entry.SchemaStorage
+	closed        int64
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
@@ -62,7 +70,11 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	return m.resolvedTs, nil
 }
 
-func (m *mockDDLPuller) Close() {}
+func (m *mockDDLPuller) Close() {
+	if !atomic.CompareAndSwapInt64(&m.closed, 0, 1) {
+		panic("close twice!")
+	}
+}
 
 func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
 	<-ctx.Done()
@@ -525,7 +537,13 @@ func testChangefeedReleaseResource(
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
+<<<<<<< HEAD
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	var err error
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -1049,4 +1067,26 @@ func TestBarrierAdvance(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, mockDDLPuller.resolvedTs, barrier)
 	}
+}
+
+func TestReleaseResourcesTwice(t *testing.T) {
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
+
+	// pre check
+	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state.Info, state.Status, captures)
+	tester.MustApplyPatches()
+	require.Equal(t, cf.initialized.Load(), true)
+
+	// close twice
+	cf.releaseResources(ctx)
+	cf.isReleased = false
+	cf.releaseResources(ctx)
 }

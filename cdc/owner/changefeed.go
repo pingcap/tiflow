@@ -513,11 +513,18 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.cancel()
 	c.cancel = func() {}
+	// ddlPuller might still be referenced in initialize.
+	// we have to wait it done
+	c.wg.Wait()
 
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
+		c.ddlPuller = nil
 	}
+<<<<<<< HEAD
 	c.ddlWg.Wait()
+=======
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 
 	if c.sink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())
