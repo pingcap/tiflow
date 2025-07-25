@@ -1274,6 +1274,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 	// when error occurs during closing the processor
 	p.cleanupMetrics()
 
+<<<<<<< HEAD
 	p.cancel()
 	if p.pullBasedSinking {
 		if p.sinkManager != nil {
@@ -1339,6 +1340,20 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				return errors.Trace(err)
 			}
 			log.Info("processor close sink success",
+=======
+	p.sinkManager.stop()
+	p.sinkManager.r = nil
+	p.sourceManager.stop()
+	p.sourceManager.r = nil
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
+	p.ddlHandler.r = nil
+
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
+			log.Error("Processor drop event sort engine fail",
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
