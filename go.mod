@@ -150,16 +150,8 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-<<<<<<< HEAD
-	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
-=======
-	github.com/go-resty/resty/v2 v2.11.0 // indirect
-	github.com/goccy/go-reflect v1.2.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
-	github.com/google/flatbuffers v2.0.8+incompatible // indirect
->>>>>>> 4d578e92b8 (*: bump jwt and jose2go (#12250))
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
