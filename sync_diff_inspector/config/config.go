@@ -168,7 +168,7 @@ func (d *DataSource) RegisterTLS() error {
 			InsecureSkipVerify: true,
 		}
 	} else {
-		sec := d.Security
+                sec = d.Security
 		log.Info("try to register tls config")
 		tlsConfig, err = tidbutil.NewTLSConfig(
 			tidbutil.WithCAPath(sec.CAPath),
