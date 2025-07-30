@@ -164,7 +164,7 @@ func (d *DataSource) RegisterTLS() error {
 		d.Security = &Security{}
 		sec = d.Security
 		tlsConfig = &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, // #nosec G402
 		}
 	} else {
 		sec = d.Security
