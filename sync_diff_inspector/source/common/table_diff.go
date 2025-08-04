@@ -17,6 +17,7 @@ import (
 	"database/sql"
 
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/util/collate"
 )
 
 // TableShardSource represents the origin schema and table and DB connection before router.
@@ -84,4 +85,26 @@ const (
 // AllTableExist check the status
 func AllTableExist(tableLack int) bool {
 	return tableLack == AllTableExistFlag
+}
+
+// GetCollatorsForTable returns collators for the table based on its collation and order by columns.
+// Exported for test.
+func GetCollatorsForTable(table *TableDiff, orderByCols []*model.ColumnInfo) []collate.Collator {
+	collators := make([]collate.Collator, 0, len(orderByCols))
+
+	// If collation is set in the config, use it.
+	// Otherwise, use the default collator for each column.
+	for _, col := range orderByCols {
+		var collation string
+		if table.Collation != "" {
+			collation = table.Collation
+		} else if col.FieldType.GetCollate() != "" {
+			collation = col.FieldType.GetCollate()
+		} else {
+			collation = table.Info.Collate
+		}
+		collators = append(collators, collate.GetCollator(collation))
+	}
+
+	return collators
 }
