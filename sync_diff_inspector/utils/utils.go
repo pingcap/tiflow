@@ -620,7 +620,7 @@ func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns
 	)
 
 	if collation == "" {
-		collation = "binary"
+		collation = "utf8mb4_bin"
 	}
 	collator := collate.GetCollator(collation)
 
