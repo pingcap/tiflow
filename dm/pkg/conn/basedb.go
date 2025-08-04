@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -246,7 +247,7 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
-			zap.String("query", utils.TruncateString(query, -1)),
+			logutil.ZapRedactString("query", utils.TruncateString(query, -1)),
 			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 	}
 	return d.DB.ExecContext(tctx.Ctx, query, args...)
@@ -256,7 +257,7 @@ func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...inter
 func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",
-			zap.String("query", utils.TruncateString(query, -1)),
+			logutil.ZapRedactString("query", utils.TruncateString(query, -1)),
 			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 	}
 	return d.DB.QueryContext(tctx.Ctx, query, args...)
@@ -285,7 +286,7 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 			q := queries[i]
 			if tctx.L().Core().Enabled(zap.DebugLevel) {
 				tctx.L().Debug("exec in tx",
-					zap.String("query", utils.TruncateString(q, -1)),
+					logutil.ZapRedactString("query", utils.TruncateString(q, -1)),
 					log.ZapRedactString("argument", utils.TruncateInterface(args[i], -1)))
 			}
 			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
