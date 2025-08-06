@@ -336,9 +336,9 @@ func IsNoSuchThreadError(err error) bool {
 	return IsMySQLError(err, tmysql.ErrNoSuchThread)
 }
 
-// GetGTIDMode return GTID_MODE.
+// GetGTIDMode return gtid_mode (lowercase for better upstream compatibility, e.g., txsql).
 func GetGTIDMode(ctx context.Context, db *sql.DB) (string, error) {
-	val, err := GetGlobalVariable(ctx, db, "GTID_MODE")
+	val, err := GetGlobalVariable(ctx, db, "gtid_mode")
 	return val, err
 }
 
