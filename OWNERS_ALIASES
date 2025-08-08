@@ -1,5 +1,14 @@
 # Sort the member alphabetically.
 aliases:
+<<<<<<< HEAD
+=======
+  sig-critical-approvers-cdc:
+    - yudongusa
+    - BenMeadowcroft
+  sig-critical-approvers-dm:
+    - yudongusa
+    - easonn7
+>>>>>>> 3c1e436937 (chore: update OWNERS_ALIASES (#11495))
   sig-approvers-dm:
     - Benjamin2037
     - D3Hunter
