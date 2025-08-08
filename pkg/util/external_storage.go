@@ -217,7 +217,7 @@ type readerWithCancel struct {
 
 // Close the reader and cancel the context.
 func (r *readerWithCancel) Close() error {
-	r.cancel()
+	defer r.cancel()
 	return r.ExternalFileReader.Close()
 }
 
