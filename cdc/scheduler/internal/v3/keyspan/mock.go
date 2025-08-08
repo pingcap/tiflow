@@ -15,7 +15,9 @@ package keyspan
 
 import (
 	"bytes"
+	"unsafe"
 
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -26,12 +28,10 @@ import (
 // RegionCache is a simplified interface of tikv.RegionCache.
 // It is useful to restrict RegionCache usage and mocking in tests.
 type RegionCache interface {
-	// ListRegionIDsInKeyRange lists ids of regions in [startKey,endKey].
-	ListRegionIDsInKeyRange(
+	// LoadRegionsInKeyRange loads regions in [startKey,endKey].
+	LoadRegionsInKeyRange(
 		bo *tikv.Backoffer, startKey, endKey []byte,
-	) (regionIDs []uint64, err error)
-	// LocateRegionByID searches for the region with ID.
-	LocateRegionByID(bo *tikv.Backoffer, regionID uint64) (*tikv.KeyLocation, error)
+	) (regions []*tikv.Region, err error)
 }
 
 // mockCache mocks tikv.RegionCache.
@@ -42,34 +42,29 @@ type mockCache struct {
 // NewMockRegionCache returns a new MockCache.
 func NewMockRegionCache() *mockCache { return &mockCache{regions: spanz.NewBtreeMap[uint64]()} }
 
-// ListRegionIDsInKeyRange lists ids of regions in [startKey,endKey].
-func (m *mockCache) ListRegionIDsInKeyRange(
+func (m *mockCache) LoadRegionsInKeyRange(
 	bo *tikv.Backoffer, startKey, endKey []byte,
-) (regionIDs []uint64, err error) {
+) (regions []*tikv.Region, err error) {
 	m.regions.Ascend(func(loc tablepb.Span, id uint64) bool {
 		if bytes.Compare(loc.StartKey, endKey) >= 0 ||
 			bytes.Compare(loc.EndKey, startKey) <= 0 {
 			return true
 		}
-		regionIDs = append(regionIDs, id)
-		return true
-	})
-	return
-}
+		region := &tikv.Region{}
+		meta := &metapb.Region{
+			Id:       id,
+			StartKey: loc.StartKey,
+			EndKey:   loc.EndKey,
+		}
 
-// LocateRegionByID searches for the region with ID.
-func (m *mockCache) LocateRegionByID(
-	bo *tikv.Backoffer, regionID uint64,
-) (loc *tikv.KeyLocation, err error) {
-	m.regions.Ascend(func(span tablepb.Span, id uint64) bool {
-		if id != regionID {
-			return true
-		}
-		loc = &tikv.KeyLocation{
-			StartKey: span.StartKey,
-			EndKey:   span.EndKey,
-		}
-		return false
+		// region.meta is not exported, so we use unsafe to set it for testing.
+		regionPtr := (*struct {
+			meta *metapb.Region
+		})(unsafe.Pointer(region))
+		regionPtr.meta = meta
+
+		regions = append(regions, region)
+		return true
 	})
 	return
 }
