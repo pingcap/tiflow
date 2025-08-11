@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
 	"go.uber.org/zap"
 )
@@ -55,13 +54,10 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 		dispatchCols = row.PreColumns
 	}
 
-	offsets, ok := row.TableInfo.OffsetsByNames(r.Columns)
-	if !ok {
-		log.Error("columns not found when dispatch event",
-			zap.Any("tableName", row.TableInfo.GetTableName()),
-			zap.Strings("columns", r.Columns))
-		return 0, "", errors.ErrDispatcherFailed.GenWithStack(
-			"columns not found when dispatch event, table: %v, columns: %v", row.TableInfo.GetTableName(), r.Columns)
+	offsets, err := row.TableInfo.OffsetsByNames(r.Columns)
+	if err != nil {
+		log.Error("dispatch event failed", zap.Error(err))
+		return 0, "", err
 	}
 
 	for idx := 0; idx < len(r.Columns); idx++ {
