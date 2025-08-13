@@ -196,9 +196,33 @@ func (s *extStorageWithTimeout) DeleteFile(ctx context.Context, name string) err
 func (s *extStorageWithTimeout) Open(
 	ctx context.Context, path string,
 ) (storage.ExternalFileReader, error) {
+	// Unlike other methods, Open method cannot call cancel() in defer.
+	// This is because the reader's lifetime is bound to the context provided at Open().
+	// Subsequent Read() calls on reader will observe context cancellation.
+	// Instead, we wrap the reader in a struct and cancel it's context in Close().
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+<<<<<<< HEAD
 	defer cancel()
 	return s.ExternalStorage.Open(ctx, path)
+=======
+	r, err := s.ExternalStorage.Open(ctx, path, nil)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	return &readerWithCancel{ExternalFileReader: r, cancel: cancel}, nil
+}
+
+type readerWithCancel struct {
+	storage.ExternalFileReader
+	cancel context.CancelFunc
+}
+
+// Close the reader and cancel the context.
+func (r *readerWithCancel) Close() error {
+	defer r.cancel()
+	return r.ExternalFileReader.Close()
+>>>>>>> 06161f5f04 (cloudstorage: fix a bug causing context cancelled errors and stuck sink (#12276))
 }
 
 // WalkDir traverse all the files in a dir.
