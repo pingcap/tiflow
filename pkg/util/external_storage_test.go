@@ -67,6 +67,15 @@ func (m *mockExternalStorage) WriteFile(ctx context.Context, name string, data [
 	return nil
 }
 
+// Implement Open so tests can simulate readers that bind to the Open() context.
+func (m *mockExternalStorage) Open(ctx context.Context, path string, option *storage.ReaderOption) (storage.ExternalFileReader, error) {
+	return &ctxBoundReader{ctx: ctx}, nil
+}
+
+func (m *mockExternalStorage) URI() string { return "mock://" }
+
+func (m *mockExternalStorage) Close() {}
+
 func TestExtStorageWithTimeoutWriteFileTimeout(t *testing.T) {
 	testTimeout := 50 * time.Millisecond
 
@@ -122,4 +131,63 @@ func TestExtStorageWithTimeoutWriteFileSuccess(t *testing.T) {
 
 	// Assert success
 	require.NoError(t, err, "Expected no error for successful write within timeout")
+}
+
+// ctxBoundReader is a reader that checks the context passed to Open().
+// It simulates backends (e.g., Azure) that bind reader lifetime to the Open() context.
+type ctxBoundReader struct {
+	ctx context.Context
+}
+
+func (r *ctxBoundReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	p[0] = 'x'
+	return 1, nil
+}
+
+func (r *ctxBoundReader) Seek(offset int64, whence int) (int64, error) {
+	return 0, nil
+}
+
+func (r *ctxBoundReader) Close() error { return nil }
+
+func (r *ctxBoundReader) GetFileSize() (int64, error) { return 1, nil }
+
+func TestExtStorageOpenDoesNotCancelReaderContext(t *testing.T) {
+	timedStore := &extStorageWithTimeout{
+		ExternalStorage: &mockExternalStorage{},
+		timeout:         100 * time.Millisecond,
+	}
+
+	rd, err := timedStore.Open(context.Background(), "file", nil)
+	require.NoError(t, err)
+	defer rd.Close()
+
+	// If Open() had used a derived context with immediate cancel, this would fail with context canceled.
+	_, err = rd.Read(make([]byte, 1))
+	require.NoError(t, err)
+}
+
+func TestExtStorageOpenReaderRespectsCallerCancel(t *testing.T) {
+	timedStore := &extStorageWithTimeout{
+		ExternalStorage: &mockExternalStorage{},
+		timeout:         10 * time.Millisecond,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rd, err := timedStore.Open(ctx, "file", nil)
+	require.NoError(t, err)
+	defer rd.Close()
+
+	// This should cause the reader to fail with context canceled.
+	cancel()
+	_, err = rd.Read(make([]byte, 1))
+
+	require.Error(t, err)
+	require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
 }
