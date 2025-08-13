@@ -129,6 +129,8 @@ type APIV2Helpers interface {
 	) (ineligibleTables,
 		eligibleTables []model.TableName, err error,
 	)
+	// getPDSafepoint return query servicesafepoint
+	getPDSafepoint([]string) (*SafePoint, error)
 }
 
 // APIV2HelpersImpl is an implementation of AVIV2Helpers interface
@@ -586,4 +588,21 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	}
 
 	return ineligibleTables, eligibleTables, nil
+}
+
+func (h APIV2HelpersImpl) getPDSafepoint(pdEndpoints []string) (*SafePoint, error) {
+	var (
+		listServiceGCSafepoint ListServiceGCSafepoint
+		err                    error
+	)
+	for _, endpoint := range pdEndpoints {
+		if listServiceGCSafepoint, err = queryListServiceGCSafepoint(endpoint); err != nil {
+			continue
+		}
+		break
+	}
+	safePoint := &SafePoint{
+		ListServiceGCSafepoint: listServiceGCSafepoint,
+	}
+	return safePoint, errors.Wrap(err, "all queries of get safepoint from PD failed")
 }
