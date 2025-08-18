@@ -403,7 +403,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 
 		for index, tableInfo := range multiTableInfos {
 			// judge each table whether need to be skip
-			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O, 0) {
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O, job.StartTS) {
 				continue
 			}
 			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
