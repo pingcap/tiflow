@@ -543,7 +543,6 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 // in the DDL job out and filter them one by one,
 // if all the tables are filtered, skip it.
 func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
-	log.Info("fizz handleRenameTables", zap.Any("job", job))
 	var args *timodel.RenameTablesArgs
 	args, err = timodel.GetRenameTablesArgs(job)
 	if err != nil {
