@@ -355,7 +355,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 			zap.Error(err))
-		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
+		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS) {
 			return true, nil
 		}
 		return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
@@ -378,11 +378,50 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
 		}
+<<<<<<< HEAD
+=======
+	case timodel.ActionCreateTables:
+		querys, err := ddl.SplitQueries(job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
+			log.Error("the number of queries in `Job.Query` is not equal to "+
+				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
+				zap.String("Job.Query", job.Query),
+				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
+				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
+		}
+
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+
+		for index, tableInfo := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O, job.StartTS) {
+				continue
+			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index])
+		}
+
+		skip = len(newMultiTableInfos) == 0
+
+		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+		job.Query = strings.Join(newQuerys, "")
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 	case timodel.ActionRenameTable:
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
+			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
 			if !discard {
 				return false, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
@@ -398,8 +437,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 		// since we can find the old table, it must be able to find the old schema.
 		// 2. If we can find the preTableInfo, we filter it by the old table name.
-		skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table)
-		skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
+		skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table, job.StartTS)
+		skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
 		if err != nil {
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
@@ -424,7 +463,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
-		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
+		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS)
 	}
 
 	if skip {
@@ -544,7 +583,11 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		if !ok {
 			shouldDiscardOldTable = true
 		} else {
+<<<<<<< HEAD
 			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
+=======
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O, job.StartTS)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 		}
 
 		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
@@ -552,7 +595,11 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			// the new table name does not hit the filter rule, so we should discard the table.
 			shouldDiscardNewTable = true
 		} else {
+<<<<<<< HEAD
 			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
+=======
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, info.NewTableName.O, job.StartTS)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 		}
 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
