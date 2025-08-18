@@ -411,6 +411,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
+<<<<<<< HEAD
 			zap.String("job", job.String()))
 		return true, nil
 	}
@@ -419,6 +420,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if err := snap.FillSchemaName(job); err != nil {
 		log.Info("failed to fill schema name for ddl job", zap.Error(err))
 		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
+=======
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Error(err))
+		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS) {
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 			return true, nil
 		}
 		return true, errors.Trace(err)
@@ -430,6 +437,45 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if err != nil {
 			return true, errors.Trace(err)
 		}
+<<<<<<< HEAD
+=======
+	case timodel.ActionCreateTables:
+		querys, err := ddl.SplitQueries(job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
+			log.Error("the number of queries in `Job.Query` is not equal to "+
+				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
+				zap.String("Job.Query", job.Query),
+				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
+				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
+		}
+
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+
+		for index, tableInfo := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O, job.StartTS) {
+				continue
+			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index])
+		}
+
+		skip = len(newMultiTableInfos) == 0
+
+		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+		job.Query = strings.Join(newQuerys, "")
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 	case timodel.ActionRenameTable:
 		log.Info("rename table ddl job",
 			zap.Int64("newSchemaID", job.SchemaID),
@@ -441,10 +487,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
+			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
 			if !discard {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
+<<<<<<< HEAD
 			skip = true
 		} else {
 			log.Info("rename table ddl job",
@@ -461,6 +508,30 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			if skipByOldTableName && skipByNewTableName {
 				skip = true
 				return true, nil
+=======
+			log.Warn("skip rename table ddl since cannot found the old table info",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", job.TableID),
+				zap.Int64("newSchemaID", job.SchemaID),
+				zap.String("newSchemaName", job.SchemaName),
+				zap.String("oldTableName", job.BinlogInfo.TableInfo.Name.O),
+				zap.String("newTableName", job.TableName))
+			return true, nil
+		}
+		// since we can find the old table, it must be able to find the old schema.
+		// 2. If we can find the preTableInfo, we filter it by the old table name.
+		skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table, job.StartTS)
+		skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
+		if err != nil {
+			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
+				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
+		}
+		// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
+		if skipByOldTableName {
+			if !skipByNewTableName {
+				return false, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 			}
 		}
 	default:
@@ -468,7 +539,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
-		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
+		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS)
 	}
 
 	if skip {
@@ -555,10 +626,44 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		"then resume the changefeed.", job.Query))
 }
 
+<<<<<<< HEAD
 func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
 	for _, db := range dbs {
 		if db.Name.L == name {
 			return db, nil
+=======
+// handleRenameTables gets all the tables that are renamed
+// in the DDL job out and filter them one by one,
+// if all the tables are filtered, skip it.
+func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
+	var args *timodel.RenameTablesArgs
+	args, err = timodel.GetRenameTablesArgs(job)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+
+	multiTableInfos := job.BinlogInfo.MultipleTableInfos
+	if len(multiTableInfos) != len(args.RenameTableInfos) {
+		return true, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+
+	// we filter subordinate rename table ddl by these principles:
+	// 1. old table name matches the filter rule, remain it.
+	// 2. old table name does not match and new table name matches the filter rule, return error.
+	// 3. old table name and new table name do not match the filter rule, skip it.
+	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
+	snap := p.schemaStorage.GetLastSnapshot()
+
+	argsForRemaining := &timodel.RenameTablesArgs{}
+	for i, tableInfo := range multiTableInfos {
+		info := args.RenameTableInfos[i]
+		var shouldDiscardOldTable, shouldDiscardNewTable bool
+		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
+		if !ok {
+			shouldDiscardOldTable = true
+		} else {
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O, job.StartTS)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 		}
 	}
 	return nil, cerror.WrapError(
@@ -566,10 +671,19 @@ func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
 		errors.Errorf("can't find schema %s", name))
 }
 
+<<<<<<< HEAD
 func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo, error) {
 	for _, t := range tbls {
 		if t.Name.L == name {
 			return t, nil
+=======
+		newSchemaName, ok := snap.SchemaByID(info.NewSchemaID)
+		if !ok {
+			// the new table name does not hit the filter rule, so we should discard the table.
+			shouldDiscardNewTable = true
+		} else {
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, info.NewTableName.O, job.StartTS)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 		}
 	}
 	return nil, cerror.WrapError(
