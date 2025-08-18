@@ -2,7 +2,7 @@
 
 ### Run integration tests locally
 
-1. Run `make prepare_test_binaries` to download TiCDC related binaries for integration test.
+1. Run `make prepare_test_binaries community=true` to download TiCDC related binaries for integration test.
 If you need to specify a version, os or arch, you can use, for example: `make prepare_test_binaries community=true ver=v7.0.0 os=linux arch=amd64`. (The `community=true` option is necessary when you need to specify a version, arch or whatever.)
 
    > Note: Please be aware that if you manually specify the versions of the TiDB-related components during the download process, there is a potential risk of incompatibility if the specified versions do not match the current TiCDC version. For example, see issue #11507 where version mismatches caused incompatibility problems during integration tests.
