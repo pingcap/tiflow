@@ -893,10 +893,11 @@ func TestCcheckIneligibleTableDDL(t *testing.T) {
 }
 
 func TestHandleExchangeTableName(t *testing.T) {
-	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	startTs := uint64(10)
+	mockPuller := newMockPuller(t, startTs)
+	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
 	defer helper.Close()
 
-	startTs := uint64(10)
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
