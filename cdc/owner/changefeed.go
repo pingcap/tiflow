@@ -489,8 +489,10 @@ LOOP2:
 	}
 
 	checkpointTs := c.state.Status.CheckpointTs
-	if c.resolvedTs == 0 {
+	// Invariant: ResolvedTs must >= checkpointTs!
+	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
+		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	minTableBarrierTs := c.state.Status.MinTableBarrierTs
@@ -753,6 +755,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
+	c.resolvedTs = 0
 
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
