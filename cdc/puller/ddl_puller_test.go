@@ -448,7 +448,7 @@ func TestHandleJob(t *testing.T) {
 		job.StartTS = 1
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
-		require.False(t, skip)
+		require.True(t, skip)
 
 		job = helper.DDL2Job("create table test1.t2(id int primary key)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
@@ -893,4 +893,51 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	skip, err = ddlJobPullerImpl.handleJob(ddl)
 	require.NoError(t, err)
 	require.False(t, skip)
+}
+
+func TestHandleExchangeTableName(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+
+	startTs := uint64(10)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
+	cfg := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+
+	ddl := helper.DDL2Job("CREATE DATABASE test1;")
+	skip, err := ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	helper.Tk().MustExec("Use test1;")
+
+	ddl = helper.DDL2Job("CREATE TABLE a (id INT PRIMARY KEY);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	ddl = helper.DDL2Job("CREATE TABLE b (id INT PRIMARY KEY);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	ddl = helper.DDL2Job("rename table a to c, b to a, c to b")
+	_, err = ddlJobPullerImpl.handleJob(ddl)
+	// Should return an error
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ignore-txn-start-ts")
+
+	// Add ddl.StartTs to ignore-txn-start-ts, expect no error.
+	cfg.Filter.IgnoreTxnStartTs = []uint64{ddl.StartTS}
+	adjustFilter, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = adjustFilter
+
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.True(t, skip)
 }

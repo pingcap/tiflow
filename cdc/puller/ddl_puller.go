@@ -373,6 +373,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
+<<<<<<< HEAD
 			zap.String("job", job.String()))
 		return true, nil
 	}
@@ -381,6 +382,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if err := snap.FillSchemaName(job); err != nil {
 		log.Info("failed to fill schema name for ddl job", zap.Error(err))
 		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
+=======
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Error(err))
+		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS) {
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 			return true, nil
 		}
 		return true, cerror.WrapError(cerror.ErrHandleDDLFailed,
@@ -393,6 +400,45 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if err != nil {
 			return true, errors.Trace(err)
 		}
+<<<<<<< HEAD
+=======
+	case timodel.ActionCreateTables:
+		querys, err := ddl.SplitQueries(job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		// we only use multiTableInfos and Querys when we generate job event
+		// So if some table should be discard, we just need to delete the info from multiTableInfos and Querys
+		if len(querys) != len(job.BinlogInfo.MultipleTableInfos) {
+			log.Error("the number of queries in `Job.Query` is not equal to "+
+				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
+				zap.Int("numQueries", len(querys)),
+				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
+				zap.String("Job.Query", job.Query),
+				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
+				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
+			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
+		}
+
+		var newMultiTableInfos []*timodel.TableInfo
+		var newQuerys []string
+
+		multiTableInfos := job.BinlogInfo.MultipleTableInfos
+
+		for index, tableInfo := range multiTableInfos {
+			// judge each table whether need to be skip
+			if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, tableInfo.Name.O, job.StartTS) {
+				continue
+			}
+			newMultiTableInfos = append(newMultiTableInfos, multiTableInfos[index])
+			newQuerys = append(newQuerys, querys[index])
+		}
+
+		skip = len(newMultiTableInfos) == 0
+
+		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
+		job.Query = strings.Join(newQuerys, "")
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 	case timodel.ActionRenameTable:
 		log.Info("rename table ddl job",
 			zap.Int64("newSchemaID", job.SchemaID),
@@ -404,10 +450,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
+			discard := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
 			if !discard {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
+<<<<<<< HEAD
 			skip = true
 		} else {
 			log.Info("rename table ddl job",
@@ -424,6 +471,30 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			if skipByOldTableName && skipByNewTableName {
 				skip = true
 				return true, nil
+=======
+			log.Warn("skip rename table ddl since cannot found the old table info",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", job.TableID),
+				zap.Int64("newSchemaID", job.SchemaID),
+				zap.String("newSchemaName", job.SchemaName),
+				zap.String("oldTableName", job.BinlogInfo.TableInfo.Name.O),
+				zap.String("newTableName", job.TableName))
+			return true, nil
+		}
+		// since we can find the old table, it must be able to find the old schema.
+		// 2. If we can find the preTableInfo, we filter it by the old table name.
+		skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table, job.StartTS)
+		skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.StartTS)
+		if err != nil {
+			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
+				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
+		}
+		// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
+		if skipByOldTableName {
+			if !skipByNewTableName {
+				return false, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 			}
 		}
 	default:
@@ -431,7 +502,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
-		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
+		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS)
 	}
 
 	if skip {
@@ -519,6 +590,254 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 		"then resume the changefeed.", job.Query))
 }
 
+<<<<<<< HEAD
+=======
+// handleRenameTables gets all the tables that are renamed
+// in the DDL job out and filter them one by one,
+// if all the tables are filtered, skip it.
+func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
+	var args *timodel.RenameTablesArgs
+	args, err = timodel.GetRenameTablesArgs(job)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+
+	multiTableInfos := job.BinlogInfo.MultipleTableInfos
+	if len(multiTableInfos) != len(args.RenameTableInfos) {
+		return true, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+
+	// we filter subordinate rename table ddl by these principles:
+	// 1. old table name matches the filter rule, remain it.
+	// 2. old table name does not match and new table name matches the filter rule, return error.
+	// 3. old table name and new table name do not match the filter rule, skip it.
+	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
+	snap := p.schemaStorage.GetLastSnapshot()
+
+	argsForRemaining := &timodel.RenameTablesArgs{}
+	for i, tableInfo := range multiTableInfos {
+		info := args.RenameTableInfos[i]
+		var shouldDiscardOldTable, shouldDiscardNewTable bool
+		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
+		if !ok {
+			shouldDiscardOldTable = true
+		} else {
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O, job.StartTS)
+		}
+
+		newSchemaName, ok := snap.SchemaByID(info.NewSchemaID)
+		if !ok {
+			// the new table name does not hit the filter rule, so we should discard the table.
+			shouldDiscardNewTable = true
+		} else {
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, info.NewTableName.O, job.StartTS)
+		}
+
+		if shouldDiscardOldTable && shouldDiscardNewTable {
+			// skip a rename table ddl only when its old table name and new table name are both filtered.
+			log.Info("RenameTables is filtered",
+				zap.Int64("tableID", tableInfo.ID),
+				zap.String("schema", info.OldSchemaName.O),
+				zap.String("query", job.Query))
+			continue
+		}
+		if shouldDiscardOldTable && !shouldDiscardNewTable {
+			// if old table is not in filter rule and its new name is in filter rule, return error.
+			return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
+		}
+		// old table name matches the filter rule, remain it.
+		argsForRemaining.RenameTableInfos = append(argsForRemaining.RenameTableInfos, &timodel.RenameTableArgs{
+			OldSchemaID:   info.OldSchemaID,
+			NewSchemaID:   info.NewSchemaID,
+			TableID:       info.TableID,
+			NewTableName:  info.NewTableName,
+			OldSchemaName: info.OldSchemaName,
+			OldTableName:  info.OldTableName,
+		})
+		remainTables = append(remainTables, tableInfo)
+	}
+
+	if len(remainTables) == 0 {
+		return true, nil
+	}
+
+	bakJob, err := entry.GetNewJobWithArgs(job, argsForRemaining)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	job.RawArgs = bakJob.RawArgs
+	job.BinlogInfo.MultipleTableInfos = remainTables
+	return false, nil
+}
+
+// DDLPuller is the interface for DDL Puller, used by owner only.
+type DDLPuller interface {
+	// Run runs the DDLPuller
+	Run(ctx context.Context) error
+	// PopFrontDDL returns and pops the first DDL job in the internal queue
+	PopFrontDDL() (uint64, *timodel.Job)
+	// ResolvedTs returns the resolved ts of the DDLPuller
+	ResolvedTs() uint64
+	// Close closes the DDLPuller
+	Close()
+}
+
+type ddlPullerImpl struct {
+	ddlJobPuller DDLJobPuller
+
+	mu             sync.Mutex
+	resolvedTS     uint64
+	pendingDDLJobs []*timodel.Job
+	lastDDLJobID   int64
+	cancel         context.CancelFunc
+
+	changefeedID model.ChangeFeedID
+}
+
+// NewDDLPuller return a puller for DDL Event
+func NewDDLPuller(
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
+) DDLPuller {
+	var puller DDLJobPuller
+	// storage can be nil only in the test
+	if up.KVStorage != nil {
+		changefeed.ID += "_owner_ddl_puller"
+		puller = NewDDLJobPuller(up, startTs, config.GetGlobalServerConfig(),
+			changefeed, schemaStorage, filter)
+	}
+
+	return &ddlPullerImpl{
+		ddlJobPuller: puller,
+		resolvedTS:   startTs,
+		cancel:       func() {},
+		changefeedID: changefeed,
+	}
+}
+
+func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
+	if job == nil {
+		return
+	}
+	if job.ID == h.lastDDLJobID {
+		log.Warn("ignore duplicated DDL job",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+
+			zap.String("query", job.Query),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Int64("jobID", job.ID))
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
+	h.lastDDLJobID = job.ID
+	log.Info("ddl puller receives new pending job",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
+		zap.String("schema", job.SchemaName),
+		zap.String("table", job.TableName),
+		zap.String("query", job.Query),
+		zap.Uint64("startTs", job.StartTS),
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+		zap.Int64("jobID", job.ID))
+}
+
+// Run the ddl puller to receive DDL events
+func (h *ddlPullerImpl) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	h.cancel = cancel
+
+	g.Go(func() error { return h.ddlJobPuller.Run(ctx) })
+
+	g.Go(func() error {
+		cc := clock.New()
+		ticker := cc.Ticker(ddlPullerStuckWarnDuration)
+		defer ticker.Stop()
+		lastResolvedTsAdvancedTime := cc.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ticker.C:
+				duration := cc.Since(lastResolvedTsAdvancedTime)
+				if duration > ddlPullerStuckWarnDuration {
+					log.Warn("ddl puller resolved ts has not advanced",
+						zap.String("namespace", h.changefeedID.Namespace),
+						zap.String("changefeed", h.changefeedID.ID),
+						zap.Duration("duration", duration),
+						zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
+				}
+			case e := <-h.ddlJobPuller.Output():
+				if e.OpType == model.OpTypeResolved {
+					if e.CRTs > atomic.LoadUint64(&h.resolvedTS) {
+						atomic.StoreUint64(&h.resolvedTS, e.CRTs)
+						lastResolvedTsAdvancedTime = cc.Now()
+						continue
+					}
+				}
+				h.addToPending(e.Job)
+			}
+		}
+	})
+
+	log.Info("DDL puller started",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
+		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
+
+	defer func() {
+		log.Info("DDL puller stopped",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID))
+	}()
+
+	return g.Wait()
+}
+
+// PopFrontDDL return the first pending DDL job and remove it from the pending list
+func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.pendingDDLJobs) == 0 {
+		return atomic.LoadUint64(&h.resolvedTS), nil
+	}
+	job := h.pendingDDLJobs[0]
+	h.pendingDDLJobs = h.pendingDDLJobs[1:]
+	return job.BinlogInfo.FinishedTS, job
+}
+
+// Close the ddl puller, release all resources.
+func (h *ddlPullerImpl) Close() {
+	h.cancel()
+	if h.ddlJobPuller != nil {
+		h.ddlJobPuller.Close()
+	}
+	log.Info("DDL puller closed",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID))
+}
+
+func (h *ddlPullerImpl) ResolvedTs() uint64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.pendingDDLJobs) == 0 {
+		return atomic.LoadUint64(&h.resolvedTS)
+	}
+	job := h.pendingDDLJobs[0]
+	return job.BinlogInfo.FinishedTS
+}
+
+// Below are some helper functions for ddl puller.
+>>>>>>> db43be26bf (puller: Support discarding unsupported DDL by setting `ignore-txn-start-ts` in filter. (#12287))
 func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
 	for _, db := range dbs {
 		if db.Name.L == name {

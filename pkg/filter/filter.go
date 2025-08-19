@@ -78,7 +78,7 @@ type Filter interface {
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
-	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool
+	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string, startTs uint64) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
@@ -159,8 +159,12 @@ func (f *filter) ShouldIgnoreDMLEvent(
 // 0. By allow list.
 // 1. By schema name.
 // 2. By table name.
-func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool {
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string, startTs uint64) bool {
 	if !isAllowedDDL(ddlType) {
+		return true
+	}
+
+	if f.shouldIgnoreStartTs(startTs) {
 		return true
 	}
 
