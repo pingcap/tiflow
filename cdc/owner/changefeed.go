@@ -724,11 +724,14 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.cancel()
 	c.cancel = func() {}
+	// ddlPuller might still be referenced in initialize.
+	// we have to wait it done
+	c.wg.Wait()
 
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
+		c.ddlPuller = nil
 	}
-	c.wg.Wait()
 
 	if c.ddlSink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())
