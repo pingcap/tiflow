@@ -255,6 +255,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
+		Headers:   message.Headers(),
 		Key:       sarama.StringEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Metadata:  message.Callback,
@@ -264,6 +265,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 		return errors.Trace(ctx.Err())
 	case p.producer.Input() <- msg:
 	}
+	log.Info("async send msg", zap.Int32("partition", partition), zap.Any("commitTs", message.Ts), zap.String("table", message.GetTable()), zap.String("shcema", message.GetSchema()))
 	return nil
 }
 
