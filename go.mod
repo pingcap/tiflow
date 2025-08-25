@@ -59,7 +59,7 @@ require (
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/klauspost/compress v1.18.0
 	github.com/labstack/gommon v0.4.0
-	github.com/linkedin/goavro/v2 v2.11.1
+	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/mailru/easyjson v0.7.7
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modern-go/reflect2 v1.0.2
