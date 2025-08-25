@@ -51,7 +51,7 @@ var (
 	retryGetRelayConfig       = 5
 	retryConnectSleepTime     = time.Second
 	syncMasterEndpointsTime   = 3 * time.Second
-	getMinLocForSubTaskFunc   = getMinLocForSubTask
+	getMinLocForSubTaskFunc   = GetMinLocForSubTask
 )
 
 // Server accepts RPC requests
@@ -932,7 +932,8 @@ func getMinLocInAllSubTasks(ctx context.Context, subTaskCfgs map[string]config.S
 	return minLoc, nil
 }
 
-func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (minLoc *binlog.Location, err error) {
+// GetMinLocForSubTaskFunc get min location for subtask. exported for precheck in master.
+func GetMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (minLoc *binlog.Location, err error) {
 	if !config.HasSync(subTaskCfg.Mode) {
 		return nil, nil
 	}
