@@ -30,10 +30,13 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/autoid"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/pkg/parser/model"
+=======
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
@@ -227,12 +230,20 @@ func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	if tr.closed.Load() {
 		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
 	}
+<<<<<<< HEAD
 	return tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
+=======
+	return tr.upstreamTracker.TableByName(context.Background(), ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 }
 
 // GetCreateTable returns the `CREATE TABLE` statement of the table.
 func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (string, error) {
+<<<<<<< HEAD
 	tableInfo, err := tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
+=======
+	tableInfo, err := tr.upstreamTracker.TableByName(ctx, ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if err != nil {
 		return "", err
 	}
@@ -251,7 +262,11 @@ func (tr *Tracker) AllSchemas() []string {
 
 // ListSchemaTables lists all tables in the schema.
 func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
+<<<<<<< HEAD
 	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(model.NewCIStr(schema))
+=======
+	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(ast.NewCIStr(schema))
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 	}
@@ -263,7 +278,11 @@ func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
 // TODO: move out of this package!
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
 	col = strings.ToLower(col)
+<<<<<<< HEAD
 	t, err := tr.upstreamTracker.TableByName(model.NewCIStr(db), model.NewCIStr(tbl))
+=======
+	t, err := tr.upstreamTracker.TableByName(context.Background(), ast.NewCIStr(db), ast.NewCIStr(tbl))
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if err != nil {
 		return nil, err
 	}
@@ -310,12 +329,20 @@ func (tr *Tracker) Close() {
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
+<<<<<<< HEAD
 	return tr.upstreamTracker.DeleteTable(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
+=======
+	return tr.upstreamTracker.DeleteTable(ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
+<<<<<<< HEAD
 	dbName := model.NewCIStr(db)
+=======
+	dbName := ast.NewCIStr(db)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if tr.upstreamTracker.SchemaByName(dbName) != nil {
 		return nil
 	}
@@ -341,15 +368,24 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
+<<<<<<< HEAD
 	schemaName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
+=======
+	schemaName := ast.NewCIStr(table.Schema)
+	tableName := ast.NewCIStr(table.Name)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
 	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
+<<<<<<< HEAD
 func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
+=======
+func (tr *Tracker) SplitBatchCreateTableAndHandle(schema ast.CIStr, info []*model.TableInfo, l int, r int) error {
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	var err error
 	if err = tr.upstreamTracker.BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
 		if r-l == 1 {
@@ -378,11 +414,19 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
+<<<<<<< HEAD
 			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
 			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`
 			cloneTis = append(cloneTis, cloneTi)
 		}
 		schemaName := model.NewCIStr(schema)
+=======
+			cloneTi := cloneTableInfo(ti)      // clone TableInfo w.r.t the warning of the CreateTable function
+			cloneTi.Name = ast.NewCIStr(table) // TableInfo has no `TableName`
+			cloneTis = append(cloneTis, cloneTi)
+		}
+		schemaName := ast.NewCIStr(schema)
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 		if err := tr.SplitBatchCreateTableAndHandle(schemaName, cloneTis, 0, len(cloneTis)); err != nil {
 			return err
 		}
@@ -481,7 +525,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	dt.se.SetValue(ddl.SuppressErrorTooLongKeyKey, true)
 	// support drop PK
 	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
-	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
+	dt.se.GetSessionVars().EnableClusteredIndex = vardef.ClusteredIndexDefModeOff
 	defer func() {
 		dt.se.ClearValue(ddl.SuppressErrorTooLongKeyKey)
 		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
