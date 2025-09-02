@@ -17,8 +17,8 @@ import (
 	"bytes"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -28,7 +28,7 @@ import (
 
 const (
 	// JobTableID is the id of `tidb_ddl_job`.
-	JobTableID = ddl.JobTableID
+	JobTableID = metadef.TiDBDDLJobTableID
 )
 
 // UpperBoundKey represents the maximum value.
