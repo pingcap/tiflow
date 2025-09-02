@@ -32,7 +32,7 @@ const (
 	// topologyTiCDC is /topology/ticdc/{clusterID}/{ip:port}.
 	topologyTiCDC = "/topology/ticdc/%s/%s"
 	// topologyTiDB is /topology/tidb/{ip:port}.
-	// Refer to https://github.com/pingcap/tidb/blob/master/pkg/domain/serverinfo/info.go#L36-L37
+	// Refer to https://github.com/pingcap/tidb/blob/9695b09e847c/pkg/domain/serverinfo/info.go#L36-L37
 	topologyTiDB    = serverinfo.TopologyInformationPath
 	topologyTiDBTTL = serverinfo.TopologySessionTTL
 	// defaultTimeout is the default timeout for etcd and mysql operations.
