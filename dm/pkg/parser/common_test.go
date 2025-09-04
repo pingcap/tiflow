@@ -216,7 +216,7 @@ var testCases = []testCase{
 	},
 	{
 		"alter table `t1` add column if not exists c1 int",
-		[]string{"ALTER TABLE `test`.`t1` ADD COLUMN IF NOT EXISTS `c1` INT"},
+		[]string{"ALTER TABLE `test`.`t1` ADD COLUMN /*T! IF NOT EXISTS */`c1` INT"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
 		[]string{"ALTER TABLE `xtest`.`xt1` ADD COLUMN IF NOT EXISTS `c1` INT"},
