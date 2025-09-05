@@ -226,7 +226,7 @@ var testCases = []testCase{
 		[]string{"ALTER TABLE `test`.`t1` ADD INDEX/*T!  IF NOT EXISTS */(`a`) USING BTREE COMMENT 'a'"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
-		[]string{"ALTER TABLE `xtest`.`xt1` ADD INDEX/*T! IF NOT EXISTS */(`a`) USING BTREE COMMENT 'a'"},
+		[]string{"ALTER TABLE `xtest`.`xt1` ADD INDEX/*T!  IF NOT EXISTS */(`a`) USING BTREE COMMENT 'a'"},
 	},
 	{
 		"alter table `t1` add constraint fk_t2_id foreign key if not exists (t2_id) references t2(id)",
