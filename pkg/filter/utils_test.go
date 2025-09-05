@@ -36,10 +36,25 @@ func TestIsSchema(t *testing.T) {
 		{tifilter.InspectionSchemaName, true},
 		{metadef.PerformanceSchemaName.O, true},
 		{metadef.MetricSchemaName.O, true},
+		{metadef.InformationSchemaName.L, true},
+		{metadef.PerformanceSchemaName.L, true},
+		{metadef.MetricSchemaName.L, true},
 		{TiCDCSystemSchema, true},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.result, isSysSchema(c.schema))
+		require.Equal(t, c.result, isSysSchema(c.schema), "case +%v", c)
+	}
+}
+
+func BenchmarkIsSysSchemaInputLower(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		isSysSchema("mysql")
+	}
+}
+
+func BenchmarkIsSysSchemaInputUpper(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		isSysSchema("MYSQL")
 	}
 }
 
