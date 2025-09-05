@@ -16,7 +16,7 @@ package filter
 import (
 	"testing"
 
-	tifilter "github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +31,10 @@ func TestIsSchema(t *testing.T) {
 		{"test", false},
 		{"SYS", true},
 		{"MYSQL", true},
-		{tifilter.InformationSchemaName, true},
-		{tifilter.InspectionSchemaName, true},
-		{tifilter.PerformanceSchemaName, true},
-		{tifilter.MetricSchemaName, true},
+		{metadef.InformationSchemaName.O, true},
+		{metadef.InspectionSchemaName.O, true},
+		{metadef.PerformanceSchemaName.O, true},
+		{metadef.MetricSchemaName.O, true},
 		{TiCDCSystemSchema, true},
 	}
 	for _, c := range cases {
