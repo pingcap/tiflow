@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/meta/metadef"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,7 @@ func TestIsSchema(t *testing.T) {
 		{"SYS", true},
 		{"MYSQL", true},
 		{metadef.InformationSchemaName.O, true},
-		{metadef.InspectionSchemaName.O, true},
+		{filter.InspectionSchemaName, true},
 		{metadef.PerformanceSchemaName.O, true},
 		{metadef.MetricSchemaName.O, true},
 		{TiCDCSystemSchema, true},
