@@ -152,7 +152,8 @@ func TestShortError(t *testing.T) {
 	buffer.Reset()
 
 	log.L().Warn("short error", zap.Error(err))
-	require.Regexp(t, regexp.QuoteMeta("errors.AddStack"), buffer.Stripped())
+	// BUG tenfyzhong 2025-09-07 18:11:00 The call stack without `AddError`
+	require.Regexp(t, regexp.QuoteMeta("errors.(*Error).GenWithStackByArgs"), buffer.Stripped())
 	buffer.Reset()
 }
 
