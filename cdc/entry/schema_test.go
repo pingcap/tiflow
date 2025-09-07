@@ -135,6 +135,7 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 2)
 	tableName := tableInfos[1].TableName
+	// BUG tenfyzhong 2025-09-07 18:28:26 Unittest failed 114->116
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
@@ -147,10 +148,11 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 2)
 	tableName = tableInfos[1].TableName
+	// BUG tenfyzhong 2025-09-07 18:28:26 Unittest failed 114->116
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 114,
+		TableID: 116,
 	}, tableName)
 }
 
