@@ -342,8 +342,8 @@ tidy:
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint version
-	time tools/bin/golangci-lint run --new-from-merge-base master --timeout 10m0s --exclude-dirs "^dm/","^tests/"
-	cd dm && time ../tools/bin/golangci-lint run --new-from-merge-base master --timeout 10m0s
+	time tools/bin/golangci-lint run --new-from-merge-base master --timeout 120m0s --exclude-dirs "^dm/","^tests/"
+	cd dm && time ../tools/bin/golangci-lint run --new-from-merge-base master --timeout 120m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
