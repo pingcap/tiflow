@@ -341,6 +341,7 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
+	tools/bin/golangci-lint version
 	time tools/bin/golangci-lint run --new-from-merge-base master --timeout 10m0s --exclude-dirs "^dm/","^tests/"
 	cd dm && time ../tools/bin/golangci-lint run --new-from-merge-base master --timeout 10m0s
 
