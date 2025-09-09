@@ -324,7 +324,7 @@ func initTables(ctx context.Context, cfg *config.Config) (cfgTables []*config.Ta
 	}
 
 	for _, schema := range targetSchemas {
-		if filter.IsSystemSchema(schema) {
+		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			continue
 		}
 		allTables, err := dbutil.GetTables(ctx, downStreamConn, schema)

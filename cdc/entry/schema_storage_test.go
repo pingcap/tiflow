@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/types"
@@ -677,7 +678,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Second)
+	vardef.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -712,7 +713,7 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Second)
+	vardef.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
@@ -863,7 +864,7 @@ func TestSchemaStorage(t *testing.T) {
 		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 			conf.AlterPrimaryKey = true
 		})
-		session.SetSchemaLease(time.Second)
+		vardef.SetSchemaLease(time.Second)
 		session.DisableStats4Test()
 		domain, err := session.BootstrapSession(store)
 		require.Nil(t, err)
@@ -956,7 +957,7 @@ func TestHandleKey(t *testing.T) {
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
 
-	session.SetSchemaLease(time.Second)
+	vardef.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)
