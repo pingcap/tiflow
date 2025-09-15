@@ -21,6 +21,7 @@ import (
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -342,28 +343,40 @@ func TestColumnsByNames(t *testing.T) {
 				Name: pmodel.NewCIStr("col3"),
 				ID:   2,
 			},
+			{
+				Name:                pmodel.NewCIStr("col4"),
+				ID:                  3,
+				GeneratedExprString: "generated",
+			},
 		},
 	})
 
 	names := []string{"col1", "col2", "col3"}
-	offsets, ok := tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
+	offsets, err := tableInfo.OffsetsByNames(names)
+	require.NoError(t, err)
 	require.Equal(t, []int{1, 0, 2}, offsets)
 
 	names = []string{"col2"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
+	offsets, err = tableInfo.OffsetsByNames(names)
+	require.NoError(t, err)
 	require.Equal(t, []int{0}, offsets)
 
 	names = []string{"col1", "col-not-found"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.False(t, ok)
+	offsets, err = tableInfo.OffsetsByNames(names)
+	require.ErrorIs(t, err, errors.ErrDispatcherFailed)
+	require.ErrorContains(t, err, "columns not found")
 	require.Nil(t, offsets)
 
 	names = []string{"Col1", "COL2", "CoL3"}
-	offsets, ok = tableInfo.OffsetsByNames(names)
-	require.True(t, ok)
+	offsets, err = tableInfo.OffsetsByNames(names)
+	require.NoError(t, err)
 	require.Equal(t, []int{1, 0, 2}, offsets)
+
+	names = []string{"Col4"}
+	offsets, err = tableInfo.OffsetsByNames(names)
+	require.ErrorIs(t, err, errors.ErrDispatcherFailed)
+	require.ErrorContains(t, err, "found virtual generated columns")
+	require.Nil(t, offsets)
 }
 
 func TestBuildTiDBTableInfoWithIntPrimaryKey(t *testing.T) {
