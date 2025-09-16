@@ -161,6 +161,7 @@ func (s *EventRouter) GetPartitionForRowChange(
 	)
 }
 
+<<<<<<< HEAD
 // GetDLLDispatchRuleByProtocol returns the DDL
 // distribution rule according to the protocol.
 func (s *EventRouter) GetDLLDispatchRuleByProtocol(
@@ -168,6 +169,41 @@ func (s *EventRouter) GetDLLDispatchRuleByProtocol(
 ) DDLDispatchRule {
 	if protocol == config.ProtocolCanal || protocol == config.ProtocolCanalJSON {
 		return PartitionZero
+=======
+// GetPartitionDispatcher returns the partition dispatcher for a specific table.
+func (s *EventRouter) GetPartitionDispatcher(schema, table string) partition.Dispatcher {
+	_, partitionDispatcher := s.matchDispatcher(schema, table)
+	return partitionDispatcher
+}
+
+// VerifyTables return error if any one table route rule is invalid.
+func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
+	for _, table := range infos {
+		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
+		switch v := partitionDispatcher.(type) {
+		case *partition.IndexValueDispatcher:
+			if v.IndexName != "" {
+				index := table.GetIndex(v.IndexName)
+				if index == nil {
+					return cerror.ErrDispatcherFailed.GenWithStack(
+						"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+				}
+				// only allow the unique index to be set.
+				// For the non-unique index, if any column belongs to the index is updated,
+				// the event is not split, it may cause incorrect data consumption.
+				if !index.Unique {
+					return cerror.ErrDispatcherFailed.GenWithStack(
+						"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+				}
+			}
+		case *partition.ColumnsDispatcher:
+			_, err := table.OffsetsByNames(v.Columns)
+			if err != nil {
+				return err
+			}
+		default:
+		}
+>>>>>>> 35ff0a22ec (sink(ticdc): check virtual columns in column dispatcher (#12254))
 	}
 	return PartitionAll
 }
