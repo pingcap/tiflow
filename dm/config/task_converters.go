@@ -199,6 +199,15 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg.MydumperConfig = DefaultMydumperConfig()
 		subTaskCfg.LoaderConfig = DefaultLoaderConfig()
 		if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil {
+			if fullCfg.Analyze != nil {
+				subTaskCfg.LoaderConfig.Analyze = PhysicalPostOpLevel(*fullCfg.Analyze)
+			}
+			if fullCfg.Checksum != nil {
+				subTaskCfg.LoaderConfig.ChecksumPhysical = PhysicalPostOpLevel(*fullCfg.Checksum)
+			}
+			if fullCfg.CompressKvPairs != nil {
+				subTaskCfg.CompressKVPairs = *fullCfg.CompressKvPairs
+			}
 			if fullCfg.Consistency != nil {
 				subTaskCfg.MydumperConfig.ExtraArgs = fmt.Sprintf("--consistency %s", *fullCfg.Consistency)
 			}
@@ -211,7 +220,29 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 			if fullCfg.DataDir != nil {
 				subTaskCfg.LoaderConfig.Dir = *fullCfg.DataDir
 			}
-			subTaskCfg.LoaderConfig.OnDuplicateLogical = LogicalDuplicateResolveType(task.OnDuplicate)
+			if fullCfg.DiskQuota != nil {
+				if err := subTaskCfg.LoaderConfig.DiskQuotaPhysical.UnmarshalText([]byte(*fullCfg.DiskQuota)); err != nil {
+					return nil, err
+				}
+			}
+			if fullCfg.ImportMode != nil {
+				subTaskCfg.LoaderConfig.ImportMode = LoadMode(*fullCfg.ImportMode)
+			}
+			if fullCfg.OnDuplicateLogical != nil {
+				subTaskCfg.LoaderConfig.OnDuplicateLogical = LogicalDuplicateResolveType(*fullCfg.OnDuplicateLogical)
+			}
+			if fullCfg.OnDuplicatePhysical != nil {
+				subTaskCfg.LoaderConfig.OnDuplicatePhysical = PhysicalDuplicateResolveType(*fullCfg.OnDuplicatePhysical)
+			}
+			if fullCfg.PdAddr != nil {
+				subTaskCfg.LoaderConfig.PDAddr = *fullCfg.PdAddr
+			}
+			if fullCfg.RangeConcurrency != nil {
+				subTaskCfg.LoaderConfig.RangeConcurrency = *fullCfg.RangeConcurrency
+			}
+			if fullCfg.SortingDir != nil {
+				subTaskCfg.LoaderConfig.SortingDirPhysical = *fullCfg.SortingDir
+			}
 		}
 		// set incremental config
 		subTaskCfg.SyncerConfig = DefaultSyncerConfig()
