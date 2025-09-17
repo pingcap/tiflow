@@ -16,6 +16,7 @@ package filter
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -31,14 +32,29 @@ func TestIsSchema(t *testing.T) {
 		{"test", false},
 		{"SYS", true},
 		{"MYSQL", true},
-		{tifilter.InformationSchemaName, true},
+		{metadef.InformationSchemaName.O, true},
 		{tifilter.InspectionSchemaName, true},
-		{tifilter.PerformanceSchemaName, true},
-		{tifilter.MetricSchemaName, true},
+		{metadef.PerformanceSchemaName.O, true},
+		{metadef.MetricSchemaName.O, true},
+		{metadef.InformationSchemaName.L, true},
+		{metadef.PerformanceSchemaName.L, true},
+		{metadef.MetricSchemaName.L, true},
 		{TiCDCSystemSchema, true},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.result, isSysSchema(c.schema))
+		require.Equal(t, c.result, isSysSchema(c.schema), "case +%v", c)
+	}
+}
+
+func BenchmarkIsSysSchemaInputLower(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		isSysSchema("mysql")
+	}
+}
+
+func BenchmarkIsSysSchemaInputUpper(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		isSysSchema("MYSQL")
 	}
 }
 

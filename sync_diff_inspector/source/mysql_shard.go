@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -346,7 +347,7 @@ func NewMySQLSources(ctx context.Context, tableDiffs []*common.TableDiff, ds []*
 		maxSourceRouteTableCount := make(map[string]int)
 		for _, schema := range sourceSchemas {
 			// Skip system schema.
-			if filter.IsSystemSchema(schema) {
+			if filter.IsSystemSchema(strings.ToLower(schema)) {
 				continue
 			}
 			allTables, err := dbutil.GetTables(ctx, sourceDB.Conn, schema)

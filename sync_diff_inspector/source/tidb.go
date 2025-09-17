@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -275,7 +276,7 @@ func NewTiDBSource(
 	}
 
 	for _, schema := range sourceSchemas {
-		if filter.IsSystemSchema(schema) {
+		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			// ignore system schema
 			continue
 		}
