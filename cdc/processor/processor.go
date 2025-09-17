@@ -962,9 +962,16 @@ func (p *processor) Close() error {
 	p.sinkManager.r = nil
 	p.sourceManager.stop(p.changefeedID)
 	p.sourceManager.r = nil
+<<<<<<< HEAD
 	p.redo.stop(p.changefeedID)
 	p.mg.stop(p.changefeedID)
 	p.ddlHandler.stop(p.changefeedID)
+=======
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
+	p.ddlHandler.r = nil
+>>>>>>> b949fa6674 (chann(ticdc): fix a panic that send on closed channel (#12245))
 
 	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
 		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
