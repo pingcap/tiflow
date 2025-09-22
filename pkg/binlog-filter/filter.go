@@ -164,6 +164,9 @@ func ClassifyEvent(event EventType) (EventType, error) {
 		SplitPartition,
 		ExchangePartition,
 
+		AddForeignKey,
+		DropForeignKey,
+
 		DropDatabase,
 		DropTable,
 		DropIndex,
