@@ -371,7 +371,11 @@ func TestShouldDiscardDDL(t *testing.T) {
 }
 
 func TestIsAllowedDDL(t *testing.T) {
+<<<<<<< HEAD
 	require.Len(t, ddlWhiteListMap, 36)
+=======
+	require.Len(t, ddlWhiteListMap, 39)
+>>>>>>> cf59ea73a8 (filter: add foreign key and drop foreign key DDL to the white list (#12329))
 	type testCase struct {
 		timodel.ActionType
 		allowed bool
@@ -380,8 +384,6 @@ func TestIsAllowedDDL(t *testing.T) {
 	for ddlType := range ddlWhiteListMap {
 		testCases = append(testCases, testCase{ddlType, true})
 	}
-	testCases = append(testCases, testCase{timodel.ActionAddForeignKey, false})
-	testCases = append(testCases, testCase{timodel.ActionDropForeignKey, false})
 	testCases = append(testCases, testCase{timodel.ActionCreateSequence, false})
 	testCases = append(testCases, testCase{timodel.ActionAlterSequence, false})
 	testCases = append(testCases, testCase{timodel.ActionDropSequence, false})
