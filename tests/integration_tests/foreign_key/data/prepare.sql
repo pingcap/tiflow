@@ -62,8 +62,6 @@ alter table t11 add constraint fk_6 foreign key (b) references t10(id) on delete
 delete from t10 where id=1;
 update t10 set id=id+10 where id=2;
 
-<<<<<<< HEAD
-=======
 -- Test foreign key only sync child. The `t12` table is excluded in the log filter.
 create table t12 (id int key);
 create table t13 (id int key, constraint fk_3 foreign key (id) references t12 (id));
@@ -86,6 +84,5 @@ alter table tt drop foreign key tt_app_id;
 
 alter table tt drop index uk_appid;
 
->>>>>>> cf59ea73a8 (filter: add foreign key and drop foreign key DDL to the white list (#12329))
 create table finish_mark (id int PRIMARY KEY);
 
