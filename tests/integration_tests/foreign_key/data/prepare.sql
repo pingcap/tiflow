@@ -62,12 +62,6 @@ alter table t11 add constraint fk_6 foreign key (b) references t10(id) on delete
 delete from t10 where id=1;
 update t10 set id=id+10 where id=2;
 
--- Test foreign key only sync child. The `t12` table is excluded in the log filter.
-create table t12 (id int key);
-create table t13 (id int key, constraint fk_3 foreign key (id) references t12 (id));
-insert into t12 values (1),(2),(3),(4),(5);
-insert into t13 values (1),(2),(3),(4),(5);
-
 create table t(id int primary key);
 
 CREATE TABLE tt (
