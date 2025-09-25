@@ -425,5 +425,7 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
+replace github.com/IBM/sarama => github.com/3AceShowHand/sarama v0.0.0-20241204051647-318559e536ae
+
 // tls10server=1
 godebug tlsrsakex=1
