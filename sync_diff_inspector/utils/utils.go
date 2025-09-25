@@ -380,12 +380,38 @@ func sameProperties(c1, c2 *model.ColumnInfo) bool {
 	}
 }
 
-// CompareStruct compare tables' columns and indices from upstream and downstream.
+// equalFK checks whether 2 foreign keys are equal.
+func equalFK(fk1, fk2 *model.FKInfo) bool {
+	if fk1.RefSchema.L != fk2.RefSchema.L ||
+		fk1.RefTable.L != fk2.RefTable.L ||
+		fk1.OnDelete != fk2.OnDelete ||
+		fk1.OnUpdate != fk2.OnUpdate ||
+		len(fk1.Cols) != len(fk2.Cols) ||
+		len(fk1.RefCols) != len(fk2.RefCols) {
+		return false
+	}
+
+	for i := range fk1.Cols {
+		if fk1.Cols[i].L != fk2.Cols[i].L {
+			return false
+		}
+	}
+
+	for i := range fk1.RefCols {
+		if fk1.RefCols[i].L != fk2.RefCols[i].L {
+			return false
+		}
+	}
+
+	return true
+}
+
+// CompareStruct compare tables' structure from upstream and downstream.
 // There are 2 return values:
 //
-//	isEqual	: result of comparing tables' columns and indices
-//	isPanic	: the differences of tables' struct can not be ignored. Need to skip data comparing.
-func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isPanic bool) {
+//	isEqual	: result of comparing tables' structure
+//	isSkip	: if the differences of tables' structure can not be ignored, need to skip data comparing.
+func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isSkip bool) {
 	// compare columns
 	for _, upstreamTableInfo := range upstreamTableInfos {
 		if len(upstreamTableInfo.Columns) != len(downstreamTableInfo.Columns) {
@@ -436,6 +462,34 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 				)
 				return false, true
 			}
+		}
+	}
+
+	// compare foreign key
+	fkEqual := true
+	for _, upstreamTableInfo := range upstreamTableInfos {
+		upstreamFKs := upstreamTableInfo.ForeignKeys
+		downstreamFKs := downstreamTableInfo.ForeignKeys
+		if len(upstreamFKs) != len(downstreamFKs) {
+			log.Warn("Upstream and downstream foreign key count not equal",
+				zap.Int("upstream count", len(upstreamFKs)), zap.Int("downstream count", len(downstreamFKs)))
+			fkEqual = false
+			break
+		}
+
+		for i, upFK := range upstreamFKs {
+			downFK := downstreamFKs[i]
+			if !equalFK(upFK, downFK) {
+				log.Warn("Foreign key not equal",
+					zap.String("upstream FK", upFK.Name.O),
+					zap.String("downstream FK", downFK.Name.O))
+				fkEqual = false
+				break
+			}
+		}
+
+		if !fkEqual {
+			break
 		}
 	}
 
@@ -530,7 +584,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 
 	}
 
-	return len(deleteIndicesSet) == 0, false
+	// FK or index difference won't affect data checking
+	return len(deleteIndicesSet) == 0 && fkEqual, false
 }
 
 // NeedQuotes determines whether an escape character is required for `'`.

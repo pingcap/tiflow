@@ -694,3 +694,41 @@ func TestSQLWithInvalidOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, tblInfo.Charset, "gbk")
 }
+
+func TestCompareTableWithForeignKey(t *testing.T) {
+	type testCase struct {
+		upstreamSQL   string
+		downstreamSQL string
+		isEqual       bool
+	}
+
+	tcs := []testCase{
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `t` (`ID`))",
+			isEqual:       true,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`))",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `test2`.`t` (`id`))",
+			isEqual:       false,
+		},
+	}
+
+	for _, tc := range tcs {
+		parser := parser.New()
+		upstreamTbl, err := GetTableInfoBySQL(tc.upstreamSQL, parser)
+		require.NoError(t, err)
+		downstreamTbl, err := GetTableInfoBySQL(tc.downstreamSQL, parser)
+		require.NoError(t, err)
+
+		isEqual, isSkip := CompareStruct([]*model.TableInfo{upstreamTbl}, downstreamTbl)
+		require.False(t, isSkip)
+		require.Equal(t, tc.isEqual, isEqual)
+	}
+}
