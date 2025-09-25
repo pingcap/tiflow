@@ -165,7 +165,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 	startTime := time.Now()
 	txn, err := conn.DBConn.BeginTx(tctx.Context(), nil)
 	if err != nil {
-		return 0, terror.ErrDBExecuteFailed.Delegate(err, "begin")
+		return 0, terror.ErrDBExecuteFailedBegin.Delegate(err)
 	}
 	if hVec != nil {
 		hVec.WithLabelValues("begin", task).Observe(time.Since(startTime).Seconds())
