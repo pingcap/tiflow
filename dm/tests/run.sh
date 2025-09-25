@@ -111,6 +111,7 @@ function run() {
 			TEST_NAME="$(basename "$(dirname "$script")")" \
 			bash +x "$script"
 	fi
+
 }
 
 if [ "$test_case" == "*" ]; then
@@ -129,3 +130,4 @@ else
 		run $script
 	done
 fi
+# add new line to trigger ci
