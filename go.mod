@@ -30,7 +30,7 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/fatih/color v1.18.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
-	github.com/getkin/kin-openapi v0.80.0
+	github.com/getkin/kin-openapi v0.131.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
@@ -178,8 +178,12 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
+	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
+	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/otiai10/copy v1.2.0 // indirect
+	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/qri-io/jsonpointer v0.1.1 // indirect
 	github.com/qri-io/jsonschema v0.2.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
@@ -260,7 +264,6 @@ require (
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
-	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
