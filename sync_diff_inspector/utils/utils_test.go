@@ -718,6 +718,11 @@ func TestCompareTableWithForeignKey(t *testing.T) {
 			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `test2`.`t` (`id`))",
 			isEqual:       false,
 		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`) ON UPDATE CASCADE)",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `t` (`ID`) ON DELETE CASCADE)",
+			isEqual:       false,
+		},
 	}
 
 	for _, tc := range tcs {

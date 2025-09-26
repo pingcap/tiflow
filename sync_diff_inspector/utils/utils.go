@@ -381,7 +381,11 @@ func sameProperties(c1, c2 *model.ColumnInfo) bool {
 }
 
 // equalFK checks whether 2 foreign keys are equal.
+// As different FK doesn't affect data checking, we just compare the names directly
+// rather than fetching the detailed table info.
 func equalFK(fk1, fk2 *model.FKInfo) bool {
+	// Not use reflect.DeepEqual to do case-insensitive comparison.
+	// We don't compare fk name as MySQL and TiDB has different behavior on naming.
 	if fk1.RefSchema.L != fk2.RefSchema.L ||
 		fk1.RefTable.L != fk2.RefTable.L ||
 		fk1.OnDelete != fk2.OnDelete ||
