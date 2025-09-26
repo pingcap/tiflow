@@ -385,7 +385,6 @@ func sameProperties(c1, c2 *model.ColumnInfo) bool {
 // rather than fetching the detailed table info.
 func equalFK(fk1, fk2 *model.FKInfo) bool {
 	// Not use reflect.DeepEqual to do case-insensitive comparison.
-	// We don't compare fk name as MySQL and TiDB has different behavior on naming.
 	if fk1.RefSchema.L != fk2.RefSchema.L ||
 		fk1.RefTable.L != fk2.RefTable.L ||
 		fk1.OnDelete != fk2.OnDelete ||
@@ -418,8 +417,8 @@ func equalFK(fk1, fk2 *model.FKInfo) bool {
 func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isSkip bool) {
 	// compare columns
 	for _, upstreamTableInfo := range upstreamTableInfos {
+		// Skip comparison when the numbers of columns are different.
 		if len(upstreamTableInfo.Columns) != len(downstreamTableInfo.Columns) {
-			// the numbers of each columns are different, don't compare data
 			log.Error("column num not equal",
 				zap.String("upstream table", upstreamTableInfo.Name.O),
 				zap.Int("column num", len(upstreamTableInfo.Columns)),
@@ -429,9 +428,9 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 			return false, true
 		}
 
+		// Skip comparison when column names are different.
 		for i, column := range upstreamTableInfo.Columns {
 			if column.Name.O != downstreamTableInfo.Columns[i].Name.O {
-				// names are different, panic!
 				log.Error("column name not equal",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -441,8 +440,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 				return false, true
 			}
 
+			// Skip comparison when column types are different.
 			if !isCompatible(column.GetType(), downstreamTableInfo.Columns[i].GetType()) {
-				// column types are different, panic!
 				log.Error("column type not compatible",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -454,8 +453,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 				return false, true
 			}
 
+			// Skip comparison when column properties are different.
 			if !sameProperties(column, downstreamTableInfo.Columns[i]) {
-				// column properties are different, panic!
 				log.Error("column properties not compatible",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -469,14 +468,20 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		}
 	}
 
-	// compare foreign key
+	// Compare foreign key.
+	// As MySQL and TiDB has different behavior on naming, we just compare
+	// the count and the definition one by one without considering the name.
 	fkEqual := true
 	for _, upstreamTableInfo := range upstreamTableInfos {
 		upstreamFKs := upstreamTableInfo.ForeignKeys
 		downstreamFKs := downstreamTableInfo.ForeignKeys
 		if len(upstreamFKs) != len(downstreamFKs) {
-			log.Warn("Upstream and downstream foreign key count not equal",
-				zap.Int("upstream count", len(upstreamFKs)), zap.Int("downstream count", len(downstreamFKs)))
+			log.Warn("Upstream and downstream have different count of foreign keys",
+				zap.String("upstream table", upstreamTableInfo.Name.O),
+				zap.Int("upstream count", len(upstreamFKs)),
+				zap.String("downstream table", downstreamTableInfo.Name.O),
+				zap.Int("downstream count", len(downstreamFKs)),
+			)
 			fkEqual = false
 			break
 		}
@@ -484,9 +489,12 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		for i, upFK := range upstreamFKs {
 			downFK := downstreamFKs[i]
 			if !equalFK(upFK, downFK) {
-				log.Warn("Foreign key not equal",
+				log.Warn("Upstream and downstream have different foreign keys",
+					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("upstream FK", upFK.Name.O),
-					zap.String("downstream FK", downFK.Name.O))
+					zap.String("downstream table", downstreamTableInfo.Name.O),
+					zap.String("downstream FK", downFK.Name.O),
+				)
 				fkEqual = false
 				break
 			}
@@ -497,7 +505,7 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		}
 	}
 
-	// compare indices
+	// Compare indices and remove the different ones from table info.
 	deleteIndicesSet := make(map[string]struct{})
 	unilateralIndicesSet := make(map[string]struct{})
 	downstreamIndicesMap := make(map[string]*struct {
