@@ -368,6 +368,8 @@ func TestDecodeCfgWithFlags(t *testing.T) {
 addr = "128.0.0.1:1234"
 advertise-addr = "127.0.0.1:1111"
 
+newarch = false
+
 log-file = "/root/cdc1.log"
 log-level = "warn"
 
@@ -503,6 +505,7 @@ func TestDecodeUnknownDebugCfg(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := `
+newarch = false
 [debug]
 unknown1 = 1
 [debug.unknown2]

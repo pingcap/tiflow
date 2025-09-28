@@ -365,7 +365,7 @@ func TestAddSpecialComment(t *testing.T) {
 			event: &model.DDLEvent{
 				Query: "alter table t force auto_increment = 12;",
 			},
-			result: "ALTER TABLE `t` /*T![force_inc] FORCE */ AUTO_INCREMENT = 12",
+			result: "ALTER TABLE `t` /*T![force_inc] FORCE  */AUTO_INCREMENT = 12",
 		},
 		{
 			event: &model.DDLEvent{
