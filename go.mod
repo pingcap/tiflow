@@ -34,13 +34,8 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
-<<<<<<< HEAD
-	github.com/go-mysql-org/go-mysql v1.9.1
-	github.com/go-oauth2/oauth2/v4 v4.5.2
-=======
 	github.com/go-mysql-org/go-mysql v1.12.0
 	github.com/go-oauth2/oauth2/v4 v4.5.4
->>>>>>> 4b7fe4b517 (*: bump jwt (#12343))
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/goccy/go-json v0.10.2
@@ -137,6 +132,7 @@ require (
 
 require (
 	cloud.google.com/go/kms v1.15.8 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
@@ -357,8 +353,6 @@ require (
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
-	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726 // indirect
-	github.com/siddontang/go-log v0.0.0-20180807004314-8d05993dda07 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spkg/bom v1.0.0 // indirect
