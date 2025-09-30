@@ -229,7 +229,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 
 		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
 			disableForJob := w.shouldDisableForeignKeyChecksForJob(j)
-			if disableForJob && len(jobs) > 0 {
+			if len(jobs) > 0 && disableForJob != disableForeignKeyChecksForBatch {
 				flushJobs()
 			}
 			if len(jobs) == 0 {
@@ -238,7 +238,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 				disableForeignKeyChecksForBatch = disableForJob
 			}
 			jobs = append(jobs, j)
-			if !disableForJob && len(jobs) < w.batch && len(jobCh) > 0 {
+			if len(jobs) < w.batch && len(jobCh) > 0 {
 				continue
 			}
 		}
