@@ -42,26 +42,26 @@ function run() {
 	run_sql_tidb_with_retry "SELECT payload FROM fk_demo.parent WHERE parent_id=1;" "payload: p1_v2"
 
 	run_sql_source1 "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=1;"
-	check_contains "count(*): 2"
-	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=1;" "count(*): 2"
+	check_contains "COUNT(*): 2"
+	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=1;" "COUNT(*): 2"
 
 	run_sql_source1 "SELECT child_data FROM fk_demo.child WHERE child_id=20;"
 	check_contains "child_data: c20_v2"
 	run_sql_tidb_with_retry "SELECT child_data FROM fk_demo.child WHERE child_id=20;" "child_data: c20_v2"
 
 	run_sql_source1 "SELECT COUNT(*) FROM fk_demo.parent WHERE parent_id=3;"
-	check_contains "count(*): 0"
-	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.parent WHERE parent_id=3;" "count(*): 0"
+	check_contains "COUNT(*): 0"
+	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.parent WHERE parent_id=3;" "COUNT(*): 0"
 
 	run_sql_source1 "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=3;"
-	check_contains "count(*): 0"
-	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=3;" "count(*): 0"
+	check_contains "COUNT(*): 0"
+	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=3;" "COUNT(*): 0"
 
 	run_sql_source1 "SELECT COUNT(*) FROM fk_demo.child WHERE child_id=21;"
-	check_contains "count(*): 1"
-	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE child_id=21;" "count(*): 1"
+	check_contains "COUNT(*): 1"
+	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child WHERE child_id=21;" "COUNT(*): 1"
 
-	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child c LEFT JOIN fk_demo.parent p ON c.parent_id=p.parent_id WHERE p.parent_id IS NULL;" "count(*): 0"
+	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child c LEFT JOIN fk_demo.parent p ON c.parent_id=p.parent_id WHERE p.parent_id IS NULL;" "COUNT(*): 0"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
