@@ -21,12 +21,12 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/dm-task.yaml --remove-meta" \
-		"\\"result\\": true" 2 \
-		"\\"source\\": \\\"$SOURCE_ID1\\\"" 1
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\\"result\\": true" 1 \
-		"\\"stage\\": \\\"Running\\\"" 1
+		"\"result\": true" 1 \
+		"\"stage\": \"Running\"" 1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -34,8 +34,8 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\\"result\\": true" 1 \
-		"\\"stage\\": \\\"Running\\\"" 1
+		"\"result\": true" 1 \
+		"\"stage\": \"Running\"" 1
 
 	run_sql_source1 "SELECT payload FROM fk_demo.parent WHERE parent_id=1;"
 	check_contains "payload: p1_v2"
