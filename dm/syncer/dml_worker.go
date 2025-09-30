@@ -394,7 +394,7 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 
 		case sqlmodel.RowChangeUpdate:
 			if j.safeMode {
-				if j.dml.IsIdentityUpdated() {
+				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
 					query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
 					appendQueryAndArg()
 				}
