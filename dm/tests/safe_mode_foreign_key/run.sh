@@ -26,7 +26,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 1
+		"\"stage\": \"Running\"" 2
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -35,7 +35,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 1
+		"\"stage\": \"Running\"" 2
 
 	run_sql_source1 "SELECT payload FROM fk_demo.parent WHERE parent_id=1;"
 	check_contains "payload: p1_v2"
