@@ -419,10 +419,12 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 	if op == sqlmodel.DMLUpdate {
 		for i, j := range jobs {
 			if j.safeMode {
-				query, arg := j.dml.GenSQL(sqlmodel.DMLDelete)
-				queries = append(queries, query)
-				args = append(args, arg)
-				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+				if j.dml.IsIdentityUpdated() {
+					query, arg := j.dml.GenSQL(sqlmodel.DMLDelete)
+					queries = append(queries, query)
+					args = append(args, arg)
+				}
+				query, arg := j.dml.GenSQL(sqlmodel.DMLReplace)
 				queries = append(queries, query)
 				args = append(args, arg)
 				continue
