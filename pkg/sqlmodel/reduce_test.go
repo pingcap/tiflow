@@ -44,6 +44,33 @@ func TestIdentity(t *testing.T) {
 	require.Equal(t, []interface{}{5, 6}, post)
 }
 
+func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, uk1 INT UNIQUE NOT NULL, uk2 INT UNIQUE, val INT)")
+
+	change := NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{1, 10, 100, 9}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{2, 10, 100, 7}, sourceTI, nil, nil)
+	require.True(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 10, 100, 7}, []interface{}{2, 20, 100, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 20, 100, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 20, nil, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
 func TestSplit(t *testing.T) {
 	t.Parallel()
 
