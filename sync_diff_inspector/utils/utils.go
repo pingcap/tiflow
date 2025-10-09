@@ -597,7 +597,7 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 	}
 
 	// FK or index difference won't affect data checking
-	return len(deleteIndicesSet) == 0 && fkEqual, false
+	return (len(deleteIndicesSet) == 0 && len(unilateralIndicesSet) == 0) && fkEqual, false
 }
 
 // NeedQuotes determines whether an escape character is required for `'`.

@@ -695,7 +695,7 @@ func TestSQLWithInvalidOptions(t *testing.T) {
 	require.Equal(t, tblInfo.Charset, "gbk")
 }
 
-func TestCompareTableWithForeignKey(t *testing.T) {
+func TestCompareTableWithDiffernetIndexOrFK(t *testing.T) {
 	type testCase struct {
 		upstreamSQL   string
 		downstreamSQL string
@@ -721,6 +721,36 @@ func TestCompareTableWithForeignKey(t *testing.T) {
 		{
 			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`) ON UPDATE CASCADE)",
 			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `t` (`ID`) ON DELETE CASCADE)",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, KEY `i1` (`id`))",
+			isEqual:       true,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, PRIMARY KEY (`id`))",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, PRIMARY KEY (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, PRIMARY KEY (`id`))",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`), KEY `i2` (`c1`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, PRIMARY KEY (`id`), KEY `i2` (`c1`))",
+			isEqual:       false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, PRIMARY KEY (`id`), KEY `i2` (`c1`))",
 			isEqual:       false,
 		},
 	}
