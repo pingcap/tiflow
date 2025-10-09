@@ -596,7 +596,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 
 	}
 
-	// FK or index difference won't affect data checking
+	// Any deleted index, unilateral index, or different FK means the
+	// table structures are different. But this won't affect data checking.
 	return (len(deleteIndicesSet) == 0 && len(unilateralIndicesSet) == 0) && fkEqual, false
 }
 
