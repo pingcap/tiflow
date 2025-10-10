@@ -518,99 +518,6 @@ func TestGetChunkIDFromSQLFileName(t *testing.T) {
 	require.Equal(t, chunkIndex, 14)
 }
 
-func TestCompareStruct(t *testing.T) {
-	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo, err := GetTableInfoBySQL(createTableSQL, parser.New())
-	require.NoError(t, err)
-
-	var isEqual bool
-	var isPanic bool
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo}, tableInfo)
-	require.True(t, isEqual)
-	require.False(t, isPanic)
-
-	// column length different
-	createTableSQL2 := "create table `test`(`a` int, `b` varchar(10), `c` float, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err := GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.True(t, isPanic)
-
-	// column name differernt
-	createTableSQL2 = "create table `test`(`aa` int, `b` varchar(10), `c` float, `d` datetime, primary key(`aa`, `b`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.True(t, isPanic)
-
-	// column type compatible
-	createTableSQL2 = "create table `test`(`a` int, `b` char(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.True(t, isEqual)
-	require.False(t, isPanic)
-
-	createTableSQL2 = "create table `test`(`a` int(11), `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.True(t, isEqual)
-	require.False(t, isPanic)
-
-	// column type not compatible
-	createTableSQL2 = "create table `test`(`a` int, `b` varchar(10), `c` int, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.True(t, isPanic)
-
-	// column properties not compatible
-	createTableSQL2 = "create table `test`(`a` int, `b` varchar(11), `c` int, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.True(t, isPanic)
-
-	// index check
-
-	// index different
-	createTableSQL2 = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.False(t, isPanic)
-	require.Equal(t, len(tableInfo.Indices), 1)
-	require.Equal(t, tableInfo.Indices[0].Name.O, "PRIMARY")
-
-	// index column different
-	createTableSQL = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`), index(`c`))"
-	tableInfo, err = GetTableInfoBySQL(createTableSQL, parser.New())
-	require.NoError(t, err)
-
-	createTableSQL2 = "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `c`), index(`c`))"
-	tableInfo2, err = GetTableInfoBySQL(createTableSQL2, parser.New())
-	require.NoError(t, err)
-
-	isEqual, isPanic = CompareStruct([]*model.TableInfo{tableInfo, tableInfo2}, tableInfo)
-	require.False(t, isEqual)
-	require.False(t, isPanic)
-	require.Equal(t, len(tableInfo.Indices), 1)
-	require.Equal(t, tableInfo.Indices[0].Name.O, "c")
-}
-
 func TestGenerateSQLBlob(t *testing.T) {
 	rowsData := map[string]*dbutil.ColumnData{
 		"id": {Data: []byte("1"), IsNull: false},
@@ -693,4 +600,144 @@ func TestSQLWithInvalidOptions(t *testing.T) {
 	tblInfo, err = GetTableInfoBySQL("create table t1 (id int, name varchar(20), primary key(`id`)) character set gbk", parser.New())
 	require.NoError(t, err)
 	require.Equal(t, tblInfo.Charset, "gbk")
+}
+
+func TestCompareTableWithDiffernetIndexOrFK(t *testing.T) {
+	type testCase struct {
+		upstreamSQL   string
+		downstreamSQL string
+		isEqual       bool
+		isSkip        bool
+	}
+
+	tcs := []testCase{
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			isEqual:       true,
+			isSkip:        false,
+		},
+		{
+			// column name different
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`aa` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`aa`, `b`), KEY(`c`))",
+			isEqual:       false,
+			isSkip:        true,
+		},
+		{
+			// column length differernt
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			isEqual:       false,
+			isSkip:        true,
+		},
+		{
+			// column type compatible
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` char(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			isEqual:       true,
+			isSkip:        false,
+		},
+		{
+			// column type not compatible
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` int, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			isEqual:       false,
+			isSkip:        true,
+		},
+		{
+			// column properties not compatible
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(11), `c` int, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			isEqual:       false,
+			isSkip:        true,
+		},
+		// Index check
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `b`), KEY(`c`))",
+			downstreamSQL: "CREATE TABLE `t1`(`a` int, `b` varchar(10), `c` float, `d` datetime, PRIMARY KEY(`a`, `c`), KEY(`c`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			// uniqueness doesn't affect struct comparison
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, KEY `i1` (`id`))",
+			isEqual:       true,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, PRIMARY KEY (`id`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, PRIMARY KEY (`id`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, UNIQUE KEY `i1` (`id`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, `c1` int, PRIMARY KEY (`id`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`), KEY `i2` (`c1`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, `c1` int, PRIMARY KEY (`id`), KEY `i2` (`c1`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`id`))",
+			downstreamSQL: "CREATE TABLE `t1`(`id` int, `c1` int, PRIMARY KEY (`id`), KEY `i2` (`c1`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		// Foreign key check
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `t` (`ID`))",
+			isEqual:       true,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`))",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `test2`.`t` (`id`))",
+			isEqual:       false,
+			isSkip:        false,
+		},
+		{
+			upstreamSQL:   "CREATE TABLE `t1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `t1_ibfk_1` FOREIGN KEY (`iD`) REFERENCES `t` (`id`) ON UPDATE CASCADE)",
+			downstreamSQL: "CREATE TABLE `T1`(`id` int, `c1` int, KEY `i1` (`iD`), CONSTRAINT `fk_1` FOREIGN KEY (`id`) REFERENCES `t` (`ID`) ON DELETE CASCADE)",
+			isEqual:       false,
+			isSkip:        false,
+		},
+	}
+
+	for _, tc := range tcs {
+		parser := parser.New()
+		upstreamTbl, err := GetTableInfoBySQL(tc.upstreamSQL, parser)
+		require.NoError(t, err)
+		downstreamTbl, err := GetTableInfoBySQL(tc.downstreamSQL, parser)
+		require.NoError(t, err)
+
+		isEqual, isSkip := CompareStruct([]*model.TableInfo{upstreamTbl}, downstreamTbl)
+		require.Equal(t, tc.isSkip, isSkip)
+		require.Equal(t, tc.isEqual, isEqual)
+	}
 }
