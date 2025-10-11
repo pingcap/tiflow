@@ -257,6 +257,14 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 		if err == nil {
 			w.successFunc(queueID, len(dmls), jobs)
 		} else {
+			// debug: print lengths and content before entering error-handling branches
+			w.logger.Debug("queries and jobs before error handling",
+				zap.Int("queries_len", len(queries)),
+				zap.Int("jobs_len", len(jobs)),
+				zap.Any("queries", queries),
+				zap.Any("jobs", jobs),
+				zap.Error(err),
+			)
 			if len(queries) == len(jobs) {
 				w.fatalFunc(jobs[affect], err)
 			} else {
