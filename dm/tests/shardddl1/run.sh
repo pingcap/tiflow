@@ -801,7 +801,7 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 
 function DM_DML_EXECUTE_ERROR_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,1)"
-	run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=1"
+	run_sql_source1 "update ${shardddl1}.${tb1} set a=a+1, b=b+1 where a=1"
 
 	check_log_contain_with_retry "length of queries not equals length of jobs" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
