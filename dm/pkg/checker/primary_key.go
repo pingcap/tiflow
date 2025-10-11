@@ -15,7 +15,6 @@ package checker
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -168,7 +167,7 @@ func (c *PrimaryKeyChecker) Check(ctx context.Context) *Result {
 		instrs = append(instrs, k)
 	}
 	if len(instrs) > 0 {
-		r.Instruction = strings.Join(instrs, "\n")  
+		r.Instruction = strings.Join(instrs, "\n")
 	}
 
 	log.L().Logger.Info("check primary key over", zap.Duration("spend time", time.Since(start)))
