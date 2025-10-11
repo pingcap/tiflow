@@ -256,33 +256,18 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 	defer func() {
 		if err == nil {
 			w.successFunc(queueID, len(dmls), jobs)
-			return
-		}
-
-		// Case 1: genSQLs failed before or during queries were generated
-		if len(queries) == 0 {
-			w.logger.Error("failed to generate SQLs", zap.Int("jobs", len(jobs)), zap.Error(err))
-			newJob := job{
-				startLocation:   jobs[0].startLocation,
-				currentLocation: jobs[len(jobs)-1].currentLocation,
+		} else {
+			if len(queries) == len(jobs) {
+				w.fatalFunc(jobs[affect], err)
+			} else {
+				w.logger.Warn("length of queries not equals length of jobs, cannot determine which job failed", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
+				newJob := job{
+					startLocation:   jobs[0].startLocation,
+					currentLocation: jobs[len(jobs)-1].currentLocation,
+				}
+				w.fatalFunc(&newJob, err)
 			}
-			w.fatalFunc(&newJob, err)
-			return
 		}
-
-		// Case 2: ExecuteSQL failed and we can identify the job by index
-		if len(queries) == len(jobs) && affect < len(jobs) {
-			w.fatalFunc(jobs[affect], err)
-		}
-
-		// Case 3: Ambiguous mapping between queries and jobs
-		w.logger.Warn("length of queries not equals length of jobs, cannot determine which job failed", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
-		newJob := job{
-			startLocation:   jobs[0].startLocation,
-			currentLocation: jobs[len(jobs)-1].currentLocation,
-		}
-		w.fatalFunc(&newJob, err)
-
 	}()
 
 	if len(jobs) == 0 {
@@ -296,13 +281,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 		}
 	})
 
-	// generate SQLs; genSQLs may now return an error that should be treated as fatal
-	queries, args, err = w.genSQLs(jobs)
-	if err != nil {
-		// propagate error to defer handler
-		return
-	}
-
+	queries, args = w.genSQLs(jobs)
 	failpoint.Inject("BlockExecuteSQLs", func(v failpoint.Value) {
 		t := v.(int) // sleep time
 		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
@@ -382,15 +361,9 @@ func (w *DMLWorker) setForeignKeyChecks(queueID int, enable bool) error {
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
-func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}, error) {
-	// if multiple rows mode is enabled while session keeps foreign_key_checks on,
-	// it's unsafe to generate multi-row DMLs in safe-mode semantics. Return error.
+func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 	if w.multipleRows {
-		if w.foreignKeyChecksEnabled {
-			return nil, nil, errors.New("multiple_rows mode cannot be used while session foreign_key_checks is enabled")
-		}
-		queries, args := genDMLsWithSameOp(jobs)
-		return queries, args, nil
+		return genDMLsWithSameOp(jobs)
 	}
 
 	queries := make([]string, 0, len(jobs))
@@ -413,12 +386,7 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}, error) {
 
 		case sqlmodel.RowChangeUpdate:
 			if j.safeMode {
-				// if primary/unique key updated in safe-mode and session keeps foreign_key_checks on,
-				// it's unsafe to perform delete+replace; return error so batch executor treats it as fatal.
 				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
-					if w.foreignKeyChecksEnabled {
-						return nil, nil, errors.New("unsafe to update primary/unique key in safe-mode while session foreign_key_checks is enabled")
-					}
 					query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
 					appendQueryAndArg()
 				}
@@ -433,7 +401,7 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}, error) {
 
 		appendQueryAndArg()
 	}
-	return queries, args, nil
+	return queries, args
 }
 
 func (w *DMLWorker) judgeKeyNotFound(affect int, jobs []*job) bool {
