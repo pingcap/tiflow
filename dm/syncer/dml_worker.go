@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -63,19 +64,10 @@ type DMLWorker struct {
 }
 
 func isForeignKeyChecksEnabled(session map[string]string) bool {
-	if session == nil {
-		return false
-	}
 	for key, value := range session {
 		if strings.EqualFold(key, "foreign_key_checks") {
-			trimmed := strings.TrimSpace(value)
-			trimmed = strings.Trim(trimmed, "'\"")
-			switch strings.ToLower(trimmed) {
-			case "1", "on", "true":
-				return true
-			default:
-				return false
-			}
+			trimmed := strings.Trim(value, " '\"")
+			return variable.TiDBOptOn(trimmed)
 		}
 	}
 	return false
