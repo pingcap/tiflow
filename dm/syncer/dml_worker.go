@@ -262,6 +262,16 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 	)
 
 	defer func() {
+
+		// debug: print lengths and content before entering error-handling branches
+		w.logger.Debug("queries and jobs before error handling",
+			zap.Int("queries_len", len(queries)),
+			zap.Int("jobs_len", len(jobs)),
+			zap.Any("queries", queries),
+			zap.Any("jobs", jobs),
+			zap.Error(err),
+		)
+
 		if err == nil {
 			w.successFunc(queueID, len(dmls), jobs)
 			return
@@ -281,6 +291,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 		// Case 2: ExecuteSQL failed and we can identify the job by index
 		if len(queries) == len(jobs) && affect < len(jobs) {
 			w.fatalFunc(jobs[affect], err)
+			return
 		}
 
 		// Case 3: Ambiguous mapping between queries and jobs
