@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrimaryKeyChecker_SuccessAndWarning(t *testing.T) {
+func TestPrimaryKeyChecker(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestPrimaryKeyChecker_SuccessAndWarning(t *testing.T) {
 	require.Equal(t, StateSuccess, res.State)
 	require.NoError(t, mock.ExpectationsWereMet())
 
-	// 2. warning: table missing primary key
+	// 2. failure: table missing primary key
 	// reset expectations on same mock
 	maxConnectionsRow2 := sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", "2")

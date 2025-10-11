@@ -46,6 +46,7 @@ const (
 	LightningMutexFeatureChecking       = "downstream_mutex_features"
 	LightningTableEmptyChecking         = "downstream_table_empty"
 	// Aliyun RDS prechecks.
+	// see https://docs.pingcap.com/tidb/stable/dm-faq/#does-dm-support-migrating-data-from-alibaba-rds-or-other-cloud-databases
 	PrimaryKeyChecking = "primary_key"
 )
 

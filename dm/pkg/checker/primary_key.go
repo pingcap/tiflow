@@ -16,6 +16,7 @@ package checker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/parser"
@@ -133,8 +134,7 @@ func (c *PrimaryKeyChecker) Check(ctx context.Context) *Result {
 				if r.State != StateFailure {
 					r.State = StateWarning
 				}
-				e := NewError(tableMsg + opt.errMessage)
-				e.Severity = StateWarning
+				e := NewWarn(tableMsg + opt.errMessage)
 				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
 					resultInstructions[opt.instruction] = struct{}{}
 				}
@@ -168,7 +168,7 @@ func (c *PrimaryKeyChecker) Check(ctx context.Context) *Result {
 		instrs = append(instrs, k)
 	}
 	if len(instrs) > 0 {
-		r.Instruction = fmt.Sprintf("%s", instrs[0])
+		r.Instruction = strings.Join(instrs, "\n")  
 	}
 
 	log.L().Logger.Info("check primary key over", zap.Duration("spend time", time.Since(start)))
