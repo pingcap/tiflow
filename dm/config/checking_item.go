@@ -45,6 +45,8 @@ const (
 	LightningFreeSpaceChecking          = "free_space"
 	LightningMutexFeatureChecking       = "downstream_mutex_features"
 	LightningTableEmptyChecking         = "downstream_table_empty"
+	// Aliyun RDS prechecks.
+	PrimaryKeyChecking = "primary_key"
 )
 
 // AllCheckingItems contains all checking items.
@@ -72,6 +74,8 @@ var AllCheckingItems = map[string]string{
 	LightningFreeSpaceChecking:          "downstream free space checking item",
 	LightningMutexFeatureChecking:       "physical import mode downstream incompatible feature checking item",
 	LightningTableEmptyChecking:         "physical import mode downstream table empty checking item",
+	// aliyun rds prechecks
+	PrimaryKeyChecking: "primary key checking item",
 }
 
 // LightningPrechecks returns all checking items for lightning.
