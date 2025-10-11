@@ -75,8 +75,6 @@ var AllCheckingItems = map[string]string{
 	LightningFreeSpaceChecking:          "downstream free space checking item",
 	LightningMutexFeatureChecking:       "physical import mode downstream incompatible feature checking item",
 	LightningTableEmptyChecking:         "physical import mode downstream table empty checking item",
-	// aliyun rds prechecks
-	PrimaryKeyChecking: "primary key checking item",
 }
 
 // LightningPrechecks returns all checking items for lightning.
@@ -89,12 +87,23 @@ var LightningPrechecks = []string{
 	LightningTableEmptyChecking,
 }
 
+// AdditionalCheckingItems contains checking items that are not enabled by default
+// via AllCheckingItems but can be exposed to callers (for example, cloud APIs)
+// so they can request these checks explicitly.
+var AdditionalCheckingItems = map[string]string{
+	PrimaryKeyChecking: "primary key checking item (Aliyun RDS precheck)",
+}
+
 // MaxSourceIDLength is the max length for dm-worker source id.
 const MaxSourceIDLength = 32
 
 // ValidateCheckingItem validates checking item.
 func ValidateCheckingItem(item string) error {
 	if _, ok := AllCheckingItems[item]; ok {
+		return nil
+	}
+
+	if _, ok := AdditionalCheckingItems[item]; ok {
 		return nil
 	}
 
@@ -106,6 +115,9 @@ func SupportCheckingItems() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "************ supporting checking items ************\n name:\t\tdescription\n")
 	for name, desc := range AllCheckingItems {
+		fmt.Fprintf(&buf, "%s:\t%s\n", name, desc)
+	}
+	for name, desc := range AdditionalCheckingItems {
 		fmt.Fprintf(&buf, "%s:\t%s\n", name, desc)
 	}
 	fmt.Fprintf(&buf, "************ supporting checking items ************\n")
