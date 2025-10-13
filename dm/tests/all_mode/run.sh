@@ -266,8 +266,6 @@ function test_regexpr_router() {
 	run_sql_tidb 'create database dtest2;'
 	run_sql_tidb 'drop database if exists dtest4;'
 	run_sql_tidb 'create database dtest4;'
-	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int);'
-	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int);'
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
