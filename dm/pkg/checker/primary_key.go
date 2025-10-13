@@ -99,7 +99,7 @@ func (w *primaryKeyWorker) handle(ctx context.Context, item *checkItem) ([]*inco
 	if _, ok := pkuk["PRIMARY"]; !ok {
 		ret = append(ret, &incompatibilityOption{
 			state:       StateFailure,
-			instruction: "You need to set primary key for the upstream table. Otherwise replication efficiency might become very low and exactly-once replication cannot be guaranteed.",
+			instruction: "You need to set primary key for the upstream table. Otherwise replication efficiency may be low, and correctness (e.g., deduplication and idempotency) may be affected if no primary key exists.",
 			errMessage:  "primary key does not exist",
 		})
 	}

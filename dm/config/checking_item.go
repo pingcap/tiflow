@@ -45,7 +45,10 @@ const (
 	LightningFreeSpaceChecking          = "free_space"
 	LightningMutexFeatureChecking       = "downstream_mutex_features"
 	LightningTableEmptyChecking         = "downstream_table_empty"
-	// Aliyun RDS prechecks.
+	// primary_key: checks that each upstream table has a defined PRIMARY KEY.
+	// This check is mainly required for Aliyun RDS migration scenarios,
+	// where missing primary keys can cause replication inefficiency or correctness issues.
+	// Not enabled by default; runs only when explicitly included in AdditionalCheckingItems.
 	// see https://docs.pingcap.com/tidb/stable/dm-faq/#does-dm-support-migrating-data-from-alibaba-rds-or-other-cloud-databases
 	PrimaryKeyChecking = "primary_key"
 )
