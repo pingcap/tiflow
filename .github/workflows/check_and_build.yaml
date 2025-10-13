@@ -29,7 +29,7 @@ concurrency:
 jobs:
   docker_build:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || fromJSON('["ARM64"]') }}
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
