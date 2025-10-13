@@ -194,19 +194,19 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	disableForeignKeyChecksForBatch := false
 
 	flushJobs := func() {
-		if len(jobs) == 0 {
-			return
-		}
-
 		failpoint.Inject("syncDMLBatchNotFull", func() {
 			if len(jobCh) == 0 && len(jobs) < w.batch {
 				w.logger.Info("execute not full job queue")
 			}
 		})
 
-		w.executeBatchJobs(queueID, jobs, disableForeignKeyChecksForBatch)
-		jobs = jobs[0:0]
-		disableForeignKeyChecksForBatch = false
+		// Skip the actual execution if there’s nothing to flush
+		if len(jobs) > 0 {
+			w.executeBatchJobs(queueID, jobs, disableForeignKeyChecksForBatch)
+			jobs = jobs[0:0]
+			disableForeignKeyChecksForBatch = false
+		}
+
 		if len(jobCh) == 0 {
 			failpoint.Inject("noJobInQueueLog", func() {
 				w.logger.Debug("no job in queue, update lag to zero", zap.Int(
