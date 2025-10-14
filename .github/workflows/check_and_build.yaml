@@ -29,7 +29,7 @@ concurrency:
 jobs:
   docker_build:
     name: Docker Build
-    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || ' ubuntu-24.04-arm' }}
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
