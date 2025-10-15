@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -41,6 +42,10 @@ type DMLWorker struct {
 	logger        log.Logger
 	metricProxies *metrics.Proxies
 
+	// foreignKeyChecksEnabled indicates whether downstream
+	// connections keep foreign_key_checks on.
+	foreignKeyChecksEnabled bool
+
 	// for MetricsProxies
 	task   string
 	source string
@@ -58,6 +63,31 @@ type DMLWorker struct {
 	flushCh chan *job
 }
 
+func isForeignKeyChecksEnabled(session map[string]string) bool {
+	for key, value := range session {
+		if strings.EqualFold(key, "foreign_key_checks") {
+			trimmed := strings.Trim(value, " '\"")
+			return variable.TiDBOptOn(trimmed)
+		}
+	}
+	return false
+}
+
+func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {
+	if !w.foreignKeyChecksEnabled {
+		return false
+	}
+	if j == nil || j.tp != dml || !j.safeMode || j.dml == nil {
+		return false
+	}
+	switch j.dml.Type() {
+	case sqlmodel.RowChangeInsert, sqlmodel.RowChangeUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // dmlWorkerWrap creates and runs a dmlWorker instance and returns flush job channel.
 func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 	chanSize := syncer.cfg.QueueSize / 2
@@ -65,24 +95,25 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		chanSize /= 2
 	}
 	dmlWorker := &DMLWorker{
-		compact:              syncer.cfg.Compact,
-		batch:                syncer.cfg.Batch,
-		workerCount:          syncer.cfg.WorkerCount,
-		chanSize:             chanSize,
-		multipleRows:         syncer.cfg.MultipleRows,
-		task:                 syncer.cfg.Name,
-		source:               syncer.cfg.SourceID,
-		worker:               syncer.cfg.WorkerName,
-		logger:               syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
-		successFunc:          syncer.successFunc,
-		fatalFunc:            syncer.fatalFunc,
-		lagFunc:              syncer.updateReplicationJobTS,
-		updateJobMetricsFunc: syncer.updateJobMetrics,
-		syncCtx:              syncer.syncCtx, // this ctx can be used to cancel all the workers
-		metricProxies:        syncer.metricsProxies,
-		toDBConns:            syncer.toDBConns,
-		inCh:                 inCh,
-		flushCh:              make(chan *job),
+		compact:                 syncer.cfg.Compact,
+		batch:                   syncer.cfg.Batch,
+		workerCount:             syncer.cfg.WorkerCount,
+		chanSize:                chanSize,
+		multipleRows:            syncer.cfg.MultipleRows,
+		task:                    syncer.cfg.Name,
+		source:                  syncer.cfg.SourceID,
+		worker:                  syncer.cfg.WorkerName,
+		logger:                  syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
+		successFunc:             syncer.successFunc,
+		fatalFunc:               syncer.fatalFunc,
+		lagFunc:                 syncer.updateReplicationJobTS,
+		updateJobMetricsFunc:    syncer.updateJobMetrics,
+		syncCtx:                 syncer.syncCtx, // this ctx can be used to cancel all the workers
+		metricProxies:           syncer.metricsProxies,
+		toDBConns:               syncer.toDBConns,
+		foreignKeyChecksEnabled: isForeignKeyChecksEnabled(syncer.cfg.To.Session),
+		inCh:                    inCh,
+		flushCh:                 make(chan *job),
 	}
 
 	go func() {
@@ -160,32 +191,22 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	jobs := make([]*job, 0, w.batch)
 	workerJobIdx := dmlWorkerJobIdx(queueID)
 	queueBucket := queueBucketName(queueID)
-	for j := range jobCh {
-		w.metricProxies.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
+	disableForeignKeyChecksForBatch := false
 
-		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
-			if len(jobs) == 0 {
-				// set job TS when received first job of this batch.
-				w.lagFunc(j, workerJobIdx)
-			}
-			jobs = append(jobs, j)
-			if len(jobs) < w.batch && len(jobCh) > 0 {
-				continue
-			}
-		}
-
+	flushJobs := func() {
 		failpoint.Inject("syncDMLBatchNotFull", func() {
 			if len(jobCh) == 0 && len(jobs) < w.batch {
 				w.logger.Info("execute not full job queue")
 			}
 		})
 
-		w.executeBatchJobs(queueID, jobs)
-		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
-			j.flushWg.Done()
+		// Skip the actual execution if there’s nothing to flush
+		if len(jobs) > 0 {
+			w.executeBatchJobs(queueID, jobs, disableForeignKeyChecksForBatch)
+			jobs = jobs[0:0]
+			disableForeignKeyChecksForBatch = false
 		}
 
-		jobs = jobs[0:0]
 		if len(jobCh) == 0 {
 			failpoint.Inject("noJobInQueueLog", func() {
 				w.logger.Debug("no job in queue, update lag to zero", zap.Int(
@@ -194,10 +215,35 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 			w.lagFunc(nil, workerJobIdx)
 		}
 	}
+
+	for j := range jobCh {
+		w.metricProxies.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
+
+		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
+			disableForJob := w.shouldDisableForeignKeyChecksForJob(j)
+			if len(jobs) > 0 && disableForJob != disableForeignKeyChecksForBatch {
+				flushJobs()
+			}
+			if len(jobs) == 0 {
+				// set job TS when received first job of this batch.
+				w.lagFunc(j, workerJobIdx)
+				disableForeignKeyChecksForBatch = disableForJob
+			}
+			jobs = append(jobs, j)
+			if len(jobs) < w.batch && len(jobCh) > 0 {
+				continue
+			}
+		}
+
+		flushJobs()
+		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
+			j.flushWg.Done()
+		}
+	}
 }
 
 // executeBatchJobs execute jobs with batch size.
-func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
+func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKeyChecks bool) {
 	var (
 		affect  int
 		queries []string
@@ -251,6 +297,30 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
 	})
+
+	var restoreForeignKeyChecks bool
+	if disableForeignKeyChecks {
+		if !w.foreignKeyChecksEnabled {
+			w.logger.Warn("requested to disable foreign_key_checks but downstream session keeps it disabled", zap.Int("queue", queueID))
+		} else {
+			if err = w.setForeignKeyChecks(queueID, false); err != nil {
+				w.logger.Error("failed to disable foreign_key_checks", zap.Int("queue_id", queueID), zap.Error(err))
+				return
+			}
+			restoreForeignKeyChecks = true
+			defer func() {
+				if !restoreForeignKeyChecks {
+					return
+				}
+				if restoreErr := w.setForeignKeyChecks(queueID, true); restoreErr != nil {
+					w.logger.Error("failed to restore foreign_key_checks", zap.Int("queue_id", queueID), zap.Error(restoreErr))
+					if err == nil {
+						err = restoreErr
+					}
+				}
+			}()
+		}
+	}
 	// use background context to execute sqls as much as possible
 	// set timeout to maxDMLConnectionDuration to make sure dmls can be replicated to downstream event if the latency is high
 	// if users need to quit this asap, we can support pause-task/stop-task --force in the future
@@ -276,6 +346,18 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		// err = terror.ErrDBExecuteFailed.Delegate(errors.New("key not found"), "mock")
 		w.logger.Warn("no matching record is found to update/delete, ER_KEY_NOT_FOUND", zap.Int("affect", affect), zap.Int("jobs", len(jobs)), zap.Stringer("start from", jobs[0].startLocation), zap.Stringer("end at", jobs[len(jobs)-1].currentLocation))
 	}
+}
+
+func (w *DMLWorker) setForeignKeyChecks(queueID int, enable bool) error {
+	value := "0"
+	if enable {
+		value = "1"
+	}
+	query := "SET SESSION foreign_key_checks=" + value
+	ctx, cancel := w.syncCtx.WithTimeout(maxDMLConnectionDuration)
+	defer cancel()
+	_, err := w.toDBConns[queueID].ExecuteSQL(ctx, w.metricProxies, []string{query})
+	return err
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
@@ -304,8 +386,10 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 
 		case sqlmodel.RowChangeUpdate:
 			if j.safeMode {
-				query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
-				appendQueryAndArg()
+				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
+					query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+					appendQueryAndArg()
+				}
 				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
