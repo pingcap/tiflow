@@ -452,7 +452,7 @@ func FetchAllDoTables(ctx context.Context, db *BaseDB, bw *filter.Filter) (map[s
 
 	ftSchemas := make([]*filter.Table, 0, len(schemas))
 	for _, schema := range schemas {
-		if filter.IsSystemSchema(schema) {
+		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			continue
 		}
 		ftSchemas = append(ftSchemas, &filter.Table{

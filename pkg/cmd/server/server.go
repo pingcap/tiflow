@@ -152,8 +152,9 @@ func (o *Options) complete(cmd *cobra.Command) error {
 	cfg := config.GetDefaultServerConfig()
 
 	if len(o.ServerConfigFilePath) > 0 {
-		// strict decode config file, but ignore debug item
-		if err := util.StrictDecodeFile(o.ServerConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
+		// strict decode config file, but ignore debug and newarch item
+		// the newarch item is only used in new ticdc
+		if err := util.StrictDecodeFile(o.ServerConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem, config.NewArchConfigurationItem); err != nil {
 			return err
 		}
 

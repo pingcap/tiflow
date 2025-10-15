@@ -105,6 +105,9 @@ func toEventType(es string) (EventType, error) {
 		SplitPartition,
 		ExchangePartition,
 
+		AddForeignKey,
+		DropForeignKey,
+
 		ModifySchemaCharsetAndCollate,
 		ModifyTableCharsetAndCollate,
 		ModifyTableComment,
