@@ -45,6 +45,12 @@ const (
 	LightningFreeSpaceChecking          = "free_space"
 	LightningMutexFeatureChecking       = "downstream_mutex_features"
 	LightningTableEmptyChecking         = "downstream_table_empty"
+	// primary_key: checks that each upstream table has a defined PRIMARY KEY.
+	// This check is mainly required for Aliyun RDS migration scenarios,
+	// where missing primary keys can cause replication inefficiency or correctness issues.
+	// Not enabled by default; runs only when explicitly included in AdditionalCheckingItems.
+	// see https://docs.pingcap.com/tidb/stable/dm-faq/#does-dm-support-migrating-data-from-alibaba-rds-or-other-cloud-databases
+	PrimaryKeyChecking = "primary_key"
 )
 
 // AllCheckingItems contains all checking items.
@@ -84,12 +90,23 @@ var LightningPrechecks = []string{
 	LightningTableEmptyChecking,
 }
 
+// AdditionalCheckingItems contains checking items that are not enabled by default
+// via AllCheckingItems but can be exposed to callers (for example, cloud APIs)
+// so they can request these checks explicitly.
+var AdditionalCheckingItems = map[string]string{
+	PrimaryKeyChecking: "primary key checking item (Aliyun RDS precheck)",
+}
+
 // MaxSourceIDLength is the max length for dm-worker source id.
 const MaxSourceIDLength = 32
 
 // ValidateCheckingItem validates checking item.
 func ValidateCheckingItem(item string) error {
 	if _, ok := AllCheckingItems[item]; ok {
+		return nil
+	}
+
+	if _, ok := AdditionalCheckingItems[item]; ok {
 		return nil
 	}
 
@@ -101,6 +118,9 @@ func SupportCheckingItems() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "************ supporting checking items ************\n name:\t\tdescription\n")
 	for name, desc := range AllCheckingItems {
+		fmt.Fprintf(&buf, "%s:\t%s\n", name, desc)
+	}
+	for name, desc := range AdditionalCheckingItems {
 		fmt.Fprintf(&buf, "%s:\t%s\n", name, desc)
 	}
 	fmt.Fprintf(&buf, "************ supporting checking items ************\n")

@@ -385,6 +385,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			dumpThreads,
 		))
 	}
+	if _, ok := c.checkingItems[config.PrimaryKeyChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewPrimaryKeyChecker(
+			upstreamDBs,
+			info.sourceID2TableMap,
+			dumpThreads,
+		))
+	}
 
 	instance := c.instances[0]
 	// Not check the sharding tables’ schema when the mode is increment.
