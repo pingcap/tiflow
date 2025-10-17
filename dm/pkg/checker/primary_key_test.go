@@ -81,7 +81,7 @@ func TestPrimaryKeyChecker(t *testing.T) {
 	res = checker.Check(ctx)
 	require.Equal(t, StateFailure, res.State)
 	require.Len(t, res.Errors, 1)
-	require.Contains(t, res.Errors[0].ShortErr, "table `test-db`.`test-table-1` primary key does not exis")
+	require.Contains(t, res.Errors[0].ShortErr, "table `test-db`.`test-table-1` primary key does not exist")
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// 3. table deleted (ErrNoSuchTable): should be skipped (no errors)
