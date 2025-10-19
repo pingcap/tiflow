@@ -137,7 +137,8 @@ func FilterCheckingItems(ignoredItems []string) map[string]string {
 
 	for _, item := range ignoredItems {
 		if item == AllChecking {
-			return nil
+			// return empty map instead of nil to avoid panic in caller
+			return map[string]string{}
 		}
 
 		delete(checkingItems, item)
