@@ -36,7 +36,6 @@ func RegisterRoutes(
 	capture capture.Capture,
 	registry prometheus.Gatherer,
 ) {
-
 	// Open API V1
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
 	// Open API V2
