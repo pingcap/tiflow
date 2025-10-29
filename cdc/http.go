@@ -24,13 +24,10 @@ import (
 	v1 "github.com/pingcap/tiflow/cdc/api/v1"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/capture"
-	_ "github.com/pingcap/tiflow/docs/swagger" // use for OpenAPI online docs
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // RegisterRoutes create a router for OpenAPI
@@ -39,8 +36,6 @@ func RegisterRoutes(
 	capture capture.Capture,
 	registry prometheus.Gatherer,
 ) {
-	// online docs
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API V1
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
