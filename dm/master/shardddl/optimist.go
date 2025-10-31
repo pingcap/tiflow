@@ -149,6 +149,9 @@ func (o *Optimist) ShowLocks(task string, sources []string) ([]*pb.DDLLock, erro
 		appendOwnerDDLs := func(opmss map[string]map[string]optimism.Operation, source string) {
 			for schema, opmsst := range opmss {
 				for table, op := range opmsst {
+					if op.ID != lock.ID {
+						continue
+					}
 					if op.ConflictStage != optimism.ConflictDetected {
 						continue
 					}
