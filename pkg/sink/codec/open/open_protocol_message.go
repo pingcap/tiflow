@@ -27,28 +27,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
-type columnsArray []*model.Column
-
-func (a columnsArray) Len() int {
-	return len(a)
-}
-
-func (a columnsArray) Less(i, j int) bool {
-	return a[i].Name < a[j].Name
-}
-
-func (a columnsArray) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-// sortColumnArrays sort column arrays by name
-func sortColumnArrays(arrays ...[]*model.Column) {
-	for _, array := range arrays {
-		if array != nil {
-			sort.Sort(columnsArray(array))
-		}
-	}
-}
 
 type messageRow struct {
 	Update     map[string]internal.Column `json:"u,omitempty"`
@@ -174,15 +152,12 @@ func (b *BatchDecoder) msgToRowChange(key *internal.MessageKey, value *messageRo
 
 	if len(value.Delete) != 0 {
 		preCols := codecColumns2RowChangeColumns(value.Delete)
-		sortColumnArrays(preCols)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(preCols)
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, preCols, indexColumns)
 		e.PreColumns = model.Columns2ColumnDatas(preCols, e.TableInfo)
 	} else {
 		cols := codecColumns2RowChangeColumns(value.Update)
 		preCols := codecColumns2RowChangeColumns(value.PreColumns)
-		sortColumnArrays(cols)
-		sortColumnArrays(preCols)
 		indexColumns := model.GetHandleAndUniqueIndexOffsets4Test(cols)
 		e.TableInfo = model.BuildTableInfo(key.Schema, key.Table, cols, indexColumns)
 		e.Columns = model.Columns2ColumnDatas(cols, e.TableInfo)
