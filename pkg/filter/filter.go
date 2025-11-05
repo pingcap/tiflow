@@ -85,6 +85,9 @@ var ddlWhiteListMap = map[timodel.ActionType]bf.EventType{
 	// difficult to classify DDLs
 	timodel.ActionMultiSchemaChange: bf.MultiSchemaChange,
 
+	timodel.ActionAddForeignKey:  bf.AddForeignKey,
+	timodel.ActionDropForeignKey: bf.DropForeignKey,
+
 	// deprecated DDLs,see https://github.com/pingcap/tidb/pull/35862.
 	// DDL types below are deprecated in TiDB v6.2.0, but we still keep them here
 	// In case that some users will use TiCDC to replicate data from TiDB v6.1.x.
@@ -104,7 +107,7 @@ type Filter interface {
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
-	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool
+	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string, startTs uint64) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
@@ -185,8 +188,12 @@ func (f *filter) ShouldIgnoreDMLEvent(
 // 0. By allow list.
 // 1. By schema name.
 // 2. By table name.
-func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool {
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string, startTs uint64) bool {
 	if !isAllowedDDL(ddlType) {
+		return true
+	}
+
+	if f.shouldIgnoreStartTs(startTs) {
 		return true
 	}
 

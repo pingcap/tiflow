@@ -44,7 +44,7 @@ type mockPDClient struct {
 func (c *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
 	serviceID string, ttl int64, safePoint uint64,
 ) (uint64, error) {
-	return safePoint, nil
+	return safePoint - 1, nil
 }
 
 // GetTS of mockPDClient returns a mock tso

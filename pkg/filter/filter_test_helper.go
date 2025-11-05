@@ -24,6 +24,7 @@ import (
 	timeta "github.com/pingcap/tidb/pkg/meta"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -47,7 +48,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
-	session.SetSchemaLease(time.Second)
+	vardef.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)

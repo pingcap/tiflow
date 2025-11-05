@@ -1,4 +1,5 @@
-# Sort the member alphabetically.
+# See the OWNERS docs at https://www.kubernetes.dev/docs/guide/owners/#owners_aliases
+# The members of 'sig-community-*' are synced from memberships defined in repository: https://github.com/pingcap/community.
 aliases:
   sig-critical-approvers-cdc:
     - yudongusa
@@ -16,3 +17,59 @@ aliases:
     - D3Hunter
     - GMHDBJD
     - lance6716
+  sig-community-reviewers:
+    - MoCuishle28
+    - ben1009
+    - charleszheng44
+    - fengou1
+    - iamxy
+    - joccau
+    - nongfushanquan
+    - tiancaiamao
+  sig-community-approvers:
+    - 0xPoe
+    - 3AceShowHand
+    - 3pointer
+    - 5kbpers
+    - Benjamin2037
+    - CharlesCheung96
+    - D3Hunter
+    - Ehco1996
+    - GMHDBJD
+    - IANTHEREAL
+    - Leavrth
+    - Little-Wallace
+    - OliverS929
+    - Tammyxia
+    - WangXiangUSTC
+    - WizardXiao
+    - YuJuncen
+    - amyangfei
+    - asddongmen
+    - buchuitoudegou
+    - csuzhangxc
+    - dsdashun
+    - glorv
+    - gozssky
+    - hicqu
+    - holys
+    - hongyunyan
+    - july2993
+    - kennytm
+    - lance6716
+    - leoppro
+    - lichunzhu
+    - lidezhu
+    - liuzix
+    - lonng
+    - maxshuang
+    - niubell
+    - okJiang
+    - overvenus
+    - sdojjy
+    - suzaku
+    - wk989898
+    - wlwilliamx
+    - zhangjinpeng87
+    - zhaoxinyu
+    - zwj-coder
