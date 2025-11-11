@@ -104,3 +104,24 @@ func TestGetBaseConnWontBlock(t *testing.T) {
 	_, err = baseDB.GetBaseConn(ctx)
 	require.Error(t, err)
 }
+
+func TestNeedsModernTerminology(t *testing.T) {
+	var b BaseDB
+
+	cases := []struct {
+		version string
+		modern  bool
+	}{
+		{"5.7.44", false},
+		{"8.0.44", false},
+		{"8.4.7", true},
+		{"9.5.0", true},
+		{"10.4.7-MariaDB", false},
+		{"", false},
+	}
+
+	for _, tc := range cases {
+		b.version = tc.version
+		require.Equal(t, tc.modern, b.needsModernTerminology(), b.version)
+	}
+}
