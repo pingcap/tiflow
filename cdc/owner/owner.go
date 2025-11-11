@@ -522,6 +522,19 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			}
 		}
 		query.Data = ret
+<<<<<<< HEAD
+=======
+	case QueryChangeFeedStatuses:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		ret := &model.ChangeFeedStatusForAPI{}
+		ret.ResolvedTs = cfReactor.resolvedTs.Load()
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		query.Data = ret
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 	case QueryChangeFeedSyncedStatus:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
