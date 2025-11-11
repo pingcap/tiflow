@@ -75,8 +75,13 @@ type changefeed struct {
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
+<<<<<<< HEAD
 	feedStateManager *feedStateManager
 	resolvedTs       model.Ts
+=======
+	feedStateManager FeedStateManager
+	resolvedTs       *atomic.Uint64
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 
 	// lastSyncedTs is the lastest resolvedTs that has been synced to downstream.
 	// pullerResolvedTs is the minimum resolvedTs of all pullers.
@@ -167,7 +172,12 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
+<<<<<<< HEAD
 		feedStateManager: newFeedStateManager(up, state.Info.Config),
+=======
+		feedStateManager: feedStateManager,
+		resolvedTs:       atomic.NewUint64(0),
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 		upstream:         up,
 
 		errCh:     make(chan error, defaultErrChSize),
@@ -314,9 +324,21 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
+<<<<<<< HEAD
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state, c.resolvedTs)
 	preCheckpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+=======
+// tick is the main logic of changefeed.
+// tick returns the checkpointTs and minTableBarrierTs.
+func (c *changefeed) tick(ctx context.Context,
+	captures map[model.CaptureID]*model.CaptureInfo,
+	cfInfo *model.ChangeFeedInfo,
+	cfStatus *model.ChangeFeedStatus,
+) (model.Ts, model.Ts, error) {
+	adminJobPending := c.feedStateManager.Tick(c.resolvedTs.Load(), cfStatus, cfInfo)
+	preCheckpointTs := cfInfo.GetCheckpointTs(cfStatus)
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
 	if err := c.checkStaleCheckpointTs(ctx, preCheckpointTs); err != nil {
@@ -368,7 +390,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Uint64("preCheckpointTs", preCheckpointTs),
-		zap.Uint64("preResolvedTs", c.resolvedTs),
+		zap.Uint64("preResolvedTs", c.resolvedTs.Load()),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
 		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
@@ -415,20 +437,24 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		if c.state.Status != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
+<<<<<<< HEAD
 			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.resolvedTs)
+=======
+			c.updateMetrics(currentTs, cfStatus.CheckpointTs, c.resolvedTs.Load())
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 		}
 		return nil
 	}
 
 	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", c.resolvedTs),
+		zap.Uint64("prevResolvedTs", c.resolvedTs.Load()),
 		zap.Uint64("newResolvedTs", watermark.ResolvedTs),
 		zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 	// resolvedTs should never regress.
-	if watermark.ResolvedTs > c.resolvedTs {
-		c.resolvedTs = watermark.ResolvedTs
+	if watermark.ResolvedTs > c.resolvedTs.Load() {
+		c.resolvedTs.Store(watermark.ResolvedTs)
 	}
 
 	// MinTableBarrierTs should never regress
@@ -451,8 +477,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		watermark.CheckpointTs = c.state.Status.CheckpointTs
 	})
 
+<<<<<<< HEAD
 	c.updateStatus(watermark.CheckpointTs, barrier.MinTableBarrierTs)
 	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
+=======
+	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs.Load())
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 	c.tickDownstreamObserver(ctx)
 
 	return nil
@@ -488,12 +518,17 @@ LOOP2:
 		}
 	}
 
+<<<<<<< HEAD
 	checkpointTs := c.state.Status.CheckpointTs
 	// Invariant: ResolvedTs must >= checkpointTs!
 	if c.resolvedTs == 0 || c.resolvedTs < checkpointTs {
 		c.resolvedTs = checkpointTs
 		log.Info("Initialize changefeed resolvedTs!", zap.Uint64("resolvedTs", c.resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	}
+=======
+	checkpointTs := cfStatus.CheckpointTs
+	c.resolvedTs.CompareAndSwap(0, checkpointTs)
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 
 	minTableBarrierTs := c.state.Status.MinTableBarrierTs
 
@@ -558,8 +593,21 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
+<<<<<<< HEAD
 	if c.state.Info.Config.EnableSyncPoint {
 		c.barriers.Update(syncPointBarrier, c.resolvedTs)
+=======
+	if util.GetOrZero(cfInfo.Config.EnableSyncPoint) {
+		// firstSyncPointStartTs = k * syncPointInterval，
+		// which >= startTs, and choose the minimal k
+		syncPointInterval := util.GetOrZero(cfInfo.Config.SyncPointInterval)
+		k := oracle.GetTimeFromTS(c.resolvedTs.Load()).Sub(time.Unix(0, 0)) / syncPointInterval
+		if oracle.GetTimeFromTS(c.resolvedTs.Load()).Sub(time.Unix(0, 0))%syncPointInterval != 0 || oracle.ExtractLogical(c.resolvedTs.Load()) != 0 {
+			k += 1
+		}
+		firstSyncPointTs := oracle.GoTimeToTS(time.Unix(0, 0).Add(k * syncPointInterval))
+		c.barriers.Update(syncPointBarrier, firstSyncPointTs)
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
@@ -678,8 +726,13 @@ LOOP2:
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
+<<<<<<< HEAD
 		zap.Uint64("resolvedTs", c.resolvedTs),
 		zap.String("info", c.state.Info.String()))
+=======
+		zap.Uint64("resolvedTs", c.resolvedTs.Load()),
+		zap.String("info", cfInfo.String()))
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 
 	return nil
 }
@@ -753,7 +806,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.schema = nil
 	c.barriers = nil
+<<<<<<< HEAD
 	c.initialized = false
+=======
+	c.resolvedTs.Store(0)
+	c.initialized.Store(false)
+>>>>>>> 8268cdced4 (owner(ticdc): fix data race about resolvedTs (#12389))
 	c.isReleased = true
 	c.resolvedTs = 0
 
