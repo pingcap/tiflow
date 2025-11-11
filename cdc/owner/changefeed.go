@@ -209,6 +209,7 @@ func NewChangefeed(
 		scheduler:        nil,
 		barriers:         newBarriers(),
 		feedStateManager: feedStateManager,
+		resolvedTs:       atomic.NewUint64(0),
 		upstream:         up,
 
 		errCh:     make(chan error, defaultErrChSize),
