@@ -89,26 +89,15 @@ func newDDLSink(
 	connRefresherForDDL kafka.SyncProducer,
 ) *DDLSink {
 	return &DDLSink{
-<<<<<<< HEAD
-		id:             changefeedID,
-		protocol:       protocol,
-		eventRouter:    eventRouter,
-		topicManager:   topicManager,
-		encoderBuilder: encoderBuilder,
-		producer:       producer,
-		statistics:     metrics.NewStatistics(changefeedID, sink.RowSink),
-		admin:          adminClient,
-=======
 		id:                  changefeedID,
 		protocol:            protocol,
 		eventRouter:         eventRouter,
 		topicManager:        topicManager,
-		encoder:             encoder,
+		encoderBuilder:      encoderBuilder,
 		producer:            producer,
 		statistics:          metrics.NewStatistics(changefeedID, sink.RowSink),
 		admin:               adminClient,
 		connRefresherForDDL: connRefresherForDDL,
->>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 	}
 }
 
@@ -161,10 +150,6 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-<<<<<<< HEAD
-	encoder := k.encoderBuilder.Build()
-	msg, err := encoder.EncodeCheckpointEvent(ts)
-=======
 	// This operation is used to keep the kafka connection alive.
 	// For more details, see https://github.com/pingcap/tiflow/pull/12173
 	if k.connRefresherForDDL != nil {
@@ -173,13 +158,8 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		// we don't need to worry about the heartbeat is too frequent.
 		k.connRefresherForDDL.HeartbeatBrokers()
 	}
-
-	var (
-		err          error
-		partitionNum int32
-	)
-	msg, err := k.encoder.EncodeCheckpointEvent(ts)
->>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
+	encoder := k.encoderBuilder.Build()
+	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}

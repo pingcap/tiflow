@@ -356,7 +356,8 @@ func TestDDLSinkHeartbeat(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("test-ddl-sink")
 	// Protocol is needed by newDDLSink but not used in the tested path.
 	proto := config.ProtocolOpen
-	encoder := &mockEncoder{}
+	// encoder := &mockEncoder{}
+	builder := &codec.MockRowEventEncoderBuilder{}
 
 	// Case 1: DDL Sink with a connection refresher.
 	t.Run("DDLSinkWithConnectionRefresher", func(t *testing.T) {
@@ -364,7 +365,7 @@ func TestDDLSinkHeartbeat(t *testing.T) {
 		producer := &mockSyncProducer{}
 		// Other dependencies for newDDLSink can be nil as they are not used
 		// before our mock encoder returns an error.
-		ddlSink := newDDLSink(changefeedID, nil, nil, nil, nil, encoder, proto, producer)
+		ddlSink := newDDLSink(changefeedID, nil, nil, nil, nil, builder, proto, producer)
 
 		require.Equal(t, 0, producer.GetHeartbeatCount())
 
@@ -374,17 +375,17 @@ func TestDDLSinkHeartbeat(t *testing.T) {
 		// Assert that the heartbeat was called exactly once.
 		require.Equal(t, 1, producer.GetHeartbeatCount())
 		// Assert that the function failed with the mock encoder's specific error.
-		require.ErrorIs(t, err, errMockEncoder)
+		require.NoError(t, err)
 	})
 
 	// Case 2: DDLSink with a nil connection refresher (e.g., for Pulsar).
 	t.Run("DDLSinkWithNilConnectionRefresher", func(t *testing.T) {
 		t.Parallel()
 		// Create the sink with a nil refresher.
-		ddlSinkNilRefresher := newDDLSink(changefeedID, nil, nil, nil, nil, encoder, proto, nil)
+		ddlSinkNilRefresher := newDDLSink(changefeedID, nil, nil, nil, nil, builder, proto, nil)
 
 		// The call should not panic and should fail with the mock encoder's error.
 		err := ddlSinkNilRefresher.WriteCheckpointTs(ctx, 12347, nil)
-		require.ErrorIs(t, err, errMockEncoder)
+		require.NoError(t, err)
 	})
 }

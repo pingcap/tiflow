@@ -256,7 +256,7 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 	return KafkaVersion, nil
 }
 
-// KeepConnAlive sends a heartbeat request to all brokers to keep the connection alive.
+// KeepConnAlive sends a ApiVersions request to all brokers to keep the connection alive.
 func KeepConnAlive(client sarama.Client) {
 	// We don't care about the response and error here, even the connection
 	// is unestablished, we just need to keep the connection alive WHEN it's established.
@@ -265,6 +265,6 @@ func KeepConnAlive(client sarama.Client) {
 	// when the connection is idle for a long time and we have disabled the retry in sarama.
 	brokers := client.Brokers()
 	for _, b := range brokers {
-		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
+		_, _ = b.ApiVersions(&sarama.ApiVersionsRequest{})
 	}
 }

@@ -86,17 +86,11 @@ type AsyncProducer interface {
 }
 
 type saramaSyncProducer struct {
-<<<<<<< HEAD
-	id       model.ChangeFeedID
-	client   sarama.Client
-	producer sarama.SyncProducer
-=======
 	id                    model.ChangeFeedID
 	producer              sarama.SyncProducer
 	client                sarama.Client
 	keepConnAliveInterval time.Duration
 	lastHeartbeatTime     time.Time // used to check if we need to send heartbeat
->>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 }
 
 func (p *saramaSyncProducer) SendMessage(

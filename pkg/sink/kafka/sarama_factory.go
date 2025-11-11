@@ -93,14 +93,6 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	config.MetricRegistry = f.registry
 
 	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
-<<<<<<< HEAD
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	p, err := sarama.NewSyncProducerFromClient(client)
-=======
->>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -110,17 +102,11 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	}
 
 	return &saramaSyncProducer{
-<<<<<<< HEAD
-		id:       f.changefeedID,
-		client:   client,
-		producer: p,
-=======
 		id:                    f.changefeedID,
 		producer:              p,
 		client:                client,
 		keepConnAliveInterval: f.option.KeepConnAliveInterval,
 		lastHeartbeatTime:     time.Now().Add(-f.option.KeepConnAliveInterval),
->>>>>>> 9ffd20bc3a (sarama: add keep-alive mechanism for sarama connections (#12173))
 	}, nil
 }
 
