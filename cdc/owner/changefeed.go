@@ -567,9 +567,7 @@ LOOP2:
 	}
 
 	checkpointTs := cfStatus.CheckpointTs
-	if c.resolvedTs.Load() == 0 {
-		c.resolvedTs.Store(checkpointTs)
-	}
+	c.resolvedTs.CompareAndSwap(0, checkpointTs)
 
 	minTableBarrierTs := cfStatus.MinTableBarrierTs
 
