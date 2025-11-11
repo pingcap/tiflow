@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -169,9 +170,17 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
+	var version string
+	err = db.QueryRowContext(ctx, `SELECT VERSION()`).Scan(&version)
+	if err != nil {
+		db.Close()
+		doFuncInClose()
+		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
+	}
+
 	db.SetMaxIdleConns(maxIdleConns)
 
-	return NewBaseDB(db, config.Scope, doFuncInClose), nil
+	return NewBaseDB(db, config.Scope, version, doFuncInClose), nil
 }
 
 // BaseDB wraps *sql.DB, control the BaseConn.
@@ -190,10 +199,13 @@ type BaseDB struct {
 
 	// only use in unit test
 	doNotClose bool
+
+	// SELECT VERSION()
+	version string
 }
 
 // NewBaseDB returns *BaseDB object for test.
-func NewBaseDB(db *sql.DB, scope terror.ErrScope, doFuncInClose ...func()) *BaseDB {
+func NewBaseDB(db *sql.DB, scope terror.ErrScope, version string, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
 	return &BaseDB{
 		DB:            db,
@@ -201,6 +213,7 @@ func NewBaseDB(db *sql.DB, scope terror.ErrScope, doFuncInClose ...func()) *Base
 		Retry:         &retry.FiniteRetryStrategy{},
 		Scope:         scope,
 		doFuncInClose: doFuncInClose,
+		version:       version,
 	}
 }
 
@@ -356,4 +369,38 @@ func (d *BaseDB) Close() error {
 	}
 
 	return err
+}
+
+// needsModernTerminology is for checking whether the database version requires modern terminolog.
+//
+// MySQL:
+//   - `SHOW MASTER STATUS` -> `SHOW BINARY LOG STATUS`
+//   - `SHOW SLAVE HOSTS`   -> `SHOW REPLICAS`
+//
+// MariaDB:
+//   - `SHOW MASTER STATUS` -> `SHOW BINLOG STATUS`
+//   - `SHOW SLAVE HOSTS`   -> `SHOW REPLICA HOSTS`
+func (d *BaseDB) needsModernTerminology() bool {
+	// - https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/show/show-binlog-status
+	// - https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/show/show-replica-hosts
+	//
+	// Old syntax is still accepted.
+	if strings.Contains(d.version, "MariaDB") {
+		return false
+	}
+
+	// https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-0.html#mysqld-8-4-0-deprecation-removal
+	// MySQL 8.4 removed `SHOW MASTER STATUS`.
+	minVer := semver.New("8.4.0")
+
+	v, err := semver.NewVersion(d.version)
+	if err != nil {
+		return false
+	}
+
+	if v.LessThan(*minVer) {
+		return false
+	}
+
+	return true
 }
