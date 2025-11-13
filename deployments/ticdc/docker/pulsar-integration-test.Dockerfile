@@ -1,6 +1,6 @@
 FROM openjdk:17 as jdk_container
 
-FROM hub.pingcap.net/jenkins/centos7_golang-1.23:latest
+FROM ghcr.io/pingcap-qe/ci/base:v2025.11.9-1-ga8991fa-go1.25
 RUN curl https://archive.apache.org/dist/pulsar/pulsar-3.2.0/apache-pulsar-3.2.0-bin.tar.gz -o pulsar.tar.gz && \
     tar -xvf pulsar.tar.gz && \
     mv apache-pulsar-3.2.0 pulsar && \

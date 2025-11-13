@@ -99,7 +99,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 		// no enough privilege to check the user's connection number
 		result.State = StateWarning
 		// nolint
-		result.Errors = append(result.Errors, NewWarn(err2.ShortErr))
+		result.Errors = append(result.Errors, NewWarn("%s", err2.ShortErr))
 		result.Instruction = err2.Instruction
 	} else {
 		processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
