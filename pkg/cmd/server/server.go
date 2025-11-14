@@ -37,79 +37,80 @@ import (
 	"go.uber.org/zap"
 )
 
-// options defines flags for the `server` command.
-type options struct {
-	serverConfig         *config.ServerConfig
-	serverPdAddr         string
-	serverConfigFilePath string
+// Options defines flags for the `server` command.
+// Exported for the new architecture of TiCDC only.
+type Options struct {
+	ServerConfig         *config.ServerConfig
+	ServerPdAddr         string
+	ServerConfigFilePath string
 
 	// TODO(hi-rustin): Consider using a client construction factory here.
-	caPath        string
-	certPath      string
-	keyPath       string
-	allowedCertCN string
+	CaPath        string
+	CertPath      string
+	KeyPath       string
+	AllowedCertCN string
 }
 
 // newOptions creates new options for the `server` command.
-func newOptions() *options {
-	return &options{
-		serverConfig: config.GetDefaultServerConfig(),
+func newOptions() *Options {
+	return &Options{
+		ServerConfig: config.GetDefaultServerConfig(),
 	}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *options) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.serverConfig.ClusterID, "cluster-id", "default", "Set cdc cluster id")
-	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
-	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+func (o *Options) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.ServerConfig.ClusterID, "cluster-id", "default", "Set cdc cluster id")
+	cmd.Flags().StringVar(&o.ServerConfig.Addr, "addr", o.ServerConfig.Addr, "Set the listening address")
+	cmd.Flags().StringVar(&o.ServerConfig.AdvertiseAddr, "advertise-addr", o.ServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
-	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", o.serverConfig.TZ, "Specify time zone of TiCDC cluster")
-	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", o.serverConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	cmd.Flags().StringVar(&o.ServerConfig.TZ, "tz", o.ServerConfig.TZ, "Specify time zone of TiCDC cluster")
+	cmd.Flags().Int64Var(&o.ServerConfig.GcTTL, "gc-ttl", o.ServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 
-	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", o.serverConfig.LogFile, "log file path")
-	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", o.serverConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&o.ServerConfig.LogFile, "log-file", o.ServerConfig.LogFile, "log file path")
+	cmd.Flags().StringVar(&o.ServerConfig.LogLevel, "log-level", o.ServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
 
-	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", o.serverConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
+	cmd.Flags().StringVar(&o.ServerConfig.DataDir, "data-dir", o.ServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 
-	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.serverConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
+	cmd.Flags().DurationVar((*time.Duration)(&o.ServerConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.ServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	_ = cmd.Flags().MarkHidden("owner-flush-interval")
 
-	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.serverConfig.ProcessorFlushInterval), "processor flushes task status interval")
+	cmd.Flags().DurationVar((*time.Duration)(&o.ServerConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.ServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 	_ = cmd.Flags().MarkHidden("processor-flush-interval")
 
 	// 80 is safe on most systems.
 	// sort-dir id deprecate, hidden it.
-	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
+	cmd.Flags().StringVar(&o.ServerConfig.Sorter.SortDir, "sort-dir", o.ServerConfig.Sorter.SortDir, "sorter's temporary file directory")
 	_ = cmd.Flags().MarkHidden("sort-dir")
 
-	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
-	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
+	cmd.Flags().StringVar(&o.ServerPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
+	cmd.Flags().StringVar(&o.ServerConfigFilePath, "config", "", "Path of the configuration file")
 
-	cmd.Flags().StringVar(&o.caPath, "ca", "", "CA certificate path for TLS connection")
-	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
-	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
-	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+	cmd.Flags().StringVar(&o.CaPath, "ca", "", "CA certificate path for TLS connection")
+	cmd.Flags().StringVar(&o.CertPath, "cert", "", "Certificate path for TLS connection")
+	cmd.Flags().StringVar(&o.KeyPath, "key", "", "Private key path for TLS connection")
+	cmd.Flags().StringVar(&o.AllowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 }
 
 // run runs the server cmd.
-func (o *options) run(cmd *cobra.Command) error {
+func (o *Options) run(cmd *cobra.Command) error {
 	cancel := util.InitCmd(cmd, &logutil.Config{
-		File:                 o.serverConfig.LogFile,
-		Level:                o.serverConfig.LogLevel,
-		FileMaxSize:          o.serverConfig.Log.File.MaxSize,
-		FileMaxDays:          o.serverConfig.Log.File.MaxDays,
-		FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
-		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
+		File:                 o.ServerConfig.LogFile,
+		Level:                o.ServerConfig.LogLevel,
+		FileMaxSize:          o.ServerConfig.Log.File.MaxSize,
+		FileMaxDays:          o.ServerConfig.Log.File.MaxDays,
+		FileMaxBackups:       o.ServerConfig.Log.File.MaxBackups,
+		ZapInternalErrOutput: o.ServerConfig.Log.InternalErrOutput,
 	})
 	defer cancel()
 
-	_, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	_, err := ticdcutil.GetTimezone(o.ServerConfig.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	config.StoreGlobalServerConfig(o.serverConfig)
+	config.StoreGlobalServerConfig(o.ServerConfig)
 	ctx := cmdcontext.GetDefaultContext()
 
 	version.LogVersionInfo("Change Data Capture (CDC)")
@@ -125,7 +126,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	util.LogHTTPProxies()
 	server.RecordGoRuntimeSettings()
-	server, err := server.New(strings.Split(o.serverPdAddr, ","))
+	server, err := server.New(strings.Split(o.ServerPdAddr, ","))
 	if err != nil {
 		log.Error("create cdc server failed", zap.Error(err))
 		return errors.Trace(err)
@@ -145,14 +146,15 @@ func (o *options) run(cmd *cobra.Command) error {
 }
 
 // complete adapts from the command line args and config file to the data required.
-func (o *options) complete(cmd *cobra.Command) error {
-	o.serverConfig.Security = o.getCredential()
+func (o *Options) complete(cmd *cobra.Command) error {
+	o.ServerConfig.Security = o.getCredential()
 
 	cfg := config.GetDefaultServerConfig()
 
-	if len(o.serverConfigFilePath) > 0 {
-		// strict decode config file, but ignore debug item
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
+	if len(o.ServerConfigFilePath) > 0 {
+		// strict decode config file, but ignore debug and newarch item
+		// the newarch item is only used in new ticdc
+		if err := util.StrictDecodeFile(o.ServerConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem, config.NewArchConfigurationItem); err != nil {
 			return err
 		}
 
@@ -169,41 +171,41 @@ func (o *options) complete(cmd *cobra.Command) error {
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
-			cfg.Addr = o.serverConfig.Addr
+			cfg.Addr = o.ServerConfig.Addr
 		case "advertise-addr":
-			cfg.AdvertiseAddr = o.serverConfig.AdvertiseAddr
+			cfg.AdvertiseAddr = o.ServerConfig.AdvertiseAddr
 		case "tz":
-			cfg.TZ = o.serverConfig.TZ
+			cfg.TZ = o.ServerConfig.TZ
 		case "gc-ttl":
-			cfg.GcTTL = o.serverConfig.GcTTL
+			cfg.GcTTL = o.ServerConfig.GcTTL
 		case "log-file":
-			cfg.LogFile = o.serverConfig.LogFile
+			cfg.LogFile = o.ServerConfig.LogFile
 		case "log-level":
-			cfg.LogLevel = o.serverConfig.LogLevel
+			cfg.LogLevel = o.ServerConfig.LogLevel
 		case "data-dir":
-			cfg.DataDir = o.serverConfig.DataDir
+			cfg.DataDir = o.ServerConfig.DataDir
 		case "owner-flush-interval":
-			cfg.OwnerFlushInterval = o.serverConfig.OwnerFlushInterval
+			cfg.OwnerFlushInterval = o.ServerConfig.OwnerFlushInterval
 		case "processor-flush-interval":
-			cfg.ProcessorFlushInterval = o.serverConfig.ProcessorFlushInterval
+			cfg.ProcessorFlushInterval = o.ServerConfig.ProcessorFlushInterval
 		case "ca":
-			cfg.Security.CAPath = o.serverConfig.Security.CAPath
+			cfg.Security.CAPath = o.ServerConfig.Security.CAPath
 		case "cert":
-			cfg.Security.CertPath = o.serverConfig.Security.CertPath
+			cfg.Security.CertPath = o.ServerConfig.Security.CertPath
 		case "key":
-			cfg.Security.KeyPath = o.serverConfig.Security.KeyPath
+			cfg.Security.KeyPath = o.ServerConfig.Security.KeyPath
 		case "cert-allowed-cn":
-			cfg.Security.CertAllowedCN = o.serverConfig.Security.CertAllowedCN
+			cfg.Security.CertAllowedCN = o.ServerConfig.Security.CertAllowedCN
 		case "sort-dir":
 			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
 			// if user try to set sort-dir by flag, warn it.
-			if o.serverConfig.Sorter.SortDir != config.DefaultSortDir {
+			if o.ServerConfig.Sorter.SortDir != config.DefaultSortDir {
 				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
 			cfg.Sorter.SortDir = config.DefaultSortDir
 		case "cluster-id":
-			cfg.ClusterID = o.serverConfig.ClusterID
+			cfg.ClusterID = o.ServerConfig.ClusterID
 		case "pd", "config":
 			// do nothing
 		default:
@@ -220,20 +222,20 @@ func (o *options) complete(cmd *cobra.Command) error {
 			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
 	}
 
-	o.serverConfig = cfg
+	o.ServerConfig = cfg
 
 	return nil
 }
 
 // validate checks that the provided attach options are specified.
-func (o *options) validate() error {
-	if len(o.serverPdAddr) == 0 {
+func (o *Options) validate() error {
+	if len(o.ServerPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
-	for _, ep := range strings.Split(o.serverPdAddr, ",") {
+	for _, ep := range strings.Split(o.ServerPdAddr, ",") {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
-		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
+		if err := util.VerifyPdEndpoint(ep, o.ServerConfig.Security.IsTLSEnabled()); err != nil {
 			return cerror.WrapError(cerror.ErrInvalidServerOption, err)
 		}
 	}
@@ -241,18 +243,34 @@ func (o *options) validate() error {
 }
 
 // getCredential returns security credential.
-func (o *options) getCredential() *security.Credential {
+func (o *Options) getCredential() *security.Credential {
 	var certAllowedCN []string
-	if len(o.allowedCertCN) != 0 {
-		certAllowedCN = strings.Split(o.allowedCertCN, ",")
+	if len(o.AllowedCertCN) != 0 {
+		certAllowedCN = strings.Split(o.AllowedCertCN, ",")
 	}
 
 	return &security.Credential{
-		CAPath:        o.caPath,
-		CertPath:      o.certPath,
-		KeyPath:       o.keyPath,
+		CAPath:        o.CaPath,
+		CertPath:      o.CertPath,
+		KeyPath:       o.KeyPath,
 		CertAllowedCN: certAllowedCN,
 	}
+}
+
+// Run a TiCDC server.
+// Exported for the new architecture of TiCDC only.
+func Run(o *Options, cmd *cobra.Command) error {
+	err := o.complete(cmd)
+	if err != nil {
+		return err
+	}
+	err = o.validate()
+	if err != nil {
+		return err
+	}
+	err = o.run(cmd)
+	cobra.CheckErr(err)
+	return nil
 }
 
 // NewCmdServer creates the `server` command.
@@ -264,17 +282,7 @@ func NewCmdServer() *cobra.Command {
 		Short: "Start a TiCDC capture server",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(cmd)
-			if err != nil {
-				return err
-			}
-			err = o.validate()
-			if err != nil {
-				return err
-			}
-			err = o.run(cmd)
-			cobra.CheckErr(err)
-			return nil
+			return Run(o, cmd)
 		},
 	}
 
