@@ -550,7 +550,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	jobs = append(jobs, job)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f, nil)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -881,7 +881,7 @@ func TestSchemaStorage(t *testing.T) {
 		jobs, err := getAllHistoryDDLJob(store, f)
 		require.Nil(t, err)
 
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f, nil)
 		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -1027,4 +1027,131 @@ func TestGetPrimaryKey(t *testing.T) {
 	event = helper.DDL2Event(sql)
 	names = event.TableInfo.GetPrimaryKeyColumnNames()
 	require.Equal(t, names, []string{"a"})
+}
+
+func TestSchemaStorageWithSchemaRouting(t *testing.T) {
+	ctx := context.Background()
+	store, err := mockstore.NewMockStore()
+	require.Nil(t, err)
+	defer store.Close() //nolint:errcheck
+
+	session.SetSchemaLease(time.Second)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	require.Nil(t, err)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+
+	tk := testkit.NewTestKit(t, store)
+
+	// Create pre-existing tables in both routed and unrouted schemas
+	tk.MustExec("create database source_db1")
+	tk.MustExec("create table source_db1.t1(id int primary key)")
+	tk.MustExec("create database source_db2")
+	tk.MustExec("create table source_db2.t2(id int primary key)")
+	tk.MustExec("create database unmapped_db")
+	tk.MustExec("create table unmapped_db.t3(id int primary key)")
+
+	// Get current version for SchemaStorage start-ts
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+
+	// Create schema router: source_db1 -> target_db1, source_db2 -> target_db2
+	// unmapped_db is not mapped
+	schemaRouter := config.NewSchemaRouter([]*config.SchemaRoute{
+		{
+			SourceSchema: "source_db1",
+			TargetSchema: "target_db1",
+		},
+		{
+			SourceSchema: "source_db2",
+			TargetSchema: "target_db2",
+		},
+	})
+
+	// Create SchemaStorage with schema router
+	// This should apply routing to all pre-existing tables via applySchemaRoutingToSnapshot
+	schemaStorage, err := NewSchemaStorage(store, ver.Ver, false, model.DefaultChangeFeedID("test"), util.RoleTester, f, schemaRouter)
+	require.NoError(t, err)
+
+	snap, err := schemaStorage.GetSnapshot(ctx, ver.Ver)
+	require.NoError(t, err)
+
+	// Verify pre-existing routed tables have correct TargetSchema
+	t1, ok := snap.TableByName("source_db1", "t1")
+	require.True(t, ok)
+	require.Equal(t, "source_db1", t1.TableName.Schema)
+	require.Equal(t, "target_db1", t1.TableName.TargetSchema)
+
+	t2, ok := snap.TableByName("source_db2", "t2")
+	require.True(t, ok)
+	require.Equal(t, "source_db2", t2.TableName.Schema)
+	require.Equal(t, "target_db2", t2.TableName.TargetSchema)
+
+	// Verify unmapped table has empty TargetSchema (optimization)
+	t3, ok := snap.TableByName("unmapped_db", "t3")
+	require.True(t, ok)
+	require.Equal(t, "unmapped_db", t3.TableName.Schema)
+	require.Equal(t, "", t3.TableName.TargetSchema)
+
+	// Now create a new table via DDL to test HandleDDLJob path
+	tk.MustExec("create table source_db1.t4(id int primary key)")
+
+	// Get the DDL job and process it
+	jobs, err := getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	// Find the CREATE TABLE job for t4
+	var createT4Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionCreateTable && jobs[i].SchemaName == "source_db1" && jobs[i].TableName == "t4" {
+			createT4Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, createT4Job)
+
+	// Process the DDL job through SchemaStorage
+	// This should apply routing via applySchemaRoutingToTable
+	err = schemaStorage.HandleDDLJob(createT4Job)
+	require.NoError(t, err)
+
+	// Verify the new table has correct TargetSchema
+	newSnap, err := schemaStorage.GetSnapshot(ctx, createT4Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	t4, ok := newSnap.TableByName("source_db1", "t4")
+	require.True(t, ok)
+	require.Equal(t, "source_db1", t4.TableName.Schema)
+	require.Equal(t, "target_db1", t4.TableName.TargetSchema)
+
+	// Create a new table in unmapped schema
+	tk.MustExec("create table unmapped_db.t5(id int primary key)")
+
+	jobs, err = getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	var createT5Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionCreateTable && jobs[i].SchemaName == "unmapped_db" && jobs[i].TableName == "t5" {
+			createT5Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, createT5Job)
+
+	err = schemaStorage.HandleDDLJob(createT5Job)
+	require.NoError(t, err)
+
+	newSnap2, err := schemaStorage.GetSnapshot(ctx, createT5Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	// Verify unmapped new table has empty TargetSchema
+	t5, ok := newSnap2.TableByName("unmapped_db", "t5")
+	require.True(t, ok)
+	require.Equal(t, "unmapped_db", t5.TableName.Schema)
+	require.Equal(t, "", t5.TableName.TargetSchema)
 }

@@ -84,11 +84,11 @@ func NewSchemaTestHelperWithReplicaConfig(
 
 	schemaStorage, err := NewSchemaStorage(
 		store, ver.Ver, replicaConfig.ForceReplicate,
-		changefeedID, util.RoleTester, filter)
+		changefeedID, util.RoleTester, filter, nil)
 	require.NoError(t, err)
 
 	mounter := NewMounter(schemaStorage, changefeedID, time.Local,
-		filter, replicaConfig.Integrity)
+		filter, replicaConfig.Integrity, nil)
 
 	return &SchemaTestHelper{
 		t:             t,

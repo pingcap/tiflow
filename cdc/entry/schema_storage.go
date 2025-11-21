@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -82,6 +83,8 @@ type schemaStorage struct {
 
 	id   model.ChangeFeedID
 	role util.Role
+
+	schemaRouter *config.SchemaRouter
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -89,6 +92,7 @@ func NewSchemaStorage(
 	storage tidbkv.Storage, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
+	schemaRouter *config.SchemaRouter,
 ) (SchemaStorage, error) {
 	var (
 		snap *schema.Snapshot
@@ -107,6 +111,14 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
+
+	// Apply schema routing to all tables in the initial snapshot
+	// This ensures DML events for pre-existing tables (tables that existed before start-ts)
+	// also get the routed schema for SQL generation
+	if schemaRouter != nil {
+		applySchemaRoutingToSnapshot(snap, schemaRouter)
+	}
+
 	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
@@ -114,6 +126,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		id:             id,
 		role:           role,
+		schemaRouter:   schemaRouter,
 	}, nil
 }
 
@@ -227,6 +240,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			zap.Error(err))
 		return errors.Trace(err)
 	}
+
+	// Apply schema routing to the TableInfo if schemaRouter is configured
+	// This ensures DML events get the routed schema for SQL generation
+	if s.schemaRouter != nil && job.TableID > 0 {
+		applySchemaRoutingToTable(snap, job.TableID, s.schemaRouter)
+	}
+
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	log.Info("schemaStorage: update snapshot by the DDL job",
@@ -410,7 +430,7 @@ func (s *schemaStorage) BuildDDLEvents(
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 				job.Query = querys[index]
 				event := new(model.DDLEvent)
-				event.FromJob(job, nil, newTableInfo)
+				event.FromJob(job, nil, newTableInfo, s.schemaRouter)
 				ddlEvents = append(ddlEvents, event)
 			}
 		} else {
@@ -459,7 +479,7 @@ func (s *schemaStorage) BuildDDLEvents(
 			}
 		}
 		event := new(model.DDLEvent)
-		event.FromJob(job, preTableInfo, tableInfo)
+		event.FromJob(job, preTableInfo, tableInfo, s.schemaRouter)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -518,7 +538,7 @@ func (s *schemaStorage) buildRenameEvents(
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
-		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
+		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.schemaRouter)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -579,4 +599,26 @@ func (s *MockSchemaStorage) ResolvedTs() uint64 {
 // DoGC implements SchemaStorage.
 func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
 	return atomic.LoadUint64(&s.Resolved)
+}
+
+// applySchemaRoutingToTable applies schema routing to a single table in a snapshot.
+// This ensures the TableInfo has TargetSchema set for SQL generation in sinks.
+func applySchemaRoutingToTable(snap *schema.Snapshot, tableID int64, schemaRouter *config.SchemaRouter) {
+	if tableInfo, ok := snap.PhysicalTableByID(tableID); ok {
+		routedSchema := schemaRouter.Route(tableInfo.TableName.Schema)
+		if routedSchema != tableInfo.TableName.Schema {
+			tableInfo.TableName.TargetSchema = routedSchema
+		}
+	}
+}
+
+// applySchemaRoutingToSnapshot applies schema routing to all tables in a snapshot.
+// This ensures pre-existing tables (loaded from initial snapshot) also get routed schemas.
+func applySchemaRoutingToSnapshot(snap *schema.Snapshot, schemaRouter *config.SchemaRouter) {
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		routedSchema := schemaRouter.Route(tblInfo.TableName.Schema)
+		if routedSchema != tblInfo.TableName.Schema {
+			tblInfo.TableName.TargetSchema = routedSchema
+		}
+	})
 }

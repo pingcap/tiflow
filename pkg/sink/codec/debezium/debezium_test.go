@@ -59,7 +59,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 	require.NoError(t, err)
 
 	schemaStorage, err := entry.NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
+		ver.Ver, false, changefeed, util.RoleTester, filter, nil)
 	require.NoError(t, err)
 
 	job := helper.DDL2Job(initialCreateTableDDL)
@@ -69,7 +69,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	mounter := entry.NewMounter(schemaStorage, changefeed, time.UTC, filter, cfg.Integrity)
+	mounter := entry.NewMounter(schemaStorage, changefeed, time.UTC, filter, cfg.Integrity, nil)
 
 	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", tableName)
 	require.True(t, ok)

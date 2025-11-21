@@ -154,6 +154,17 @@ func TestToAPIReplicaConfig(t *testing.T) {
 	cfg.Scheduler = &config.ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: true, RegionThreshold: 10001, WriteKeyThreshold: 10001,
 	}
+	cfg.SchemaRoutes = map[string]*config.SchemaRoute{
+		"route1": {
+			SourceSchema: "db1",
+			TargetSchema: "db1_new",
+		},
+		"route2": {
+			SourceSchema: "db2",
+			TargetSchema: "db2_new",
+		},
+	}
+	cfg.SchemaRouteRules = []string{"route1", "route2"}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""

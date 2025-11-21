@@ -657,9 +657,17 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	p.ddlHandler.changefeedID = p.changefeedID
 	p.ddlHandler.spawn(ctx)
 
+	// Build schema router from config
+	schemaRouter, err := config.BuildSchemaRouter(
+		p.latestInfo.Config.SchemaRoutes,
+		p.latestInfo.Config.SchemaRouteRules)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		cfConfig.Mounter.WorkerNum,
-		p.filter, tz, p.changefeedID, cfConfig.Integrity)
+		p.filter, tz, p.changefeedID, cfConfig.Integrity, schemaRouter)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(ctx)
@@ -782,8 +790,17 @@ func (p *processor) initDDLHandler() error {
 	} else {
 		ddlStartTs = checkpointTs - 1
 	}
+
+	// Build schema router from config
+	schemaRouter, err := config.BuildSchemaRouter(
+		p.latestInfo.Config.SchemaRoutes,
+		p.latestInfo.Config.SchemaRouteRules)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter)
+		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter, schemaRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -161,6 +161,11 @@ type replicaConfig struct {
 	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
 
+	// SchemaRoutes defines named schema routing rules that map source schemas to target schemas.
+	SchemaRoutes map[string]*SchemaRoute `toml:"schema-routes" json:"schema-routes,omitempty"`
+	// SchemaRouteRules lists which route rules to apply (references keys in SchemaRoutes).
+	SchemaRouteRules []string `toml:"schema-route-rules" json:"schema-route-rules,omitempty"`
+
 	// Deprecated: we don't use this field since v8.0.0.
 	SQLMode string `toml:"sql-mode" json:"sql-mode"`
 }
@@ -321,6 +326,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 				fmt.Sprintf("The ChangefeedErrorStuckDuration:%f must be larger than %f Seconds",
 					c.ChangefeedErrorStuckDuration.Seconds(),
 					minChangeFeedErrorStuckDuration.Seconds()))
+	}
+
+	// Validate schema routing configuration
+	if len(c.SchemaRoutes) > 0 || len(c.SchemaRouteRules) > 0 {
+		if err := ValidateSchemaRouting(c.SchemaRoutes, c.SchemaRouteRules); err != nil {
+			return err
+		}
 	}
 
 	return nil

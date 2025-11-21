@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -43,6 +44,8 @@ type mounterGroup struct {
 	workerNum int
 
 	changefeedID model.ChangeFeedID
+
+	schemaRouter *config.SchemaRouter
 }
 
 const (
@@ -59,6 +62,7 @@ func NewMounterGroup(
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
 	integrity *integrity.Config,
+	schemaRouter *config.SchemaRouter,
 ) *mounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
@@ -74,6 +78,8 @@ func NewMounterGroup(
 		workerNum: workerNum,
 
 		changefeedID: changefeedID,
+
+		schemaRouter: schemaRouter,
 	}
 }
 
@@ -108,7 +114,7 @@ func (m *mounterGroup) WaitForReady(_ context.Context) {}
 func (m *mounterGroup) Close() {}
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.integrity)
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.integrity, m.schemaRouter)
 	for {
 		select {
 		case <-ctx.Done():

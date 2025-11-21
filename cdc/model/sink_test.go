@@ -21,6 +21,7 @@ import (
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,8 @@ func TestFlagValue(t *testing.T) {
 
 func TestTableNameFuncs(t *testing.T) {
 	t.Parallel()
+
+	// Test without schema routing (TargetSchema not set)
 	tbl := &TableName{
 		Schema:  "test",
 		Table:   "t1",
@@ -82,9 +85,26 @@ func TestTableNameFuncs(t *testing.T) {
 	}
 	require.Equal(t, "test.t1", tbl.String())
 	require.Equal(t, "`test`.`t1`", tbl.QuoteString())
+	require.Equal(t, "`test`.`t1`", tbl.QuoteSinkString())
 	require.Equal(t, "test", tbl.GetSchema())
 	require.Equal(t, "t1", tbl.GetTable())
 	require.Equal(t, int64(1071), tbl.GetTableID())
+
+	// Test with schema routing (TargetSchema set)
+	tblWithRouting := &TableName{
+		Schema:       "uds_000",
+		Table:        "TidbReplicationObject",
+		TableID:      1072,
+		TargetSchema: "tidb_failover_test",
+	}
+	require.Equal(t, "uds_000.TidbReplicationObject", tblWithRouting.String())
+	// QuoteString should return source schema for logging
+	require.Equal(t, "`uds_000`.`TidbReplicationObject`", tblWithRouting.QuoteString())
+	// QuoteSinkString should return target schema for SQL generation
+	require.Equal(t, "`tidb_failover_test`.`TidbReplicationObject`", tblWithRouting.QuoteSinkString())
+	require.Equal(t, "uds_000", tblWithRouting.GetSchema())
+	require.Equal(t, "TidbReplicationObject", tblWithRouting.GetTable())
+	require.Equal(t, int64(1072), tblWithRouting.GetTableID())
 }
 
 func TestRowChangedEventFuncs(t *testing.T) {
@@ -178,13 +198,13 @@ func TestDDLEventFromJob(t *testing.T) {
 	}
 	tableInfo := WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	event := &DDLEvent{}
-	event.FromJob(job, preTableInfo, tableInfo)
+	event.FromJob(job, preTableInfo, tableInfo, nil)
 	require.Equal(t, uint64(420536581131337731), event.StartTs)
 	require.Equal(t, int64(49), event.TableInfo.TableName.TableID)
 	require.Equal(t, 1, len(event.PreTableInfo.TableInfo.Columns))
 
 	event = &DDLEvent{}
-	event.FromJob(job, nil, nil)
+	event.FromJob(job, nil, nil, nil)
 	require.Nil(t, event.PreTableInfo)
 }
 
@@ -270,7 +290,7 @@ func TestRenameTables(t *testing.T) {
 	}
 
 	event := &DDLEvent{}
-	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
+	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t1")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -321,7 +341,7 @@ func TestRenameTables(t *testing.T) {
 	}
 
 	event = &DDLEvent{}
-	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
+	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(69))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -390,7 +410,7 @@ func TestExchangeTablePartition(t *testing.T) {
 	}
 
 	event := &DDLEvent{}
-	event.FromJob(job, preTableInfo, tableInfo)
+	event.FromJob(job, preTableInfo, tableInfo, nil)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -399,6 +419,278 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2`", event.Query)
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
+}
+
+// mockSchemaRouter is a simple implementation of SchemaRouter for testing
+// Helper function to create a SchemaRouter for tests
+func newTestSchemaRouter(routes map[string]string) *config.SchemaRouter {
+	if len(routes) == 0 {
+		return nil
+	}
+	schemaRoutes := make(map[string]*config.SchemaRoute)
+	schemaRouteRules := make([]string, 0, len(routes))
+
+	for source, target := range routes {
+		ruleName := source + "_rule"
+		schemaRoutes[ruleName] = &config.SchemaRoute{
+			SourceSchema: source,
+			TargetSchema: target,
+		}
+		schemaRouteRules = append(schemaRouteRules, ruleName)
+	}
+
+	router, _ := config.BuildSchemaRouter(schemaRoutes, schemaRouteRules)
+	return router
+}
+
+func TestDDLSchemaRouting(t *testing.T) {
+	t.Parallel()
+
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag)
+
+	router := newTestSchemaRouter(map[string]string{
+		"source_db": "target_db",
+	})
+
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "source_db",
+			Table:   "test_table",
+			TableID: 1,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   1,
+			Name: pmodel.CIStr{O: "test_table"},
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		jobType       timodel.ActionType
+		query         string
+		expectedQuery string
+	}{
+		{
+			name:          "CREATE TABLE",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `source_db`.`test_table` (id INT PRIMARY KEY)",
+			expectedQuery: "CREATE TABLE `target_db`.`test_table` (`id` INT PRIMARY KEY)",
+		},
+		{
+			name:          "CREATE TABLE IF NOT EXISTS",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE IF NOT EXISTS `source_db`.`test_table` (id INT PRIMARY KEY)",
+			expectedQuery: "CREATE TABLE IF NOT EXISTS `target_db`.`test_table` (`id` INT PRIMARY KEY)",
+		},
+		{
+			name:          "DROP TABLE",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `source_db`.`test_table`",
+			expectedQuery: "DROP TABLE `target_db`.`test_table`",
+		},
+		{
+			name:          "TRUNCATE TABLE",
+			jobType:       timodel.ActionTruncateTable,
+			query:         "TRUNCATE TABLE `source_db`.`test_table`",
+			expectedQuery: "TRUNCATE TABLE `target_db`.`test_table`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &timodel.Job{
+				ID:         1,
+				TableID:    1,
+				SchemaName: "source_db",
+				Type:       tt.jobType,
+				StartTS:    1,
+				Query:      tt.query,
+				BinlogInfo: &timodel.HistoryInfo{
+					TableInfo:  tableInfo.TableInfo,
+					FinishedTS: 2,
+				},
+			}
+
+			event := &DDLEvent{}
+			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
+			// Verify that the original Schema is NOT mutated (pullers need to read from original)
+			require.Equal(t, "source_db", event.TableInfo.TableName.Schema, "Schema should not be mutated for %s", tt.name)
+			// Verify that TargetSchema is set correctly (sinks need to write to target)
+			require.Equal(t, "target_db", event.TableInfo.TableName.TargetSchema, "TargetSchema should be set for %s", tt.name)
+		})
+	}
+}
+
+func TestDDLSchemaRoutingOrdering(t *testing.T) {
+	t.Parallel()
+
+	// Create a schema router where one schema is mapped and one is not
+	// This tests that FetchDDLTables and RenameDDLTable maintain the correct ordering
+	router := newTestSchemaRouter(map[string]string{
+		"mapped_source_db": "mapped_target_db",
+	})
+
+	// Create TableInfo objects for different test scenarios
+	columns := []*timodel.ColumnInfo{
+		{ID: 1, Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+	}
+
+	// For DROP TABLE tests
+	tableInfoMappedT1 := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("t1"),
+		Columns: columns,
+	})
+	tableInfoUnmappedT1 := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("t1"),
+		Columns: columns,
+	})
+
+	// For RENAME TABLE tests - PreTableInfo (old table)
+	preTableInfoMappedOld := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("old_table"),
+		Columns: columns,
+	})
+	preTableInfoUnmappedOld := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("old_table"),
+		Columns: columns,
+	})
+
+	// For RENAME TABLE tests - TableInfo (new table)
+	tableInfoMappedNew := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("new_table"),
+		Columns: columns,
+	})
+	tableInfoUnmappedNew := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("new_table"),
+		Columns: columns,
+	})
+
+	// For CREATE TABLE LIKE tests
+	tableInfoMapped := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("new_table"),
+		Columns: columns,
+	})
+
+	tests := []struct {
+		name          string
+		jobType       timodel.ActionType
+		query         string
+		oldSchemaName string // for RENAME TABLE
+		newSchemaName string // for RENAME TABLE
+		preTableInfo  *TableInfo
+		tableInfo     *TableInfo
+		expectedQuery string
+		description   string
+	}{
+		{
+			name:          "DROP TABLE - mapped schema",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `mapped_source_db`.`t1`",
+			tableInfo:     tableInfoMappedT1,
+			expectedQuery: "DROP TABLE `mapped_target_db`.`t1`",
+			description:   "Tests DROP TABLE with mapped schema",
+		},
+		{
+			name:          "DROP TABLE - unmapped schema",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `unmapped_db`.`t1`",
+			tableInfo:     tableInfoUnmappedT1,
+			expectedQuery: "DROP TABLE `unmapped_db`.`t1`",
+			description:   "Tests DROP TABLE with unmapped schema (identity mapping)",
+		},
+		{
+			name:          "RENAME TABLE - mapped old, mapped new",
+			jobType:       timodel.ActionRenameTables,
+			query:         "RENAME TABLE `mapped_source_db`.`old_table` TO `mapped_source_db`.`new_table`",
+			oldSchemaName: "mapped_source_db",
+			newSchemaName: "mapped_source_db",
+			preTableInfo:  preTableInfoMappedOld,
+			tableInfo:     tableInfoMappedNew,
+			expectedQuery: "RENAME TABLE `mapped_target_db`.`old_table` TO `mapped_target_db`.`new_table`",
+			description:   "Tests RENAME TABLE where both old and new schemas are mapped (same schema)",
+		},
+		{
+			name:          "RENAME TABLE - mapped old, unmapped new",
+			jobType:       timodel.ActionRenameTables,
+			query:         "RENAME TABLE `mapped_source_db`.`old_table` TO `unmapped_db`.`new_table`",
+			oldSchemaName: "mapped_source_db",
+			newSchemaName: "unmapped_db",
+			preTableInfo:  preTableInfoMappedOld,
+			tableInfo:     tableInfoUnmappedNew,
+			expectedQuery: "RENAME TABLE `mapped_target_db`.`old_table` TO `unmapped_db`.`new_table`",
+			description:   "Tests RENAME TABLE ordering: old table is mapped, new table is unmapped",
+		},
+		{
+			name:          "RENAME TABLE - unmapped old, mapped new",
+			jobType:       timodel.ActionRenameTables,
+			query:         "RENAME TABLE `unmapped_db`.`old_table` TO `mapped_source_db`.`new_table`",
+			oldSchemaName: "unmapped_db",
+			newSchemaName: "mapped_source_db",
+			preTableInfo:  preTableInfoUnmappedOld,
+			tableInfo:     tableInfoMappedNew,
+			expectedQuery: "RENAME TABLE `unmapped_db`.`old_table` TO `mapped_target_db`.`new_table`",
+			description:   "Tests RENAME TABLE ordering: old table is unmapped, new table is mapped",
+		},
+		{
+			name:          "CREATE TABLE LIKE - mapped source, unmapped template",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `mapped_source_db`.`new_table` LIKE `unmapped_db`.`template_table`",
+			tableInfo:     tableInfoMapped,
+			expectedQuery: "CREATE TABLE `mapped_target_db`.`new_table` LIKE `unmapped_db`.`template_table`",
+			description:   "Tests CREATE LIKE ordering: new table is mapped, template is unmapped",
+		},
+		{
+			name:          "CREATE TABLE LIKE - unmapped source, mapped template",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `unmapped_db`.`new_table` LIKE `mapped_source_db`.`template_table`",
+			tableInfo:     tableInfoMapped,
+			expectedQuery: "CREATE TABLE `unmapped_db`.`new_table` LIKE `mapped_target_db`.`template_table`",
+			description:   "Tests CREATE LIKE ordering: new table is unmapped, template is mapped",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use the tableInfo from the test case, or default to the mapped one
+			testTableInfo := tt.tableInfo
+			if testTableInfo == nil {
+				testTableInfo = tableInfoMapped
+			}
+
+			job := &timodel.Job{
+				ID:         1,
+				TableID:    1,
+				SchemaName: "mapped_source_db",
+				Type:       tt.jobType,
+				StartTS:    1,
+				Query:      tt.query,
+				BinlogInfo: &timodel.HistoryInfo{
+					TableInfo:  testTableInfo.TableInfo,
+					FinishedTS: 2,
+				},
+			}
+
+			event := &DDLEvent{}
+			event.FromJobWithArgs(job, tt.preTableInfo, testTableInfo,
+				tt.oldSchemaName, tt.newSchemaName, router)
+
+			require.Equal(t, tt.expectedQuery, event.Query,
+				"ORDERING TEST FAILED for %s\n%s\nExpected: %s\nActual:   %s",
+				tt.name, tt.description, tt.expectedQuery, event.Query)
+		})
+	}
 }
 
 func TestSortRowChangedEvent(t *testing.T) {

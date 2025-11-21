@@ -365,3 +365,56 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedArgs, args)
 	}
 }
+
+func TestSchemaRouting(t *testing.T) {
+	t.Parallel()
+
+	// Test that SQL generation uses TargetSchema when set.
+	// This matches CDC's pattern where source has TargetSchema set and target is nil.
+	source := &cdcmodel.TableName{
+		Schema:       "source_db",
+		Table:        "test_table",
+		TargetSchema: "target_db", // Schema routing: source_db -> target_db
+	}
+
+	sourceTI := mockTableInfo(t, "CREATE TABLE test_table (id INT PRIMARY KEY, name VARCHAR(50))")
+
+	// Test INSERT - should use target_db, not source_db
+	change := NewRowChange(source, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	sql, args := change.GenSQL(DMLInsert)
+	require.Equal(t, "INSERT INTO `target_db`.`test_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test REPLACE - should use target_db
+	sql, args = change.GenSQL(DMLReplace)
+	require.Equal(t, "REPLACE INTO `target_db`.`test_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test INSERT ON DUPLICATE KEY UPDATE - should use target_db
+	sql, args = change.GenSQL(DMLInsertOnDuplicateUpdate)
+	require.Equal(t, "INSERT INTO `target_db`.`test_table` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test UPDATE - should use target_db
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, []interface{}{1, "bob"}, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLUpdate)
+	require.Equal(t, "UPDATE `target_db`.`test_table` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1, "bob", 1}, args)
+
+	// Test DELETE - should use target_db
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	require.Equal(t, "DELETE FROM `target_db`.`test_table` WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1}, args)
+
+	// Test fallback behavior - when TargetSchema is empty, should use Schema
+	sourceNoRouting := &cdcmodel.TableName{
+		Schema: "source_db",
+		Table:  "test_table",
+		// TargetSchema is empty - should fall back to Schema
+	}
+	change = NewRowChange(sourceNoRouting, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLInsert)
+	require.Equal(t, "INSERT INTO `source_db`.`test_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+}

@@ -24,9 +24,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dmparser "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -57,6 +62,12 @@ const (
 	typeUpdate
 	typeInsert
 )
+
+// SchemaRouter is an interface for routing schema names from source to target
+type SchemaRouter interface {
+	// Route returns the target schema name for a given source schema name
+	Route(sourceSchema string) string
+}
 
 // ColumnFlagType is for encapsulating the flag operations for different flags.
 type ColumnFlagType util.Flag
@@ -206,10 +217,14 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" msg:"db-name"`
-	Table       string `toml:"tbl-name" msg:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" msg:"tbl-id"`
-	IsPartition bool   `toml:"is-partition" msg:"is-partition"`
+	Schema       string `toml:"db-name" msg:"db-name"`
+	Table        string `toml:"tbl-name" msg:"tbl-name"`
+	TableID      int64  `toml:"tbl-id" msg:"tbl-id"`
+	IsPartition  bool   `toml:"is-partition" msg:"is-partition"`
+	// TargetSchema is the routed schema name for sinks.
+	// If set, SQL generation will use this instead of Schema.
+	// Schema is kept as the original for pullers to read from correct location.
+	TargetSchema string `toml:"target-db-name,omitempty" msg:"target-db-name,omitempty"`
 }
 
 // String implements fmt.Stringer interface.
@@ -217,9 +232,21 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
-// QuoteString returns quoted full table name
+// QuoteString returns quoted full table name using the source schema.
+// This is used for logging and debugging to show the original table name.
 func (t TableName) QuoteString() string {
 	return quotes.QuoteSchema(t.Schema, t.Table)
+}
+
+// QuoteSinkString returns quoted full table name for SQL generation.
+// Uses TargetSchema if set (for schema routing), otherwise uses Schema.
+// This should be used when generating SQL statements for the downstream sink.
+func (t TableName) QuoteSinkString() string {
+	schema := t.Schema
+	if t.TargetSchema != "" {
+		schema = t.TargetSchema
+	}
+	return quotes.QuoteSchema(schema, t.Table)
 }
 
 // GetSchema returns schema name.
@@ -1059,8 +1086,8 @@ type DDLEvent struct {
 }
 
 // FromJob fills the values with DDLEvent from DDL job
-func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo) {
-	d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "")
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo, schemaRouter *config.SchemaRouter) {
+	d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "", schemaRouter)
 }
 
 // FromJobWithArgs fills the values with DDLEvent from DDL job
@@ -1068,6 +1095,7 @@ func (d *DDLEvent) FromJobWithArgs(
 	job *model.Job,
 	preTableInfo, tableInfo *TableInfo,
 	oldSchemaName, newSchemaName string,
+	schemaRouter *config.SchemaRouter,
 ) {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
@@ -1116,6 +1144,72 @@ func (d *DDLEvent) FromJobWithArgs(
 	default:
 		d.Query = job.Query
 	}
+
+	// Apply schema routing to ALL DDLs if schema router is configured
+	if schemaRouter != nil {
+		d.applySchemaRouting(schemaRouter)
+	}
+}
+
+// applySchemaRouting uses RenameDDLTable to rewrite the DDL query with routed schema names
+func (d *DDLEvent) applySchemaRouting(schemaRouter *config.SchemaRouter) {
+	// Parse the DDL query into an AST
+	p := parser.New()
+	stmts, _, err := p.Parse(d.Query, d.Charset, d.Collate)
+	if err != nil {
+		// If parsing fails, keep the original query
+		log.Warn("failed to parse DDL for schema routing, keeping original query",
+			zap.String("query", d.Query), zap.Error(err))
+		return
+	}
+	if len(stmts) == 0 {
+		return
+	}
+
+	// Fetch source tables in the order they appear in the DDL AST
+	// This is critical - the order must match the AST visit order
+	var defaultSchema string
+	if d.TableInfo != nil {
+		defaultSchema = d.TableInfo.TableName.Schema
+	} else if d.PreTableInfo != nil {
+		defaultSchema = d.PreTableInfo.TableName.Schema
+	}
+
+	sourceTables, err := dmparser.FetchDDLTables(defaultSchema, stmts[0], conn.LCTableNamesSensitive)
+	if err != nil {
+		log.Warn("failed to fetch source tables for schema routing, keeping original query",
+			zap.String("query", d.Query), zap.Error(err))
+		return
+	}
+
+	// Route each source table to get target tables in the same order
+	targetTables := make([]*filter.Table, 0, len(sourceTables))
+	for _, sourceTable := range sourceTables {
+		routedSchema := schemaRouter.Route(sourceTable.Schema)
+		targetTables = append(targetTables, &filter.Table{
+			Schema: routedSchema,
+			Name:   sourceTable.Name,
+		})
+	}
+
+	// Set TargetSchema on TableInfo/PreTableInfo for consistency
+	if d.TableInfo != nil {
+		d.TableInfo.TableName.TargetSchema = schemaRouter.Route(d.TableInfo.TableName.Schema)
+	}
+	if d.PreTableInfo != nil {
+		d.PreTableInfo.TableName.TargetSchema = schemaRouter.Route(d.PreTableInfo.TableName.Schema)
+	}
+
+	// Use RenameDDLTable to rewrite the query
+	routedQuery, err := dmparser.RenameDDLTable(stmts[0], targetTables)
+	if err != nil {
+		// If rewriting fails, keep the original query
+		log.Warn("failed to rewrite DDL for schema routing, keeping original query",
+			zap.String("query", d.Query), zap.Error(err))
+		return
+	}
+
+	d.Query = routedQuery
 }
 
 // NewBootstrapDDLEvent returns a bootstrap DDL event.

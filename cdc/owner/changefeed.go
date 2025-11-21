@@ -650,9 +650,16 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// Build schema router from config
+	schemaRouter, err := config.BuildSchemaRouter(cfInfo.Config.SchemaRoutes, cfInfo.Config.SchemaRouteRules)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage, ddlStartTs,
-		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
+		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter, schemaRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}
