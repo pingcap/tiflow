@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -618,6 +619,59 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
 	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+}
+
+func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))", "db")
+	createAndExec("create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", "create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", "create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {

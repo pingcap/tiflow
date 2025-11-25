@@ -934,6 +934,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			nil,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
