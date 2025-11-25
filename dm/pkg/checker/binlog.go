@@ -245,7 +245,7 @@ func (pc *MariaDBBinlogLegacyEventPosChecker) Check(ctx context.Context) *Result
 	}
 	if strings.ToUpper(value) != "ON" {
 		result.Errors = append(result.Errors, NewError("binlog_legacy_event_pos is %s, and should be ON", value))
-		result.Instruction = "MariaDB 11.4 and newer as source: please execute 'SET GLOBAL binlog_legacy_event_pos=ON;' or update the configuration and apply the configuration"
+		result.Instruction = "MariaDB 11.4 and newer as source: please execute 'SET GLOBAL binlog_legacy_event_pos=ON;' or update the configuration and apply the configuration. You also need to start replicating from a binlog position that was created after chaning this setting."
 		return result
 	}
 	result.State = StateSuccess
