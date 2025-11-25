@@ -336,7 +336,7 @@ var statusVarsFixedLength = map[byte]int{
 	QDefaultTableEncryption:       1,
 	// https://github.com/MariaDB/server/blob/94b45787045677c106a25ebb5aaf1273040b2ff6/sql/log_event.cc#L1619
 	QHrnow: 3,
-	// https://github.com/MariaDB/server/blob/809e6f4195daff4e4020d26b15191de9b0e65bcb/sql/log_event.h#L329
+	// https://mariadb.com/docs/server/reference/clientserver-protocol/replication-protocol/query_event#q_xid-0x81
 	QXid: 8,
 }
 
