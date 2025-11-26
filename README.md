@@ -18,7 +18,7 @@
 
 > **Note**:
 >
-> This repository is only used for TiCDC versions v8.5 and lower, or v9.0 and up [github.com/pingcap/ticdc](https://github.com/pingcap/ticdc) is used.
+> The TiCDC in this repository is only used for versions v8.5.x and lower (old architecture). A TiCDC with new architecture is hosted in [github.com/pingcap/ticdc](https://github.com/pingcap/ticdc), starting from v8.5.4.
 
 For more details, see [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
 
