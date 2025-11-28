@@ -1302,7 +1302,20 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
-	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.ExtStorage)
+
+	flavor := ""
+	baseDB, err := conn.GetUpstreamDB(&cp.cfg.From)
+	if err != nil {
+		log.L().Warn("set up db connect failed", zap.Any("db", cp.cfg.From), zap.Error(err))
+	} else {
+		flavor, err = conn.GetFlavor(ctx, baseDB)
+		if err != nil {
+			log.L().Warn("failed to get database flavor", zap.Any("db", cp.cfg.From), zap.Error(err))
+		}
+		baseDB.Close()
+	}
+
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.ExtStorage, flavor)
 	if err != nil {
 		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {

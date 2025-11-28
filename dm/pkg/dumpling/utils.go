@@ -48,6 +48,7 @@ func ParseMetaData(
 	dir string,
 	filename string,
 	extStorage brstorage.ExternalStorage,
+	flavor string,
 ) (*binlog.Location, *binlog.Location, error) {
 	fd, err := storage.OpenFile(ctx, dir, filename, extStorage)
 	if err != nil {
@@ -55,11 +56,11 @@ func ParseMetaData(
 	}
 	defer fd.Close()
 
-	return ParseMetaDataByReader(filename, fd)
+	return ParseMetaDataByReader(filename, fd, flavor)
 }
 
 // ParseMetaDataByReader parses mydumper's output meta file by created reader and returns binlog location.
-func ParseMetaDataByReader(filename string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
+func ParseMetaDataByReader(filename string, rd io.Reader, flavor string) (*binlog.Location, *binlog.Location, error) {
 	invalidErr := fmt.Errorf("file %s invalid format", filename)
 
 	var (
@@ -156,7 +157,7 @@ func ParseMetaDataByReader(filename string, rd io.Reader) (*binlog.Location, *bi
 		return nil, nil, terror.ErrMetadataNoBinlogLoc.Generate(filename)
 	}
 
-	gset, err := gtid.ParserGTID("", gtidStr)
+	gset, err := gtid.ParserGTID(flavor, gtidStr)
 	if err != nil {
 		return nil, nil, invalidErr
 	}

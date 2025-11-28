@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -45,6 +46,18 @@ func percent(a int64, b int64, finish bool) string {
 }
 
 func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
+	flavor := ""
+	baseDB, err := conn.GetUpstreamDB(&cfg.From)
+	if err != nil {
+		log.L().Warn("set up db connect failed", zap.Any("db", cfg.From), zap.Error(err))
+	} else {
+		flavor, err = conn.GetFlavor(ctx, baseDB)
+		if err != nil {
+			log.L().Warn("failed to get database flavor", zap.Any("db", cfg.From), zap.Error(err))
+		}
+		baseDB.Close()
+	}
+
 	metafile := "metadata"
 	failpoint.Inject("TestRemoveMetaFile", func() {
 		err := storage.RemoveAll(ctx, cfg.LoaderConfig.Dir, nil)
@@ -52,7 +65,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
 	})
-	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.ExtStorage)
+	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.ExtStorage, flavor)
 	if err == nil {
 		return loc.Position.String(), loc.GTIDSetStr(), nil
 	}
