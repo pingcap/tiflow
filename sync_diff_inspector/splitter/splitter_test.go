@@ -20,11 +20,14 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
+	ttypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -718,7 +721,17 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 	// Mock query with subquery to get all table_ids (main table + partitions) at once
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	for i := 0; i < 5; i++ {
-		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
+		lowerA, lowerB := i*64, i*12
+		upperA, upperB := (i+1)*64-1, (i+1)*12-1
+
+		lowerDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(lowerA)), ttypes.NewStringDatum(fmt.Sprintf("%d", lowerB))}
+		upperDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(upperA)), ttypes.NewStringDatum(fmt.Sprintf("%d", upperB))}
+
+		lowerEncoded, _ := codec.EncodeKey(time.UTC, nil, lowerDatums...)
+		upperEncoded, _ := codec.EncodeKey(time.UTC, nil, upperDatums...)
+
+		statsRows.AddRow(1, 1, i, (i+1)*64, lowerEncoded, upperEncoded)
 	}
 	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
